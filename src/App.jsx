@@ -18,7 +18,7 @@ import MyInterviewsPage     from "./pages/interviewer/MyInterviewsPage";
 import InterviewDetail      from "./pages/interviewer/InterviewDetail";
 import AvailabilityPage     from "./pages/interviewer/AvailabilityPage";
 
-const ADMIN_ROLES = ["admin", "content_team"];
+const ADMIN_ROLES = ["admin", "content_team", "interviewer_content"];
 
 function RootRedirect() {
   const { currentUser, userProfile, authLoading } = useAuth();
@@ -27,6 +27,7 @@ function RootRedirect() {
   if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
   if (userProfile.role === "admin") return <Navigate to="/admin/dashboard" replace />;
   if (userProfile.role === "content_team") return <Navigate to="/admin/templates" replace />;
+  if (userProfile.role === "interviewer_content") return <Navigate to="/interviewer/dashboard" replace />;
   return <Navigate to="/interviewer/dashboard" replace />;
 }
 
@@ -44,7 +45,7 @@ function InterviewerGuard({ children }) {
   if (authLoading) return <div className="min-h-screen flex items-center justify-center text-gray-400">Loading…</div>;
   if (!currentUser) return <Navigate to="/login" replace />;
   if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
-  if (userProfile.role !== "interviewer") return <Navigate to="/admin/templates" replace />;
+  if (userProfile.role !== "interviewer" && userProfile.role !== "interviewer_content") return <Navigate to="/admin/templates" replace />;
   return children;
 }
 

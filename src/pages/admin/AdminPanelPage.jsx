@@ -12,9 +12,17 @@ import Toast from "../../components/Toast";
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
 
 const ROLE_OPTIONS = [
-  { value: "interviewer",   label: "Interviewer",   desc: "Can conduct interviews and submit evaluations" },
-  { value: "admin",         label: "Admin",         desc: "Full access — manage interviews, candidates, users" },
-  { value: "content_team",  label: "Content Team",  desc: "Access to Templates page only" },
+  { value: "interviewer",          label: "Interviewer",           desc: "Can conduct interviews and submit evaluations" },
+  { value: "admin",                label: "Admin",                 desc: "Full access — manage interviews, candidates, users" },
+  { value: "content_team",         label: "Content Team",          desc: "Access to Templates page only" },
+  { value: "interviewer_content",  label: "Interviewer + Content", desc: "Can conduct interviews AND access Templates" },
+];
+
+const ALL_ROLES = [
+  { value: "interviewer",          label: "Interviewer" },
+  { value: "admin",                label: "Admin" },
+  { value: "content_team",         label: "Content Team" },
+  { value: "interviewer_content",  label: "Interviewer + Content" },
 ];
 
 const VALID_ROLES = new Set(["interviewer", "admin", "content_team"]);
@@ -164,28 +172,18 @@ export default function AdminPanelPage() {
     setToast({ message: "Account deleted." });
   };
 
-  const promoteToAdmin = async (u) => {
-    if (!confirm(`Give admin access to ${u.displayName || u.email}?`)) return;
+  const changeRole = async (u, newRole) => {
+    if (u.role === newRole) return;
+    const label = ALL_ROLES.find(r => r.value === newRole)?.label || newRole;
+    if (!confirm(`Change ${u.displayName || u.email}'s role to "${label}"?`)) return;
     setSavingFor(u.id, true);
-    await updateUser(u.id, { role: "admin" });
-    setToast({ message: `${u.displayName || u.email} is now an admin.` });
-    setSavingFor(u.id, false);
-  };
-
-  const demoteToInterviewer = async (u) => {
-    if (u.id === currentUser?.uid) {
-      setToast({ message: "You cannot remove your own admin access.", type: "error" });
-      return;
-    }
-    if (!confirm(`Remove admin access for ${u.displayName || u.email}?`)) return;
-    setSavingFor(u.id, true);
-    await updateUser(u.id, { role: "interviewer" });
-    setToast({ message: `${u.displayName || u.email} is now an interviewer.` });
+    await updateUser(u.id, { role: newRole });
+    setToast({ message: `${u.displayName || u.email} is now ${label}.` });
     setSavingFor(u.id, false);
   };
 
   const revoke = async (u) => {
-    if (!confirm(`Revoke access for ${u.email}?`)) return;
+    if (!confirm(`Revoke access for ${u.email}? They will be moved to pending.`)) return;
     await updateUser(u.id, { status: "pending", role: null });
     setToast({ message: "Access revoked." });
   };
@@ -277,6 +275,11 @@ export default function AdminPanelPage() {
     if (role === "content_team") return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
         Content Team
+      </span>
+    );
+    if (role === "interviewer_content") return (
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+        Interviewer + Content
       </span>
     );
     return (
@@ -398,24 +401,26 @@ export default function AdminPanelPage() {
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
                     <td className="px-4 py-3">{roleBadge(u.role)}</td>
                     <td className="px-4 py-3">
-                      <div className="flex gap-3">
-                        {u.role === "admin" && u.id !== currentUser?.uid && (
-                          <button onClick={() => demoteToInterviewer(u)} disabled={saving[u.id]}
-                            className="text-xs text-gray-500 font-medium hover:text-orange-600 hover:underline disabled:opacity-60">
-                            {saving[u.id] ? "Updating…" : "Make Interviewer"}
+                      {u.id === currentUser?.uid ? (
+                        <span className="text-xs text-gray-400">—</span>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <select
+                            value={u.role || "interviewer"}
+                            disabled={saving[u.id]}
+                            onChange={e => changeRole(u, e.target.value)}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-gray-700 disabled:opacity-60 cursor-pointer"
+                          >
+                            {ALL_ROLES.map(r => (
+                              <option key={r.value} value={r.value}>{r.label}</option>
+                            ))}
+                          </select>
+                          <button onClick={() => revoke(u)} disabled={saving[u.id]}
+                            className="text-xs text-red-500 font-medium hover:underline disabled:opacity-40">
+                            Revoke
                           </button>
-                        )}
-                        {u.role === "interviewer" && (
-                          <>
-                            <button onClick={() => promoteToAdmin(u)} disabled={saving[u.id]}
-                              className="text-xs text-purple-600 font-medium hover:underline disabled:opacity-60">
-                              {saving[u.id] ? "Updating…" : "Make Admin"}
-                            </button>
-                            <button onClick={() => revoke(u)}
-                              className="text-xs text-red-500 font-medium hover:underline">Revoke</button>
-                          </>
-                        )}
-                      </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

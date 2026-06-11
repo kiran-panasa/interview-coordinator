@@ -206,6 +206,41 @@ function downloadSampleExcel() {
   XLSX.writeFile(wb, "interview_template_sample.xlsx");
 }
 
+function exportTemplateToExcel(template) {
+  const rows = [
+    ["type", "id / score", "label / value", "field type", "weight %"],
+    ["template", template.name, "", "", ""],
+  ];
+  const domains = (template.domains || []).slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  for (const domain of domains) {
+    rows.push(["", "", "", "", ""]);
+    rows.push(["domain", domain.type, domain.label, domain.weightInVerdict ?? 0, domain.defaultCardCount ?? 0]);
+    for (const field of (domain.cardFields || [])) {
+      if (field.type === "computed") continue;
+      rows.push(["card_field", field.id, field.label, field.type, field.type === "scored_dropdown" ? (field.weight ?? "") : ""]);
+      if (field.type === "scored_dropdown" && Array.isArray(field.options)) {
+        for (const opt of field.options) rows.push(["option", opt.score, opt.label, "", ""]);
+      } else if (field.type === "dropdown" && Array.isArray(field.options)) {
+        for (const opt of field.options) rows.push(["option", opt, "", "", ""]);
+      }
+    }
+    for (const field of (domain.domainFields || [])) {
+      if (field.type === "computed_domain") continue;
+      rows.push(["domain_field", field.id, field.label, field.type, field.type === "scored_dropdown" ? (field.weight ?? "") : ""]);
+      if (field.type === "scored_dropdown" && Array.isArray(field.options)) {
+        for (const opt of field.options) rows.push(["option", opt.score, opt.label, "", ""]);
+      } else if (field.type === "dropdown" && Array.isArray(field.options)) {
+        for (const opt of field.options) rows.push(["option", opt, "", "", ""]);
+      }
+    }
+  }
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{ wch: 16 }, { wch: 22 }, { wch: 64 }, { wch: 20 }, { wch: 12 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Template");
+  XLSX.writeFile(wb, `${template.name.replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_")}.xlsx`);
+}
+
 function parseCSV(text) {
   return text.split(/\r?\n/).map(l => {
     const cols = l.split(",").map(c => c.trim().replace(/^"|"$/g, ""));
@@ -986,6 +1021,7 @@ export default function TemplatesPage() {
                   </div>
                   <div className="flex gap-2 ml-2 flex-shrink-0">
                     <button onClick={() => setPreviewTarget(t)} className="text-xs text-gray-500 font-medium hover:underline">Preview</button>
+                    <button onClick={() => exportTemplateToExcel(t)} title="Download as Excel" className="text-xs text-emerald-600 font-medium hover:underline">Export</button>
                     <button onClick={() => openEdit(t)}         className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
                     <button onClick={() => handleDelete(t)}     className="text-xs text-red-500 font-medium hover:underline">Delete</button>
                   </div>
