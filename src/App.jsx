@@ -10,6 +10,7 @@ import InterviewsPage     from "./pages/admin/InterviewsPage";
 import CandidatesPage     from "./pages/admin/CandidatesPage";
 import InterviewersPage   from "./pages/admin/InterviewersPage";
 import TemplatesPage      from "./pages/admin/TemplatesPage";
+import AdminPanelPage     from "./pages/admin/AdminPanelPage";
 
 import InterviewerLayout    from "./components/InterviewerLayout";
 import InterviewerDashboard from "./pages/interviewer/Dashboard";
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="candidates"  element={<CandidatesPage />} />
         <Route path="interviewers" element={<InterviewersPage />} />
         <Route path="templates"   element={<TemplatesPage />} />
+        <Route path="panel"       element={<AdminPanelPage />} />
       </Route>
 
       {/* Interviewer */}
