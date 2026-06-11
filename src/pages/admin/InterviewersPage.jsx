@@ -4,6 +4,7 @@ import {
   createInvite, deleteInvite,
   subscribeToUsers, subscribeToInvites,
 } from "../../api/firestore";
+import { useAuth } from "../../AuthContext";
 import Badge from "../../components/Badge";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -11,6 +12,7 @@ import Toast from "../../components/Toast";
 const BLANK_INVITE = { name: "", phone: "", email: "" };
 
 export default function InterviewersPage() {
+  const { currentUser } = useAuth();
   const [users,    setUsers]    = useState([]);
   const [invites,  setInvites]  = useState([]);
   const [loading,  setLoading]  = useState(true);
@@ -36,8 +38,9 @@ export default function InterviewersPage() {
     return () => { unsubUsers(); unsubInvites(); };
   }, []);
 
-  const pending     = users.filter(u => u.status === "pending");
+  const pending      = users.filter(u => u.status === "pending");
   const interviewers = users.filter(u => u.role === "interviewer" && u.status === "active");
+  const admins       = users.filter(u => u.role === "admin" && u.status === "active");
 
   const signupLink = (email) =>
     `${window.location.origin}/login?mode=signup&email=${encodeURIComponent(email)}`;
@@ -93,6 +96,26 @@ export default function InterviewersPage() {
     if (!confirm(`Revoke access for ${user.email}?`)) return;
     await updateUser(user.id, { status: "pending", role: null });
     setToast({ message: "Access revoked." });
+  };
+
+  const promoteToAdmin = async (user) => {
+    if (!confirm(`Give admin access to ${user.displayName || user.email}? They will be able to manage all interviews, candidates, and users.`)) return;
+    setSaving(s => ({ ...s, [user.id]: true }));
+    await updateUser(user.id, { role: "admin" });
+    setToast({ message: `${user.displayName || user.email} is now an admin.` });
+    setSaving(s => ({ ...s, [user.id]: false }));
+  };
+
+  const demoteToInterviewer = async (user) => {
+    if (user.id === currentUser?.uid) {
+      setToast({ message: "You cannot remove your own admin access.", type: "error" });
+      return;
+    }
+    if (!confirm(`Remove admin access for ${user.displayName || user.email}? They will become a regular interviewer.`)) return;
+    setSaving(s => ({ ...s, [user.id]: true }));
+    await updateUser(user.id, { role: "interviewer" });
+    setToast({ message: `${user.displayName || user.email} is now an interviewer.` });
+    setSaving(s => ({ ...s, [user.id]: false }));
   };
 
   const viewAvailability = async (user) => {
@@ -180,44 +203,95 @@ export default function InterviewersPage() {
         </div>
       </div>
 
-      {/* Active interviewers */}
-      <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-        <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
-        Active Interviewers ({interviewers.length})
-      </h2>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
-          <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
-        ) : interviewers.length === 0 ? (
-          <p className="text-center text-gray-400 py-12 text-sm">No active interviewers yet. Approve sign-ups above.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100">
-                {["Name", "Email", "Status", "Actions"].map(h => (
-                  <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {interviewers.map(u => (
-                <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-semibold text-gray-900">{u.displayName || "—"}</td>
-                  <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
-                  <td className="px-4 py-3"><Badge value={u.status} /></td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-3">
-                      <button onClick={() => viewAvailability(u)}
-                        className="text-xs text-indigo-600 font-medium hover:underline">View Availability</button>
-                      <button onClick={() => revoke(u)}
-                        className="text-xs text-red-500 font-medium hover:underline">Revoke</button>
-                    </div>
-                  </td>
+      {/* Admins section */}
+      <div className="mb-8">
+        <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-2 h-2 bg-purple-500 rounded-full inline-block" />
+          Admins ({admins.length})
+        </h2>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {loading ? (
+            <p className="text-center text-gray-400 py-10 text-sm">Loading…</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {["Name", "Email", "Actions"].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {admins.map(u => (
+                  <tr key={u.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-gray-900">{u.displayName || "—"}</span>
+                        {u.id === currentUser?.uid && (
+                          <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">You</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
+                    <td className="px-4 py-3">
+                      {u.id !== currentUser?.uid && (
+                        <button onClick={() => demoteToInterviewer(u)} disabled={saving[u.id]}
+                          className="text-xs text-gray-500 font-medium hover:text-orange-600 hover:underline disabled:opacity-60">
+                          {saving[u.id] ? "Updating…" : "Make Interviewer"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Active interviewers */}
+      <div className="mb-8">
+        <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+          <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
+          Active Interviewers ({interviewers.length})
+        </h2>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {loading ? (
+            <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
+          ) : interviewers.length === 0 ? (
+            <p className="text-center text-gray-400 py-12 text-sm">No active interviewers yet. Approve sign-ups above.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {["Name", "Email", "Actions"].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {interviewers.map(u => (
+                  <tr key={u.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-semibold text-gray-900">{u.displayName || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-3">
+                        <button onClick={() => viewAvailability(u)}
+                          className="text-xs text-indigo-600 font-medium hover:underline">Availability</button>
+                        <button onClick={() => promoteToAdmin(u)} disabled={saving[u.id]}
+                          className="text-xs text-purple-600 font-medium hover:underline disabled:opacity-60">
+                          {saving[u.id] ? "Updating…" : "Make Admin"}
+                        </button>
+                        <button onClick={() => revoke(u)}
+                          className="text-xs text-red-500 font-medium hover:underline">Revoke</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Invites section */}

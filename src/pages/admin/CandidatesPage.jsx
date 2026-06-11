@@ -4,7 +4,7 @@ import { getCandidates, createCandidate, updateCandidate, deleteCandidate } from
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 
-const EMPTY = { name: "", email: "", phone: "", roleAppliedFor: "", resumeLink: "", notes: "" };
+const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "" };
 
 export default function CandidatesPage() {
   const { currentUser } = useAuth();
@@ -21,11 +21,15 @@ export default function CandidatesPage() {
   useEffect(() => { load(); }, []);
 
   const openNew  = () => { setEditTarget(null); setForm(EMPTY); setShowModal(true); };
-  const openEdit = (c) => { setEditTarget(c); setForm({ name: c.name, email: c.email || "", phone: c.phone || "", roleAppliedFor: c.roleAppliedFor || "", resumeLink: c.resumeLink || "", notes: c.notes || "" }); setShowModal(true); };
+  const openEdit = (c) => {
+    setEditTarget(c);
+    setForm({ name: c.name, uid: c.uid || "", email: c.email || "", phone: c.phone || "", resumeLink: c.resumeLink || "", notes: c.notes || "" });
+    setShowModal(true);
+  };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.roleAppliedFor.trim())
-      return setToast({ message: "Name and role are required.", type: "error" });
+    if (!form.name.trim())
+      return setToast({ message: "Name is required.", type: "error" });
     setSaving(true);
     try {
       if (editTarget) {
@@ -49,8 +53,8 @@ export default function CandidatesPage() {
 
   const filtered = candidates.filter(c =>
     c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase()) ||
-    c.roleAppliedFor?.toLowerCase().includes(search.toLowerCase())
+    c.uid?.toLowerCase().includes(search.toLowerCase()) ||
+    c.email?.toLowerCase().includes(search.toLowerCase())
   );
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
@@ -73,7 +77,7 @@ export default function CandidatesPage() {
         </button>
       </div>
 
-      <input type="text" placeholder="Search by name, email, or role…" value={search}
+      <input type="text" placeholder="Search by name, UID, or email…" value={search}
         onChange={e => setSearch(e.target.value)}
         className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
@@ -84,7 +88,7 @@ export default function CandidatesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Name", "Email", "Role Applied For", "Resume", "Actions"].map(h => (
+                {["Name", "UID", "Email", "Resume", "Actions"].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -98,8 +102,10 @@ export default function CandidatesPage() {
                     <p className="font-semibold text-gray-900">{c.name}</p>
                     {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
                   </td>
+                  <td className="px-4 py-3">
+                    <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">{c.uid || "—"}</span>
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{c.email || "—"}</td>
-                  <td className="px-4 py-3 text-gray-700">{c.roleAppliedFor || "—"}</td>
                   <td className="px-4 py-3">
                     {c.resumeLink
                       ? <a href={c.resumeLink} target="_blank" rel="noreferrer" className="text-indigo-600 text-xs hover:underline">View ↗</a>
@@ -127,18 +133,18 @@ export default function CandidatesPage() {
               <input value={form.name} onChange={e => setField("name", e.target.value)} placeholder="John Doe" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Email</label>
-              <input type="email" value={form.email} onChange={e => setField("email", e.target.value)} placeholder="john@example.com" className={inputCls} />
+              <label className={labelCls}>UID</label>
+              <input value={form.uid} onChange={e => setField("uid", e.target.value)} placeholder="e.g. STU-2024-001" className={inputCls} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Phone</label>
-              <input value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="+91 98765 43210" className={inputCls} />
+              <label className={labelCls}>Email</label>
+              <input type="email" value={form.email} onChange={e => setField("email", e.target.value)} placeholder="john@example.com" className={inputCls} />
             </div>
             <div>
-              <label className={labelCls}>Role Applied For *</label>
-              <input value={form.roleAppliedFor} onChange={e => setField("roleAppliedFor", e.target.value)} placeholder="Software Engineer" className={inputCls} />
+              <label className={labelCls}>Phone</label>
+              <input value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="+91 98765 43210" className={inputCls} />
             </div>
           </div>
           <div>
