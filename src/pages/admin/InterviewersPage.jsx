@@ -203,25 +203,28 @@ export default function InterviewersPage() {
         </div>
       </div>
 
-      {/* Admins section */}
+      {/* All active users — admins + interviewers in one table */}
       <div className="mb-8">
         <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-          <span className="w-2 h-2 bg-purple-500 rounded-full inline-block" />
-          Admins ({admins.length})
+          <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
+          Active Users ({admins.length + interviewers.length})
         </h2>
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           {loading ? (
-            <p className="text-center text-gray-400 py-10 text-sm">Loading…</p>
+            <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
+          ) : admins.length + interviewers.length === 0 ? (
+            <p className="text-center text-gray-400 py-12 text-sm">No active users yet.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Name", "Email", "Actions"].map(h => (
+                  {["Name", "Email", "Role", "Actions"].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
+                {/* Admins first */}
                 {admins.map(u => (
                   <tr key={u.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
@@ -234,6 +237,14 @@ export default function InterviewersPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
                     <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clipRule="evenodd" />
+                        </svg>
+                        Admin
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       {u.id !== currentUser?.uid && (
                         <button onClick={() => demoteToInterviewer(u)} disabled={saving[u.id]}
                           className="text-xs text-gray-500 font-medium hover:text-orange-600 hover:underline disabled:opacity-60">
@@ -243,37 +254,19 @@ export default function InterviewersPage() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* Active interviewers */}
-      <div className="mb-8">
-        <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-          <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block" />
-          Active Interviewers ({interviewers.length})
-        </h2>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {loading ? (
-            <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
-          ) : interviewers.length === 0 ? (
-            <p className="text-center text-gray-400 py-12 text-sm">No active interviewers yet. Approve sign-ups above.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {["Name", "Email", "Actions"].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
+                {/* Interviewers */}
                 {interviewers.map(u => (
                   <tr key={u.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-semibold text-gray-900">{u.displayName || "—"}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
+                        </svg>
+                        Interviewer
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-3">
                         <button onClick={() => viewAvailability(u)}
