@@ -22,6 +22,19 @@ export async function getAllUsers() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+export function subscribeToUsers(callback) {
+  return onSnapshot(collection(db, "users"), snap =>
+    callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+  );
+}
+
+export function subscribeToInvites(callback) {
+  return onSnapshot(
+    query(collection(db, "invites"), orderBy("createdAt", "desc")),
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+  );
+}
+
 export async function updateUser(id, data) {
   await updateDoc(doc(db, "users", id), data);
 }

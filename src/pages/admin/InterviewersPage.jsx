@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import {
-  getAllUsers, updateUser, deleteUser, getInterviewerAvailability,
-  createInvite, getInvites, deleteInvite,
+  updateUser, deleteUser, getInterviewerAvailability,
+  createInvite, deleteInvite,
+  subscribeToUsers, subscribeToInvites,
 } from "../../api/firestore";
 import Badge from "../../components/Badge";
 import Modal from "../../components/Modal";
@@ -25,13 +26,15 @@ export default function InterviewersPage() {
   const [savedInvite,     setSavedInvite]     = useState(null); // invite just created → show link
   const [copiedId,        setCopiedId]        = useState(null);
 
-  const load = async () => {
-    const [u, inv] = await Promise.all([getAllUsers(), getInvites()]);
-    setUsers(u);
-    setInvites(inv);
-    setLoading(false);
-  };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let usersReady = false, invitesReady = false;
+    const checkReady = () => { if (usersReady && invitesReady) setLoading(false); };
+
+    const unsubUsers   = subscribeToUsers(u   => { setUsers(u);   usersReady   = true; checkReady(); });
+    const unsubInvites = subscribeToInvites(i => { setInvites(i); invitesReady = true; checkReady(); });
+
+    return () => { unsubUsers(); unsubInvites(); };
+  }, []);
 
   const pending     = users.filter(u => u.status === "pending");
   const interviewers = users.filter(u => u.role === "interviewer" && u.status === "active");
@@ -60,7 +63,6 @@ export default function InterviewersPage() {
       const created = { id, ...inviteForm, email: inviteForm.email.toLowerCase().trim(), status: "pending", createdAt: new Date().toISOString() };
       setSavedInvite(created);
       setInviteForm(BLANK_INVITE);
-      load();
     } catch {
       setInviteError("Failed to save invite. Try again.");
     } finally {
@@ -72,14 +74,12 @@ export default function InterviewersPage() {
     if (!confirm(`Remove invite for ${invite.email}?`)) return;
     await deleteInvite(invite.id);
     setToast({ message: "Invite removed." });
-    load();
   };
 
   const approve = async (user) => {
     setSaving(s => ({ ...s, [user.id]: true }));
     await updateUser(user.id, { role: "interviewer", status: "active" });
     setToast({ message: `${user.email} approved as Interviewer.` });
-    load();
     setSaving(s => ({ ...s, [user.id]: false }));
   };
 
@@ -87,14 +87,12 @@ export default function InterviewersPage() {
     if (!confirm(`Delete ${user.email}'s account?`)) return;
     await deleteUser(user.id);
     setToast({ message: "Account deleted." });
-    load();
   };
 
   const revoke = async (user) => {
     if (!confirm(`Revoke access for ${user.email}?`)) return;
     await updateUser(user.id, { status: "pending", role: null });
     setToast({ message: "Access revoked." });
-    load();
   };
 
   const viewAvailability = async (user) => {
