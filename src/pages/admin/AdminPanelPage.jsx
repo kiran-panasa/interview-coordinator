@@ -8,7 +8,13 @@ import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 
-const BLANK_INVITE = { name: "", phone: "", email: "" };
+const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
+
+const ROLE_OPTIONS = [
+  { value: "interviewer",   label: "Interviewer",   desc: "Can conduct interviews and submit evaluations" },
+  { value: "admin",         label: "Admin",         desc: "Full access — manage interviews, candidates, users" },
+  { value: "content_team",  label: "Content Team",  desc: "Access to Templates page only" },
+];
 
 export default function AdminPanelPage() {
   const { currentUser } = useAuth();
@@ -340,7 +346,10 @@ export default function AdminPanelPage() {
                 </svg>
               </div>
               <p className="font-semibold text-gray-900">Invite saved!</p>
-              <p className="text-sm text-gray-500 text-center">Share this link with <strong>{savedInvite.name}</strong>.</p>
+              <p className="text-sm text-gray-500 text-center">
+                Share this link with <strong>{savedInvite.name}</strong>. They'll be registered as{" "}
+                <strong>{ROLE_OPTIONS.find(r => r.value === savedInvite.role)?.label || "Interviewer"}</strong>.
+              </p>
             </div>
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Signup link</p>
@@ -382,6 +391,23 @@ export default function AdminPanelPage() {
               <input type="email" value={inviteForm.email} placeholder="interviewer@example.com"
                 onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Role <span className="text-red-400">*</span></label>
+              <div className="space-y-2">
+                {ROLE_OPTIONS.map(opt => (
+                  <label key={opt.value}
+                    className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${inviteForm.role === opt.value ? "border-indigo-400 bg-indigo-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
+                    <input type="radio" name="invite-role" value={opt.value} checked={inviteForm.role === opt.value}
+                      onChange={() => setInviteForm(f => ({ ...f, role: opt.value }))}
+                      className="mt-0.5 accent-indigo-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{opt.label}</p>
+                      <p className="text-xs text-gray-400">{opt.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
             </div>
             {inviteError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{inviteError}</p>}
             <p className="text-xs text-gray-400">After saving, you'll get a signup link to share with the interviewer.</p>

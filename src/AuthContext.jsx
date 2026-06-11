@@ -24,7 +24,7 @@ export function AuthProvider({ children }) {
         email:       user.email,
         displayName: invite?.name || user.displayName || user.email.split("@")[0],
         phone:       invite?.phone || null,
-        role:        isBootstrap ? "admin"      : (invite ? "interviewer" : null),
+        role:        isBootstrap ? "admin"      : (invite ? (invite.role || "interviewer") : null),
         status:      isBootstrap ? "active"     : (invite ? "active"      : "pending"),
         createdAt:   new Date().toISOString(),
       }).catch(() => {});
