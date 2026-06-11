@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
-import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, updateInvite } from "./api/firestore";
+import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, getAnyInviteByEmail, updateInvite } from "./api/firestore";
 
 const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
 
@@ -33,8 +33,9 @@ export function AuthProvider({ children }) {
       }
       profile = await getMyProfile(user.uid).catch(() => null);
     } else if (profile.status === "pending") {
-      // Profile exists but still pending — check if a valid invite exists (race condition recovery)
-      const invite = await getInviteByEmail(user.email).catch(() => null);
+      // Profile stuck as pending — check ANY invite (pending or already registered)
+      // to recover accounts where the race condition created a pending profile
+      const invite = await getAnyInviteByEmail(user.email).catch(() => null);
       if (invite) {
         await updateUser(user.uid, {
           role:        "interviewer",
@@ -42,7 +43,9 @@ export function AuthProvider({ children }) {
           displayName: profile.displayName || invite.name,
           phone:       profile.phone       || invite.phone || null,
         }).catch(() => {});
-        await updateInvite(invite.id, { status: "registered", registeredAt: new Date().toISOString() }).catch(() => {});
+        if (invite.status === "pending") {
+          await updateInvite(invite.id, { status: "registered", registeredAt: new Date().toISOString() }).catch(() => {});
+        }
         profile = await getMyProfile(user.uid).catch(() => null);
       }
     }

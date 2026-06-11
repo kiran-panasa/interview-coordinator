@@ -238,6 +238,14 @@ export async function getInviteByEmail(email) {
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
 }
 
+export async function getAnyInviteByEmail(email) {
+  const snap = await getDocs(query(
+    collection(db, "invites"),
+    where("email", "==", email.toLowerCase().trim()),
+  ));
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+}
+
 // ── Rating label descriptors ──────────────────────────────────────────────────
 
 export const CODING_PS_LABELS = {
