@@ -6,7 +6,6 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { createUserProfile, getInviteByEmail, updateInvite } from "../../api/firestore";
 
 const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
 
@@ -38,20 +37,8 @@ export default function LoginPage() {
     setError(""); setLoading(true);
     try {
       if (mode === "signup") {
-        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const isBootstrap = email.trim().toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
-        const invite = !isBootstrap ? await getInviteByEmail(email.trim()).catch(() => null) : null;
-        await createUserProfile(user.uid, {
-          email:       user.email,
-          displayName: name.trim() || invite?.name || email.split("@")[0],
-          phone:       invite?.phone || null,
-          role:        isBootstrap ? "admin" : (invite ? "interviewer" : null),
-          status:      isBootstrap ? "active" : (invite ? "active" : "pending"),
-          createdAt:   new Date().toISOString(),
-        });
-        if (invite) {
-          await updateInvite(invite.id, { status: "registered", registeredAt: new Date().toISOString() }).catch(() => {});
-        }
+        // Profile creation (with invite check) is handled by AuthContext's onAuthStateChanged
+        await createUserWithEmailAndPassword(auth, email.trim(), password);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
-import { getMyProfile, createUserProfile } from "./api/firestore";
+import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, updateInvite } from "./api/firestore";
 
 const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
 
@@ -15,18 +15,38 @@ export function AuthProvider({ children }) {
 
   const loadProfile = async (user) => {
     let profile = await getMyProfile(user.uid).catch(() => null);
+
     if (!profile) {
-      // Document missing — create it now (handles accounts created outside the signup flow)
+      // New account — check invite to assign correct role/status immediately
       const isBootstrap = user.email?.toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
+      const invite = !isBootstrap ? await getInviteByEmail(user.email).catch(() => null) : null;
       await createUserProfile(user.uid, {
         email:       user.email,
-        displayName: user.displayName || user.email.split("@")[0],
-        role:        isBootstrap ? "admin"  : null,
-        status:      isBootstrap ? "active" : "pending",
+        displayName: invite?.name || user.displayName || user.email.split("@")[0],
+        phone:       invite?.phone || null,
+        role:        isBootstrap ? "admin"      : (invite ? "interviewer" : null),
+        status:      isBootstrap ? "active"     : (invite ? "active"      : "pending"),
         createdAt:   new Date().toISOString(),
       }).catch(() => {});
+      if (invite) {
+        await updateInvite(invite.id, { status: "registered", registeredAt: new Date().toISOString() }).catch(() => {});
+      }
       profile = await getMyProfile(user.uid).catch(() => null);
+    } else if (profile.status === "pending") {
+      // Profile exists but still pending — check if a valid invite exists (race condition recovery)
+      const invite = await getInviteByEmail(user.email).catch(() => null);
+      if (invite) {
+        await updateUser(user.uid, {
+          role:        "interviewer",
+          status:      "active",
+          displayName: profile.displayName || invite.name,
+          phone:       profile.phone       || invite.phone || null,
+        }).catch(() => {});
+        await updateInvite(invite.id, { status: "registered", registeredAt: new Date().toISOString() }).catch(() => {});
+        profile = await getMyProfile(user.uid).catch(() => null);
+      }
     }
+
     setUserProfile(profile);
   };
 
