@@ -235,8 +235,8 @@ export default function InterviewDetail() {
             )}
           </div>
 
-          {/* Feedback form — dynamic v2, only when not yet submitted */}
-          {!hasFeedback && isDynamic && (
+          {/* Feedback form — dynamic v2, editable while scheduled */}
+          {isScheduled && isDynamic && (
             <DynamicFeedbackForm
               template={template}
               interview={interview}
@@ -245,16 +245,16 @@ export default function InterviewDetail() {
             />
           )}
 
-          {/* Feedback form — structured v1, only when not yet submitted */}
-          {!hasFeedback && isStructured && (
+          {/* Feedback form — structured v1, editable while scheduled */}
+          {isScheduled && isStructured && (
             <StructuredFeedbackForm
               interview={interview} template={template}
               onSubmit={handleSaveFeedback} saving={saving}
             />
           )}
 
-          {/* Feedback form — legacy (no template), only when not yet submitted */}
-          {!hasFeedback && !isDynamic && !isStructured && (
+          {/* Feedback form — legacy (no template), editable while scheduled */}
+          {isScheduled && !isDynamic && !isStructured && (
             <div className="space-y-5">
               {DEFAULT_FEEDBACK_QUESTIONS.map(q => (
                 <div key={q.id}>
@@ -282,25 +282,25 @@ export default function InterviewDetail() {
               </div>
               <button onClick={handleLegacySubmit} disabled={saving}
                 className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-                {saving ? "Saving…" : "Save Evaluation"}
+                {saving ? "Saving…" : hasFeedback ? "Update Evaluation" : "Save Evaluation"}
               </button>
             </div>
           )}
 
-          {/* Read-only feedback display — dynamic v2 */}
-          {hasFeedback && isDynamic && (
+          {/* Read-only feedback display — dynamic v2, only after completed */}
+          {isCompleted && hasFeedback && isDynamic && (
             <DynamicFeedbackDisplay template={template} feedbackData={interview.feedback} />
           )}
 
-          {/* Read-only feedback display — structured v1 */}
-          {hasFeedback && isStructured && (
+          {/* Read-only feedback display — structured v1, only after completed */}
+          {isCompleted && hasFeedback && isStructured && (
             <StructuredFeedbackDisplay
               interview={interview} template={template} feedback={interview.feedback}
             />
           )}
 
-          {/* Read-only feedback display — legacy */}
-          {hasFeedback && !isDynamic && !isStructured && (
+          {/* Read-only feedback display — legacy, only after completed */}
+          {isCompleted && hasFeedback && !isDynamic && !isStructured && (
             <div className="space-y-4">
               {DEFAULT_FEEDBACK_QUESTIONS.map(q => {
                 const val = interview.feedback.answers?.[q.id];
