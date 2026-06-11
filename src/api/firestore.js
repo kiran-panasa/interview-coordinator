@@ -76,9 +76,9 @@ export async function getInterviewerInterviews(interviewerEmail) {
   const snap = await getDocs(query(
     collection(db, "interviews"),
     where("interviewerEmail", "==", interviewerEmail),
-    orderBy("scheduledDate", "desc"),
   ));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 }
 
 export async function getInterview(id) {
@@ -150,9 +150,12 @@ export function subscribeToInterviewerInterviews(interviewerEmail, callback) {
   const q = query(
     collection(db, "interviews"),
     where("interviewerEmail", "==", interviewerEmail),
-    orderBy("scheduledDate", "desc"),
   );
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  return onSnapshot(q, snap => {
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
+    callback(docs);
+  });
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
