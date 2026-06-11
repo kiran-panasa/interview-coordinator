@@ -149,7 +149,7 @@ export default function AdminPanelPage() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Invite Interviewer
+          Invite
         </button>
       </div>
 
@@ -336,7 +336,7 @@ export default function AdminPanelPage() {
       )}
 
       {/* ── Invite Modal ── */}
-      <Modal open={showInviteModal} onClose={() => { setShowInviteModal(false); setSavedInvite(null); }} title="Invite Interviewer">
+      <Modal open={showInviteModal} onClose={() => { setShowInviteModal(false); setSavedInvite(null); }} title="Invite">
         {savedInvite ? (
           <div className="space-y-5">
             <div className="flex flex-col items-center gap-2 py-4">
