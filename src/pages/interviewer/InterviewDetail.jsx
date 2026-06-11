@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
-  getInterview, updateInterview, submitFeedback, getTemplate,
-  markSlotFree, DEFAULT_FEEDBACK_QUESTIONS,
+  getInterview, updateInterview, saveFeedbackDraft,
+  markSlotFree, DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
 } from "../../api/firestore";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -17,7 +17,21 @@ function fmt(dateStr) {
   const [y, m, d] = dateStr.split("-");
   return `${d}/${m}/${y}`;
 }
-// ── Main page ─────────────────────────────────────────────────────────────────
+
+function isPastInterviewTime(scheduledDate, scheduledTime) {
+  if (!scheduledDate || !scheduledTime) return false;
+  try {
+    const match = scheduledTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return false;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = match[3]?.toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    const start = new Date(`${scheduledDate}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
+    return Date.now() >= start.getTime();
+  } catch { return false; }
+}
 
 export default function InterviewDetail() {
   const { id } = useParams();
@@ -28,6 +42,13 @@ export default function InterviewDetail() {
   const [toast,     setToast]     = useState(null);
   const [answers,   setAnswers]   = useState({});
   const [comments,  setComments]  = useState("");
+  const [now,       setNow]       = useState(new Date());
+
+  // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     getInterview(id).then(async iv => {
@@ -66,26 +87,23 @@ export default function InterviewDetail() {
   };
 
   const handleMarkCompleted = async () => {
-    if (!confirm("Mark this interview as completed? This will unlock the feedback form.")) return;
+    if (!confirm("Mark this interview as completed?")) return;
     setSaving(true);
     await updateInterview(id, { status: "completed" });
     setInterview(iv => ({ ...iv, status: "completed" }));
-    setToast({ message: "Marked as completed." });
+    setToast({ message: "Interview marked as completed." });
     setSaving(false);
   };
 
-  // Called by both structured and legacy forms
-  const handleSubmitFeedback = async (feedbackData, errorMsg) => {
+  // Saves feedback WITHOUT marking completed — called from all form types while scheduled
+  const handleSaveFeedback = async (feedbackData, errorMsg) => {
     if (errorMsg) return setToast({ message: errorMsg, type: "error" });
     setSaving(true);
     try {
-      await submitFeedback(id, feedbackData);
-      setInterview(iv => ({
-        ...iv,
-        status: "completed",
-        feedback: { ...feedbackData, submittedAt: new Date().toISOString() },
-      }));
-      setToast({ message: "Feedback submitted successfully." });
+      await saveFeedbackDraft(id, feedbackData);
+      const saved = { ...feedbackData, submittedAt: new Date().toISOString() };
+      setInterview(iv => ({ ...iv, feedback: saved }));
+      setToast({ message: "Evaluation saved. Mark as Completed when the interview is done." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -101,7 +119,7 @@ export default function InterviewDetail() {
     if (recQuestion && !answers[recQuestion.id])
       return setToast({ message: "Please select an overall recommendation.", type: "error" });
     const overallRecommendation = recQuestion ? (answers[recQuestion.id] || "") : "";
-    await handleSubmitFeedback({ answers, overallRecommendation, comments }, null);
+    await handleSaveFeedback({ answers, overallRecommendation, comments }, null);
   };
 
   if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
@@ -111,14 +129,17 @@ export default function InterviewDetail() {
   const isScheduled  = interview.status === "scheduled";
   const isCompleted  = interview.status === "completed";
   const hasFeedback  = !!interview.feedback?.submittedAt;
-  const isDynamic    = !!(template?.domains);   // v2 template
-  const isStructured = !!template && !isDynamic; // v1 legacy template
+  const isDynamic    = !!(template?.domains);
+  const isStructured = !!template && !isDynamic;
+
+  const pastTime     = isPastInterviewTime(interview.scheduledDate, interview.scheduledTime);
+  const canComplete  = hasFeedback && pastTime;
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 max-w-3xl">
       <Link to="/interviewer/interviews"
         className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">
         ← Back to My Interviews
@@ -199,141 +220,133 @@ export default function InterviewDetail() {
         </div>
       )}
 
-      {/* Mark completed */}
-      {isScheduled && (
-        <div className="mb-5">
-          <button onClick={handleMarkCompleted} disabled={saving}
-            className="bg-white border border-gray-300 text-gray-700 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50 disabled:opacity-60">
-            Mark as Completed
-          </button>
-        </div>
-      )}
-
-      {/* Feedback submitted — dynamic (v2 template) */}
-      {isCompleted && hasFeedback && isDynamic && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <h2 className="text-sm font-bold text-emerald-800">Evaluation Submitted</h2>
-            <span className="text-xs text-gray-400 ml-auto">
-              {new Date(interview.feedback.submittedAt).toLocaleDateString()}
-            </span>
-          </div>
-          <DynamicFeedbackDisplay template={template} feedbackData={interview.feedback} />
-        </div>
-      )}
-
-      {/* Feedback form — dynamic (v2 template) */}
-      {isCompleted && !hasFeedback && isDynamic && (
-        <div>
-          <h2 className="text-base font-bold text-gray-900 mb-4">Submit Evaluation</h2>
-          <DynamicFeedbackForm
-            template={template}
-            interview={interview}
-            onSubmit={handleSubmitFeedback}
-            saving={saving}
-          />
-        </div>
-      )}
-
-      {/* Feedback submitted — structured (v1 legacy template) */}
-      {isCompleted && hasFeedback && isStructured && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <h2 className="text-sm font-bold text-emerald-800">Feedback Submitted</h2>
-            <span className="text-xs text-gray-400 ml-auto">
-              {new Date(interview.feedback.submittedAt).toLocaleDateString()}
-            </span>
-          </div>
-          <StructuredFeedbackDisplay
-            interview={interview} template={template} feedback={interview.feedback}
-          />
-        </div>
-      )}
-
-      {/* Feedback form — structured (v1 legacy template) */}
-      {isCompleted && !hasFeedback && isStructured && (
-        <div>
-          <h2 className="text-base font-bold text-gray-900 mb-4">Submit Evaluation</h2>
-          <StructuredFeedbackForm
-            interview={interview} template={template}
-            onSubmit={handleSubmitFeedback} saving={saving}
-          />
-        </div>
-      )}
-
-      {/* Feedback form — legacy (no template) */}
-      {isCompleted && !hasFeedback && !isStructured && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-base font-bold text-gray-900 mb-5">Submit Feedback</h2>
-          <div className="space-y-5">
-            {DEFAULT_FEEDBACK_QUESTIONS.map(q => (
-              <div key={q.id}>
-                <label className={labelCls}>{q.label}{q.type === "rating" ? " *" : ""}</label>
-                {q.type === "rating" && (
-                  <RatingInput value={answers[q.id] || 0} onChange={v => setAnswer(q.id, v)} />
-                )}
-                {q.type === "text" && (
-                  <textarea rows={3} value={answers[q.id] || ""}
-                    onChange={e => setAnswer(q.id, e.target.value)}
-                    className={`${inputCls} resize-none`} />
-                )}
-                {q.type === "select" && (
-                  <select value={answers[q.id] || ""} onChange={e => setAnswer(q.id, e.target.value)} className={inputCls}>
-                    <option value="">— Select —</option>
-                    {q.options.map(o => <option key={o} value={o}>{o}</option>)}
-                  </select>
-                )}
-              </div>
-            ))}
-            <div>
-              <label className={labelCls}>Additional Comments</label>
-              <textarea rows={3} value={comments} onChange={e => setComments(e.target.value)}
-                placeholder="Any additional observations…" className={`${inputCls} resize-none`} />
-            </div>
-            <button onClick={handleLegacySubmit} disabled={saving}
-              className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-              {saving ? "Submitting…" : "Submit Feedback"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Feedback submitted — legacy */}
-      {isCompleted && hasFeedback && !isStructured && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center gap-2 mb-5">
-            <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            <h2 className="text-sm font-bold text-emerald-800">Feedback Submitted</h2>
-            <span className="text-xs text-gray-400 ml-auto">
-              {new Date(interview.feedback.submittedAt).toLocaleDateString()}
-            </span>
-          </div>
-          <div className="space-y-4">
-            {DEFAULT_FEEDBACK_QUESTIONS.map(q => {
-              const val = interview.feedback.answers?.[q.id];
-              if (!val && val !== 0) return null;
-              return (
-                <div key={q.id}>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{q.label}</p>
-                  {q.type === "rating" ? <RatingDisplay value={val} /> : <p className="text-sm text-gray-700 mt-1">{val}</p>}
-                </div>
-              );
-            })}
-            {interview.feedback.comments && (
-              <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Additional Comments</p>
-                <p className="text-sm text-gray-700 mt-1">{interview.feedback.comments}</p>
-              </div>
+      {/* ── Evaluation section (scheduled or completed) ── */}
+      {(isScheduled || isCompleted) && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-bold text-gray-900">Evaluation</h2>
+            {hasFeedback && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+                Submitted {new Date(interview.feedback.submittedAt).toLocaleDateString()}
+              </span>
             )}
           </div>
+
+          {/* Feedback form — dynamic v2, only when not yet submitted */}
+          {!hasFeedback && isDynamic && (
+            <DynamicFeedbackForm
+              template={template}
+              interview={interview}
+              onSubmit={handleSaveFeedback}
+              saving={saving}
+            />
+          )}
+
+          {/* Feedback form — structured v1, only when not yet submitted */}
+          {!hasFeedback && isStructured && (
+            <StructuredFeedbackForm
+              interview={interview} template={template}
+              onSubmit={handleSaveFeedback} saving={saving}
+            />
+          )}
+
+          {/* Feedback form — legacy (no template), only when not yet submitted */}
+          {!hasFeedback && !isDynamic && !isStructured && (
+            <div className="space-y-5">
+              {DEFAULT_FEEDBACK_QUESTIONS.map(q => (
+                <div key={q.id}>
+                  <label className={labelCls}>{q.label}{q.type === "rating" ? " *" : ""}</label>
+                  {q.type === "rating" && (
+                    <RatingInput value={answers[q.id] || 0} onChange={v => setAnswer(q.id, v)} />
+                  )}
+                  {q.type === "text" && (
+                    <textarea rows={3} value={answers[q.id] || ""}
+                      onChange={e => setAnswer(q.id, e.target.value)}
+                      className={`${inputCls} resize-none`} />
+                  )}
+                  {q.type === "select" && (
+                    <select value={answers[q.id] || ""} onChange={e => setAnswer(q.id, e.target.value)} className={inputCls}>
+                      <option value="">— Select —</option>
+                      {q.options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  )}
+                </div>
+              ))}
+              <div>
+                <label className={labelCls}>Additional Comments</label>
+                <textarea rows={3} value={comments} onChange={e => setComments(e.target.value)}
+                  placeholder="Any additional observations…" className={`${inputCls} resize-none`} />
+              </div>
+              <button onClick={handleLegacySubmit} disabled={saving}
+                className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                {saving ? "Saving…" : "Save Evaluation"}
+              </button>
+            </div>
+          )}
+
+          {/* Read-only feedback display — dynamic v2 */}
+          {hasFeedback && isDynamic && (
+            <DynamicFeedbackDisplay template={template} feedbackData={interview.feedback} />
+          )}
+
+          {/* Read-only feedback display — structured v1 */}
+          {hasFeedback && isStructured && (
+            <StructuredFeedbackDisplay
+              interview={interview} template={template} feedback={interview.feedback}
+            />
+          )}
+
+          {/* Read-only feedback display — legacy */}
+          {hasFeedback && !isDynamic && !isStructured && (
+            <div className="space-y-4">
+              {DEFAULT_FEEDBACK_QUESTIONS.map(q => {
+                const val = interview.feedback.answers?.[q.id];
+                if (!val && val !== 0) return null;
+                return (
+                  <div key={q.id}>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{q.label}</p>
+                    {q.type === "rating" ? <RatingDisplay value={val} /> : <p className="text-sm text-gray-700 mt-1">{val}</p>}
+                  </div>
+                );
+              })}
+              {interview.feedback.comments && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Additional Comments</p>
+                  <p className="text-sm text-gray-700 mt-1">{interview.feedback.comments}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mark as Completed — only when scheduled */}
+          {isScheduled && (
+            <div className="mt-6 pt-5 border-t border-gray-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Mark as Completed</p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {!hasFeedback && "Submit the evaluation above first."}
+                    {hasFeedback && !pastTime && `Available after interview start time (${interview.scheduledTime}).`}
+                    {canComplete && "Ready — interview time has passed and evaluation is submitted."}
+                  </p>
+                </div>
+                <button
+                  onClick={handleMarkCompleted}
+                  disabled={!canComplete || saving}
+                  className={`px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                    canComplete
+                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  {saving ? "Saving…" : "Mark as Completed"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

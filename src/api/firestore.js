@@ -101,6 +101,13 @@ export async function updateInterview(id, data) {
   });
 }
 
+export async function saveFeedbackDraft(id, feedback) {
+  await updateDoc(doc(db, "interviews", id), {
+    feedback: { ...feedback, submittedAt: new Date().toISOString() },
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function submitFeedback(id, feedback) {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
