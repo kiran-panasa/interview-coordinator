@@ -753,7 +753,11 @@ export default function TemplatesPage() {
           }
           return f;
         });
-      const domainFields = (domain.domainFields || []).filter(f => f.type !== "computed_domain");
+      const existing = (domain.domainFields || []).filter(f => f.type !== "computed_domain");
+      // If no domain-level fields exist (old schema), seed from preset so the user sees defaults
+      const domainFields = existing.length > 0
+        ? existing
+        : deepClone(DOMAIN_PRESETS[domain.type]?.domainFields || []);
       const scored = cardFields.filter(f => f.type === "scored_dropdown");
       const hasWeights = scored.some(f => f.weight != null);
       const migratedCardFields = (scored.length > 0 && !hasWeights)
@@ -903,7 +907,12 @@ export default function TemplatesPage() {
         setToast({ message: "Template created." });
       }
       setShowModal(false);
-      load();
+      const fresh = await getTemplates();
+      setTemplates(fresh);
+      if (previewTarget && editTarget && previewTarget.id === editTarget.id) {
+        const updated = fresh.find(t => t.id === editTarget.id);
+        if (updated) setPreviewTarget(updated);
+      }
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }

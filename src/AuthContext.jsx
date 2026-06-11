@@ -55,6 +55,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
+      setAuthLoading(true);
       setCurrentUser(user);
       if (user) await loadProfile(user);
       else setUserProfile(null);
