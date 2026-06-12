@@ -10,10 +10,21 @@ import Modal from "../../components/Modal";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 
-const STATUSES = ["All", "pending_acceptance", "scheduled", "completed", "cancelled", "declined", "no_show"];
+const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
+const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
+
+const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "cancelled", "declined", "no_show"];
+const DURATIONS = [
+  { label: "30 min",  value: 30  },
+  { label: "45 min",  value: 45  },
+  { label: "1 hour",  value: 60  },
+  { label: "1.5 hrs", value: 90  },
+  { label: "2 hours", value: 120 },
+];
+
 const EMPTY_FORM = {
   candidateId: "", interviewerId: "", scheduledDate: "", scheduledTime: "",
-  meetLink: "", round: "", notes: "", templateId: "",
+  duration: 60, meetLink: "", round: "", notes: "", templateId: "",
 };
 
 function fmt(dateStr) {
@@ -22,34 +33,53 @@ function fmt(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
+// ── Calendar API helpers ──────────────────────────────────────────────────────
+
+async function callAppsScript(payload) {
+  if (!APPS_SCRIPT_URL) throw new Error("VITE_APPS_SCRIPT_URL is not set in .env");
+  const res = await fetch(APPS_SCRIPT_URL, {
+    method:   "POST",
+    redirect: "follow",
+    body:     JSON.stringify({ ...payload, secret: APPS_SCRIPT_SECRET }),
+  });
+  const json = await res.json();
+  if (!json.success) throw new Error(json.error || "Apps Script call failed");
+  return json;
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function InterviewsPage() {
   const { currentUser, userProfile } = useAuth();
-  const [interviews,  setInterviews]  = useState([]);
-  const [candidates,  setCandidates]  = useState([]);
-  const [interviewers, setInterviewers] = useState([]);
-  const [templates,   setTemplates]   = useState([]);
-  const [filterStatus, setFilterStatus] = useState("All");
-  const [filterDate,   setFilterDate]   = useState("");
-  const [filterIvr,    setFilterIvr]    = useState("All");
-  const [showModal,    setShowModal]    = useState(false);
-  const [editTarget,   setEditTarget]   = useState(null);
-  const [form,         setForm]         = useState(EMPTY_FORM);
-  const [slots,        setSlots]        = useState([]);
-  const [availDates,   setAvailDates]   = useState([]);
-  const [availTimes,   setAvailTimes]   = useState([]);
-  const [saving,       setSaving]       = useState(false);
-  const [toast,        setToast]        = useState(null);
+  const [interviews,    setInterviews]    = useState([]);
+  const [candidates,    setCandidates]    = useState([]);
+  const [interviewers,  setInterviewers]  = useState([]);
+  const [templates,     setTemplates]     = useState([]);
+  const [filterStatus,  setFilterStatus]  = useState("All");
+  const [filterDate,    setFilterDate]    = useState("");
+  const [filterIvr,     setFilterIvr]     = useState("All");
+  const [showModal,     setShowModal]     = useState(false);
+  const [editTarget,    setEditTarget]    = useState(null);
+  const [form,          setForm]          = useState(EMPTY_FORM);
+  const [slots,         setSlots]         = useState([]);
+  const [availDates,    setAvailDates]    = useState([]);
+  const [availTimes,    setAvailTimes]    = useState([]);
+  const [saving,        setSaving]        = useState(false);
+  const [inviting,      setInviting]      = useState({});  // { [interviewId]: true }
+  const [toast,         setToast]         = useState(null);
 
   useEffect(() => {
     const unsub = subscribeToInterviews(setInterviews);
     getCandidates().then(setCandidates);
-    getAllUsers().then(users => setInterviewers(users.filter(u => u.role === "interviewer" && u.status === "active")));
+    getAllUsers().then(users =>
+      setInterviewers(users.filter(u =>
+        (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
+      ))
+    );
     getTemplates().then(setTemplates);
     return unsub;
   }, []);
 
-
-  // Load availability when interviewer changes
   useEffect(() => {
     if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }
     getInterviewerAvailability(form.interviewerId).then(s => {
@@ -60,7 +90,6 @@ export default function InterviewsPage() {
     });
   }, [form.interviewerId]);
 
-  // Update available times when date changes
   useEffect(() => {
     if (!form.scheduledDate || !form.interviewerId) { setAvailTimes([]); return; }
     const free = slots.filter(s => s.date === form.scheduledDate && !s.isBooked);
@@ -72,10 +101,15 @@ export default function InterviewsPage() {
   const openEdit = (iv) => {
     setEditTarget(iv);
     setForm({
-      candidateId: iv.candidateId, interviewerId: iv.interviewerId,
-      scheduledDate: iv.scheduledDate, scheduledTime: iv.scheduledTime,
-      meetLink: iv.meetLink || "", round: iv.round || "", notes: iv.notes || "",
-      templateId: iv.templateId || "",
+      candidateId:   iv.candidateId,
+      interviewerId: iv.interviewerId,
+      scheduledDate: iv.scheduledDate,
+      scheduledTime: iv.scheduledTime,
+      duration:      iv.duration || 60,
+      meetLink:      iv.meetLink  || "",
+      round:         iv.round     || "",
+      notes:         iv.notes     || "",
+      templateId:    iv.templateId || "",
     });
     setShowModal(true);
   };
@@ -90,20 +124,18 @@ export default function InterviewsPage() {
       const template    = templates.find(t => t.id === form.templateId);
       const data = {
         ...form,
-        candidateName:  candidate?.name  || "",
-        candidateEmail: candidate?.email || "",
-        roleAppliedFor: candidate?.roleAppliedFor || "",
-        resumeLink:     candidate?.resumeLink || "",
-        interviewerEmail: interviewer?.email || "",
+        candidateName:    candidate?.name         || "",
+        candidateEmail:   candidate?.email        || "",
+        roleAppliedFor:   candidate?.roleAppliedFor || "",
+        resumeLink:       candidate?.resumeLink   || "",
+        interviewerEmail: interviewer?.email      || "",
         interviewerName:  interviewer?.displayName || interviewer?.email || "",
-        // snapshot questions from template question banks
-        codingProblems: (template?.questions?.coding  || []).slice(0, template?.codingProblems || 2),
-        theorySubject:  (template?.questions?.theory  || []).join(", "),
-        templateName:   template?.name || "",
+        codingProblems:   (template?.questions?.coding  || []).slice(0, template?.codingProblems || 2),
+        theorySubject:    (template?.questions?.theory  || []).join(", "),
+        templateName:     template?.name || "",
       };
 
       if (editTarget) {
-        // free old slot if date/time/interviewer changed
         if (editTarget.scheduledDate !== form.scheduledDate ||
             editTarget.scheduledTime !== form.scheduledTime ||
             editTarget.interviewerId !== form.interviewerId) {
@@ -125,12 +157,49 @@ export default function InterviewsPage() {
     setSaving(false);
   };
 
+  // ── Send calendar invite ────────────────────────────────────────────────────
+
+  const sendInvite = async (iv) => {
+    setInviting(s => ({ ...s, [iv.id]: true }));
+    try {
+      const result = await callAppsScript({
+        action:          "schedule",
+        candidateEmail:  iv.candidateEmail,
+        interviewerEmail: iv.interviewerEmail,
+        candidateName:   iv.candidateName,
+        interviewerName: iv.interviewerName,
+        round:           iv.round,
+        date:            iv.scheduledDate,
+        startTime:       iv.scheduledTime,
+        durationMinutes: iv.duration || 60,
+      });
+      await updateInterview(iv.id, {
+        meetLink: result.meetLink,
+        eventId:  result.eventId,
+        inviteSentAt: new Date().toISOString(),
+      });
+      setToast({ message: "Calendar invite sent! Meet link saved." });
+    } catch (e) {
+      setToast({ message: "Failed to send invite: " + e.message, type: "error" });
+    }
+    setInviting(s => ({ ...s, [iv.id]: false }));
+  };
+
+  // ── Cancel interview (+ calendar event) ────────────────────────────────────
+
   const handleCancel = async (iv) => {
-    if (!confirm(`Cancel interview with ${iv.candidateName}?`)) return;
-    await updateInterview(iv.id, { status: "cancelled" });
-    const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
-    await markSlotFree(iv.interviewerId, slotId).catch(() => {});
-    setToast({ message: "Interview cancelled." });
+    if (!confirm(`Cancel interview with ${iv.candidateName}? This will also delete the calendar event and notify attendees.`)) return;
+    try {
+      if (iv.eventId) {
+        await callAppsScript({ action: "cancel", eventId: iv.eventId }).catch(() => {});
+      }
+      await updateInterview(iv.id, { status: "cancelled", eventId: null, meetLink: "" });
+      const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
+      await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+      setToast({ message: "Interview cancelled and calendar event deleted." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
   };
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -142,8 +211,7 @@ export default function InterviewsPage() {
     return true;
   });
 
-  const uniqueDates = [...new Set(interviews.map(i => i.scheduledDate))].filter(Boolean).sort();
-  const uniqueIvrs  = [...new Set(interviews.map(i => i.interviewerEmail))].filter(Boolean).sort();
+  const uniqueIvrs = [...new Set(interviews.map(i => i.interviewerEmail))].filter(Boolean).sort();
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
@@ -188,7 +256,7 @@ export default function InterviewsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {["Candidate", "Interviewer", "Round", "Date", "Time", "Status", "Actions"].map(h => (
+              {["Candidate", "Interviewer", "Round", "Date & Time", "Meet", "Status", "Actions"].map(h => (
                 <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
               ))}
             </tr>
@@ -196,27 +264,80 @@ export default function InterviewsPage() {
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="text-center text-gray-400 py-12">No interviews found</td></tr>
-            ) : filtered.map(i => (
-              <tr key={i.id} className="hover:bg-gray-50">
+            ) : filtered.map(iv => (
+              <tr key={iv.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-gray-900">{i.candidateName}</p>
-                  <p className="text-xs text-gray-400">{i.roleAppliedFor}</p>
+                  <p className="font-semibold text-gray-900">{iv.candidateName}</p>
+                  <p className="text-xs text-gray-400">{iv.candidateEmail}</p>
                 </td>
-                <td className="px-4 py-3 text-gray-700">{i.interviewerName || i.interviewerEmail}</td>
-                <td className="px-4 py-3 text-gray-600">{i.round}</td>
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmt(i.scheduledDate)}</td>
-                <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{i.scheduledTime}</td>
-                <td className="px-4 py-3"><Badge value={i.status} /></td>
+                <td className="px-4 py-3 text-gray-700 text-xs">
+                  <p>{iv.interviewerName || iv.interviewerEmail}</p>
+                </td>
+                <td className="px-4 py-3 text-gray-600">{iv.round}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <p className="text-gray-700">{fmt(iv.scheduledDate)}</p>
+                  <p className="text-xs text-gray-400">{iv.scheduledTime}{iv.duration ? ` · ${iv.duration}m` : ""}</p>
+                </td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <button onClick={() => openEdit(i)}
-                      className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
-                    {i.status !== "cancelled" && i.status !== "completed" && (
-                      <button onClick={() => handleCancel(i)}
-                        className="text-xs text-red-500 font-medium hover:underline">Cancel</button>
+                  {iv.meetLink ? (
+                    <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100 transition-colors">
+                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
+                      </svg>
+                      Join Meet
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-300">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3"><Badge value={iv.status} /></td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex gap-2">
+                      <button onClick={() => openEdit(iv)}
+                        className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
+                      {iv.status !== "cancelled" && iv.status !== "completed" && (
+                        <button onClick={() => handleCancel(iv)}
+                          className="text-xs text-red-500 font-medium hover:underline">Cancel</button>
+                      )}
+                      {iv.status === "completed" && iv.feedback && (
+                        <span className="text-xs text-emerald-600 font-medium">✓ Feedback</span>
+                      )}
+                    </div>
+                    {/* Send Invite button */}
+                    {iv.status !== "cancelled" && iv.status !== "completed" && !iv.eventId && (
+                      <button
+                        onClick={() => sendInvite(iv)}
+                        disabled={inviting[iv.id] || !iv.candidateEmail || !iv.interviewerEmail}
+                        className="flex items-center gap-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2 py-0.5 rounded-lg disabled:opacity-50 transition-colors"
+                        title={!iv.candidateEmail ? "Candidate has no email" : !iv.interviewerEmail ? "Interviewer has no email" : ""}
+                      >
+                        {inviting[iv.id] ? (
+                          <>
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                            </svg>
+                            Sending…
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                            </svg>
+                            Send Invite
+                          </>
+                        )}
+                      </button>
                     )}
-                    {i.status === "completed" && i.feedback && (
-                      <span className="text-xs text-emerald-600 font-medium">✓ Feedback</span>
+                    {iv.eventId && iv.status !== "cancelled" && (
+                      <span className="text-[10px] text-emerald-600 font-semibold flex items-center gap-1">
+                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+                        </svg>
+                        Invite Sent
+                      </span>
                     )}
                   </div>
                 </td>
@@ -235,7 +356,7 @@ export default function InterviewsPage() {
             <label className={labelCls}>Candidate *</label>
             <select value={form.candidateId} onChange={e => setField("candidateId", e.target.value)} className={inputCls}>
               <option value="">— Select candidate —</option>
-              {candidates.map(c => <option key={c.id} value={c.id}>{c.name} · {c.roleAppliedFor}</option>)}
+              {candidates.map(c => <option key={c.id} value={c.id}>{c.name}{c.uid ? ` · ${c.uid}` : ""}</option>)}
             </select>
           </div>
 
@@ -248,8 +369,8 @@ export default function InterviewsPage() {
             </select>
           </div>
 
-          {/* Date */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Date, Time, Duration */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className={labelCls}>Date *</label>
               {availDates.length > 0 ? (
@@ -261,13 +382,13 @@ export default function InterviewsPage() {
                 <div>
                   <input type="date" value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
                   {form.interviewerId && availDates.length === 0 &&
-                    <p className="text-xs text-amber-600 mt-1">⚠ Interviewer has no availability set — scheduling anyway.</p>
+                    <p className="text-xs text-amber-600 mt-1">⚠ No availability set</p>
                   }
                 </div>
               )}
             </div>
             <div>
-              <label className={labelCls}>Time *</label>
+              <label className={labelCls}>Start Time *</label>
               {availTimes.length > 0 ? (
                 <select value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls}>
                   <option value="">— Select time —</option>
@@ -276,6 +397,12 @@ export default function InterviewsPage() {
               ) : (
                 <input type="time" value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls} />
               )}
+            </div>
+            <div>
+              <label className={labelCls}>Duration *</label>
+              <select value={form.duration} onChange={e => setField("duration", Number(e.target.value))} className={inputCls}>
+                {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+              </select>
             </div>
           </div>
 
@@ -286,13 +413,6 @@ export default function InterviewsPage() {
               <option value="">— Select round —</option>
               {DEFAULT_ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}
             </select>
-          </div>
-
-          {/* Meet link */}
-          <div>
-            <label className={labelCls}>Meet Link</label>
-            <input type="url" placeholder="https://meet.google.com/…" value={form.meetLink}
-              onChange={e => setField("meetLink", e.target.value)} className={inputCls} />
           </div>
 
           {/* Notes */}
@@ -311,38 +431,6 @@ export default function InterviewsPage() {
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
-
-          {/* Template question bank summary (read-only) */}
-          {form.templateId && (() => {
-            const tmpl = templates.find(t => t.id === form.templateId);
-            if (!tmpl) return null;
-            const q = tmpl.questions || {};
-            const sections = [
-              { label: "Coding",  items: (q.coding  || []).slice(0, tmpl.codingProblems), show: true },
-              { label: "Theory",  items: q.theory  || [],                                 show: tmpl.hasTheory },
-              { label: "Project", items: q.project || [],                                 show: tmpl.hasProject },
-              { label: "Resume",  items: q.resume  || [],                                 show: tmpl.hasResume },
-            ].filter(s => s.show);
-            const hasAny = sections.some(s => s.items.length > 0);
-            return (
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Questions from template</p>
-                  {!hasAny && <span className="text-xs text-amber-600 font-medium">⚠ No questions in this template yet</span>}
-                </div>
-                {sections.map(({ label, items }) => (
-                  <div key={label}>
-                    <p className="text-xs font-semibold text-gray-400 mb-1">{label}</p>
-                    {items.length > 0 ? items.map((q, i) => (
-                      <p key={i} className="text-xs text-gray-700 truncate pl-2 py-0.5">· {q}</p>
-                    )) : (
-                      <p className="text-xs text-gray-400 italic pl-2">Not set</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            );
-          })()}
 
           <div className="flex gap-3 pt-2">
             <button onClick={handleSave} disabled={saving}
