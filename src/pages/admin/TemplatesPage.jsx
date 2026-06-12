@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate,
+  subscribeToPrograms, createProgram, updateProgram, deleteProgram,
+  subscribeToInterviews,
 } from "../../api/firestore";
 import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
@@ -730,6 +732,8 @@ function QuestionBankSection({ bankKey, label, placeholder, note, value, onChang
 
 export default function TemplatesPage() {
   const [templates,     setTemplates]     = useState([]);
+  const [programs,      setPrograms]      = useState([]);
+  const [interviews,    setInterviews]    = useState([]);
   const [loading,       setLoading]       = useState(true);
   const [showNewPicker, setShowNewPicker] = useState(false);
   const [showModal,     setShowModal]     = useState(false);
@@ -743,8 +747,36 @@ export default function TemplatesPage() {
   const [csvErrors,     setCsvErrors]     = useState([]);
   const csvFileRef = useRef(null);
 
+  // Program tabs state
+  const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
+  const [addingProgram,  setAddingProgram]  = useState(false);
+  const [newProgramName, setNewProgramName] = useState("");
+  const [editingProgram, setEditingProgram] = useState(null); // { id, name }
+  const newProgramRef = useRef(null);
+
   const load = () => getTemplates().then(t => { setTemplates(t); setLoading(false); });
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const unsub1 = subscribeToPrograms(setPrograms);
+    const unsub2 = subscribeToInterviews(setInterviews);
+    return () => { unsub1(); unsub2(); };
+  }, []);
+
+  useEffect(() => {
+    if (addingProgram) newProgramRef.current?.focus();
+  }, [addingProgram]);
+
+  // Stats per templateId: { [id]: { scheduled, completed, cancelled } }
+  const templateStats = interviews.reduce((acc, iv) => {
+    const tid = iv.templateId;
+    if (!tid) return acc;
+    if (!acc[tid]) acc[tid] = { scheduled: 0, completed: 0, cancelled: 0 };
+    if (iv.status === "completed")                                      acc[tid].completed++;
+    else if (iv.status === "cancelled" || iv.status === "no_show")      acc[tid].cancelled++;
+    else if (iv.status !== "declined")                                  acc[tid].scheduled++;
+    return acc;
+  }, {});
 
   const toTexts = (qb = {}) => ({
     theory:  (qb.theory  || []).join("\n"),
@@ -770,7 +802,8 @@ export default function TemplatesPage() {
 
   const openBlank = () => {
     setEditTarget(null);
-    setForm({ name: "", domains: [], questionBank: {} });
+    const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
+    setForm({ name: "", program: defaultProgram, domains: [], questionBank: {} });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setActiveTab("domains");
     setShowNewPicker(false);
@@ -808,7 +841,7 @@ export default function TemplatesPage() {
     const rawDomains = (source.domains || []).length > 0
       ? source.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: `Copy of ${source.name}`, domains: deepClone(migrateDomainsForEdit(rawDomains)) });
+    setForm({ name: `Copy of ${source.name}`, program: source.program || "", domains: deepClone(migrateDomainsForEdit(rawDomains)) });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setActiveTab("domains");
     setShowNewPicker(false);
@@ -820,10 +853,40 @@ export default function TemplatesPage() {
     const rawDomains = (t.domains || []).length > 0
       ? t.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: t.name, domains: deepClone(migrateDomainsForEdit(rawDomains)) });
+    setForm({ name: t.name, program: t.program || "", domains: deepClone(migrateDomainsForEdit(rawDomains)) });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setActiveTab("domains");
     setShowModal(true);
+  };
+
+  // Program CRUD
+  const handleAddProgram = async () => {
+    const name = newProgramName.trim();
+    if (!name) return;
+    await createProgram(name, programs.length);
+    setNewProgramName("");
+    setAddingProgram(false);
+  };
+
+  const handleRenameProgram = async () => {
+    if (!editingProgram || !editingProgram.name.trim()) return;
+    await updateProgram(editingProgram.id, { name: editingProgram.name.trim() });
+    setEditingProgram(null);
+  };
+
+  const handleDeleteProgram = async (p) => {
+    const count = templates.filter(t => t.program === p.id).length;
+    const msg = count > 0
+      ? `Delete "${p.name}"? ${count} template(s) will become Unassigned.`
+      : `Delete program "${p.name}"?`;
+    if (!confirm(msg)) return;
+    if (count > 0) {
+      await Promise.all(templates.filter(t => t.program === p.id).map(t => updateTemplate(t.id, { program: "" })));
+    }
+    await deleteProgram(p.id);
+    if (activeProgram === p.id) setActiveProgram("all");
+    setToast({ message: `"${p.name}" deleted.` });
+    load();
   };
 
   // ── CSV import ─────────────────────────────────────────────────────────────
@@ -930,6 +993,7 @@ export default function TemplatesPage() {
     try {
       const data = {
         name: form.name.trim(),
+        program: form.program || "",
         domains: [...form.domains].sort((a, b) => a.order - b.order),
         questionBank: toArrays(qbTexts),
         schemaVersion: 2,
@@ -981,6 +1045,13 @@ export default function TemplatesPage() {
     questionBank: previewTarget.questionBank || previewTarget.questions || {},
   };
 
+  // Filtered templates for the active program tab
+  const visibleTemplates = templates.filter(t => {
+    if (activeProgram === "all")        return true;
+    if (activeProgram === "unassigned") return !t.program;
+    return t.program === activeProgram;
+  });
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -997,37 +1068,135 @@ export default function TemplatesPage() {
         </button>
       </div>
 
+      {/* ── Program Tabs ── */}
+      <div className="flex items-center gap-1 mb-6 flex-wrap">
+        {/* All tab */}
+        {[
+          { id: "all",        label: "All",        count: templates.length },
+          ...programs.map(p => ({ id: p.id, label: p.name, count: templates.filter(t => t.program === p.id).length, prog: p })),
+          { id: "unassigned", label: "Unassigned",  count: templates.filter(t => !t.program).length },
+        ].map(tab => (
+          <div key={tab.id} className="relative group flex items-center">
+            {editingProgram?.id === tab.id ? (
+              <input
+                autoFocus
+                value={editingProgram.name}
+                onChange={e => setEditingProgram(s => ({ ...s, name: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") handleRenameProgram(); if (e.key === "Escape") setEditingProgram(null); }}
+                onBlur={handleRenameProgram}
+                className="px-3 py-1.5 rounded-lg border border-indigo-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 w-36"
+              />
+            ) : (
+              <button
+                onClick={() => setActiveProgram(tab.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeProgram === tab.id
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900"
+                }`}
+              >
+                {tab.label}
+                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                  activeProgram === tab.id ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-500"
+                }`}>{tab.count}</span>
+              </button>
+            )}
+            {/* Rename / delete on program tabs (not All or Unassigned) */}
+            {tab.prog && editingProgram?.id !== tab.id && (
+              <div className="hidden group-hover:flex items-center gap-0.5 absolute -top-2 right-0 bg-white border border-gray-200 rounded-lg shadow-sm px-1 py-0.5 z-10">
+                <button
+                  onClick={() => setEditingProgram({ id: tab.id, name: tab.label })}
+                  className="p-0.5 text-gray-400 hover:text-indigo-600 transition-colors"
+                  title="Rename">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => handleDeleteProgram(tab.prog)}
+                  className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                  title="Delete program">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* + Add Program */}
+        {addingProgram ? (
+          <input
+            ref={newProgramRef}
+            value={newProgramName}
+            onChange={e => setNewProgramName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleAddProgram(); if (e.key === "Escape") { setAddingProgram(false); setNewProgramName(""); } }}
+            onBlur={() => { if (!newProgramName.trim()) { setAddingProgram(false); setNewProgramName(""); } }}
+            placeholder="Program name…"
+            className="px-3 py-1.5 rounded-lg border border-indigo-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-40"
+          />
+        ) : (
+          <button
+            onClick={() => setAddingProgram(true)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-600 border border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+            </svg>
+            Add Program
+          </button>
+        )}
+      </div>
+
       {/* ── Template list ── */}
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
-      ) : templates.length === 0 ? (
+      ) : visibleTemplates.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <p className="text-gray-400 text-sm mb-4">No templates yet.</p>
-          <button onClick={openNew} className="text-indigo-600 text-sm font-semibold hover:underline">
-            Create your first template →
-          </button>
+          {templates.length === 0 ? (
+            <>
+              <p className="text-gray-400 text-sm mb-4">No templates yet.</p>
+              <button onClick={openNew} className="text-indigo-600 text-sm font-semibold hover:underline">
+                Create your first template →
+              </button>
+            </>
+          ) : (
+            <p className="text-gray-400 text-sm">No templates in this program yet.</p>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {templates.map(t => {
+          {visibleTemplates.map(t => {
             const domains = (t.domains || []).filter(d => d.enabled !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             const isV2 = t.schemaVersion === 2;
+            const stats = templateStats[t.id];
+            const programName = programs.find(p => p.id === t.program)?.name;
             return (
-              <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2 flex-wrap">
+              <div key={t.id} className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <h2 className="text-base font-bold text-gray-900 leading-tight">{t.name}</h2>
-                    {isV2 && <span className="text-xs px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-medium">v2</span>}
+                    {isV2 && <span className="text-xs px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-medium flex-shrink-0">v2</span>}
                   </div>
-                  <div className="flex gap-2 ml-2 flex-shrink-0">
+                  <div className="flex gap-2 flex-shrink-0">
                     <button onClick={() => setPreviewTarget(t)} className="text-xs text-gray-500 font-medium hover:underline">Preview</button>
-                    <button onClick={() => exportTemplateToExcel(t)} title="Download as Excel" className="text-xs text-emerald-600 font-medium hover:underline">Export</button>
-                    <button onClick={() => openEdit(t)}         className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
-                    <button onClick={() => handleDelete(t)}     className="text-xs text-red-500 font-medium hover:underline">Delete</button>
+                    <button onClick={() => exportTemplateToExcel(t)} className="text-xs text-emerald-600 font-medium hover:underline">Export</button>
+                    <button onClick={() => openEdit(t)} className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
+                    <button onClick={() => handleDelete(t)} className="text-xs text-red-500 font-medium hover:underline">Delete</button>
                   </div>
                 </div>
+
+                {/* Program badge (only visible on "All" tab) */}
+                {activeProgram === "all" && programName && (
+                  <span className="self-start text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                    {programName}
+                  </span>
+                )}
+
+                {/* Domain chips */}
                 {isV2 ? (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                  <div className="flex flex-wrap gap-1.5">
                     {domains.map(d => (
                       <span key={d.id} className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-medium">
                         {d.label}{(d.weightInVerdict ?? 0) > 0 ? ` ${d.weightInVerdict}%` : ""}
@@ -1035,12 +1204,39 @@ export default function TemplatesPage() {
                     ))}
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                  <div className="flex flex-wrap gap-1.5">
                     {["Coding", t.hasTheory && "Theory", t.hasProject && "Project", t.hasResume && "Resume"].filter(Boolean).map(l => (
                       <span key={l} className="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{l}</span>
                     ))}
                   </div>
                 )}
+
+                {/* Interview stats */}
+                {stats ? (
+                  <div className="flex items-center gap-3 pt-1 border-t border-gray-50">
+                    <span className="flex items-center gap-1 text-xs text-indigo-700 font-semibold">
+                      <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                      </svg>
+                      {stats.scheduled} Scheduled
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
+                      <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+                      </svg>
+                      {stats.completed} Completed
+                    </span>
+                    <span className="flex items-center gap-1 text-xs text-red-600 font-semibold">
+                      <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                      </svg>
+                      {stats.cancelled} Cancelled
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-300 pt-1 border-t border-gray-50">No interviews yet</p>
+                )}
+
                 <p className="text-xs text-gray-400">Created {new Date(t.createdAt).toLocaleDateString()}</p>
               </div>
             );
@@ -1149,14 +1345,29 @@ export default function TemplatesPage() {
         title={editTarget ? "Edit Template" : "New Interview Template"} wide>
         <div className="space-y-5">
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-              Template Name *
-            </label>
-            <input type="text" placeholder="e.g. Systems Mastery - Novice || V1"
-              value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Template Name *
+              </label>
+              <input type="text" placeholder="e.g. Systems Mastery - Novice || V1"
+                value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Program
+              </label>
+              <select
+                value={form.program || ""}
+                onChange={e => setForm(f => ({ ...f, program: e.target.value }))}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                <option value="">— Unassigned —</option>
+                {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
           </div>
 
           {/* Tabs */}
