@@ -17,6 +17,7 @@ import InterviewerDashboard from "./pages/interviewer/Dashboard";
 import MyInterviewsPage     from "./pages/interviewer/MyInterviewsPage";
 import InterviewDetail      from "./pages/interviewer/InterviewDetail";
 import AvailabilityPage     from "./pages/interviewer/AvailabilityPage";
+import ProfilePage          from "./pages/interviewer/ProfilePage";
 
 const ADMIN_ROLES = ["admin", "content_team", "interviewer_content"];
 
@@ -74,6 +75,7 @@ function AppRoutes() {
         <Route path="interviews"   element={<MyInterviewsPage />} />
         <Route path="interviews/:id" element={<InterviewDetail />} />
         <Route path="availability" element={<AvailabilityPage />} />
+        <Route path="profile"      element={<ProfilePage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
