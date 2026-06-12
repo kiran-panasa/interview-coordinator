@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../AuthContext";
-import { updateUser } from "../../api/firestore";
+import { updateUser, subscribeToSkills } from "../../api/firestore";
+import SkillsSelect from "../../components/SkillsSelect";
 import Toast from "../../components/Toast";
 
 const inputCls = "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors bg-white";
@@ -21,6 +22,9 @@ export default function ProfilePage() {
   const [saving,  setSaving]  = useState(false);
   const [toast,   setToast]   = useState(null);
   const [changed, setChanged] = useState(false);
+  const [skills,  setSkills]  = useState([]);
+
+  useEffect(() => { return subscribeToSkills(setSkills); }, []);
 
   useEffect(() => {
     if (userProfile) {
@@ -31,6 +35,7 @@ export default function ProfilePage() {
         companyRole: userProfile.companyRole || "",
         experience:  userProfile.experience  || "",
         linkedin:    userProfile.linkedin    || "",
+        skills:      userProfile.skills      || [],
       });
       setChanged(false);
     }
@@ -52,6 +57,7 @@ export default function ProfilePage() {
         companyRole: form.companyRole.trim() || null,
         experience:  form.experience.trim()  || null,
         linkedin:    form.linkedin.trim()    || null,
+        skills:      form.skills             || [],
       });
       await refreshProfile();
       setChanged(false);
@@ -128,6 +134,16 @@ export default function ProfilePage() {
             <Field label="LinkedIn Profile">
               <input value={form.linkedin} onChange={e => set("linkedin", e.target.value)}
                 placeholder="https://linkedin.com/in/yourprofile" className={inputCls} />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Skills">
+              <SkillsSelect
+                skills={skills}
+                value={form.skills || []}
+                onChange={v => set("skills", v)}
+                placeholder="Select your skills…"
+              />
             </Field>
           </div>
         </div>

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { getInterviewerAvailability, subscribeToUsers } from "../../api/firestore";
+import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import SkillsSelect from "../../components/SkillsSelect";
 
 function initials(name, email) {
   return (name || email || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -24,13 +25,16 @@ function avatarColor(id) {
 
 export default function InterviewersPage() {
   const [interviewers, setInterviewers] = useState([]);
+  const [skills,       setSkills]       = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [viewAvail,    setViewAvail]    = useState(null);
+  const [editSkills,   setEditSkills]   = useState(null); // { user, draft }
+  const [savingSkills, setSavingSkills] = useState(false);
   const [search,       setSearch]       = useState("");
   const [toast,        setToast]        = useState(null);
 
   useEffect(() => {
-    const unsub = subscribeToUsers(users => {
+    const unsub1 = subscribeToUsers(users => {
       setInterviewers(
         users.filter(u =>
           (u.role === "interviewer" || u.role === "interviewer_content") &&
@@ -39,12 +43,22 @@ export default function InterviewersPage() {
       );
       setLoading(false);
     });
-    return unsub;
+    const unsub2 = subscribeToSkills(setSkills);
+    return () => { unsub1(); unsub2(); };
   }, []);
 
   const viewAvailability = async (u) => {
     const slots = await getInterviewerAvailability(u.id);
     setViewAvail({ user: u, slots });
+  };
+
+  const saveSkills = async () => {
+    if (!editSkills) return;
+    setSavingSkills(true);
+    await updateUser(editSkills.user.id, { skills: editSkills.draft });
+    setSavingSkills(false);
+    setEditSkills(null);
+    setToast({ message: "Skills updated." });
   };
 
   const today = new Date().toISOString().slice(0, 10);
@@ -160,6 +174,29 @@ export default function InterviewersPage() {
                 )}
               </div>
 
+              {/* Skills */}
+              <div className="border-t border-gray-50 pt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Skills</span>
+                  <button onClick={() => setEditSkills({ user: u, draft: u.skills || [] })}
+                    className="text-[10px] text-indigo-500 hover:underline font-medium">Edit</button>
+                </div>
+                {(u.skills || []).length === 0 ? (
+                  <p className="text-xs text-gray-300">Not set</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {(u.skills || []).map(sid => {
+                      const sk = skills.find(s => s.id === sid);
+                      return sk ? (
+                        <span key={sid} className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">
+                          {sk.name}
+                        </span>
+                      ) : null;
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Action */}
               <button onClick={() => viewAvailability(u)}
                 className="mt-auto w-full text-xs font-semibold text-indigo-600 border border-indigo-100 bg-indigo-50 hover:bg-indigo-100 py-2 rounded-xl transition-colors">
@@ -169,6 +206,31 @@ export default function InterviewersPage() {
           ))}
         </div>
       )}
+
+      {/* Edit skills modal */}
+      <Modal open={!!editSkills} onClose={() => setEditSkills(null)}
+        title={`Skills — ${editSkills?.user?.displayName || editSkills?.user?.email || ""}`}>
+        {editSkills && (
+          <div className="space-y-4">
+            <SkillsSelect
+              skills={skills}
+              value={editSkills.draft}
+              onChange={v => setEditSkills(s => ({ ...s, draft: v }))}
+              placeholder="Select skills…"
+            />
+            <div className="flex gap-3 pt-1">
+              <button onClick={saveSkills} disabled={savingSkills}
+                className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                {savingSkills ? "Saving…" : "Save Skills"}
+              </button>
+              <button onClick={() => setEditSkills(null)}
+                className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Availability modal */}
       <Modal open={!!viewAvail} onClose={() => setViewAvail(null)}

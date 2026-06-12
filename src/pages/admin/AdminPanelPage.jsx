@@ -4,6 +4,7 @@ import {
   updateUser, deleteUser,
   createInvite, deleteInvite,
   subscribeToUsers, subscribeToInvites,
+  subscribeToSkills, createSkill, updateSkill, deleteSkill,
 } from "../../api/firestore";
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
@@ -120,6 +121,11 @@ export default function AdminPanelPage() {
 
   const [pendingRoles, setPendingRoles] = useState({});  // { [userId]: role }
 
+  const [skills,        setSkills]        = useState([]);
+  const [newSkillName,  setNewSkillName]  = useState("");
+  const [editingSkill,  setEditingSkill]  = useState(null); // { id, name }
+  const [addingSkill,   setAddingSkill]   = useState(false);
+
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm,      setInviteForm]      = useState(BLANK_INVITE);
   const [inviteSaving,    setInviteSaving]    = useState(false);
@@ -139,7 +145,8 @@ export default function AdminPanelPage() {
     const checkReady = () => { if (usersReady && invitesReady) setLoading(false); };
     const unsubUsers   = subscribeToUsers(u   => { setUsers(u);   usersReady   = true; checkReady(); });
     const unsubInvites = subscribeToInvites(i => { setInvites(i); invitesReady = true; checkReady(); });
-    return () => { unsubUsers(); unsubInvites(); };
+    const unsubSkills  = subscribeToSkills(setSkills);
+    return () => { unsubUsers(); unsubInvites(); unsubSkills(); };
   }, []);
 
   const pending     = users.filter(u => u.status === "pending");
@@ -256,6 +263,27 @@ export default function AdminPanelPage() {
   };
 
   const closeCSV = () => { setShowCSV(false); setCsvPreview([]); setCsvErrors([]); };
+
+  // Skills CRUD
+  const handleAddSkill = async () => {
+    const name = newSkillName.trim();
+    if (!name) return;
+    await createSkill(name);
+    setNewSkillName("");
+    setAddingSkill(false);
+  };
+
+  const handleRenameSkill = async () => {
+    if (!editingSkill?.name?.trim()) return;
+    await updateSkill(editingSkill.id, editingSkill.name.trim());
+    setEditingSkill(null);
+  };
+
+  const handleDeleteSkill = async (s) => {
+    if (!confirm(`Delete skill "${s.name}"?`)) return;
+    await deleteSkill(s.id);
+    setToast({ message: `"${s.name}" removed.` });
+  };
 
   const sectionTitle = (dot, label, count) => (
     <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
@@ -504,6 +532,66 @@ export default function AdminPanelPage() {
           </div>
         </div>
       )}
+
+      {/* ── Skills ── */}
+      <div className="mb-8">
+        {sectionTitle("bg-violet-400", "Skills")}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <p className="text-xs text-gray-400 mb-4">These skills are shared across templates and interviewer profiles for matching.</p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {skills.map(s => (
+              <div key={s.id} className="group flex items-center gap-1 bg-indigo-50 border border-indigo-200 rounded-full pl-3 pr-1 py-0.5">
+                {editingSkill?.id === s.id ? (
+                  <input
+                    autoFocus
+                    value={editingSkill.name}
+                    onChange={e => setEditingSkill(x => ({ ...x, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === "Enter") handleRenameSkill(); if (e.key === "Escape") setEditingSkill(null); }}
+                    onBlur={handleRenameSkill}
+                    className="text-xs font-semibold text-indigo-700 bg-transparent border-b border-indigo-400 focus:outline-none w-24"
+                  />
+                ) : (
+                  <span className="text-xs font-semibold text-indigo-700">{s.name}</span>
+                )}
+                <div className="flex items-center gap-0.5 ml-1">
+                  <button onClick={() => setEditingSkill({ id: s.id, name: s.name })}
+                    className="p-0.5 text-indigo-300 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100">
+                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                    </svg>
+                  </button>
+                  <button onClick={() => handleDeleteSkill(s)}
+                    className="p-0.5 text-indigo-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 font-bold text-sm leading-none">×</button>
+                </div>
+              </div>
+            ))}
+
+            {/* Add skill */}
+            {addingSkill ? (
+              <input
+                autoFocus
+                value={newSkillName}
+                onChange={e => setNewSkillName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleAddSkill(); if (e.key === "Escape") { setAddingSkill(false); setNewSkillName(""); } }}
+                onBlur={() => { if (!newSkillName.trim()) { setAddingSkill(false); setNewSkillName(""); } }}
+                placeholder="Skill name…"
+                className="text-xs border border-indigo-400 rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-36"
+              />
+            ) : (
+              <button onClick={() => setAddingSkill(true)}
+                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 border border-dashed border-indigo-300 rounded-full px-3 py-1 hover:bg-indigo-50 transition-colors">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+                </svg>
+                Add Skill
+              </button>
+            )}
+          </div>
+          {skills.length === 0 && !addingSkill && (
+            <p className="text-xs text-gray-400">No skills defined yet. Click "Add Skill" to create the first one.</p>
+          )}
+        </div>
+      </div>
 
       {/* ── Invite Modal ── */}
       <Modal open={showInviteModal} onClose={() => { setShowInviteModal(false); setSavedInvite(null); }} title="Invite">

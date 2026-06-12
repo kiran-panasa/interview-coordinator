@@ -3,8 +3,9 @@ import * as XLSX from "xlsx";
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate,
   subscribeToPrograms, createProgram, updateProgram, deleteProgram,
-  subscribeToInterviews,
+  subscribeToInterviews, subscribeToSkills,
 } from "../../api/firestore";
+import SkillsSelect from "../../components/SkillsSelect";
 import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -748,6 +749,8 @@ export default function TemplatesPage() {
   const csvFileRef = useRef(null);
 
   // Program tabs state
+  const [skills,         setSkills]         = useState([]);
+
   const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
   const [addingProgram,  setAddingProgram]  = useState(false);
   const [newProgramName, setNewProgramName] = useState("");
@@ -760,7 +763,8 @@ export default function TemplatesPage() {
   useEffect(() => {
     const unsub1 = subscribeToPrograms(setPrograms);
     const unsub2 = subscribeToInterviews(setInterviews);
-    return () => { unsub1(); unsub2(); };
+    const unsub3 = subscribeToSkills(setSkills);
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
   useEffect(() => {
@@ -803,7 +807,7 @@ export default function TemplatesPage() {
   const openBlank = () => {
     setEditTarget(null);
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
-    setForm({ name: "", program: defaultProgram, domains: [], questionBank: {} });
+    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {} });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setActiveTab("domains");
     setShowNewPicker(false);
@@ -841,7 +845,7 @@ export default function TemplatesPage() {
     const rawDomains = (source.domains || []).length > 0
       ? source.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: `Copy of ${source.name}`, program: source.program || "", domains: deepClone(migrateDomainsForEdit(rawDomains)) });
+    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: deepClone(migrateDomainsForEdit(rawDomains)) });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setActiveTab("domains");
     setShowNewPicker(false);
@@ -853,7 +857,7 @@ export default function TemplatesPage() {
     const rawDomains = (t.domains || []).length > 0
       ? t.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: t.name, program: t.program || "", domains: deepClone(migrateDomainsForEdit(rawDomains)) });
+    setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: deepClone(migrateDomainsForEdit(rawDomains)) });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setActiveTab("domains");
     setShowModal(true);
@@ -994,6 +998,7 @@ export default function TemplatesPage() {
       const data = {
         name: form.name.trim(),
         program: form.program || "",
+        skills: form.skills || [],
         domains: [...form.domains].sort((a, b) => a.order - b.order),
         questionBank: toArrays(qbTexts),
         schemaVersion: 2,
@@ -1368,6 +1373,17 @@ export default function TemplatesPage() {
                 {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* Skills */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Required Skills</label>
+            <SkillsSelect
+              skills={skills}
+              value={form.skills || []}
+              onChange={v => setForm(f => ({ ...f, skills: v }))}
+              placeholder="Tag required skills for this template…"
+            />
           </div>
 
           {/* Tabs */}

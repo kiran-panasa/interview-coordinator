@@ -11,6 +11,7 @@ import CandidatesPage     from "./pages/admin/CandidatesPage";
 import InterviewersPage   from "./pages/admin/InterviewersPage";
 import TemplatesPage      from "./pages/admin/TemplatesPage";
 import AdminPanelPage     from "./pages/admin/AdminPanelPage";
+import NudgePage          from "./pages/admin/NudgePage";
 
 import InterviewerLayout    from "./components/InterviewerLayout";
 import InterviewerDashboard from "./pages/interviewer/Dashboard";
@@ -18,6 +19,7 @@ import MyInterviewsPage     from "./pages/interviewer/MyInterviewsPage";
 import InterviewDetail      from "./pages/interviewer/InterviewDetail";
 import AvailabilityPage     from "./pages/interviewer/AvailabilityPage";
 import ProfilePage          from "./pages/interviewer/ProfilePage";
+import NotificationsPage    from "./pages/interviewer/NotificationsPage";
 
 const ADMIN_ROLES = ["admin", "content_team", "interviewer_content"];
 
@@ -66,6 +68,7 @@ function AppRoutes() {
         <Route path="interviewers" element={<InterviewersPage />} />
         <Route path="templates"   element={<TemplatesPage />} />
         <Route path="panel"       element={<AdminPanelPage />} />
+        <Route path="nudge"       element={<NudgePage />} />
       </Route>
 
       {/* Interviewer */}
@@ -75,7 +78,8 @@ function AppRoutes() {
         <Route path="interviews"   element={<MyInterviewsPage />} />
         <Route path="interviews/:id" element={<InterviewDetail />} />
         <Route path="availability" element={<AvailabilityPage />} />
-        <Route path="profile"      element={<ProfilePage />} />
+        <Route path="profile"        element={<ProfilePage />} />
+        <Route path="notifications"  element={<NotificationsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

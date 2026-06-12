@@ -2,12 +2,15 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
+import { useEffect, useState } from "react";
+import { subscribeToUserNotifications } from "../api/firestore";
 
 const NAV = [
-  { to: "/interviewer/dashboard",    label: "Dashboard",       icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-  { to: "/interviewer/interviews",   label: "My Interviews",   icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
-  { to: "/interviewer/availability", label: "My Availability", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
-  { to: "/interviewer/profile",      label: "My Profile",      icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+  { to: "/interviewer/dashboard",       label: "Dashboard",       icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
+  { to: "/interviewer/interviews",      label: "My Interviews",   icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
+  { to: "/interviewer/availability",    label: "My Availability", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { to: "/interviewer/notifications",   label: "Notifications",   icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9", badge: true },
+  { to: "/interviewer/profile",         label: "My Profile",      icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
 ];
 
 const TEMPLATES_NAV = { to: "/admin/templates", label: "Templates", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" };
@@ -15,10 +18,18 @@ const TEMPLATES_NAV = { to: "/admin/templates", label: "Templates", icon: "M9 12
 const ROLE_LABELS = { interviewer: "Interviewer", interviewer_content: "Interviewer + Content" };
 
 export default function InterviewerLayout() {
-  const { userProfile } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const role = userProfile?.role || "interviewer";
   const nav = role === "interviewer_content" ? [...NAV, TEMPLATES_NAV] : NAV;
+
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!currentUser?.uid) return;
+    return subscribeToUserNotifications(currentUser.uid, (notifs) => {
+      setUnread(notifs.filter(n => n.type === "nudge" && n.status === "unread").length);
+    });
+  }, [currentUser?.uid]);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -51,7 +62,12 @@ export default function InterviewerLayout() {
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={item.icon} />
               </svg>
-              {item.label}
+              <span className="flex-1">{item.label}</span>
+              {item.badge && unread > 0 && (
+                <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {unread}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>
