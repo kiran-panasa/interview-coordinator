@@ -4,11 +4,12 @@ import {
   subscribeToInterviews, getCandidates, getAllUsers,
   createInterview, updateInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
-  getTemplates, DEFAULT_ROUNDS,
+  getTemplates, getTemplate, DEFAULT_ROUNDS,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
+import { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -66,6 +67,7 @@ export default function InterviewsPage() {
   const [availTimes,    setAvailTimes]    = useState([]);
   const [saving,        setSaving]        = useState(false);
   const [inviting,      setInviting]      = useState({});  // { [interviewId]: true }
+  const [feedbackModal, setFeedbackModal] = useState(null); // { interview, template }
   const [toast,         setToast]         = useState(null);
 
   useEffect(() => {
@@ -202,6 +204,11 @@ export default function InterviewsPage() {
     }
   };
 
+  const openFeedback = async (iv) => {
+    const tmpl = iv.templateId ? await getTemplate(iv.templateId) : null;
+    setFeedbackModal({ interview: iv, template: tmpl });
+  };
+
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const filtered = interviews.filter(i => {
@@ -302,7 +309,13 @@ export default function InterviewsPage() {
                           className="text-xs text-red-500 font-medium hover:underline">Cancel</button>
                       )}
                       {iv.status === "completed" && iv.feedback && (
-                        <span className="text-xs text-emerald-600 font-medium">✓ Feedback</span>
+                        <button onClick={() => openFeedback(iv)}
+                          className="text-xs text-emerald-600 font-semibold hover:underline flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                          </svg>
+                          View Feedback
+                        </button>
                       )}
                     </div>
                     {/* Send Invite button */}
@@ -443,6 +456,76 @@ export default function InterviewsPage() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* Feedback Viewer Modal */}
+      <Modal open={!!feedbackModal} onClose={() => setFeedbackModal(null)}
+        title={feedbackModal ? `Feedback — ${feedbackModal.interview.candidateName}` : ""} wide>
+        {feedbackModal && (() => {
+          const fb = feedbackModal.interview.feedback;
+          const tmpl = feedbackModal.template;
+          const isDynamic = fb && (fb.domains || fb.sections);
+          return (
+            <div className="space-y-4">
+              {/* Meta row */}
+              <div className="flex flex-wrap gap-3 text-xs text-gray-500 pb-2 border-b border-gray-100">
+                <span><span className="font-semibold text-gray-700">Interviewer:</span> {feedbackModal.interview.interviewerName || feedbackModal.interview.interviewerEmail}</span>
+                <span><span className="font-semibold text-gray-700">Round:</span> {feedbackModal.interview.round}</span>
+                <span><span className="font-semibold text-gray-700">Date:</span> {fmt(feedbackModal.interview.scheduledDate)}</span>
+                {fb?.submittedAt && (
+                  <span><span className="font-semibold text-gray-700">Submitted:</span> {new Date(fb.submittedAt).toLocaleString()}</span>
+                )}
+              </div>
+
+              {/* Dynamic template feedback */}
+              {isDynamic ? (
+                <DynamicFeedbackDisplay template={tmpl} feedbackData={fb} />
+              ) : (
+                /* Legacy feedback fallback */
+                <div className="space-y-3">
+                  {fb?.answers && Object.entries(fb.answers).map(([qid, val]) => (
+                    <div key={qid} className="bg-gray-50 rounded-lg px-4 py-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                        {qid.replace(/_/g, " ")}
+                      </p>
+                      {typeof val === "number" ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex gap-0.5">
+                            {[1,2,3,4,5].map(n => (
+                              <div key={n} className={`w-4 h-4 rounded-sm ${n <= val ? "bg-indigo-500" : "bg-gray-200"}`} />
+                            ))}
+                          </div>
+                          <span className="text-sm font-bold text-indigo-700">{val}/5</span>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-800">{val || "—"}</p>
+                      )}
+                    </div>
+                  ))}
+                  {fb?.comments && (
+                    <div className="bg-gray-50 rounded-lg px-4 py-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Comments</p>
+                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{fb.comments}</p>
+                    </div>
+                  )}
+                  {fb?.overallRecommendation && (
+                    <div className="bg-indigo-50 rounded-lg px-4 py-3 flex items-center gap-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recommendation</p>
+                      <span className="text-sm font-bold text-indigo-700">{fb.overallRecommendation}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="pt-2 flex justify-end">
+                <button onClick={() => setFeedbackModal(null)}
+                  className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2 text-sm font-semibold hover:bg-gray-200">
+                  Close
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

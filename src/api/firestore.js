@@ -266,8 +266,12 @@ export async function deleteSkill(id) {
 
 export function subscribeToUserNotifications(userId, callback) {
   return onSnapshot(
-    query(collection(db, "notifications"), where("recipientId", "==", userId), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    query(collection(db, "notifications"), where("recipientId", "==", userId)),
+    snap => callback(
+      snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
+    )
   );
 }
 
