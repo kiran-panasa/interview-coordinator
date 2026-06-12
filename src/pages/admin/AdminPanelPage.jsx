@@ -118,6 +118,8 @@ export default function AdminPanelPage() {
   const [saving,  setSaving]  = useState({});
   const [toast,   setToast]   = useState(null);
 
+  const [pendingRoles, setPendingRoles] = useState({});  // { [userId]: role }
+
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm,      setInviteForm]      = useState(BLANK_INVITE);
   const [inviteSaving,    setInviteSaving]    = useState(false);
@@ -160,9 +162,11 @@ export default function AdminPanelPage() {
   const setSavingFor = (id, val) => setSaving(s => ({ ...s, [id]: val }));
 
   const approve = async (u) => {
+    const role = pendingRoles[u.id] || "interviewer";
+    const label = ALL_ROLES.find(r => r.value === role)?.label || role;
     setSavingFor(u.id, true);
-    await updateUser(u.id, { role: "interviewer", status: "active" });
-    setToast({ message: `${u.email} approved as Interviewer.` });
+    await updateUser(u.id, { role, status: "active" });
+    setToast({ message: `${u.email} approved as ${label}.` });
     setSavingFor(u.id, false);
   };
 
@@ -342,7 +346,7 @@ export default function AdminPanelPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Name", "Email", "Requested", "Actions"].map(h => (
+                  {["Name", "Email", "Requested", "Assign Role", "Actions"].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -353,6 +357,18 @@ export default function AdminPanelPage() {
                     <td className="px-4 py-3 font-semibold text-gray-900">{u.displayName || "—"}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={pendingRoles[u.id] || "interviewer"}
+                        onChange={e => setPendingRoles(s => ({ ...s, [u.id]: e.target.value }))}
+                        disabled={saving[u.id]}
+                        className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-gray-700 disabled:opacity-60 cursor-pointer"
+                      >
+                        {ALL_ROLES.map(r => (
+                          <option key={r.value} value={r.value}>{r.label}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-3">
                         <button onClick={() => approve(u)} disabled={saving[u.id]}
