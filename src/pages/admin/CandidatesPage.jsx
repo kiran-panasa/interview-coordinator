@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../AuthContext";
-import { getCandidates, createCandidate, updateCandidate, deleteCandidate } from "../../api/firestore";
+import { getCandidates, createCandidate, updateCandidate, deleteCandidate, getPrograms, getTemplates } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
 
-const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "" };
+const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", program: "", templateIds: [] };
 
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
@@ -83,6 +83,8 @@ function downloadSampleExcel() {
 export default function CandidatesPage() {
   const { currentUser } = useAuth();
   const [candidates, setCandidates] = useState([]);
+  const [programs,   setPrograms]   = useState([]);
+  const [templates,  setTemplates]  = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [showModal,  setShowModal]  = useState(false);
@@ -91,7 +93,14 @@ export default function CandidatesPage() {
   const [saving,     setSaving]     = useState(false);
   const [toast,      setToast]      = useState(null);
 
-  // CSV import state
+  // Bulk edit
+  const [selected,      setSelected]      = useState(new Set());
+  const [showBulk,      setShowBulk]      = useState(false);
+  const [bulkProgram,   setBulkProgram]   = useState("");
+  const [bulkTemplates, setBulkTemplates] = useState([]);
+  const [bulkSaving,    setBulkSaving]    = useState(false);
+
+  // CSV import
   const [showCSV,      setShowCSV]      = useState(false);
   const [csvPreview,   setCsvPreview]   = useState([]);
   const [csvErrors,    setCsvErrors]    = useState([]);
@@ -99,12 +108,21 @@ export default function CandidatesPage() {
   const fileRef = useRef();
 
   const load = () => getCandidates().then(c => { setCandidates(c); setLoading(false); });
-  useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    load();
+    getPrograms().then(setPrograms);
+    getTemplates().then(setTemplates);
+  }, []);
 
   const openNew  = () => { setEditTarget(null); setForm(EMPTY); setShowModal(true); };
   const openEdit = (c) => {
     setEditTarget(c);
-    setForm({ name: c.name, uid: c.uid || "", email: c.email || "", phone: c.phone || "", resumeLink: c.resumeLink || "", notes: c.notes || "" });
+    setForm({
+      name: c.name, uid: c.uid || "", email: c.email || "",
+      phone: c.phone || "", resumeLink: c.resumeLink || "", notes: c.notes || "",
+      program: c.program || "", templateIds: c.templateIds || [],
+    });
     setShowModal(true);
   };
 
@@ -131,14 +149,47 @@ export default function CandidatesPage() {
     load();
   };
 
+  const handleBulkSave = async () => {
+    if (!bulkProgram && bulkTemplates.length === 0) {
+      setToast({ message: "Set at least a program or template.", type: "error" }); return;
+    }
+    setBulkSaving(true);
+    try {
+      const updates = {};
+      if (bulkProgram)           updates.program     = bulkProgram;
+      if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
+      for (const id of selected) await updateCandidate(id, updates);
+      setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
+      setShowBulk(false);
+      setSelected(new Set());
+      setBulkProgram(""); setBulkTemplates([]);
+      load();
+    } catch (e) { setToast({ message: e.message, type: "error" }); }
+    setBulkSaving(false);
+  };
+
+  const toggleSelect = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleAll = () => {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map(c => c.id)));
+  };
+
+  const toggleBulkTemplate = (tid) => setBulkTemplates(prev =>
+    prev.includes(tid) ? prev.filter(id => id !== tid) : [...prev, tid]
+  );
+
   const handleCSVFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const { rows, errors } = parseCandidatesCSV(ev.target.result);
-      setCsvPreview(rows);
-      setCsvErrors(errors);
+      setCsvPreview(rows); setCsvErrors(errors);
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -150,12 +201,9 @@ export default function CandidatesPage() {
     let imported = 0;
     for (const row of csvPreview) {
       try { await createCandidate({ ...row, createdBy: currentUser.uid }); imported++; }
-      catch { /* skip failures */ }
+      catch { /* skip */ }
     }
-    setCsvImporting(false);
-    setShowCSV(false);
-    setCsvPreview([]);
-    setCsvErrors([]);
+    setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]);
     load();
     setToast({ message: `${imported} candidate${imported !== 1 ? "s" : ""} imported.` });
   };
@@ -168,9 +216,14 @@ export default function CandidatesPage() {
     c.email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
+
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const toggleFormTemplate = (tid) => setField("templateIds",
+    form.templateIds.includes(tid) ? form.templateIds.filter(id => id !== tid) : [...form.templateIds, tid]
+  );
 
   return (
     <div className="p-8">
@@ -180,6 +233,12 @@ export default function CandidatesPage() {
           <p className="text-sm text-gray-500 mt-0.5">{candidates.length} candidates</p>
         </div>
         <div className="flex gap-2">
+          {selected.size > 0 && (
+            <button onClick={() => { setBulkProgram(""); setBulkTemplates([]); setShowBulk(true); }}
+              className="flex items-center gap-2 border border-indigo-300 text-indigo-700 bg-indigo-50 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-100">
+              Edit Selected ({selected.size})
+            </button>
+          )}
           <button onClick={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}
             className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -208,16 +267,26 @@ export default function CandidatesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Name", "UID", "Email", "Resume", ""].map(h => (
+                <th className="px-4 py-3 w-8">
+                  <input type="checkbox"
+                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    onChange={toggleAll}
+                    className="accent-indigo-600 w-4 h-4 cursor-pointer" />
+                </th>
+                {["Name", "UID", "Email", "Program", "Templates", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="text-center text-gray-400 py-12">No candidates found</td></tr>
+                <tr><td colSpan={7} className="text-center text-gray-400 py-12">No candidates found</td></tr>
               ) : filtered.map(c => (
-                <tr key={c.id} className="hover:bg-gray-50">
+                <tr key={c.id} className={`hover:bg-gray-50 ${selected.has(c.id) ? "bg-indigo-50" : ""}`}>
+                  <td className="px-4 py-3 w-8">
+                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
+                      className="accent-indigo-600 w-4 h-4 cursor-pointer" />
+                  </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-gray-900">{c.name}</p>
                     {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
@@ -227,9 +296,23 @@ export default function CandidatesPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{c.email || "—"}</td>
                   <td className="px-4 py-3">
-                    {c.resumeLink
-                      ? <a href={c.resumeLink} target="_blank" rel="noreferrer" className="text-indigo-600 text-xs hover:underline">View ↗</a>
-                      : <span className="text-gray-400 text-xs">—</span>}
+                    {c.program
+                      ? <span className="text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full">{programName(c.program)}</span>
+                      : <span className="text-xs text-gray-300">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(c.templateIds || []).length === 0 ? (
+                      <span className="text-xs text-gray-300">—</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {(c.templateIds || []).map(tid => {
+                          const t = templates.find(x => x.id === tid);
+                          return t ? (
+                            <span key={tid} className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
@@ -245,7 +328,7 @@ export default function CandidatesPage() {
       </div>
 
       {/* Add / Edit modal */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editTarget ? "Edit Candidate" : "Add Candidate"}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editTarget ? "Edit Candidate" : "Add Candidate"} wide>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -273,9 +356,33 @@ export default function CandidatesPage() {
           </div>
           <div>
             <label className={labelCls}>Notes</label>
-            <textarea rows={2} value={form.notes} onChange={e => setField("notes", e.target.value)}
-              placeholder="Any notes…" className={`${inputCls} resize-none`} />
+            <textarea rows={2} value={form.notes} onChange={e => setField("notes", e.target.value)} placeholder="Any notes…" className={`${inputCls} resize-none`} />
           </div>
+
+          {/* Program + Templates */}
+          <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Program</label>
+              <select value={form.program} onChange={e => setField("program", e.target.value)} className={inputCls}>
+                <option value="">— None —</option>
+                {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Templates ({form.templateIds.length} selected)</label>
+              <div className="border border-gray-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
+                {templates.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-3">No templates</p>
+                ) : templates.map(t => (
+                  <label key={t.id} className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer border-b border-gray-50 last:border-0 text-xs transition-colors ${form.templateIds.includes(t.id) ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
+                    <input type="checkbox" checked={form.templateIds.includes(t.id)} onChange={() => toggleFormTemplate(t.id)} className="accent-indigo-600" />
+                    <span className="font-medium text-gray-800">{t.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="flex gap-3 pt-1">
             <button onClick={handleSave} disabled={saving}
               className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
@@ -287,34 +394,64 @@ export default function CandidatesPage() {
         </div>
       </Modal>
 
+      {/* Bulk Edit modal */}
+      <Modal open={showBulk} onClose={() => setShowBulk(false)} title={`Bulk Edit — ${selected.size} candidates`} wide>
+        <div className="space-y-5">
+          <p className="text-sm text-gray-500">Only filled fields will be updated. Leave blank to keep existing values.</p>
+          <div>
+            <label className={labelCls}>Assign Program</label>
+            <select value={bulkProgram} onChange={e => setBulkProgram(e.target.value)} className={inputCls}>
+              <option value="">— Keep existing —</option>
+              {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Assign Templates ({bulkTemplates.length} selected)</label>
+            <div className="border border-gray-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+              {templates.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-6">No templates</p>
+              ) : templates.map(t => (
+                <label key={t.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${bulkTemplates.includes(t.id) ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
+                  <input type="checkbox" checked={bulkTemplates.includes(t.id)} onChange={() => toggleBulkTemplate(t.id)} className="accent-indigo-600" />
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{t.name}</p>
+                    {t.program && <p className="text-xs text-gray-400">{t.program}</p>}
+                  </div>
+                </label>
+              ))}
+            </div>
+            {bulkTemplates.length > 0 && <p className="text-xs text-amber-600 mt-1.5">⚠ This will replace existing template assignments for selected candidates.</p>}
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleBulkSave} disabled={bulkSaving}
+              className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              {bulkSaving ? "Saving…" : `Update ${selected.size} Candidates`}
+            </button>
+            <button onClick={() => setShowBulk(false)}
+              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">Cancel</button>
+          </div>
+        </div>
+      </Modal>
+
       {/* CSV Import modal */}
       <Modal open={showCSV} onClose={closeCSV} title="Import Candidates from CSV" wide>
         <div className="space-y-5">
-          {/* Download sample */}
           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-sm font-semibold text-gray-700 mb-0.5">Template format</p>
             <p className="text-xs text-gray-400 mb-3">Columns: name, uid, email, phone, resumeLink, notes</p>
             <div className="flex gap-2">
               <button onClick={downloadSampleExcel}
                 className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-3 py-1.5 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
                 Download Excel (.xlsx)
               </button>
               <button onClick={downloadSampleCSV}
                 className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
                 Download CSV
               </button>
             </div>
           </div>
 
-          {/* File picker */}
-          <div
-            onClick={() => fileRef.current?.click()}
+          <div onClick={() => fileRef.current?.click()}
             className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
             <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -324,7 +461,6 @@ export default function CandidatesPage() {
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
           </div>
 
-          {/* Parse errors */}
           {csvErrors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-1">
               <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Errors</p>
@@ -332,7 +468,6 @@ export default function CandidatesPage() {
             </div>
           )}
 
-          {/* Preview table */}
           {csvPreview.length > 0 && (
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{csvPreview.length} candidates ready to import</p>
@@ -362,9 +497,7 @@ export default function CandidatesPage() {
 
           <div className="flex gap-3 pt-1">
             <button onClick={closeCSV}
-              className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-              Cancel
-            </button>
+              className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
             <button onClick={handleCSVImport} disabled={csvImporting || csvPreview.length === 0}
               className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors">
               {csvImporting ? "Importing…" : `Import ${csvPreview.length || ""} Candidates`}

@@ -20,6 +20,7 @@ import InterviewDetail      from "./pages/interviewer/InterviewDetail";
 import AvailabilityPage     from "./pages/interviewer/AvailabilityPage";
 import ProfilePage          from "./pages/interviewer/ProfilePage";
 import NotificationsPage    from "./pages/interviewer/NotificationsPage";
+import SchedulePage         from "./pages/student/SchedulePage";
 
 const ADMIN_ROLES = ["admin", "content_team", "interviewer_content"];
 
@@ -81,6 +82,9 @@ function AppRoutes() {
         <Route path="profile"        element={<ProfilePage />} />
         <Route path="notifications"  element={<NotificationsPage />} />
       </Route>
+
+      {/* Public student scheduling — no auth required */}
+      <Route path="/student/schedule" element={<SchedulePage />} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
