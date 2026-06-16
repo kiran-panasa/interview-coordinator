@@ -4,6 +4,7 @@ import { useAuth } from "../../AuthContext";
 import { getCandidates, createCandidate, updateCandidate, deleteCandidate } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import KebabMenu from "../../components/KebabMenu";
 
 const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "" };
 
@@ -207,7 +208,7 @@ export default function CandidatesPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Name", "UID", "Email", "Resume", "Actions"].map(h => (
+                {["Name", "UID", "Email", "Resume", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -230,11 +231,11 @@ export default function CandidatesPage() {
                       ? <a href={c.resumeLink} target="_blank" rel="noreferrer" className="text-indigo-600 text-xs hover:underline">View ↗</a>
                       : <span className="text-gray-400 text-xs">—</span>}
                   </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-3">
-                      <button onClick={() => openEdit(c)} className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
-                      <button onClick={() => handleDelete(c)} className="text-xs text-red-500 font-medium hover:underline">Delete</button>
-                    </div>
+                  <td className="px-4 py-3 w-12">
+                    <KebabMenu actions={[
+                      { label: "Edit",   onClick: () => openEdit(c) },
+                      { label: "Delete", onClick: () => handleDelete(c), danger: true },
+                    ]} />
                   </td>
                 </tr>
               ))}
