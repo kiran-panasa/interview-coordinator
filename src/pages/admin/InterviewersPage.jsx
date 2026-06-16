@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser } from "../../api/firestore";
+import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser, deleteUser } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -50,6 +50,17 @@ export default function InterviewersPage() {
   const viewAvailability = async (u) => {
     const slots = await getInterviewerAvailability(u.id);
     setViewAvail({ user: u, slots });
+  };
+
+  const handleDelete = async (u) => {
+    const name = u.displayName || u.email;
+    if (!confirm(`Remove interviewer "${name}" from the platform?\n\nThis deletes their account record. Their past interviews will remain.`)) return;
+    try {
+      await deleteUser(u.id);
+      setToast({ message: `${name} removed.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
   };
 
   const saveSkills = async () => {
@@ -197,11 +208,17 @@ export default function InterviewersPage() {
                 )}
               </div>
 
-              {/* Action */}
-              <button onClick={() => viewAvailability(u)}
-                className="mt-auto w-full text-xs font-semibold text-indigo-600 border border-indigo-100 bg-indigo-50 hover:bg-indigo-100 py-2 rounded-xl transition-colors">
-                View Availability
-              </button>
+              {/* Actions */}
+              <div className="mt-auto flex gap-2">
+                <button onClick={() => viewAvailability(u)}
+                  className="flex-1 text-xs font-semibold text-indigo-600 border border-indigo-100 bg-indigo-50 hover:bg-indigo-100 py-2 rounded-xl transition-colors">
+                  View Availability
+                </button>
+                <button onClick={() => handleDelete(u)}
+                  className="text-xs font-semibold text-red-400 border border-red-100 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors">
+                  Remove
+                </button>
+              </div>
             </div>
           ))}
         </div>

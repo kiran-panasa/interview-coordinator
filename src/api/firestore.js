@@ -101,6 +101,10 @@ export async function updateInterview(id, data) {
   });
 }
 
+export async function deleteInterview(id) {
+  await deleteDoc(doc(db, "interviews", id));
+}
+
 export async function saveFeedbackDraft(id, feedback) {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },

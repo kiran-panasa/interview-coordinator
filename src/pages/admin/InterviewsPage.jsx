@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../AuthContext";
 import {
   subscribeToInterviews, getCandidates, getAllUsers,
-  createInterview, updateInterview,
+  createInterview, updateInterview, deleteInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplates, getTemplate, DEFAULT_ROUNDS,
 } from "../../api/firestore";
@@ -204,6 +204,32 @@ export default function InterviewsPage() {
     }
   };
 
+  const handleDelete = async (iv) => {
+    const label = `${iv.candidateName} — ${iv.round} on ${fmt(iv.scheduledDate)}`;
+    if (!confirm(`Permanently delete interview:\n"${label}"?\n\nThis cannot be undone.`)) return;
+    try {
+      if (iv.eventId) {
+        await callAppsScript({ action: "cancel", eventId: iv.eventId }).catch(() => {});
+      }
+      const slotId = `${iv.scheduledDate}_${(iv.scheduledTime || "").replace(/[: ]/g, "")}`;
+      await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+      await deleteInterview(iv.id);
+      setToast({ message: "Interview deleted." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
+  const handleMarkNoShow = async (iv) => {
+    if (!confirm(`Mark "${iv.candidateName}" as no-show?`)) return;
+    try {
+      await updateInterview(iv.id, { status: "no_show" });
+      setToast({ message: "Marked as no-show." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   const openFeedback = async (iv) => {
     const tmpl = iv.templateId ? await getTemplate(iv.templateId) : null;
     setFeedbackModal({ interview: iv, template: tmpl });
@@ -301,12 +327,16 @@ export default function InterviewsPage() {
                 <td className="px-4 py-3"><Badge value={iv.status} /></td>
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1.5">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <button onClick={() => openEdit(iv)}
                         className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
-                      {iv.status !== "cancelled" && iv.status !== "completed" && (
+                      {iv.status !== "cancelled" && iv.status !== "completed" && iv.status !== "no_show" && (
                         <button onClick={() => handleCancel(iv)}
                           className="text-xs text-red-500 font-medium hover:underline">Cancel</button>
+                      )}
+                      {(iv.status === "scheduled" || iv.status === "pending_acceptance") && (
+                        <button onClick={() => handleMarkNoShow(iv)}
+                          className="text-xs text-amber-600 font-medium hover:underline">No-show</button>
                       )}
                       {iv.status === "completed" && iv.feedback && (
                         <button onClick={() => openFeedback(iv)}
@@ -317,6 +347,8 @@ export default function InterviewsPage() {
                           View Feedback
                         </button>
                       )}
+                      <button onClick={() => handleDelete(iv)}
+                        className="text-xs text-gray-400 font-medium hover:text-red-500 hover:underline">Delete</button>
                     </div>
                     {/* Send Invite button */}
                     {iv.status !== "cancelled" && iv.status !== "completed" && !iv.eventId && (
