@@ -1,23 +1,43 @@
 import { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export default function KebabMenu({ actions }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef();
+  const [pos,  setPos]  = useState({ top: 0, right: 0 });
+  const btnRef = useRef();
 
   useEffect(() => {
     if (!open) return;
-    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    const close = (e) => {
+      if (!btnRef.current?.contains(e.target)) setOpen(false);
+    };
     document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("scroll", () => setOpen(false), { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("scroll", () => setOpen(false));
+    };
   }, [open]);
 
   const visible = actions.filter(a => a.show !== false);
   if (visible.length === 0) return null;
 
+  const handleOpen = () => {
+    if (!open) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({
+        top:   rect.bottom + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setOpen(o => !o);
+  };
+
   return (
-    <div ref={ref} className="relative flex justify-center">
+    <div className="flex justify-center">
       <button
-        onClick={() => setOpen(o => !o)}
+        ref={btnRef}
+        onClick={handleOpen}
         className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
         title="More actions"
       >
@@ -28,8 +48,11 @@ export default function KebabMenu({ actions }) {
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-8 z-30 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]">
+      {open && createPortal(
+        <div
+          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
+          className="bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]"
+        >
           {visible.map((a, i) => (
             <button
               key={i}
@@ -45,7 +68,8 @@ export default function KebabMenu({ actions }) {
               {a.label}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
