@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser, deleteUser } from "../../api/firestore";
+import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser, deleteUser, getTemplates } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -27,10 +27,11 @@ function avatarColor(id) {
 export default function InterviewersPage() {
   const [interviewers, setInterviewers] = useState([]);
   const [skills,       setSkills]       = useState([]);
+  const [templates,    setTemplates]    = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [viewAvail,    setViewAvail]    = useState(null);
-  const [editSkills,   setEditSkills]   = useState(null);
-  const [savingSkills, setSavingSkills] = useState(false);
+  const [editModal,    setEditModal]    = useState(null); // { user, draftSkills, draftTemplates }
+  const [saving,       setSaving]       = useState(false);
   const [search,       setSearch]       = useState("");
   const [toast,        setToast]        = useState(null);
 
@@ -45,8 +46,38 @@ export default function InterviewersPage() {
       setLoading(false);
     });
     const unsub2 = subscribeToSkills(setSkills);
+    getTemplates().then(setTemplates);
     return () => { unsub1(); unsub2(); };
   }, []);
+
+  const openEdit = (u) => setEditModal({
+    user: u,
+    draftSkills:    u.skills      || [],
+    draftTemplates: u.templateIds || [],
+  });
+
+  const handleSave = async () => {
+    if (!editModal) return;
+    setSaving(true);
+    try {
+      await updateUser(editModal.user.id, {
+        skills:      editModal.draftSkills,
+        templateIds: editModal.draftTemplates,
+      });
+      setToast({ message: "Interviewer updated." });
+      setEditModal(null);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setSaving(false);
+  };
+
+  const toggleTemplate = (tid) => setEditModal(m => {
+    const next = m.draftTemplates.includes(tid)
+      ? m.draftTemplates.filter(id => id !== tid)
+      : [...m.draftTemplates, tid];
+    return { ...m, draftTemplates: next };
+  });
 
   const viewAvailability = async (u) => {
     const slots = await getInterviewerAvailability(u.id);
@@ -62,15 +93,6 @@ export default function InterviewersPage() {
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
-  };
-
-  const saveSkills = async () => {
-    if (!editSkills) return;
-    setSavingSkills(true);
-    await updateUser(editSkills.user.id, { skills: editSkills.draft });
-    setSavingSkills(false);
-    setEditSkills(null);
-    setToast({ message: "Skills updated." });
   };
 
   const today = new Date().toISOString().slice(0, 10);
@@ -114,7 +136,7 @@ export default function InterviewersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Interviewer", "Company", "Contact", "Skills", ""].map((h, i) => (
+                {["Interviewer", "Company", "Contact", "Skills", "Templates", ""].map((h, i) => (
                   <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -190,11 +212,29 @@ export default function InterviewersPage() {
                     )}
                   </td>
 
+                  {/* Templates */}
+                  <td className="px-4 py-3">
+                    {(u.templateIds || []).length === 0 ? (
+                      <span className="text-xs text-gray-300">Not assigned</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {(u.templateIds || []).map(tid => {
+                          const tmpl = templates.find(t => t.id === tid);
+                          return tmpl ? (
+                            <span key={tid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                              {tmpl.name}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </td>
+
                   {/* Actions */}
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
                       { label: "View Availability", onClick: () => viewAvailability(u) },
-                      { label: "Edit Skills",       onClick: () => setEditSkills({ user: u, draft: u.skills || [] }) },
+                      { label: "Edit",              onClick: () => openEdit(u) },
                       { label: "Remove",            onClick: () => handleDelete(u), danger: true },
                     ]} />
                   </td>
@@ -205,23 +245,65 @@ export default function InterviewersPage() {
         )}
       </div>
 
-      {/* Edit skills modal */}
-      <Modal open={!!editSkills} onClose={() => setEditSkills(null)}
-        title={`Skills — ${editSkills?.user?.displayName || editSkills?.user?.email || ""}`}>
-        {editSkills && (
-          <div className="space-y-4">
-            <SkillsSelect
-              skills={skills}
-              value={editSkills.draft}
-              onChange={v => setEditSkills(s => ({ ...s, draft: v }))}
-              placeholder="Select skills…"
-            />
+      {/* Combined Edit modal — Skills + Templates */}
+      <Modal open={!!editModal} onClose={() => setEditModal(null)}
+        title={`Edit — ${editModal?.user?.displayName || editModal?.user?.email || ""}`} wide>
+        {editModal && (
+          <div className="space-y-6">
+
+            {/* Skills section */}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Skills</p>
+              <SkillsSelect
+                skills={skills}
+                value={editModal.draftSkills}
+                onChange={v => setEditModal(m => ({ ...m, draftSkills: v }))}
+                placeholder="Select skills…"
+              />
+            </div>
+
+            {/* Templates section */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Interview Templates</p>
+                <span className="text-xs text-gray-400">{editModal.draftTemplates.length} selected</span>
+              </div>
+              {templates.length === 0 ? (
+                <p className="text-sm text-gray-400 py-4 text-center">No templates found.</p>
+              ) : (
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                  {templates.map(t => (
+                    <label key={t.id}
+                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
+                        editModal.draftTemplates.includes(t.id) ? "bg-violet-50" : "hover:bg-gray-50"
+                      }`}>
+                      <input
+                        type="checkbox"
+                        checked={editModal.draftTemplates.includes(t.id)}
+                        onChange={() => toggleTemplate(t.id)}
+                        className="accent-violet-600 flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
+                        {t.program && <p className="text-xs text-gray-400">{t.program}</p>}
+                      </div>
+                      {editModal.draftTemplates.includes(t.id) && (
+                        <svg className="w-4 h-4 text-violet-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+                        </svg>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-1">
-              <button onClick={saveSkills} disabled={savingSkills}
+              <button onClick={handleSave} disabled={saving}
                 className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-                {savingSkills ? "Saving…" : "Save Skills"}
+                {saving ? "Saving…" : "Save Changes"}
               </button>
-              <button onClick={() => setEditSkills(null)}
+              <button onClick={() => setEditModal(null)}
                 className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
                 Cancel
               </button>
