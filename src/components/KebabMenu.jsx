@@ -4,18 +4,24 @@ import { createPortal } from "react-dom";
 export default function KebabMenu({ actions }) {
   const [open, setOpen] = useState(false);
   const [pos,  setPos]  = useState({ top: 0, right: 0 });
-  const btnRef = useRef();
+  const btnRef      = useRef();
+  const dropdownRef = useRef();
 
   useEffect(() => {
     if (!open) return;
     const close = (e) => {
-      if (!btnRef.current?.contains(e.target)) setOpen(false);
+      if (
+        btnRef.current?.contains(e.target) ||
+        dropdownRef.current?.contains(e.target)
+      ) return;
+      setOpen(false);
     };
+    const onScroll = () => setOpen(false);
     document.addEventListener("mousedown", close);
-    document.addEventListener("scroll", () => setOpen(false), { passive: true });
+    document.addEventListener("scroll", onScroll, { passive: true, capture: true });
     return () => {
       document.removeEventListener("mousedown", close);
-      document.removeEventListener("scroll", () => setOpen(false));
+      document.removeEventListener("scroll", onScroll, { capture: true });
     };
   }, [open]);
 
@@ -50,6 +56,7 @@ export default function KebabMenu({ actions }) {
 
       {open && createPortal(
         <div
+          ref={dropdownRef}
           style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
           className="bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]"
         >
