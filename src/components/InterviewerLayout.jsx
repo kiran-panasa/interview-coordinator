@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useEffect, useState } from "react";
-import { subscribeToUserNotifications } from "../api/firestore";
+import { subscribeToUserNotifications, checkAndSendFeedbackNudges } from "../api/firestore";
 
 const NAV = [
   { to: "/interviewer/dashboard",       label: "Dashboard",       icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -27,9 +27,16 @@ export default function InterviewerLayout() {
   useEffect(() => {
     if (!currentUser?.uid) return;
     return subscribeToUserNotifications(currentUser.uid, (notifs) => {
-      setUnread(notifs.filter(n => n.type === "nudge" && n.status === "unread").length);
+      setUnread(notifs.filter(n =>
+        (n.type === "nudge" || n.type === "feedback_reminder") && n.status === "unread"
+      ).length);
     });
   }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || !userProfile?.email) return;
+    checkAndSendFeedbackNudges(currentUser.uid, userProfile.email).catch(() => {});
+  }, [currentUser?.uid, userProfile?.email]);
 
   return (
     <div className="flex min-h-screen bg-gray-50">

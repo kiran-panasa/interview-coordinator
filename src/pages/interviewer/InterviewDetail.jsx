@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   getInterview, updateInterview, saveFeedbackDraft,
-  markSlotFree, DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
+  markSlotFree, markCandidateAttendance,
+  DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
 } from "../../api/firestore";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -86,6 +87,23 @@ export default function InterviewDetail() {
     setSaving(false);
   };
 
+  const handleCandidateJoined = async () => {
+    setSaving(true);
+    await markCandidateAttendance(id, true);
+    setInterview(iv => ({ ...iv, candidateJoined: true }));
+    setToast({ message: "Attendance marked. You can now submit feedback." });
+    setSaving(false);
+  };
+
+  const handleCandidateNoShow = async () => {
+    if (!confirm("Mark this candidate as a no-show?\n\nThis will set the interview status to no-show and no feedback is required.")) return;
+    setSaving(true);
+    await markCandidateAttendance(id, false);
+    setInterview(iv => ({ ...iv, candidateJoined: false, status: "no_show" }));
+    setToast({ message: "Marked as no-show." });
+    setSaving(false);
+  };
+
   const handleMarkCompleted = async () => {
     if (!confirm("Mark this interview as completed?")) return;
     setSaving(true);
@@ -132,8 +150,12 @@ export default function InterviewDetail() {
   const isDynamic    = !!(template?.domains);
   const isStructured = !!template && !isDynamic;
 
-  const pastTime     = isPastInterviewTime(interview.scheduledDate, interview.scheduledTime);
-  const canComplete  = hasFeedback && pastTime;
+  const pastTime          = isPastInterviewTime(interview.scheduledDate, interview.scheduledTime);
+  const attended          = interview.candidateJoined ?? null; // null | true | false
+  const showAttendanceGate = isScheduled && pastTime && attended === null;
+  const isNoShow          = attended === false;
+  const showEvaluation    = isCompleted || (isScheduled && !showAttendanceGate && !isNoShow);
+  const canComplete       = hasFeedback && pastTime && attended === true;
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
@@ -220,8 +242,41 @@ export default function InterviewDetail() {
         </div>
       )}
 
+      {/* ── Attendance gate — appears once interview time has passed ── */}
+      {showAttendanceGate && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
+          <p className="text-sm font-bold text-amber-800 mb-1">Did the candidate join?</p>
+          <p className="text-xs text-amber-600 mb-4">
+            Scheduled for {interview.scheduledTime} · {fmt(interview.scheduledDate)}
+          </p>
+          <div className="flex gap-3">
+            <button onClick={handleCandidateJoined} disabled={saving}
+              className="bg-emerald-500 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60 transition-colors">
+              ✓ Candidate Joined
+            </button>
+            <button onClick={handleCandidateNoShow} disabled={saving}
+              className="bg-white border border-red-300 text-red-600 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
+              ✗ Candidate Didn't Join
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── No-show confirmation ── */}
+      {isNoShow && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-5 flex items-center gap-3">
+          <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+          <div>
+            <p className="text-sm font-semibold text-red-700">Candidate did not join</p>
+            <p className="text-xs text-red-400 mt-0.5">Marked as no-show. No feedback required.</p>
+          </div>
+        </div>
+      )}
+
       {/* ── Evaluation section (scheduled or completed) ── */}
-      {(isScheduled || isCompleted) && (
+      {showEvaluation && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-base font-bold text-gray-900">Evaluation</h2>

@@ -24,7 +24,20 @@ export default function MyInterviewsPage() {
     return unsub;
   }, [userProfile?.email]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+
+  function isPastStart(scheduledDate, scheduledTime) {
+    if (!scheduledDate) return false;
+    const match = (scheduledTime || "").match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return scheduledDate < today;
+    let h = parseInt(match[1]);
+    const m = parseInt(match[2]);
+    const ampm = match[3]?.toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return new Date(`${scheduledDate}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`) < now;
+  }
 
   let filtered = interviews;
   if (tab === "Upcoming") {
@@ -89,7 +102,14 @@ export default function MyInterviewsPage() {
                 <td className="px-4 py-3 text-gray-600">{i.round || "—"}</td>
                 <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmt(i.scheduledDate)}</td>
                 <td className="px-4 py-3 text-gray-600">{i.scheduledTime || "—"}</td>
-                <td className="px-4 py-3"><Badge value={i.status} /></td>
+                <td className="px-4 py-3">
+                  <Badge value={i.status} />
+                  {i.status === "scheduled" && isPastStart(i.scheduledDate, i.scheduledTime) && i.candidateJoined == null && (
+                    <span className="ml-1.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                      Mark attendance
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <Link to={`/interviewer/interviews/${i.id}`}
                     className="text-xs text-indigo-600 font-medium hover:underline">View</Link>

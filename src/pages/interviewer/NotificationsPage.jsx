@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { subscribeToUserNotifications, updateNotification, createNotification } from "../../api/firestore";
 import Toast from "../../components/Toast";
@@ -22,7 +22,7 @@ export default function NotificationsPage() {
 
   useEffect(() => {
     return subscribeToUserNotifications(currentUser.uid, notifs =>
-      setNotifications(notifs.filter(n => n.type === "nudge"))
+      setNotifications(notifs.filter(n => n.type === "nudge" || n.type === "feedback_reminder"))
     );
   }, [currentUser.uid]);
 
@@ -109,13 +109,25 @@ export default function NotificationsPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     {isNew && <span className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0 mt-1" />}
                     <div>
-                      <p className="text-sm font-bold text-gray-900">
-                        {n.templateName || "Interview"}{n.date ? ` · ${fmtDate(n.date)}` : ""}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">From {n.senderName} · {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
+                      {n.type === "feedback_reminder" ? (
+                        <>
+                          <p className="text-sm font-bold text-gray-900">Feedback Reminder — {n.candidateName || "Interview"}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-bold text-gray-900">
+                            {n.templateName || "Interview"}{n.date ? ` · ${fmtDate(n.date)}` : ""}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-0.5">From {n.senderName} · {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {responded && statusBadge(n.status)}
+                  {n.type === "nudge" && responded && statusBadge(n.status)}
+                  {n.type === "feedback_reminder" && !isNew && (
+                    <span className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">Seen</span>
+                  )}
                 </div>
 
                 {/* Message */}
@@ -123,8 +135,19 @@ export default function NotificationsPage() {
                   {n.message}
                 </p>
 
-                {/* Actions */}
-                {!responded && (
+                {/* Actions — feedback reminder */}
+                {n.type === "feedback_reminder" && isNew && n.interviewId && (
+                  <Link
+                    to={`/interviewer/interviews/${n.interviewId}`}
+                    onClick={() => updateNotification(n.id, { status: "read" })}
+                    className="flex items-center justify-center gap-2 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition-colors"
+                  >
+                    Go to Interview →
+                  </Link>
+                )}
+
+                {/* Actions — availability nudge */}
+                {n.type === "nudge" && !responded && (
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleAvailable(n)}

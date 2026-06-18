@@ -105,6 +105,74 @@ export async function deleteInterview(id) {
   await deleteDoc(doc(db, "interviews", id));
 }
 
+export async function markCandidateAttendance(interviewId, joined) {
+  const update = {
+    candidateJoined: joined,
+    attendanceMarkedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (!joined) {
+    update.status    = "no_show";
+    update.nextNudgeAt = null;
+  }
+  await updateDoc(doc(db, "interviews", interviewId), update);
+}
+
+function parseInterviewStart(scheduledDate, scheduledTime) {
+  if (!scheduledDate || !scheduledTime) return null;
+  try {
+    const match = scheduledTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return null;
+    let h = parseInt(match[1]);
+    const min = parseInt(match[2]);
+    const ampm = match[3]?.toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return new Date(`${scheduledDate}T${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}:00`);
+  } catch { return null; }
+}
+
+export async function checkAndSendFeedbackNudges(interviewerId, interviewerEmail) {
+  const now  = new Date();
+  const hour = now.getHours();
+  if (hour < 9 || hour >= 21) return; // only 9 AM – 9 PM
+
+  const snap = await getDocs(
+    query(collection(db, "interviews"), where("interviewerEmail", "==", interviewerEmail))
+  );
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+  for (const iv of rows) {
+    if (iv.status !== "scheduled") continue;
+    if (iv.candidateJoined === false) continue;       // no-show — stop
+    if (iv.feedback?.submittedAt)     continue;       // feedback done — stop
+
+    const start = parseInterviewStart(iv.scheduledDate, iv.scheduledTime);
+    if (!start || start > now) continue;              // hasn't started yet
+
+    const cutoff = new Date(start.getTime() + 48 * 60 * 60 * 1000);
+    if (now > cutoff) continue;                       // past 48-hour window
+
+    if (iv.nextNudgeAt && new Date(iv.nextNudgeAt) > now) continue; // not yet due
+
+    await createNotification({
+      type:          "feedback_reminder",
+      recipientId:   interviewerId,
+      recipientEmail: interviewerEmail,
+      interviewId:   iv.id,
+      candidateName: iv.candidateName || "",
+      message:       `Please submit your feedback for the interview with ${iv.candidateName || "the candidate"}.`,
+      status:        "unread",
+    });
+
+    await updateDoc(doc(db, "interviews", iv.id), {
+      nextNudgeAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
+      nudgeCount:  (iv.nudgeCount || 0) + 1,
+      updatedAt:   now.toISOString(),
+    });
+  }
+}
+
 export async function saveFeedbackDraft(id, feedback) {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
