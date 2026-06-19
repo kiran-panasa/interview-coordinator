@@ -10,6 +10,7 @@ import {
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
@@ -748,34 +749,53 @@ export default function NudgePage() {
                           {fmtDate(inv.dateRangeStart)} – {fmtDate(inv.dateRangeEnd)}
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_BADGE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                          <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
                             {STATUS_LABEL[inv.status] || inv.status}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                          {inv.sentAt ? new Date(inv.sentAt).toLocaleString() : "—"}
+                          {inv.sentAt ? new Date(inv.sentAt).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                        <td className="px-4 py-3 w-20">
+                          <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => handleCopyLink(inv)}
                               disabled={!inv.inviteToken}
                               title="Copy scheduling link"
-                              className="text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
-                              {copiedId === inv.id ? "Copied!" : "Copy Link"}
+                              className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40 ${
+                                copiedId === inv.id
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
+                              }`}>
+                              {copiedId === inv.id ? (
+                                <>
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  Copied
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                  </svg>
+                                  Copy
+                                </>
+                              )}
                             </button>
-                            <button
-                              onClick={() => handleResendInvite(inv)}
-                              disabled={resendingId === inv.id || deletingId === inv.id || ["confirmed", "cancelled"].includes(inv.status)}
-                              className="text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
-                              {resendingId === inv.id ? "…" : "Resend"}
-                            </button>
-                            <button
-                              onClick={() => handleDeleteInvite(inv)}
-                              disabled={resendingId === inv.id || deletingId === inv.id}
-                              className="text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
-                              {deletingId === inv.id ? "…" : "Delete"}
-                            </button>
+                            <KebabMenu actions={[
+                              {
+                                label: resendingId === inv.id ? "Resending…" : "Resend",
+                                onClick: () => handleResendInvite(inv),
+                                disabled: resendingId === inv.id || deletingId === inv.id || ["confirmed", "cancelled"].includes(inv.status),
+                              },
+                              {
+                                label: deletingId === inv.id ? "Deleting…" : "Delete",
+                                onClick: () => handleDeleteInvite(inv),
+                                danger: true,
+                                disabled: resendingId === inv.id || deletingId === inv.id,
+                              },
+                            ]} />
                           </div>
                         </td>
                       </tr>

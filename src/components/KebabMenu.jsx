@@ -63,13 +63,14 @@ export default function KebabMenu({ actions }) {
           {visible.map((a, i) => (
             <button
               key={i}
-              onClick={() => { setOpen(false); a.onClick(); }}
-              className={`w-full text-left px-4 py-2 text-sm font-medium transition-colors ${
+              disabled={a.disabled}
+              onClick={() => { if (!a.disabled) { setOpen(false); a.onClick(); } }}
+              className={`w-full text-left px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                 a.danger
-                  ? "text-red-500 hover:bg-red-50"
+                  ? "text-red-500 hover:bg-red-50 disabled:hover:bg-transparent"
                   : a.highlight
-                    ? "text-emerald-700 hover:bg-emerald-50"
-                    : "text-gray-700 hover:bg-gray-50"
+                    ? "text-emerald-700 hover:bg-emerald-50 disabled:hover:bg-transparent"
+                    : "text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
               }`}
             >
               {a.label}
