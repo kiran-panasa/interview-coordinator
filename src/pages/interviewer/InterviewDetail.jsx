@@ -4,6 +4,8 @@ import {
   getInterview, updateInterview, saveFeedbackDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
+  getQuestionsByIds, getCandidateAskedQuestions,
+  incrementQuestionUsage, createAdhocQuestion,
 } from "../../api/firestore";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -41,9 +43,18 @@ export default function InterviewDetail() {
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [toast,     setToast]     = useState(null);
-  const [answers,   setAnswers]   = useState({});
-  const [comments,  setComments]  = useState("");
-  const [now,       setNow]       = useState(new Date());
+  const [answers,        setAnswers]        = useState({});
+  const [comments,       setComments]       = useState("");
+  const [now,            setNow]            = useState(new Date());
+
+  // Questions Asked state
+  const [templateQs,     setTemplateQs]     = useState([]);
+  const [askedQIds,      setAskedQIds]      = useState(new Set());
+  const [savedAskedQIds, setSavedAskedQIds] = useState(new Set());
+  const [qRemarks,       setQRemarks]       = useState({});
+  const [priorAskedSet,  setPriorAskedSet]  = useState(new Set());
+  const [adhocText,      setAdhocText]      = useState("");
+  const [qSaving,        setQSaving]        = useState(false);
 
   // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
   useEffect(() => {
@@ -57,10 +68,20 @@ export default function InterviewDetail() {
       if (iv?.templateId) {
         const tmpl = await getTemplate(iv.templateId);
         setTemplate(tmpl);
+        if (tmpl?.questionIds?.length) {
+          getQuestionsByIds(tmpl.questionIds).then(setTemplateQs);
+        }
       }
       if (iv?.feedback) {
         setAnswers(iv.feedback.answers || {});
         setComments(iv.feedback.comments || "");
+      }
+      const savedAsked = new Set(iv?.questionsAsked || []);
+      setAskedQIds(savedAsked);
+      setSavedAskedQIds(savedAsked);
+      setQRemarks(iv?.questionRemarks || {});
+      if (iv?.candidateId) {
+        getCandidateAskedQuestions(iv.candidateId, id).then(setPriorAskedSet);
       }
       setLoading(false);
     });
@@ -138,6 +159,53 @@ export default function InterviewDetail() {
       return setToast({ message: "Please select an overall recommendation.", type: "error" });
     const overallRecommendation = recQuestion ? (answers[recQuestion.id] || "") : "";
     await handleSaveFeedback({ answers, overallRecommendation, comments }, null);
+  };
+
+  const toggleAsked = (qid) => {
+    setAskedQIds(prev => {
+      const next = new Set(prev);
+      if (next.has(qid)) next.delete(qid);
+      else next.add(qid);
+      return next;
+    });
+  };
+
+  const handleSaveQuestions = async () => {
+    setQSaving(true);
+    try {
+      const newlyAsked = [...askedQIds].filter(qid => !savedAskedQIds.has(qid));
+      await updateInterview(id, {
+        questionsAsked: [...askedQIds],
+        questionRemarks: qRemarks,
+      });
+      if (newlyAsked.length > 0) await incrementQuestionUsage(newlyAsked);
+      setSavedAskedQIds(new Set(askedQIds));
+      setInterview(iv => ({ ...iv, questionsAsked: [...askedQIds], questionRemarks: qRemarks }));
+      setToast({ message: "Questions saved." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setQSaving(false);
+  };
+
+  const handleAddAdhoc = async () => {
+    const text = adhocText.trim();
+    if (!text) return;
+    setQSaving(true);
+    try {
+      await createAdhocQuestion({
+        text,
+        interviewId: id,
+        candidateId: interview.candidateId,
+        interviewerId: interview.interviewerId,
+        templateId: interview.templateId || null,
+      });
+      setAdhocText("");
+      setToast({ message: "Question submitted for review — content team will be notified." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setQSaving(false);
   };
 
   if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
@@ -274,6 +342,122 @@ export default function InterviewDetail() {
           </div>
         </div>
       )}
+
+      {/* ── Questions Asked ── */}
+      {showEvaluation && templateQs.length > 0 && (() => {
+        const byDomain = templateQs.reduce((acc, q) => {
+          const key = q.domainType || "other";
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(q);
+          return acc;
+        }, {});
+        const diffBadge = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
+
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-bold text-gray-900">Questions Asked</h2>
+              <span className="text-xs text-gray-400">{askedQIds.size} / {templateQs.length} marked</span>
+            </div>
+
+            <div className="space-y-5">
+              {Object.entries(byDomain).map(([domain, qs]) => (
+                <div key={domain}>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{domain.replace(/_/g, " ")}</p>
+                  <div className="space-y-2">
+                    {qs.map(q => {
+                      const isAsked  = askedQIds.has(q.id);
+                      const isRepeat = priorAskedSet.has(q.id);
+                      return (
+                        <div key={q.id} className={`rounded-lg border p-3 transition-colors ${isAsked ? "border-indigo-200 bg-indigo-50/40" : "border-gray-100 bg-gray-50"}`}>
+                          <div className="flex items-start gap-2.5">
+                            {isCompleted ? (
+                              <div className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded ${isAsked ? "bg-indigo-600" : "bg-gray-200"}`}>
+                                {isAsked && (
+                                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </div>
+                            ) : (
+                              <input type="checkbox" checked={isAsked} onChange={() => toggleAsked(q.id)}
+                                className="mt-0.5 w-4 h-4 flex-shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                {q.difficulty && (
+                                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded capitalize ${diffBadge[q.difficulty] || "bg-gray-100 text-gray-600"}`}>
+                                    {q.difficulty}
+                                  </span>
+                                )}
+                                {q.topic && (
+                                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{q.topic}</span>
+                                )}
+                                {isRepeat && (
+                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Asked before
+                                  </span>
+                                )}
+                              </div>
+                              {isAsked && !isCompleted && (
+                                <textarea
+                                  rows={2}
+                                  value={qRemarks[q.id] || ""}
+                                  onChange={e => setQRemarks(r => ({ ...r, [q.id]: e.target.value }))}
+                                  placeholder="Add remarks for this question…"
+                                  className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none bg-white"
+                                />
+                              )}
+                              {isAsked && isCompleted && qRemarks[q.id] && (
+                                <p className="mt-1.5 text-xs text-gray-600 italic">{qRemarks[q.id]}</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Add your own question */}
+            {!isCompleted && (
+              <div className="mt-5 pt-5 border-t border-gray-100">
+                <p className="text-xs font-semibold text-gray-500 mb-2">Add your own question</p>
+                <p className="text-xs text-gray-400 mb-2">Questions you submit here go to the content team for review.</p>
+                <div className="flex gap-2">
+                  <textarea
+                    rows={2}
+                    value={adhocText}
+                    onChange={e => setAdhocText(e.target.value)}
+                    placeholder="Type a question you asked that isn't listed above…"
+                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  />
+                  <button onClick={handleAddAdhoc} disabled={qSaving || !adhocText.trim()}
+                    className="self-end px-4 py-2 bg-gray-800 text-white text-sm font-semibold rounded-lg hover:bg-gray-700 disabled:opacity-40 whitespace-nowrap">
+                    Submit
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Save button */}
+            {!isCompleted && (
+              <div className="mt-4 flex justify-end">
+                <button onClick={handleSaveQuestions} disabled={qSaving}
+                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60">
+                  {qSaving ? "Saving…" : "Save Questions"}
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Evaluation section (scheduled or completed) ── */}
       {showEvaluation && (

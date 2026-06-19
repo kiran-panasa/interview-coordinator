@@ -618,15 +618,17 @@ export async function getQuestionsByIds(ids) {
   return results.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() })));
 }
 
-export async function getCandidateAskedQuestions(candidateId) {
+export async function getCandidateAskedQuestions(candidateId, excludeInterviewId = null) {
   const snap = await getDocs(query(
     collection(db, "interviews"),
     where("candidateId", "==", candidateId)
   ));
   const questionIds = new Set();
   snap.docs.forEach(d => {
+    if (excludeInterviewId && d.id === excludeInterviewId) return;
     (d.data().questionsAsked || []).forEach(q => {
-      if (q.questionId) questionIds.add(q.questionId);
+      if (typeof q === "string") questionIds.add(q);
+      else if (q?.questionId) questionIds.add(q.questionId);
     });
   });
   return questionIds;
