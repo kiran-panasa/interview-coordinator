@@ -13,6 +13,7 @@ import TemplatesPage      from "./pages/admin/TemplatesPage";
 import AdminPanelPage     from "./pages/admin/AdminPanelPage";
 import NudgePage          from "./pages/admin/NudgePage";
 import AdminAboutPage     from "./pages/admin/AboutPage";
+import QuestionsPage      from "./pages/admin/QuestionsPage";
 
 import InterviewerLayout    from "./components/InterviewerLayout";
 import InterviewerDashboard from "./pages/interviewer/Dashboard";
@@ -73,6 +74,7 @@ function AppRoutes() {
         <Route path="templates"   element={<TemplatesPage />} />
         <Route path="panel"       element={<AdminPanelPage />} />
         <Route path="nudge"       element={<NudgePage />} />
+        <Route path="questions"   element={<QuestionsPage />} />
         <Route path="about"       element={<AdminAboutPage />} />
       </Route>
 

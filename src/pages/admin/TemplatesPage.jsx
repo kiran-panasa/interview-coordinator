@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate,
   subscribeToPrograms, createProgram, updateProgram, deleteProgram,
-  subscribeToInterviews, subscribeToSkills,
+  subscribeToInterviews, subscribeToSkills, subscribeToQuestions,
 } from "../../api/firestore";
 import SkillsSelect from "../../components/SkillsSelect";
 import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
@@ -744,6 +744,10 @@ export default function TemplatesPage() {
   const [form,          setForm]          = useState(makeEmptyForm);
   const [qbTexts,       setQbTexts]       = useState({ theory: "", coding: "", project: "", resume: "" });
   const [activeTab,     setActiveTab]     = useState("domains");
+  const [bankQuestions, setBankQuestions] = useState([]);
+  const [assignedQIds,  setAssignedQIds]  = useState([]);
+  const [qbSearch,      setQbSearch]      = useState("");
+  const [qbDomainFilter,setQbDomainFilter]= useState("");
   const [saving,        setSaving]        = useState(false);
   const [toast,         setToast]         = useState(null);
   const [csvErrors,     setCsvErrors]     = useState([]);
@@ -765,7 +769,8 @@ export default function TemplatesPage() {
     const unsub1 = subscribeToPrograms(setPrograms);
     const unsub2 = subscribeToInterviews(setInterviews);
     const unsub3 = subscribeToSkills(setSkills);
-    return () => { unsub1(); unsub2(); unsub3(); };
+    const unsub4 = subscribeToQuestions(qs => setBankQuestions(qs.filter(q => q.status !== "archived")));
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
 
   useEffect(() => {
@@ -810,6 +815,8 @@ export default function TemplatesPage() {
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
     setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {} });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
+    setAssignedQIds([]);
+    setQbSearch(""); setQbDomainFilter("");
     setActiveTab("domains");
     setShowNewPicker(false);
     setShowModal(true);
@@ -848,6 +855,8 @@ export default function TemplatesPage() {
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
     setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: deepClone(migrateDomainsForEdit(rawDomains)) });
     setQbTexts(toTexts(source.questionBank || source.questions));
+    setAssignedQIds(source.questionIds || []);
+    setQbSearch(""); setQbDomainFilter("");
     setActiveTab("domains");
     setShowNewPicker(false);
     setShowModal(true);
@@ -860,6 +869,8 @@ export default function TemplatesPage() {
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
     setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: deepClone(migrateDomainsForEdit(rawDomains)) });
     setQbTexts(toTexts(t.questionBank || t.questions));
+    setAssignedQIds(t.questionIds || []);
+    setQbSearch(""); setQbDomainFilter("");
     setActiveTab("domains");
     setShowModal(true);
   };
@@ -1002,6 +1013,7 @@ export default function TemplatesPage() {
         skills: form.skills || [],
         domains: [...form.domains].sort((a, b) => a.order - b.order),
         questionBank: toArrays(qbTexts),
+        questionIds: assignedQIds,
         schemaVersion: 2,
       };
       if (editTarget) {
@@ -1473,25 +1485,109 @@ export default function TemplatesPage() {
           )}
 
           {/* ── Question Banks tab ── */}
-          {activeTab === "questionbank" && (
-            <div className="space-y-3">
-              {qbSections.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-6">Enable at least one domain to manage its question bank.</p>
-              ) : (
-                qbSections.map(({ key, label, placeholder, note }) => (
-                  <QuestionBankSection
-                    key={key}
-                    bankKey={key}
-                    label={label}
-                    placeholder={placeholder}
-                    note={note}
-                    value={qbTexts[key] || ""}
-                    onChange={val => setQbTexts(t => ({ ...t, [key]: val }))}
-                  />
-                ))
-              )}
-            </div>
-          )}
+          {activeTab === "questionbank" && (() => {
+            const enabledTypes = new Set(enabledDomains.filter(d => d.type !== "overall_feedback").map(d => d.type));
+            const assigned   = bankQuestions.filter(q => assignedQIds.includes(q.id));
+            const available  = bankQuestions.filter(q => !assignedQIds.includes(q.id) && (enabledTypes.size === 0 || enabledTypes.has(q.domainType)));
+            const filteredAvail = available.filter(q => {
+              if (qbDomainFilter && q.domainType !== qbDomainFilter) return false;
+              if (qbSearch) {
+                const sq = qbSearch.toLowerCase();
+                return q.text?.toLowerCase().includes(sq) || q.topic?.toLowerCase().includes(sq);
+              }
+              return true;
+            });
+            const availDomainTypes = [...new Set(available.map(q => q.domainType).filter(Boolean))].sort();
+            const DIFF_COLORS = { easy: "text-emerald-600", medium: "text-amber-600", hard: "text-red-600" };
+
+            return (
+              <div className="space-y-4">
+                {/* Assigned questions */}
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                    Assigned to this template ({assigned.length})
+                  </p>
+                  {assigned.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 py-6 text-center">
+                      <p className="text-sm text-gray-400">No questions assigned yet. Search below to add from the bank.</p>
+                    </div>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-50 max-h-48 overflow-y-auto">
+                      {assigned.map(q => (
+                        <div key={q.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-mono text-indigo-500">{q.domainType}</span>
+                              {q.topic && <span className="text-[10px] text-gray-400">· {q.topic}</span>}
+                              {q.difficulty && <span className={`text-[10px] font-semibold ${DIFF_COLORS[q.difficulty] || ""}`}>· {q.difficulty}</span>}
+                            </div>
+                          </div>
+                          <button type="button"
+                            onClick={() => setAssignedQIds(ids => ids.filter(id => id !== q.id))}
+                            className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors mt-0.5">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Search from bank */}
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+                    Add from Question Bank
+                  </p>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Search questions…"
+                      value={qbSearch}
+                      onChange={e => setQbSearch(e.target.value)}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <select value={qbDomainFilter} onChange={e => setQbDomainFilter(e.target.value)}
+                      className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                      <option value="">All Domains</option>
+                      {availDomainTypes.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  {bankQuestions.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">
+                      No questions in the bank yet. Go to <span className="font-semibold">Question Bank</span> to add some.
+                    </p>
+                  ) : filteredAvail.length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-4">
+                      {available.length === 0 ? "All matching questions are already assigned." : "No questions match your search."}
+                    </p>
+                  ) : (
+                    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-50 max-h-56 overflow-y-auto">
+                      {filteredAvail.map(q => (
+                        <button key={q.id} type="button"
+                          onClick={() => setAssignedQIds(ids => [...ids, q.id])}
+                          className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-indigo-50 text-left transition-colors">
+                          <svg className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-mono text-indigo-500">{q.domainType}</span>
+                              {q.topic && <span className="text-[10px] text-gray-400">· {q.topic}</span>}
+                              {q.difficulty && <span className={`text-[10px] font-semibold ${DIFF_COLORS[q.difficulty] || ""}`}>· {q.difficulty}</span>}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">
