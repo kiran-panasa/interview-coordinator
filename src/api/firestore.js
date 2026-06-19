@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, runTransaction, increment,
+  query, where, orderBy, onSnapshot, runTransaction, increment, arrayUnion, arrayRemove,
 } from "firebase/firestore";
 
 // ── Users ─────────────────────────────────────────────────────────────────────
@@ -657,6 +657,18 @@ export function subscribeToQuestions(callback) {
     query(collection(db, "questions"), orderBy("createdAt", "desc")),
     snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
   );
+}
+
+export async function addQuestionToTemplate(templateId, questionId) {
+  await updateDoc(doc(db, "interviewTemplates", templateId), {
+    questionIds: arrayUnion(questionId),
+  });
+}
+
+export async function removeQuestionFromTemplate(templateId, questionId) {
+  await updateDoc(doc(db, "interviewTemplates", templateId), {
+    questionIds: arrayRemove(questionId),
+  });
 }
 
 export async function incrementQuestionUsage(questionIds) {

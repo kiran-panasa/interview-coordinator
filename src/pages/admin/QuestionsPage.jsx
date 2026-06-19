@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   subscribeToQuestions, createQuestion, updateQuestion, archiveQuestion,
   subscribeToSkills, getTemplates,
   subscribeToAdhocQuestions, approveAdhocQuestion, rejectAdhocQuestion,
+  addQuestionToTemplate, removeQuestionFromTemplate,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -11,46 +12,131 @@ import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
-
 const DIFF_BADGE = {
   easy:   "bg-emerald-50 text-emerald-700 border-emerald-200",
   medium: "bg-amber-50 text-amber-700 border-amber-200",
   hard:   "bg-red-50 text-red-700 border-red-200",
 };
 
-const BLANK_FORM = { text: "", domainType: "", skills: [], topic: "", difficulty: "medium" };
+const BLANK_FORM = { text: "", domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [] };
+
+// ── CSV helpers ────────────────────────────────────────────────────────────────
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current); current = "";
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseCSV(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return { rows: [], errors: ["Need a header row plus at least one data row."] };
+
+  const rawHeaders = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, ""));
+  const colMap = {
+    text:       rawHeaders.indexOf("text"),
+    domaintype: rawHeaders.indexOf("domaintype"),
+    difficulty: rawHeaders.indexOf("difficulty"),
+    topic:      rawHeaders.indexOf("topic"),
+    skills:     rawHeaders.indexOf("skills"),
+    templates:  rawHeaders.indexOf("templates"),
+  };
+  if (colMap.text === -1)       return { rows: [], errors: ['Required column "text" not found.'] };
+  if (colMap.domaintype === -1) return { rows: [], errors: ['Required column "domainType" not found.'] };
+
+  const rows = [];
+  const errors = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = parseCSVLine(lines[i]).map(v => v.trim().replace(/^"|"$/g, "").trim());
+    const get  = (col) => (col === -1 ? "" : vals[col] || "");
+    const text = get(colMap.text);
+    const domainType = get(colMap.domaintype);
+    if (!text)       { errors.push(`Row ${i + 1}: "text" is empty — skipped.`); continue; }
+    if (!domainType) { errors.push(`Row ${i + 1}: "domainType" is empty — skipped.`); continue; }
+    const diff = get(colMap.difficulty).toLowerCase();
+    if (diff && !["easy", "medium", "hard"].includes(diff)) {
+      errors.push(`Row ${i + 1}: difficulty "${diff}" invalid (use easy/medium/hard) — skipped.`); continue;
+    }
+    rows.push({
+      text,
+      domainType,
+      difficulty: diff || "medium",
+      topic: get(colMap.topic),
+      skills:    get(colMap.skills).split("|").map(s => s.trim()).filter(Boolean),
+      templates: get(colMap.templates).split("|").map(t => t.trim()).filter(Boolean),
+    });
+  }
+  return { rows, errors };
+}
+
+const SAMPLE_CSV = `text,domainType,difficulty,topic,skills,templates
+"What is a closure in JavaScript?",coding,medium,Closures,JavaScript,
+"Explain React's reconciliation algorithm.",react_coding,hard,React Internals,ReactJS|JavaScript,
+"Write a function to reverse a linked list.",coding,hard,Data Structures,Python|Java,Template A
+`;
+
+function downloadSampleCSV() {
+  const blob = new Blob([SAMPLE_CSV], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = "questions_template.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function QuestionsPage() {
-  const [activeTab,   setActiveTab]   = useState("bank");
-  const [questions,   setQuestions]   = useState([]);
-  const [adhocQs,     setAdhocQs]     = useState([]);
-  const [skills,      setSkills]      = useState([]);
-  const [templates,   setTemplates]   = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [toast,       setToast]       = useState(null);
-  const [showModal,   setShowModal]   = useState(false);
-  const [editTarget,  setEditTarget]  = useState(null);
-  const [form,        setForm]        = useState(BLANK_FORM);
-  const [saving,      setSaving]      = useState(false);
+  const [activeTab,    setActiveTab]    = useState("bank");
+  const [questions,    setQuestions]    = useState([]);
+  const [adhocQs,      setAdhocQs]      = useState([]);
+  const [skills,       setSkills]       = useState([]);
+  const [templates,    setTemplates]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [toast,        setToast]        = useState(null);
+  const [showModal,    setShowModal]    = useState(false);
+  const [editTarget,   setEditTarget]   = useState(null);
+  const [form,         setForm]         = useState(BLANK_FORM);
+  const [saving,       setSaving]       = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
   // Approve modal
   const [approveTarget, setApproveTarget] = useState(null);
   const [approveForm,   setApproveForm]   = useState(BLANK_FORM);
 
+  // Bulk upload
+  const [showBulkModal,  setShowBulkModal]  = useState(false);
+  const [bulkText,       setBulkText]       = useState("");
+  const [bulkPreview,    setBulkPreview]    = useState(null);
+  const [bulkImporting,  setBulkImporting]  = useState(false);
+  const fileInputRef = useRef(null);
+
   // Filters
   const [search,           setSearch]           = useState("");
   const [filterDomain,     setFilterDomain]     = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState("");
   const [filterSkill,      setFilterSkill]      = useState("");
+  const [filterTemplate,   setFilterTemplate]   = useState("");
 
   useEffect(() => {
-    const unsub  = subscribeToQuestions(setQuestions);
+    const unsub1 = subscribeToQuestions(setQuestions);
     const unsub2 = subscribeToSkills(setSkills);
     const unsub3 = subscribeToAdhocQuestions(setAdhocQs);
     setLoading(false);
     getTemplates().then(setTemplates);
-    return () => { unsub(); unsub2(); unsub3(); };
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
   const allDomainTypes = [...new Set([
@@ -58,13 +144,33 @@ export default function QuestionsPage() {
     ...templates.flatMap(t => (t.domains || []).map(d => d.type)).filter(Boolean),
   ])].sort();
 
-  // ── Question Bank actions ──────────────────────────────────────────────────
+  // compute which template IDs contain a given question ID
+  const templateIdsForQuestion = (qid) =>
+    templates.filter(t => (t.questionIds || []).includes(qid)).map(t => t.id);
+
+  // ── Question Bank actions ────────────────────────────────────────────────────
 
   const openCreate = () => { setForm(BLANK_FORM); setEditTarget(null); setShowModal(true); };
   const openEdit   = (q) => {
-    setForm({ text: q.text, domainType: q.domainType || "", skills: q.skills || [], topic: q.topic || "", difficulty: q.difficulty || "medium" });
+    setForm({
+      text: q.text, domainType: q.domainType || "", skills: q.skills || [],
+      topic: q.topic || "", difficulty: q.difficulty || "medium",
+      templateIds: templateIdsForQuestion(q.id),
+    });
     setEditTarget(q);
     setShowModal(true);
+  };
+
+  const syncTemplates = async (questionId, newTemplateIds, prevTemplateIds) => {
+    const toAdd    = newTemplateIds.filter(id => !prevTemplateIds.includes(id));
+    const toRemove = prevTemplateIds.filter(id => !newTemplateIds.includes(id));
+    await Promise.all([
+      ...toAdd.map(tid    => addQuestionToTemplate(tid, questionId)),
+      ...toRemove.map(tid => removeQuestionFromTemplate(tid, questionId)),
+    ]);
+    if (toAdd.length > 0 || toRemove.length > 0) {
+      getTemplates().then(setTemplates);
+    }
   };
 
   const handleSave = async () => {
@@ -72,11 +178,14 @@ export default function QuestionsPage() {
     if (!form.domainType.trim()) return setToast({ message: "Domain type is required.", type: "error" });
     setSaving(true);
     try {
+      const { templateIds, ...questionData } = form;
       if (editTarget) {
-        await updateQuestion(editTarget.id, form);
+        await updateQuestion(editTarget.id, questionData);
+        await syncTemplates(editTarget.id, templateIds, templateIdsForQuestion(editTarget.id));
         setToast({ message: "Question updated." });
       } else {
-        await createQuestion(form);
+        const qid = await createQuestion(questionData);
+        await syncTemplates(qid, templateIds, []);
         setToast({ message: "Question added to the bank." });
       }
       setShowModal(false);
@@ -99,44 +208,79 @@ export default function QuestionsPage() {
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
 
+  // ── Bulk upload ──────────────────────────────────────────────────────────────
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setBulkText(ev.target.result);
+      setBulkPreview(null);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  const handleBulkParse = () => {
+    const result = parseCSV(bulkText);
+    setBulkPreview(result);
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulkPreview?.rows?.length) return;
+    setBulkImporting(true);
+    try {
+      let imported = 0;
+      for (const row of bulkPreview.rows) {
+        const skillIds = row.skills.map(name => {
+          const s = skills.find(s => s.name.toLowerCase() === name.toLowerCase());
+          return s?.id;
+        }).filter(Boolean);
+        const templateMatchIds = row.templates.map(name => {
+          const t = templates.find(t => t.name.toLowerCase() === name.toLowerCase());
+          return t?.id;
+        }).filter(Boolean);
+        const qid = await createQuestion({
+          text: row.text, domainType: row.domainType,
+          difficulty: row.difficulty, topic: row.topic, skills: skillIds,
+        });
+        if (templateMatchIds.length > 0) {
+          await Promise.all(templateMatchIds.map(tid => addQuestionToTemplate(tid, qid)));
+        }
+        imported++;
+      }
+      if (bulkPreview.rows.some(r => r.templates.length > 0)) getTemplates().then(setTemplates);
+      setShowBulkModal(false);
+      setBulkPreview(null);
+      setBulkText("");
+      setToast({ message: `${imported} question${imported !== 1 ? "s" : ""} imported.` });
+    } catch (e) { setToast({ message: e.message, type: "error" }); }
+    setBulkImporting(false);
+  };
+
+  // ── Adhoc review actions ─────────────────────────────────────────────────────
+
   const toggleSkill = (sid) => setForm(f => ({
     ...f,
     skills: f.skills.includes(sid) ? f.skills.filter(s => s !== sid) : [...f.skills, sid],
   }));
-
   const toggleApproveSkill = (sid) => setApproveForm(f => ({
     ...f,
     skills: f.skills.includes(sid) ? f.skills.filter(s => s !== sid) : [...f.skills, sid],
   }));
-
-  const filtered = questions.filter(q => {
-    if (!showArchived && q.status === "archived") return false;
-    if (showArchived  && q.status !== "archived") return false;
-    if (filterDomain     && q.domainType !== filterDomain)      return false;
-    if (filterDifficulty && q.difficulty !== filterDifficulty)  return false;
-    if (filterSkill      && !(q.skills || []).includes(filterSkill)) return false;
-    if (search) {
-      const sq = search.toLowerCase();
-      return (
-        q.text?.toLowerCase().includes(sq) ||
-        q.topic?.toLowerCase().includes(sq) ||
-        q.domainType?.toLowerCase().includes(sq)
-      );
-    }
-    return true;
-  });
-
-  const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered, 20);
-
-  const activeCount   = questions.filter(q => q.status !== "archived").length;
-  const archivedCount = questions.filter(q => q.status === "archived").length;
-  const pendingAdhoc  = adhocQs.filter(q => q.status === "pending");
-
-  // ── Adhoc review actions ───────────────────────────────────────────────────
+  const toggleTemplate = (tid) => setForm(f => ({
+    ...f,
+    templateIds: f.templateIds.includes(tid) ? f.templateIds.filter(t => t !== tid) : [...f.templateIds, tid],
+  }));
+  const toggleApproveTemplate = (tid) => setApproveForm(f => ({
+    ...f,
+    templateIds: f.templateIds.includes(tid) ? f.templateIds.filter(t => t !== tid) : [...f.templateIds, tid],
+  }));
 
   const openApprove = (q) => {
     setApproveTarget(q);
-    setApproveForm({ text: q.text, domainType: "", skills: [], topic: "", difficulty: "medium" });
+    setApproveForm({ text: q.text, domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [] });
   };
 
   const handleApprove = async () => {
@@ -144,7 +288,9 @@ export default function QuestionsPage() {
     if (!approveForm.domainType.trim()) return setToast({ message: "Domain type is required.", type: "error" });
     setSaving(true);
     try {
-      await approveAdhocQuestion(approveTarget.id, approveForm);
+      const { templateIds, ...questionData } = approveForm;
+      const qid = await approveAdhocQuestion(approveTarget.id, questionData);
+      await syncTemplates(qid, templateIds, []);
       setApproveTarget(null);
       setToast({ message: "Question approved and added to the bank." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
@@ -159,6 +305,31 @@ export default function QuestionsPage() {
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
 
+  // ── Filtered list ────────────────────────────────────────────────────────────
+
+  const filtered = questions.filter(q => {
+    if (!showArchived && q.status === "archived") return false;
+    if (showArchived  && q.status !== "archived") return false;
+    if (filterDomain     && q.domainType !== filterDomain)          return false;
+    if (filterDifficulty && q.difficulty !== filterDifficulty)      return false;
+    if (filterSkill      && !(q.skills || []).includes(filterSkill)) return false;
+    if (filterTemplate   && !(templates.find(t => t.id === filterTemplate)?.questionIds || []).includes(q.id)) return false;
+    if (search) {
+      const sq = search.toLowerCase();
+      return (
+        q.text?.toLowerCase().includes(sq) ||
+        q.topic?.toLowerCase().includes(sq) ||
+        q.domainType?.toLowerCase().includes(sq)
+      );
+    }
+    return true;
+  });
+
+  const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered, 20);
+  const activeCount   = questions.filter(q => q.status !== "archived").length;
+  const archivedCount = questions.filter(q => q.status === "archived").length;
+  const pendingAdhoc  = adhocQs.filter(q => q.status === "pending");
+
   return (
     <div className="p-8">
       {/* Header */}
@@ -171,13 +342,22 @@ export default function QuestionsPage() {
           </p>
         </div>
         {activeTab === "bank" && (
-          <button onClick={openCreate}
-            className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Question
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => setShowBulkModal(true)}
+              className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Bulk Upload
+            </button>
+            <button onClick={openCreate}
+              className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Question
+            </button>
+          </div>
         )}
       </div>
 
@@ -208,12 +388,9 @@ export default function QuestionsPage() {
         <>
           {/* Filters */}
           <div className="flex flex-wrap gap-3 mb-5">
-            <input
-              type="text"
-              placeholder="Search questions…"
-              value={search}
+            <input type="text" placeholder="Search questions…" value={search}
               onChange={e => setSearch(e.target.value)}
-              className="w-64 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="w-56 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -229,6 +406,11 @@ export default function QuestionsPage() {
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">All Skills</option>
               {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Templates</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             <button onClick={() => setShowArchived(a => !a)}
               className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${showArchived ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
@@ -254,60 +436,80 @@ export default function QuestionsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {["Question", "Domain", "Topic", "Skills", "Difficulty", "Used", ""].map((h, i) => (
+                    {["Question", "Domain", "Topic", "Skills", "Difficulty", "Templates", "Used", ""].map((h, i) => (
                       <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {paged.map(q => (
-                    <tr key={q.id} className={`hover:bg-gray-50 ${q.status === "archived" ? "opacity-50" : ""}`}>
-                      <td className="px-4 py-3 max-w-xs">
-                        <p className="text-gray-900 text-sm leading-snug line-clamp-2">{q.text}</p>
-                        <p className="text-[10px] font-mono text-gray-300 mt-0.5">#{q.id.slice(0, 8)}</p>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full">
-                          {q.domainType || "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-gray-500">{q.topic || "—"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {(q.skills || []).length === 0
-                            ? <span className="text-xs text-gray-300">—</span>
-                            : (q.skills || []).map(sid => {
-                                const sk = skills.find(s => s.id === sid);
-                                return sk ? (
-                                  <span key={sid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
-                                    {sk.name}
-                                  </span>
-                                ) : null;
-                              })
-                          }
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {q.difficulty ? (
-                          <span className={`text-[10px] font-semibold border px-1.5 py-0.5 rounded-full ${DIFF_BADGE[q.difficulty] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                            {q.difficulty}
+                  {paged.map(q => {
+                    const qTemplates = templates.filter(t => (t.questionIds || []).includes(q.id));
+                    return (
+                      <tr key={q.id} className={`hover:bg-gray-50 ${q.status === "archived" ? "opacity-50" : ""}`}>
+                        <td className="px-4 py-3 max-w-[220px]">
+                          <p className="text-gray-900 text-sm leading-snug line-clamp-2">{q.text}</p>
+                          <p className="text-[10px] font-mono text-gray-300 mt-0.5">#{q.id.slice(0, 8)}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-xs font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full">
+                            {q.domainType || "—"}
                           </span>
-                        ) : <span className="text-xs text-gray-300">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-sm font-bold text-gray-700">{q.usageCount || 0}</span>
-                        <span className="text-xs text-gray-400 ml-0.5">×</span>
-                      </td>
-                      <td className="px-4 py-3 w-12">
-                        <KebabMenu actions={[
-                          { label: "Edit",    onClick: () => openEdit(q) },
-                          q.status === "archived"
-                            ? { label: "Restore", onClick: () => handleUnarchive(q) }
-                            : { label: "Archive", onClick: () => handleArchive(q), danger: true },
-                        ]} />
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-500 max-w-[100px]">{q.topic || "—"}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {(q.skills || []).length === 0
+                              ? <span className="text-xs text-gray-300">—</span>
+                              : (q.skills || []).map(sid => {
+                                  const sk = skills.find(s => s.id === sid);
+                                  return sk ? (
+                                    <span key={sid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                                      {sk.name}
+                                    </span>
+                                  ) : null;
+                                })
+                            }
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {q.difficulty ? (
+                            <span className={`text-[10px] font-semibold border px-1.5 py-0.5 rounded-full ${DIFF_BADGE[q.difficulty] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                              {q.difficulty}
+                            </span>
+                          ) : <span className="text-xs text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 max-w-[140px]">
+                          {qTemplates.length === 0
+                            ? <span className="text-xs text-gray-300">—</span>
+                            : (
+                              <div className="flex flex-wrap gap-1">
+                                {qTemplates.slice(0, 2).map(t => (
+                                  <span key={t.id} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                    {t.name}
+                                  </span>
+                                ))}
+                                {qTemplates.length > 2 && (
+                                  <span className="text-[10px] text-gray-400">+{qTemplates.length - 2}</span>
+                                )}
+                              </div>
+                            )
+                          }
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-bold text-gray-700">{q.usageCount || 0}</span>
+                          <span className="text-xs text-gray-400 ml-0.5">×</span>
+                        </td>
+                        <td className="px-4 py-3 w-12">
+                          <KebabMenu actions={[
+                            { label: "Edit",    onClick: () => openEdit(q) },
+                            q.status === "archived"
+                              ? { label: "Restore", onClick: () => handleUnarchive(q) }
+                              : { label: "Archive", onClick: () => handleArchive(q), danger: true },
+                          ]} />
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
@@ -329,25 +531,14 @@ export default function QuestionsPage() {
             </div>
           ) : (
             <>
-              {/* Status legend */}
               <div className="flex gap-4 text-xs text-gray-500">
                 <span><span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>{pendingAdhoc.length} pending</span>
                 <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-400 mr-1"></span>{adhocQs.filter(q => q.status === "approved").length} approved</span>
                 <span><span className="inline-block w-2 h-2 rounded-full bg-gray-300 mr-1"></span>{adhocQs.filter(q => q.status === "rejected").length} rejected</span>
               </div>
-
               {adhocQs.map(q => {
-                const statusStyle = {
-                  pending:  "border-amber-200 bg-amber-50/40",
-                  approved: "border-emerald-200 bg-emerald-50/30",
-                  rejected: "border-gray-200 bg-gray-50 opacity-60",
-                }[q.status] || "border-gray-200 bg-white";
-                const statusBadge = {
-                  pending:  "bg-amber-100 text-amber-700",
-                  approved: "bg-emerald-100 text-emerald-700",
-                  rejected: "bg-gray-100 text-gray-500",
-                }[q.status] || "bg-gray-100 text-gray-500";
-
+                const statusStyle = { pending: "border-amber-200 bg-amber-50/40", approved: "border-emerald-200 bg-emerald-50/30", rejected: "border-gray-200 bg-gray-50 opacity-60" }[q.status] || "border-gray-200 bg-white";
+                const statusBadge = { pending: "bg-amber-100 text-amber-700", approved: "bg-emerald-100 text-emerald-700", rejected: "bg-gray-100 text-gray-500" }[q.status] || "bg-gray-100 text-gray-500";
                 return (
                   <div key={q.id} className={`rounded-xl border p-4 ${statusStyle}`}>
                     <div className="flex items-start justify-between gap-4">
@@ -363,9 +554,7 @@ export default function QuestionsPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${statusBadge}`}>
-                          {q.status}
-                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${statusBadge}`}>{q.status}</span>
                         {q.status === "pending" && (
                           <>
                             <button onClick={() => openApprove(q)}
@@ -393,16 +582,15 @@ export default function QuestionsPage() {
         title={editTarget ? "Edit Question" : "Add Question"} wide>
         <QuestionForm
           form={form} setForm={setForm}
-          skills={skills} allDomainTypes={allDomainTypes}
-          toggleSkill={toggleSkill}
+          skills={skills} allDomainTypes={allDomainTypes} templates={templates}
+          toggleSkill={toggleSkill} toggleTemplate={toggleTemplate}
           onSave={handleSave} onCancel={() => setShowModal(false)}
           saving={saving} submitLabel={editTarget ? "Update Question" : "Add to Bank"}
         />
       </Modal>
 
       {/* Approve modal */}
-      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)}
-        title="Approve & Add to Bank" wide>
+      <Modal open={!!approveTarget} onClose={() => setApproveTarget(null)} title="Approve & Add to Bank" wide>
         {approveTarget && (
           <div className="space-y-4">
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
@@ -411,8 +599,8 @@ export default function QuestionsPage() {
             </div>
             <QuestionForm
               form={approveForm} setForm={setApproveForm}
-              skills={skills} allDomainTypes={allDomainTypes}
-              toggleSkill={toggleApproveSkill}
+              skills={skills} allDomainTypes={allDomainTypes} templates={templates}
+              toggleSkill={toggleApproveSkill} toggleTemplate={toggleApproveTemplate}
               onSave={handleApprove} onCancel={() => setApproveTarget(null)}
               saving={saving} submitLabel="Approve & Add to Bank"
             />
@@ -420,21 +608,136 @@ export default function QuestionsPage() {
         )}
       </Modal>
 
+      {/* Bulk Upload modal */}
+      <Modal open={showBulkModal} onClose={() => { setShowBulkModal(false); setBulkPreview(null); setBulkText(""); }}
+        title="Bulk Upload Questions" wide>
+        <div className="space-y-4">
+          {/* Download template */}
+          <div className="flex items-center justify-between bg-gray-50 rounded-xl p-3 border border-gray-200">
+            <div>
+              <p className="text-sm font-semibold text-gray-700">CSV Format</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Columns: <span className="font-mono">text, domainType, difficulty, topic, skills, templates</span>
+                <br />Use <span className="font-mono">|</span> to separate multiple skills or templates per row.
+              </p>
+            </div>
+            <button onClick={downloadSampleCSV}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 flex-shrink-0">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download Template
+            </button>
+          </div>
+
+          {/* File upload */}
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Upload or Paste CSV</p>
+              <button onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                </svg>
+                Choose File
+              </button>
+              <input ref={fileInputRef} type="file" accept=".csv,.txt" className="hidden" onChange={handleFileUpload} />
+            </div>
+            <textarea
+              rows={6}
+              value={bulkText}
+              onChange={e => { setBulkText(e.target.value); setBulkPreview(null); }}
+              placeholder={`text,domainType,difficulty,topic,skills,templates\n"What is a closure?",coding,medium,Closures,JavaScript,\n"Explain reconciliation",react_coding,hard,React Internals,ReactJS|JavaScript,Template A`}
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+
+          {/* Parse button */}
+          {!bulkPreview && (
+            <button onClick={handleBulkParse} disabled={!bulkText.trim()}
+              className="w-full py-2.5 bg-gray-800 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 disabled:opacity-40">
+              Parse & Preview
+            </button>
+          )}
+
+          {/* Preview */}
+          {bulkPreview && (
+            <div className="space-y-3">
+              {bulkPreview.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+                  <p className="text-xs font-semibold text-red-700 mb-1">{bulkPreview.errors.length} issue{bulkPreview.errors.length !== 1 ? "s" : ""} found</p>
+                  <ul className="space-y-0.5">
+                    {bulkPreview.errors.map((e, i) => (
+                      <li key={i} className="text-xs text-red-600">{e}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {bulkPreview.rows.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-600 mb-2">
+                    {bulkPreview.rows.length} question{bulkPreview.rows.length !== 1 ? "s" : ""} ready to import
+                  </p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 sticky top-0">
+                        <tr>
+                          {["Text", "Domain", "Difficulty", "Templates"].map(h => (
+                            <th key={h} className="text-left font-semibold text-gray-500 px-3 py-2">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {bulkPreview.rows.map((r, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 max-w-[200px]">
+                              <p className="line-clamp-1 text-gray-800">{r.text}</p>
+                            </td>
+                            <td className="px-3 py-2 font-mono text-indigo-600">{r.domainType}</td>
+                            <td className="px-3 py-2 capitalize text-gray-600">{r.difficulty}</td>
+                            <td className="px-3 py-2 text-gray-500">{r.templates.join(", ") || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                {bulkPreview.rows.length > 0 && (
+                  <button onClick={handleBulkImport} disabled={bulkImporting}
+                    className="flex-1 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-60">
+                    {bulkImporting ? "Importing…" : `Import ${bulkPreview.rows.length} Question${bulkPreview.rows.length !== 1 ? "s" : ""}`}
+                  </button>
+                )}
+                <button onClick={() => setBulkPreview(null)}
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-200">
+                  Edit CSV
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
   );
 }
 
-function QuestionForm({ form, setForm, skills, allDomainTypes, toggleSkill, onSave, onCancel, saving, submitLabel }) {
+// ── Reusable question form ────────────────────────────────────────────────────
+
+function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggleSkill, toggleTemplate, onSave, onCancel, saving, submitLabel }) {
   return (
     <div className="space-y-4">
+      {/* Question text */}
       <div>
         <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
           Question <span className="text-red-400">*</span>
         </label>
-        <textarea
-          rows={3}
-          value={form.text}
+        <textarea rows={3} value={form.text}
           onChange={e => setForm(f => ({ ...f, text: e.target.value }))}
           placeholder="e.g. Explain the difference between useMemo and useCallback in React."
           className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
@@ -442,13 +745,12 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, toggleSkill, onSa
       </div>
 
       <div className="grid grid-cols-2 gap-4">
+        {/* Domain type */}
         <div>
           <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
             Domain Type <span className="text-red-400">*</span>
           </label>
-          <input
-            list="domain-types-list"
-            value={form.domainType}
+          <input list="domain-types-list" value={form.domainType}
             onChange={e => setForm(f => ({ ...f, domainType: e.target.value }))}
             placeholder="e.g. react_coding"
             className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -458,12 +760,18 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, toggleSkill, onSa
           </datalist>
           <p className="text-[10px] text-gray-400 mt-1">Type or pick from existing domain types</p>
         </div>
+
+        {/* Difficulty */}
         <div>
           <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Difficulty</label>
           <div className="flex gap-2">
             {["easy", "medium", "hard"].map(d => (
               <button key={d} type="button" onClick={() => setForm(f => ({ ...f, difficulty: d }))}
-                className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${form.difficulty === d ? { easy: "bg-emerald-50 text-emerald-700 border-emerald-200", medium: "bg-amber-50 text-amber-700 border-amber-200", hard: "bg-red-50 text-red-700 border-red-200" }[d] + " border-current" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                  form.difficulty === d
+                    ? { easy: "bg-emerald-50 text-emerald-700 border-emerald-300", medium: "bg-amber-50 text-amber-700 border-amber-300", hard: "bg-red-50 text-red-700 border-red-300" }[d]
+                    : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                }`}>
                 {d.charAt(0).toUpperCase() + d.slice(1)}
               </button>
             ))}
@@ -471,22 +779,23 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, toggleSkill, onSa
         </div>
       </div>
 
+      {/* Topic */}
       <div>
         <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Topic</label>
-        <input
-          value={form.topic}
+        <input value={form.topic}
           onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
           placeholder="e.g. React Hooks, Async JS, System Design…"
           className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
         />
       </div>
 
+      {/* Skills */}
       <div>
         <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Skills</label>
         {skills.length === 0 ? (
           <p className="text-xs text-gray-400">No skills defined yet — add them in Admin Panel.</p>
         ) : (
-          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-36 overflow-y-auto">
+          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
             {skills.map(s => (
               <button key={s.id} type="button" onClick={() => toggleSkill(s.id)}
                 className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
@@ -498,6 +807,32 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, toggleSkill, onSa
               </button>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* Templates */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Assign to Templates</label>
+        {templates.length === 0 ? (
+          <p className="text-xs text-gray-400">No templates defined yet.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
+            {templates.map(t => (
+              <button key={t.id} type="button" onClick={() => toggleTemplate(t.id)}
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                  (form.templateIds || []).includes(t.id)
+                    ? "bg-violet-600 text-white border-violet-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-violet-300"
+                }`}>
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {(form.templateIds || []).length > 0 && (
+          <p className="text-[10px] text-gray-400 mt-1">
+            Assigned to {(form.templateIds || []).length} template{(form.templateIds || []).length !== 1 ? "s" : ""}
+          </p>
         )}
       </div>
 
