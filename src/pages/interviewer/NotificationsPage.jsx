@@ -39,7 +39,7 @@ export default function NotificationsPage() {
       senderName:   userProfile?.displayName || userProfile?.email || "Interviewer",
       templateName: n.templateName,
       date:         n.date,
-      message:      `${userProfile?.displayName || userProfile?.email} is available for "${n.templateName || "interview"}"${n.date ? ` on ${fmtDate(n.date)}` : ""}.`,
+      message:      `${userProfile?.displayName || userProfile?.email} is available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${fmtDate(n.dateRangeStart)} – ${fmtDate(n.dateRangeEnd)})` : n.date ? ` on ${fmtDate(n.date)}` : ""}.`,
       status:       "unread",
       originalNotificationId: n.id,
     });
@@ -61,7 +61,7 @@ export default function NotificationsPage() {
       senderName:   userProfile?.displayName || userProfile?.email || "Interviewer",
       templateName: n.templateName,
       date:         n.date,
-      message:      `${userProfile?.displayName || userProfile?.email} is NOT available for "${n.templateName || "interview"}"${n.date ? ` on ${fmtDate(n.date)}` : ""}${reason ? ` — "${reason}"` : "."}`,
+      message:      `${userProfile?.displayName || userProfile?.email} is NOT available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${fmtDate(n.dateRangeStart)} – ${fmtDate(n.dateRangeEnd)})` : n.date ? ` on ${fmtDate(n.date)}` : ""}${reason ? ` — "${reason}"` : "."}`,
       status:       "unread",
       originalNotificationId: n.id,
     });
@@ -117,7 +117,15 @@ export default function NotificationsPage() {
                       ) : (
                         <>
                           <p className="text-sm font-bold text-gray-900">
-                            {n.templateName || "Interview"}{n.date ? ` · ${fmtDate(n.date)}` : ""}
+                            {n.templateName || "Interview"}
+                            {(n.dateRangeStart || n.date) && (
+                              <span className="font-normal text-gray-500">
+                                {" · "}
+                                {n.dateRangeStart
+                                  ? `${fmtDate(n.dateRangeStart)} – ${fmtDate(n.dateRangeEnd)}`
+                                  : fmtDate(n.date)}
+                              </span>
+                            )}
                           </p>
                           <p className="text-xs text-gray-400 mt-0.5">From {n.senderName} · {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
                         </>

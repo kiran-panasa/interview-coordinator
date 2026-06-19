@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../../AuthContext";
 import {
-  subscribeToInterviews, getTemplates, getAllUsers, getCandidates,
+  getTemplates, getAllUsers, getCandidates,
   subscribeToSkills, subscribeToUserNotifications,
   createNotification, updateNotification,
   subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate,
-  getPrograms,
+  getPrograms, getSlotsForInterviewers,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -27,7 +27,6 @@ function inDays(n) {
   const d = new Date(); d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
-
 function fmtDate(d) {
   if (!d) return "—";
   const [y, m, day] = d.split("-");
@@ -59,7 +58,6 @@ export default function NudgePage() {
   const [activeTab, setActiveTab] = useState("interviewers");
 
   // ── Shared data ──
-  const [interviews, setInterviews] = useState([]);
   const [templates,  setTemplates]  = useState([]);
   const [users,      setUsers]      = useState([]);
   const [skills,     setSkills]     = useState([]);
@@ -70,11 +68,15 @@ export default function NudgePage() {
   const [toast,      setToast]      = useState(null);
 
   // ── Interviewers tab state ──
-  const [selectedDate,  setSelectedDate]  = useState(today());
-  const [nudgeTarget,   setNudgeTarget]   = useState(null);
-  const [selectedIvrs,  setSelectedIvrs]  = useState(new Set());
-  const [message,       setMessage]       = useState("");
-  const [sending,       setSending]       = useState(false);
+  const [nudgeTemplateId, setNudgeTemplateId] = useState("");
+  const [nudgeDateStart,  setNudgeDateStart]  = useState(today());
+  const [nudgeDateEnd,    setNudgeDateEnd]    = useState(inDays(7));
+  const [nudgeTarget,     setNudgeTarget]     = useState(null);
+  const [selectedIvrs,    setSelectedIvrs]    = useState(new Set());
+  const [message,         setMessage]         = useState("");
+  const [sending,         setSending]         = useState(false);
+  const [ivrSlots,        setIvrSlots]        = useState({});
+  const [loadingSlots,    setLoadingSlots]    = useState(false);
 
   // ── Candidates tab state ──
   const [dateStart,      setDateStart]      = useState(today());
@@ -89,7 +91,6 @@ export default function NudgePage() {
   const [deletingId,     setDeletingId]     = useState(null);
 
   useEffect(() => {
-    const u1 = subscribeToInterviews(setInterviews);
     const u2 = subscribeToSkills(setSkills);
     const u3 = subscribeToUserNotifications(currentUser.uid, setResponses);
     const u4 = subscribeToScheduleInvites(setInvites);
@@ -97,44 +98,64 @@ export default function NudgePage() {
     getAllUsers().then(setUsers);
     getCandidates().then(setCandidates);
     getPrograms().then(setPrograms);
-    return () => { u1(); u2(); u3(); u4(); };
+    return () => { u2(); u3(); u4(); };
   }, [currentUser.uid]);
+
+  // Reload slots whenever the active interviewers list changes
+  const activeInterviewers = users.filter(
+    u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
+  );
+
+  const loadSlots = useCallback(async () => {
+    if (activeInterviewers.length === 0) return;
+    setLoadingSlots(true);
+    const data = await getSlotsForInterviewers(activeInterviewers.map(u => u.id));
+    setIvrSlots(data);
+    setLoadingSlots(false);
+  }, [activeInterviewers.map(u => u.id).join(",")]); // eslint-disable-line
+
+  useEffect(() => { loadSlots(); }, [loadSlots]);
 
   // ────────────────────────────────────────────────────────────────────────────
   // INTERVIEWERS TAB
   // ────────────────────────────────────────────────────────────────────────────
 
-  const forDate = interviews.filter(i =>
-    i.scheduledDate === selectedDate && i.status !== "cancelled" && i.status !== "declined"
-  );
-  const byTemplate = Object.values(
-    forDate.reduce((acc, iv) => {
-      const tid = iv.templateId || "__none__";
-      if (!acc[tid]) acc[tid] = { template: templates.find(t => t.id === iv.templateId) || null, interviews: [] };
-      acc[tid].interviews.push(iv);
-      return acc;
-    }, {})
-  ).sort((a, b) => (a.template?.name || "").localeCompare(b.template?.name || ""));
+  const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
 
-  const activeInterviewers = users.filter(
-    u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
-  );
-  const matchedFor = (template) => {
-    const req = template?.skills || [];
-    if (!req.length) return activeInterviewers;
-    return activeInterviewers.filter(u => skillOverlap(req, u.skills || []).length > 0);
+  const matchedInterviewers = nudgeTemplateId
+    ? activeInterviewers.filter(u => {
+        const req = nudgeTemplate?.skills || [];
+        return req.length === 0 || skillOverlap(req, u.skills || []).length > 0;
+      })
+    : activeInterviewers;
+
+  const freeSlotCount = (ivrId) => {
+    const slots = ivrSlots[ivrId] || [];
+    return slots.filter(s => !s.isBooked && s.date >= nudgeDateStart && s.date <= nudgeDateEnd).length;
   };
-  const openNudge = (template, ivs) => {
-    const matched = matchedFor(template);
-    const portal  = `${window.location.origin}/interviewer/notifications`;
+
+  // Most recent nudge response per interviewer (from responses sent to admin)
+  const lastNudgeResponse = (ivrId) => {
+    const relevant = responses
+      .filter(n => n.type === "response" && n.senderId === ivrId)
+      .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    return relevant[0] || null;
+  };
+
+  const openNudge = () => {
+    const portal = `${window.location.origin}/interviewer/notifications`;
+    const templateName = nudgeTemplate?.name || "Interview";
     const msg =
-      `Hi {{name}},\n\nWe have ${ivs.length} interview(s) on ${fmtDate(selectedDate)}` +
-      (template ? ` using the "${template.name}" template` : "") +
-      `.\nWe'd like to check if you're available to take one.\n\nPlease respond here:\n${portal}\n\nThank you,\n${userProfile?.displayName || "Admin"} · NxtWave`;
-    setNudgeTarget({ template, interviews: ivs, matched });
-    setSelectedIvrs(new Set(matched.map(u => u.id)));
+      `Hi {{name}},\n\nWe need interviewers for "${templateName}" sessions between ` +
+      `${fmtDate(nudgeDateStart)} and ${fmtDate(nudgeDateEnd)}.\n\n` +
+      `Please add your available time slots for this period so we can schedule candidates.\n\n` +
+      `Click here to respond and add your slots:\n${portal}\n\n` +
+      `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`;
+    setNudgeTarget({ template: nudgeTemplate, interviewers: matchedInterviewers });
+    setSelectedIvrs(new Set(matchedInterviewers.map(u => u.id)));
     setMessage(msg);
   };
+
   const sendNudge = async () => {
     if (!nudgeTarget || selectedIvrs.size === 0) return;
     setSending(true);
@@ -145,14 +166,15 @@ export default function NudgePage() {
           type: "nudge", recipientId: r.id, recipientEmail: r.email,
           senderId: currentUser.uid, senderName: userProfile?.displayName || userProfile?.email,
           templateId: nudgeTarget.template?.id || "", templateName: nudgeTarget.template?.name || "General",
-          date: selectedDate, message: message.replace(/\{\{name\}\}/g, r.displayName || r.email),
+          dateRangeStart: nudgeDateStart, dateRangeEnd: nudgeDateEnd,
+          message: message.replace(/\{\{name\}\}/g, r.displayName || r.email),
           status: "unread",
         });
       }
       if (APPS_SCRIPT_URL) {
         await callAppsScript({
           action: "sendEmail",
-          subject: `Interview Availability Request${nudgeTarget.template ? ` — ${nudgeTarget.template.name}` : ""} · ${fmtDate(selectedDate)}`,
+          subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${fmtDate(nudgeDateStart)} – ${fmtDate(nudgeDateEnd)}`,
           body: message,
           recipients: recipients.map(r => ({ email: r.email, name: r.displayName || r.email })),
         });
@@ -162,10 +184,12 @@ export default function NudgePage() {
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setSending(false);
   };
+
   const markResponseRead = async (n) => updateNotification(n.id, { status: "read" });
   const incomingResponses = responses.filter(n => n.type === "response");
   const unreadResponses   = incomingResponses.filter(n => n.status === "unread").length;
   const skillName = (id) => skills.find(s => s.id === id)?.name || id;
+
   const toggleIvr = (id) => setSelectedIvrs(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
@@ -175,6 +199,19 @@ export default function NudgePage() {
   // ────────────────────────────────────────────────────────────────────────────
   // CANDIDATES TAB
   // ────────────────────────────────────────────────────────────────────────────
+
+  // Slot summary: per template, count free slots from matched interviewers within dateStart–dateEnd
+  const slotSummary = templates.map(tmpl => {
+    const matched = activeInterviewers.filter(u => {
+      const req = tmpl.skills || [];
+      return req.length === 0 || skillOverlap(req, u.skills || []).length > 0;
+    });
+    const total = matched.reduce((sum, u) => {
+      const slots = ivrSlots[u.id] || [];
+      return sum + slots.filter(s => !s.isBooked && s.date >= dateStart && s.date <= dateEnd).length;
+    }, 0);
+    return { tmpl, matched: matched.length, freeSlots: total };
+  }).filter(s => s.matched > 0);
 
   const filteredCandidates = candidates.filter(c => {
     if (filterProgram  && c.program !== filterProgram) return false;
@@ -258,20 +295,19 @@ export default function NudgePage() {
         templateName:     inv.templateName || "",
         createdBy:        currentUser.uid,
       });
-      // Send calendar + Meet invite automatically
       if (ivr?.email && inv.candidateEmail) {
         const result = await fetch(APPS_SCRIPT_URL, {
           method: "POST", redirect: "follow",
           body: JSON.stringify({
             action: "schedule", secret: APPS_SCRIPT_SECRET,
-            candidateEmail:  inv.candidateEmail,
+            candidateEmail:   inv.candidateEmail,
             interviewerEmail: ivr.email,
-            candidateName:   inv.candidateName,
-            interviewerName: ivr?.displayName || ivr?.email || "",
-            round:           tmpl?.name || "Interview",
-            date:            inv.bookedDate,
-            startTime:       inv.bookedTime,
-            durationMinutes: 60,
+            candidateName:    inv.candidateName,
+            interviewerName:  ivr?.displayName || ivr?.email || "",
+            round:            tmpl?.name || "Interview",
+            date:             inv.bookedDate,
+            startTime:        inv.bookedTime,
+            durationMinutes:  60,
           }),
         }).then(r => r.json()).catch(() => null);
         if (result?.meetLink) {
@@ -297,8 +333,8 @@ export default function NudgePage() {
   const handleResendInvite = async (inv) => {
     setResendingId(inv.id);
     try {
-      const newToken   = crypto.randomUUID();
-      const expiresAt  = new Date(Date.now() + (inv.expiryHours || 24) * 3600 * 1000).toISOString();
+      const newToken  = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + (inv.expiryHours || 24) * 3600 * 1000).toISOString();
       await updateScheduleInvite(inv.id, {
         inviteToken: newToken, status: "sent",
         sentAt: new Date().toISOString(), expiresAt,
@@ -330,7 +366,7 @@ export default function NudgePage() {
     setDeletingId(null);
   };
 
-  const pendingBookings  = invites.filter(i => i.status === "pending_confirmation");
+  const pendingBookings = invites.filter(i => i.status === "pending_confirmation");
   const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -351,7 +387,7 @@ export default function NudgePage() {
     <div className="p-8 max-w-5xl">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Nudge</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Send availability requests to interviewers and scheduling invites to candidates</p>
+        <p className="text-sm text-gray-500 mt-0.5">Collect interviewer slots, then invite candidates to schedule</p>
       </div>
 
       {/* Tabs */}
@@ -365,69 +401,110 @@ export default function NudgePage() {
           ═══════════════════════════════════════════════════════════════════════ */}
       {activeTab === "interviewers" && (
         <div className="space-y-8">
-          {/* Date picker */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-semibold text-gray-700">Date</label>
-            <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <span className="text-sm text-gray-400">
-              {forDate.length === 0 ? "No interviews scheduled" : `${forDate.length} interview${forDate.length !== 1 ? "s" : ""} scheduled`}
-            </span>
+
+          {/* Config row */}
+          <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Request Campaign</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Template</label>
+                <select value={nudgeTemplateId} onChange={e => setNudgeTemplateId(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">All Templates</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">From Date</label>
+                <input type="date" value={nudgeDateStart} onChange={e => setNudgeDateStart(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">To Date</label>
+                <input type="date" value={nudgeDateEnd} min={nudgeDateStart} onChange={e => setNudgeDateEnd(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+            </div>
           </div>
 
-          {/* Schedule table */}
-          {byTemplate.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Schedule — {fmtDate(selectedDate)}</p>
-              </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {["Template", "Interviews", "Required Skills", "Matched", "Action"].map(h => (
-                      <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {byTemplate.map(({ template, interviews: ivs }) => {
-                    const matched   = matchedFor(template);
-                    const reqSkills = template?.skills || [];
-                    return (
-                      <tr key={template?.id || "__none__"} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-semibold text-gray-900">{template?.name || "No template"}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{ivs.length}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          {reqSkills.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {reqSkills.map(sid => (
-                                <span key={sid} className="text-[11px] font-medium bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
+          {/* Matched interviewers table */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                Matched Interviewers ({matchedInterviewers.length})
+              </p>
+              <button onClick={openNudge} disabled={matchedInterviewers.length === 0}
+                className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+                Nudge All
+              </button>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {["Interviewer", "Skills", "Free Slots in Range", "Last Response"].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {matchedInterviewers.length === 0 ? (
+                  <tr><td colSpan={4} className="text-center text-gray-400 py-10 text-sm">
+                    No interviewers match the selected template.
+                  </td></tr>
+                ) : matchedInterviewers.map(u => {
+                  const slots   = freeSlotCount(u.id);
+                  const lastResp = lastNudgeResponse(u.id);
+                  const overlap  = skillOverlap(nudgeTemplate?.skills || [], u.skills || []);
+                  return (
+                    <tr key={u.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-gray-900">{u.displayName || u.email}</p>
+                        <p className="text-xs text-gray-400">{u.email}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {overlap.length > 0
+                            ? overlap.map(sid => (
+                                <span key={sid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
                                   {skillName(sid)}
                                 </span>
-                              ))}
-                            </div>
-                          ) : <span className="text-xs text-gray-400">Not defined</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold ${matched.length > 0 ? "text-emerald-700" : "text-amber-600"}`}>
-                            {matched.length} interviewer{matched.length !== 1 ? "s" : ""}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => openNudge(template, ivs)}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3 py-1.5 rounded-lg transition-colors">
-                            Nudge
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                              ))
+                            : <span className="text-xs text-gray-300">—</span>
+                          }
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {loadingSlots
+                          ? <span className="text-xs text-gray-300">Loading…</span>
+                          : <span className={`text-sm font-bold ${slots > 0 ? "text-emerald-600" : "text-amber-500"}`}>
+                              {slots} slot{slots !== 1 ? "s" : ""}
+                            </span>
+                        }
+                      </td>
+                      <td className="px-4 py-3">
+                        {lastResp ? (
+                          <div>
+                            <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${
+                              lastResp.message?.includes("NOT available")
+                                ? "bg-red-50 text-red-600 border-red-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            }`}>
+                              {lastResp.message?.includes("NOT available") ? "Not Available" : "Available"}
+                            </span>
+                            <p className="text-[10px] text-gray-300 mt-0.5">
+                              {lastResp.createdAt ? new Date(lastResp.createdAt).toLocaleDateString() : ""}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-300">No response</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {/* Responses */}
           <div>
@@ -436,7 +513,7 @@ export default function NudgePage() {
               {unreadResponses > 0 && <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{unreadResponses} new</span>}
             </div>
             {incomingResponses.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-10 gap-2">
+              <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-10">
                 <p className="text-sm text-gray-400">No responses yet.</p>
               </div>
             ) : (
@@ -465,7 +542,35 @@ export default function NudgePage() {
       {activeTab === "candidates" && (
         <div className="space-y-8">
 
-          {/* Config row */}
+          {/* Slot availability summary */}
+          {slotSummary.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                  Available Slots · {fmtDate(dateStart)} – {fmtDate(dateEnd)}
+                </p>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {slotSummary.map(({ tmpl, matched, freeSlots }) => (
+                  <div key={tmpl.id} className="px-5 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{tmpl.name}</p>
+                      <p className="text-xs text-gray-400">{matched} matched interviewer{matched !== 1 ? "s" : ""}</p>
+                    </div>
+                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                      freeSlots > 0
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-amber-50 text-amber-600"
+                    }`}>
+                      {freeSlots} free slot{freeSlots !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Campaign config */}
           <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Scheduling Campaign</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -610,14 +715,12 @@ export default function NudgePage() {
                             <button
                               onClick={() => handleResendInvite(inv)}
                               disabled={resendingId === inv.id || deletingId === inv.id || ["confirmed", "cancelled"].includes(inv.status)}
-                              title="Resend invite"
                               className="text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
                               {resendingId === inv.id ? "…" : "Resend"}
                             </button>
                             <button
                               onClick={() => handleDeleteInvite(inv)}
                               disabled={resendingId === inv.id || deletingId === inv.id}
-                              title="Delete invite"
                               className="text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
                               {deletingId === inv.id ? "…" : "Delete"}
                             </button>
@@ -672,23 +775,23 @@ export default function NudgePage() {
         </div>
       )}
 
-      {/* Nudge Modal (Interviewers) */}
+      {/* Nudge Modal */}
       <Modal open={!!nudgeTarget} onClose={() => setNudgeTarget(null)}
-        title={`Nudge Interviewers — ${nudgeTarget?.template?.name || "No template"} · ${fmtDate(selectedDate)}`} wide>
+        title={`Nudge Interviewers — ${nudgeTarget?.template?.name || "All Templates"} · ${fmtDate(nudgeDateStart)} – ${fmtDate(nudgeDateEnd)}`} wide>
         {nudgeTarget && (
           <div className="space-y-5">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Select Interviewers ({selectedIvrs.size} selected)</p>
                 <div className="flex gap-3">
-                  <button type="button" onClick={() => setSelectedIvrs(new Set(nudgeTarget.matched.map(u => u.id)))}
-                    className="text-xs text-indigo-600 hover:underline font-medium">Select all matched</button>
+                  <button type="button" onClick={() => setSelectedIvrs(new Set(nudgeTarget.interviewers.map(u => u.id)))}
+                    className="text-xs text-indigo-600 hover:underline font-medium">Select all</button>
                   <button type="button" onClick={() => setSelectedIvrs(new Set())}
                     className="text-xs text-gray-400 hover:underline font-medium">Clear</button>
                 </div>
               </div>
               <div className="border border-gray-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
-                {activeInterviewers.map(u => {
+                {nudgeTarget.interviewers.map(u => {
                   const overlap = skillOverlap(nudgeTarget.template?.skills || [], u.skills || []);
                   return (
                     <label key={u.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 ${selectedIvrs.has(u.id) ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
@@ -700,7 +803,7 @@ export default function NudgePage() {
                       <div className="flex flex-wrap gap-1 justify-end">
                         {overlap.map(sid => (
                           <span key={sid} className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">
-                            {skills.find(s => s.id === sid)?.name || sid}
+                            {skillName(sid)}
                           </span>
                         ))}
                       </div>

@@ -218,6 +218,16 @@ export async function markSlotFree(interviewerId, slotId) {
   });
 }
 
+// Returns { [interviewerId]: slot[] } for a list of interviewer ids
+export async function getSlotsForInterviewers(interviewerIds) {
+  const result = {};
+  await Promise.all(interviewerIds.map(async id => {
+    const snap = await getDocs(collection(db, "availability", id, "slots"));
+    result[id] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  }));
+  return result;
+}
+
 // ── Real-time subscriptions ───────────────────────────────────────────────────
 
 export function subscribeToInterviews(callback) {
