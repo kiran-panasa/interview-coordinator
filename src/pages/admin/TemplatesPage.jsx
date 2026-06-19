@@ -1039,12 +1039,20 @@ export default function TemplatesPage() {
   const totalWeight    = scoredDomains.reduce((s, d) => s + (d.weightInVerdict ?? 0), 0);
   const weightOk       = scoredDomains.length === 0 || Math.abs(totalWeight - 100) < 0.5;
 
-  const qbSections = [
-    { key: "theory",  label: "Theory — Subject list",   placeholder: "One subject per line…\ne.g. Data Structures\nAlgorithms", note: "These become options in the Theory → Subject dropdown" },
-    { key: "coding",  label: "Coding — Problem bank",   placeholder: "One problem per line…" },
-    { key: "project", label: "Project — Question bank", placeholder: "One question per line…" },
-    { key: "resume",  label: "Resume — Question bank",  placeholder: "One question per line…" },
-  ].filter(s => enabledDomains.some(d => d.type === s.key));
+  const QB_META = {
+    theory:  { label: "Theory — Subject list",   placeholder: "One subject per line…\ne.g. Data Structures\nAlgorithms", note: "These become options in the Theory → Subject dropdown" },
+    coding:  { label: "Coding — Problem bank",   placeholder: "One problem per line…" },
+    project: { label: "Project — Question bank", placeholder: "One question per line…" },
+    resume:  { label: "Resume — Question bank",  placeholder: "One question per line…" },
+  };
+  const qbSections = enabledDomains
+    .filter(d => d.type !== "overall_feedback")
+    .map(d => ({
+      key:         d.type,
+      label:       QB_META[d.type]?.label       ?? `${d.label} — Question bank`,
+      placeholder: QB_META[d.type]?.placeholder ?? "One question per line…",
+      note:        QB_META[d.type]?.note,
+    }));
 
   const previewTemplate = previewTarget && {
     ...previewTarget,
