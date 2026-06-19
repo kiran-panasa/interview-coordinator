@@ -9,6 +9,8 @@ import {
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
 
@@ -285,6 +287,9 @@ export default function AdminPanelPage() {
     setToast({ message: `"${s.name}" removed.` });
   };
 
+  const usersPagination   = usePagination(activeUsers);
+  const invitesPagination = usePagination(invites);
+
   const sectionTitle = (dot, label, count) => (
     <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
       <span className={`w-2 h-2 rounded-full inline-block ${dot}`} />
@@ -432,7 +437,7 @@ export default function AdminPanelPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {activeUsers.map(u => (
+                {usersPagination.paged.map(u => (
                   <tr key={u.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -470,6 +475,7 @@ export default function AdminPanelPage() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={usersPagination.page} totalPages={usersPagination.totalPages} total={usersPagination.total} pageSize={usersPagination.pageSize} onPageChange={usersPagination.setPage} />
           )}
         </div>
       </div>
@@ -491,7 +497,7 @@ export default function AdminPanelPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {invites.map(inv => (
+                  {invitesPagination.paged.map(inv => (
                     <tr key={inv.id} className={`hover:bg-gray-50 ${inv.status === "registered" ? "opacity-60" : ""}`}>
                       <td className="px-4 py-3 font-semibold text-gray-900">{inv.name || "—"}</td>
                       <td className="px-4 py-3 text-gray-600">{inv.phone || "—"}</td>
@@ -528,6 +534,7 @@ export default function AdminPanelPage() {
                   ))}
                 </tbody>
               </table>
+              <Pagination page={invitesPagination.page} totalPages={invitesPagination.totalPages} total={invitesPagination.total} pageSize={invitesPagination.pageSize} onPageChange={invitesPagination.setPage} />
             )}
           </div>
         </div>

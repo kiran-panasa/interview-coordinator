@@ -5,6 +5,8 @@ import { getCandidates, createCandidate, updateCandidate, deleteCandidate, getPr
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", program: "", templateIds: [] };
 
@@ -215,6 +217,7 @@ export default function CandidatesPage() {
     c.uid?.toLowerCase().includes(search.toLowerCase()) ||
     c.email?.toLowerCase().includes(search.toLowerCase())
   );
+  const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
 
   const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
 
@@ -281,7 +284,7 @@ export default function CandidatesPage() {
             <tbody className="divide-y divide-gray-50">
               {filtered.length === 0 ? (
                 <tr><td colSpan={7} className="text-center text-gray-400 py-12">No candidates found</td></tr>
-              ) : filtered.map(c => (
+              ) : pagedCandidates.map(c => (
                 <tr key={c.id} className={`hover:bg-gray-50 ${selected.has(c.id) ? "bg-indigo-50" : ""}`}>
                   <td className="px-4 py-3 w-8">
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
@@ -325,6 +328,7 @@ export default function CandidatesPage() {
             </tbody>
           </table>
         )}
+        <Pagination page={candPage} totalPages={candTotalPages} total={candTotal} pageSize={candPageSize} onPageChange={setCandPage} />
       </div>
 
       {/* Add / Edit modal */}

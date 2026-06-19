@@ -4,6 +4,8 @@ import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import SkillsSelect from "../../components/SkillsSelect";
 import KebabMenu from "../../components/KebabMenu";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 function initials(name, email) {
   return (name || email || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -106,6 +108,8 @@ export default function InterviewersPage() {
       u.companyRole?.toLowerCase().includes(q);
   });
 
+  const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -142,7 +146,7 @@ export default function InterviewersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(u => (
+              {paged.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50">
 
                   {/* Name + role */}
@@ -242,6 +246,7 @@ export default function InterviewersPage() {
               ))}
             </tbody>
           </table>
+          <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
         )}
       </div>
 

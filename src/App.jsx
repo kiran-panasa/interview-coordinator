@@ -12,6 +12,7 @@ import InterviewersPage   from "./pages/admin/InterviewersPage";
 import TemplatesPage      from "./pages/admin/TemplatesPage";
 import AdminPanelPage     from "./pages/admin/AdminPanelPage";
 import NudgePage          from "./pages/admin/NudgePage";
+import AdminAboutPage     from "./pages/admin/AboutPage";
 
 import InterviewerLayout    from "./components/InterviewerLayout";
 import InterviewerDashboard from "./pages/interviewer/Dashboard";
@@ -20,6 +21,7 @@ import InterviewDetail      from "./pages/interviewer/InterviewDetail";
 import AvailabilityPage     from "./pages/interviewer/AvailabilityPage";
 import ProfilePage          from "./pages/interviewer/ProfilePage";
 import NotificationsPage    from "./pages/interviewer/NotificationsPage";
+import InterviewerAboutPage from "./pages/interviewer/AboutPage";
 import SchedulePage         from "./pages/student/SchedulePage";
 import CandidatePortal      from "./pages/student/CandidatePortal";
 
@@ -71,6 +73,7 @@ function AppRoutes() {
         <Route path="templates"   element={<TemplatesPage />} />
         <Route path="panel"       element={<AdminPanelPage />} />
         <Route path="nudge"       element={<NudgePage />} />
+        <Route path="about"       element={<AdminAboutPage />} />
       </Route>
 
       {/* Interviewer */}
@@ -82,6 +85,7 @@ function AppRoutes() {
         <Route path="availability" element={<AvailabilityPage />} />
         <Route path="profile"        element={<ProfilePage />} />
         <Route path="notifications"  element={<NotificationsPage />} />
+        <Route path="about"          element={<InterviewerAboutPage />} />
       </Route>
 
       {/* Public student pages — no auth required */}

@@ -11,6 +11,8 @@ import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
 import { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -244,6 +246,7 @@ export default function InterviewsPage() {
     if (filterIvr  !== "All" && i.interviewerEmail !== filterIvr) return false;
     return true;
   });
+  const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
   const uniqueIvrs = [...new Set(interviews.map(i => i.interviewerEmail))].filter(Boolean).sort();
 
@@ -298,7 +301,7 @@ export default function InterviewsPage() {
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="text-center text-gray-400 py-12">No interviews found</td></tr>
-            ) : filtered.map(iv => (
+            ) : pagedInterviews.map(iv => (
               <tr key={iv.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   <p className="font-semibold text-gray-900">{iv.candidateName}</p>
@@ -358,6 +361,7 @@ export default function InterviewsPage() {
             ))}
           </tbody>
         </table>
+        <Pagination page={ivrPage} totalPages={ivrTotalPages} total={ivrTotal} pageSize={ivrPageSize} onPageChange={setIvrPage} />
       </div>
 
       {/* Schedule / Edit Modal */}

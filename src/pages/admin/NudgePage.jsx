@@ -10,6 +10,8 @@ import {
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -401,6 +403,10 @@ export default function NudgePage() {
   const pendingBookings = invites.filter(i => i.status === "pending_confirmation");
   const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
 
+  const ivrPagination  = usePagination(matchedInterviewers);
+  const candPagination = usePagination(filteredCandidates);
+  const invPagination  = usePagination(invites);
+
   // ────────────────────────────────────────────────────────────────────────────
   // RENDER
   // ────────────────────────────────────────────────────────────────────────────
@@ -483,7 +489,7 @@ export default function NudgePage() {
                   <tr><td colSpan={4} className="text-center text-gray-400 py-10 text-sm">
                     No interviewers match the selected template.
                   </td></tr>
-                ) : matchedInterviewers.map(u => {
+                ) : ivrPagination.paged.map(u => {
                   const slots   = freeSlotCount(u.id);
                   const lastResp = lastNudgeResponse(u.id);
                   const overlap  = skillOverlap(nudgeTemplate?.skills || [], u.skills || []);
@@ -533,6 +539,7 @@ export default function NudgePage() {
                 })}
               </tbody>
             </table>
+            <Pagination page={ivrPagination.page} totalPages={ivrPagination.totalPages} total={ivrPagination.total} pageSize={ivrPagination.pageSize} onPageChange={ivrPagination.setPage} />
           </div>
 
           {/* Responses */}
@@ -673,7 +680,7 @@ export default function NudgePage() {
                   <tr><td colSpan={5} className="text-center text-gray-400 py-10 text-sm">
                     {candidates.length === 0 ? "No candidates yet." : "No candidates match the selected filters."}
                   </td></tr>
-                ) : filteredCandidates.map(c => (
+                ) : candPagination.paged.map(c => (
                   <tr key={c.id} className={`hover:bg-gray-50 ${selCandidates.has(c.id) ? "bg-indigo-50" : ""}`}>
                     <td className="px-4 py-3">
                       <input type="checkbox" checked={selCandidates.has(c.id)} onChange={() => toggleCand(c.id)}
@@ -701,6 +708,7 @@ export default function NudgePage() {
                 ))}
               </tbody>
             </table>
+            <Pagination page={candPagination.page} totalPages={candPagination.totalPages} total={candPagination.total} pageSize={candPagination.pageSize} onPageChange={candPagination.setPage} />
           </div>
 
           {/* Invites log */}
@@ -729,7 +737,7 @@ export default function NudgePage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {invites.map(inv => (
+                    {invPagination.paged.map(inv => (
                       <tr key={inv.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3">
                           <p className="font-semibold text-gray-900">{inv.candidateName}</p>
@@ -774,6 +782,7 @@ export default function NudgePage() {
                     ))}
                   </tbody>
                 </table>
+                <Pagination page={invPagination.page} totalPages={invPagination.totalPages} total={invPagination.total} pageSize={invPagination.pageSize} onPageChange={invPagination.setPage} />
               </div>
             )}
           </div>

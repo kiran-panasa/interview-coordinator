@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { subscribeToInterviewerInterviews } from "../../api/firestore";
 import Badge from "../../components/Badge";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 const TABS = ["Upcoming", "Past", "All"];
 
@@ -55,6 +57,8 @@ export default function MyInterviewsPage() {
 
   const uniqueStatuses = [...new Set(interviews.map(i => i.status))].filter(Boolean).sort();
 
+  const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
+
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">My Interviews</h1>
@@ -95,7 +99,7 @@ export default function MyInterviewsPage() {
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
               <tr><td colSpan={7} className="text-center text-gray-400 py-12">No interviews found</td></tr>
-            ) : filtered.map(i => (
+            ) : paged.map(i => (
               <tr key={i.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-semibold text-gray-900">{i.candidateName}</td>
                 <td className="px-4 py-3 text-gray-600">{i.roleAppliedFor || "—"}</td>
@@ -118,6 +122,7 @@ export default function MyInterviewsPage() {
             ))}
           </tbody>
         </table>
+        <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
       </div>
     </div>
   );
