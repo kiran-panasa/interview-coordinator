@@ -10,6 +10,7 @@ import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import DynamicFeedbackForm from "../../components/DynamicFeedbackForm";
+import KebabMenu from "../../components/KebabMenu";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1184,12 +1185,12 @@ export default function TemplatesPage() {
                     <h2 className="text-base font-bold text-gray-900 leading-tight">{t.name}</h2>
                     {isV2 && <span className="text-xs px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-medium flex-shrink-0">v2</span>}
                   </div>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <button onClick={() => setPreviewTarget(t)} className="text-xs text-gray-500 font-medium hover:underline">Preview</button>
-                    <button onClick={() => exportTemplateToExcel(t)} className="text-xs text-emerald-600 font-medium hover:underline">Export</button>
-                    <button onClick={() => openEdit(t)} className="text-xs text-indigo-600 font-medium hover:underline">Edit</button>
-                    <button onClick={() => handleDelete(t)} className="text-xs text-red-500 font-medium hover:underline">Delete</button>
-                  </div>
+                  <KebabMenu actions={[
+                    { label: "Preview",  onClick: () => setPreviewTarget(t) },
+                    { label: "Export",   onClick: () => exportTemplateToExcel(t), highlight: true },
+                    { label: "Edit",     onClick: () => openEdit(t) },
+                    { label: "Delete",   onClick: () => handleDelete(t), danger: true },
+                  ]} />
                 </div>
 
                 {/* Program badge (only visible on "All" tab) */}
@@ -1216,36 +1217,60 @@ export default function TemplatesPage() {
                   </div>
                 )}
 
-                {/* Interview stats */}
-                {stats ? (
-                  <div className="flex items-center gap-3 pt-1 border-t border-gray-50">
-                    <span className="flex items-center gap-1 text-xs text-indigo-700 font-semibold">
-                      <svg className="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                      </svg>
-                      {stats.scheduled} Scheduled
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold">
-                      <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
-                      </svg>
-                      {stats.completed} Completed
-                    </span>
-                    <span className="flex items-center gap-1 text-xs text-red-600 font-semibold">
-                      <svg className="w-3.5 h-3.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
-                      {stats.cancelled} Cancelled
-                    </span>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-300 pt-1 border-t border-gray-50">No interviews yet</p>
-                )}
-
                 <p className="text-xs text-gray-400">Created {new Date(t.createdAt).toLocaleDateString()}</p>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Interview Stats Table ── */}
+      {!loading && visibleTemplates.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-sm font-bold text-gray-700 mb-3">Interview Stats</h2>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  {["Template", "Program", "Scheduled", "Completed", "Cancelled", "Total"].map(h => (
+                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {visibleTemplates.map(t => {
+                  const s = templateStats[t.id];
+                  const programName = programs.find(p => p.id === t.program)?.name;
+                  const scheduled  = s?.scheduled  ?? 0;
+                  const completed  = s?.completed  ?? 0;
+                  const cancelled  = s?.cancelled  ?? 0;
+                  const total      = scheduled + completed + cancelled;
+                  return (
+                    <tr key={t.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold text-gray-900">{t.name}</td>
+                      <td className="px-4 py-3">
+                        {programName
+                          ? <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">{programName}</span>
+                          : <span className="text-xs text-gray-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-semibold text-indigo-700">{scheduled}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-semibold text-emerald-700">{completed}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-semibold text-red-500">{cancelled}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-semibold text-gray-700">{total}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
