@@ -1183,7 +1183,6 @@ export default function TemplatesPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap min-w-0">
                     <h2 className="text-base font-bold text-gray-900 leading-tight">{t.name}</h2>
-                    {isV2 && <span className="text-xs px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded font-medium flex-shrink-0">v2</span>}
                   </div>
                   <KebabMenu actions={[
                     { label: "Preview",  onClick: () => setPreviewTarget(t) },
