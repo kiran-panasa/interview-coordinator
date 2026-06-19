@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useEffect, useState } from "react";
-import { subscribeToUserNotifications } from "../api/firestore";
+import { subscribeToUserNotifications, subscribeToAdhocQuestions } from "../api/firestore";
 
 const ALL_NAV = [
   { to: "/admin/dashboard",    label: "Dashboard",           roles: ["admin"],                                        icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -25,13 +25,18 @@ export default function AdminLayout() {
   const role = userProfile?.role || "admin";
   const nav = ALL_NAV.filter(item => item.roles.includes(role));
 
-  const [unread, setUnread] = useState(0);
+  const [unread,       setUnread]       = useState(0);
+  const [pendingAdhoc, setPendingAdhoc] = useState(0);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
-    return subscribeToUserNotifications(currentUser.uid, (notifs) => {
+    const unsub1 = subscribeToUserNotifications(currentUser.uid, (notifs) => {
       setUnread(notifs.filter(n => n.type === "response" && n.status === "unread").length);
     });
+    const unsub2 = subscribeToAdhocQuestions((qs) => {
+      setPendingAdhoc(qs.filter(q => q.status === "pending").length);
+    });
+    return () => { unsub1(); unsub2(); };
   }, [currentUser?.uid]);
 
   return (
@@ -69,6 +74,11 @@ export default function AdminLayout() {
               {item.to === "/admin/nudge" && unread > 0 && (
                 <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                   {unread}
+                </span>
+              )}
+              {item.to === "/admin/questions" && pendingAdhoc > 0 && (
+                <span className="text-[10px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                  {pendingAdhoc}
                 </span>
               )}
             </NavLink>
