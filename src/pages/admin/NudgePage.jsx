@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../../AuthContext";
 import {
   getTemplates, getAllUsers, getCandidates,
@@ -6,7 +6,7 @@ import {
   createNotification, updateNotification,
   subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate,
-  getPrograms, getSlotsForInterviewers,
+  getPrograms, subscribeToSlotsForInterviewers,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -76,7 +76,6 @@ export default function NudgePage() {
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
   const [ivrSlots,        setIvrSlots]        = useState({});
-  const [loadingSlots,    setLoadingSlots]    = useState(false);
 
   // ── Candidates tab state ──
   const [dateStart,      setDateStart]      = useState(today());
@@ -101,20 +100,22 @@ export default function NudgePage() {
     return () => { u2(); u3(); u4(); };
   }, [currentUser.uid]);
 
-  // Reload slots whenever the active interviewers list changes
   const activeInterviewers = users.filter(
     u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
   );
 
-  const loadSlots = useCallback(async () => {
+  // Real-time slot subscription — re-subscribes when the interviewer list changes
+  const ivrIdsKey = activeInterviewers.map(u => u.id).join(",");
+  const prevUnsub = useRef(null);
+  useEffect(() => {
+    if (prevUnsub.current) prevUnsub.current();
     if (activeInterviewers.length === 0) return;
-    setLoadingSlots(true);
-    const data = await getSlotsForInterviewers(activeInterviewers.map(u => u.id));
-    setIvrSlots(data);
-    setLoadingSlots(false);
-  }, [activeInterviewers.map(u => u.id).join(",")]); // eslint-disable-line
-
-  useEffect(() => { loadSlots(); }, [loadSlots]);
+    prevUnsub.current = subscribeToSlotsForInterviewers(
+      activeInterviewers.map(u => u.id),
+      setIvrSlots
+    );
+    return () => { if (prevUnsub.current) prevUnsub.current(); };
+  }, [ivrIdsKey]); // eslint-disable-line
 
   // ────────────────────────────────────────────────────────────────────────────
   // INTERVIEWERS TAB
@@ -474,12 +475,9 @@ export default function NudgePage() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        {loadingSlots
-                          ? <span className="text-xs text-gray-300">Loading…</span>
-                          : <span className={`text-sm font-bold ${slots > 0 ? "text-emerald-600" : "text-amber-500"}`}>
-                              {slots} slot{slots !== 1 ? "s" : ""}
-                            </span>
-                        }
+                        <span className={`text-sm font-bold ${slots > 0 ? "text-emerald-600" : "text-amber-500"}`}>
+                          {slots} slot{slots !== 1 ? "s" : ""}
+                        </span>
                       </td>
                       <td className="px-4 py-3">
                         {lastResp ? (

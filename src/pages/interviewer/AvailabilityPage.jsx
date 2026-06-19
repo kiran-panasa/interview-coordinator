@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../../AuthContext";
 import {
-  getInterviewerAvailability,
+  subscribeToInterviewerAvailability,
   addAvailabilitySlot,
   removeAvailabilitySlot,
 } from "../../api/firestore";
@@ -38,12 +38,9 @@ export default function AvailabilityPage() {
   const [customTime, setCustomTime] = useState("");
   const [toast, setToast] = useState(null);
 
-  const load = useCallback(async () => {
-    const all = await getInterviewerAvailability(currentUser.uid);
-    setSlots(all);
+  useEffect(() => {
+    return subscribeToInterviewerAvailability(currentUser.uid, setSlots);
   }, [currentUser.uid]);
-
-  useEffect(() => { load(); }, [load]);
 
   const year  = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -69,7 +66,6 @@ export default function AvailabilityPage() {
     setBusy(true);
     try {
       await addAvailabilitySlot(currentUser.uid, selectedDate, time);
-      await load();
       setToast({ message: `${time} added.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -82,7 +78,6 @@ export default function AvailabilityPage() {
       return setToast({ message: "Cannot delete a booked slot.", type: "error" });
     setBusy(true);
     await removeAvailabilitySlot(currentUser.uid, slot.id);
-    await load();
     setToast({ message: "Slot removed." });
     setBusy(false);
   };
@@ -245,6 +240,59 @@ export default function AvailabilityPage() {
           )}
         </div>
       </div>
+
+      {/* All upcoming slots summary */}
+      {(() => {
+        const upcoming = slots
+          .filter(s => s.date >= todayStr)
+          .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+        if (upcoming.length === 0) return null;
+
+        const grouped = upcoming.reduce((acc, s) => {
+          if (!acc[s.date]) acc[s.date] = [];
+          acc[s.date].push(s);
+          return acc;
+        }, {});
+
+        return (
+          <div className="mt-8">
+            <h2 className="text-base font-bold text-gray-900 mb-3">My Upcoming Slots</h2>
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {["Date", "Time", "Status"].map(h => (
+                      <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {Object.entries(grouped).map(([date, daySlotList]) =>
+                    daySlotList.map((s, i) => (
+                      <tr key={s.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {i === 0
+                            ? new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
+                                weekday: "short", day: "numeric", month: "short", year: "numeric",
+                              })
+                            : ""}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700 font-mono text-xs">{s.time}</td>
+                        <td className="px-4 py-3">
+                          {s.isBooked
+                            ? <span className="text-[11px] font-semibold bg-orange-50 text-orange-600 border border-orange-200 px-2 py-0.5 rounded-full">Booked</span>
+                            : <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">Free</span>
+                          }
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>

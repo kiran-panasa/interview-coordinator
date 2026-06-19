@@ -195,6 +195,26 @@ export async function getInterviewerAvailability(interviewerId) {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
+export function subscribeToInterviewerAvailability(interviewerId, callback) {
+  return onSnapshot(
+    collection(db, "availability", interviewerId, "slots"),
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+  );
+}
+
+// Subscribes to slots for multiple interviewers; fires callback with { [interviewerId]: slot[] }
+export function subscribeToSlotsForInterviewers(interviewerIds, callback) {
+  if (interviewerIds.length === 0) { callback({}); return () => {}; }
+  const state = {};
+  const unsubs = interviewerIds.map(id =>
+    onSnapshot(collection(db, "availability", id, "slots"), snap => {
+      state[id] = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      callback({ ...state });
+    })
+  );
+  return () => unsubs.forEach(u => u());
+}
+
 export async function addAvailabilitySlot(interviewerId, date, time) {
   const slotId = `${date}_${time.replace(/[: ]/g, "")}`;
   await setDoc(doc(db, "availability", interviewerId, "slots", slotId), {
