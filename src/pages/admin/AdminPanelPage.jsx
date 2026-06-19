@@ -428,6 +428,7 @@ export default function AdminPanelPage() {
           ) : activeUsers.length === 0 ? (
             <p className="text-center text-gray-400 py-10 text-sm">No active users yet.</p>
           ) : (
+            <>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -476,6 +477,7 @@ export default function AdminPanelPage() {
               </tbody>
             </table>
             <Pagination page={usersPagination.page} totalPages={usersPagination.totalPages} total={usersPagination.total} pageSize={usersPagination.pageSize} onPageChange={usersPagination.setPage} />
+            </>
           )}
         </div>
       </div>
@@ -488,6 +490,7 @@ export default function AdminPanelPage() {
             {loading ? (
               <p className="text-center text-gray-400 py-10 text-sm">Loading…</p>
             ) : (
+              <>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
@@ -535,6 +538,7 @@ export default function AdminPanelPage() {
                 </tbody>
               </table>
               <Pagination page={invitesPagination.page} totalPages={invitesPagination.totalPages} total={invitesPagination.total} pageSize={invitesPagination.pageSize} onPageChange={invitesPagination.setPage} />
+              </>
             )}
           </div>
         </div>
