@@ -473,6 +473,10 @@ export async function updateScheduleInvite(id, data) {
   });
 }
 
+export async function deleteScheduleInvite(id) {
+  await deleteDoc(doc(db, "scheduleInvites", id));
+}
+
 export async function getScheduleInviteByToken(token) {
   const snap = await getDocs(query(
     collection(db, "scheduleInvites"),

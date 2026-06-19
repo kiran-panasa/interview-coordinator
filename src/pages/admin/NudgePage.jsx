@@ -4,7 +4,7 @@ import {
   subscribeToInterviews, getTemplates, getAllUsers, getCandidates,
   subscribeToSkills, subscribeToUserNotifications,
   createNotification, updateNotification,
-  subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite,
+  subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate,
   getPrograms,
 } from "../../api/firestore";
@@ -85,6 +85,8 @@ export default function NudgePage() {
   const [selCandidates,  setSelCandidates]  = useState(new Set());
   const [sendingInvites, setSendingInvites] = useState(false);
   const [confirmingId,   setConfirmingId]   = useState(null);
+  const [resendingId,    setResendingId]    = useState(null);
+  const [deletingId,     setDeletingId]     = useState(null);
 
   useEffect(() => {
     const u1 = subscribeToInterviews(setInterviews);
@@ -290,6 +292,42 @@ export default function NudgePage() {
       await updateScheduleInvite(inv.id, { status: "cancelled", bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null });
       setToast({ message: "Booking rejected and slot freed." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
+  };
+
+  const handleResendInvite = async (inv) => {
+    setResendingId(inv.id);
+    try {
+      const newToken   = crypto.randomUUID();
+      const expiresAt  = new Date(Date.now() + (inv.expiryHours || 24) * 3600 * 1000).toISOString();
+      await updateScheduleInvite(inv.id, {
+        inviteToken: newToken, status: "sent",
+        sentAt: new Date().toISOString(), expiresAt,
+        bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null,
+      });
+      const link = `${window.location.origin}/student/schedule`;
+      await callAppsScript({
+        action: "sendEmail",
+        subject: `Schedule Your Interview — ${inv.templateName || "Interview"}`,
+        recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
+        body:
+          `Hi ${inv.candidateName},\n\nYou've been invited to schedule your interview.\n\n` +
+          `Template: ${inv.templateName || ""}\nDate Range: ${fmtDate(inv.dateRangeStart)} – ${fmtDate(inv.dateRangeEnd)}\n\n` +
+          `Click below to pick your slot (link valid for ${inv.expiryHours || 24} hours):\n${link}?invite=${newToken}\n\n` +
+          `NxtWave Interview Team`,
+      });
+      setToast({ message: `Invite resent to ${inv.candidateName}.` });
+    } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
+    setResendingId(null);
+  };
+
+  const handleDeleteInvite = async (inv) => {
+    if (!confirm(`Delete invite for ${inv.candidateName}? This cannot be undone.`)) return;
+    setDeletingId(inv.id);
+    try {
+      await deleteScheduleInvite(inv.id);
+      setToast({ message: `Invite for ${inv.candidateName} deleted.` });
+    } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
+    setDeletingId(null);
   };
 
   const pendingBookings  = invites.filter(i => i.status === "pending_confirmation");
@@ -543,8 +581,8 @@ export default function NudgePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-100">
-                      {["Candidate", "Template", "Date Range", "Status", "Sent At"].map(h => (
-                        <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                      {["Candidate", "Template", "Date Range", "Status", "Sent At", ""].map((h, i) => (
+                        <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -566,6 +604,24 @@ export default function NudgePage() {
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                           {inv.sentAt ? new Date(inv.sentAt).toLocaleString() : "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleResendInvite(inv)}
+                              disabled={resendingId === inv.id || deletingId === inv.id || ["confirmed", "cancelled"].includes(inv.status)}
+                              title="Resend invite"
+                              className="text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
+                              {resendingId === inv.id ? "…" : "Resend"}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteInvite(inv)}
+                              disabled={resendingId === inv.id || deletingId === inv.id}
+                              title="Delete invite"
+                              className="text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
+                              {deletingId === inv.id ? "…" : "Delete"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
