@@ -515,6 +515,15 @@ export async function getScheduleInviteByToken(token) {
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
 }
 
+export async function getScheduleInvitesByEmail(email) {
+  const snap = await getDocs(query(
+    collection(db, "scheduleInvites"),
+    where("candidateEmail", "==", email.toLowerCase()),
+    orderBy("createdAt", "desc")
+  ));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+}
+
 // ── OTP Verifications ─────────────────────────────────────────────────────────
 
 export async function createOtpVerification(data) {

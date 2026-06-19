@@ -88,6 +88,7 @@ export default function NudgePage() {
   const [confirmingId,   setConfirmingId]   = useState(null);
   const [resendingId,    setResendingId]    = useState(null);
   const [deletingId,     setDeletingId]     = useState(null);
+  const [copiedId,       setCopiedId]       = useState(null);
 
   useEffect(() => {
     const u2 = subscribeToSkills(setSkills);
@@ -355,6 +356,36 @@ export default function NudgePage() {
       setToast({ message: `Invite resent to ${inv.candidateName}.` });
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setResendingId(null);
+  };
+
+  const handleCopyLink = (inv) => {
+    const link = `${window.location.origin}/student/schedule?invite=${inv.inviteToken}`;
+    navigator.clipboard.writeText(link);
+    setCopiedId(inv.id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleExportLinks = () => {
+    const rows = [["Candidate Name", "Email", "Template", "Date Range", "Status", "Scheduling Link"]];
+    invites.forEach(inv => {
+      const link = inv.inviteToken
+        ? `${window.location.origin}/student/schedule?invite=${inv.inviteToken}`
+        : "—";
+      rows.push([
+        inv.candidateName,
+        inv.candidateEmail,
+        inv.templateName || "",
+        `${fmtDate(inv.dateRangeStart)} – ${fmtDate(inv.dateRangeEnd)}`,
+        STATUS_LABEL[inv.status] || inv.status,
+        link,
+      ]);
+    });
+    const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "candidate_invite_links.csv"; a.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleDeleteInvite = async (inv) => {
@@ -674,7 +705,15 @@ export default function NudgePage() {
 
           {/* Invites log */}
           <div>
-            <h2 className="text-sm font-bold text-gray-700 mb-3">Sent Invites</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-gray-700">Sent Invites</h2>
+              {invites.length > 0 && (
+                <button onClick={handleExportLinks}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors">
+                  Export Links CSV
+                </button>
+              )}
+            </div>
             {invites.length === 0 ? (
               <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-10">
                 <p className="text-sm text-gray-400">No invites sent yet.</p>
@@ -710,6 +749,13 @@ export default function NudgePage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleCopyLink(inv)}
+                              disabled={!inv.inviteToken}
+                              title="Copy scheduling link"
+                              className="text-xs font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-lg disabled:opacity-40 transition-colors">
+                              {copiedId === inv.id ? "Copied!" : "Copy Link"}
+                            </button>
                             <button
                               onClick={() => handleResendInvite(inv)}
                               disabled={resendingId === inv.id || deletingId === inv.id || ["confirmed", "cancelled"].includes(inv.status)}
