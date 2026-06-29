@@ -140,11 +140,11 @@ function parseImportCSV(text, candidates, interviewers, templates, existing) {
         if (h.endsWith("_rating") || h.endsWith("_notes")) domainData[h] = (f[j] || "").trim();
       });
 
-      // Validate numeric ratings are 1-5
+      // Validate numeric ratings are in 0-5 range (templates may use 0-4 or 1-5 scales)
       Object.entries(domainData).forEach(([k, v]) => {
         if (k.endsWith("_rating") && v) {
           const n = parseFloat(v);
-          if (isNaN(n) || n < 1 || n > 5) warnings.push(`${k}: "${v}" is not a valid 1–5 rating`);
+          if (isNaN(n) || n < 0 || n > 5) warnings.push(`${k}: "${v}" is not a valid score (expected 0–5)`);
         }
       });
 
@@ -161,10 +161,10 @@ function parseImportCSV(text, candidates, interviewers, templates, existing) {
 }
 
 // Builds a proper feedback.domains object from flat CSV domain columns.
-// Stores a synthetic card (with the rating on every scored_dropdown) for card-based
-// domains, and sets the domainField directly for card-less domains (resume, overall_feedback).
+// For domains WITH cardFields: reads {domainId}_{fieldId}_rating per scored field → one synthetic card.
+// For domains WITHOUT cardFields (resume, overall_feedback): reads {domainId}_rating → domain-level field.
 function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
-  const hasDomainData = Object.keys(domainData).some(k => domainData[k]);
+  const hasDomainData = Object.values(domainData).some(Boolean);
 
   if (!template?.domains || !hasDomainData) {
     return {
@@ -178,26 +178,35 @@ function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
   const feedbackDomains = {};
 
   for (const domain of template.domains.filter(d => d.enabled !== false)) {
-    const ratingRaw = domainData[`${domain.id}_rating`];
-    const rating    = ratingRaw ? parseFloat(ratingRaw) : null;
-    const notes     = domainData[`${domain.id}_notes`] || "";
-    const hasCards  = (domain.cardFields || []).length > 0;
-
+    const notes    = domainData[`${domain.id}_notes`] || "";
+    const hasCards = (domain.cardFields || []).length > 0;
     const domainState = { cards: [] };
 
     if (hasCards) {
+      // One synthetic card: each scored_dropdown gets its own per-field column value
       const card = {};
       for (const f of domain.cardFields) {
-        if (f.type === "scored_dropdown") card[f.id] = rating;
-        else card[f.id] = f.type === "text" ? "" : null;
+        if (f.type === "scored_dropdown") {
+          const raw = domainData[`${domain.id}_${f.id}_rating`];
+          card[f.id] = raw !== "" && raw != null ? parseFloat(raw) : null;
+        } else {
+          card[f.id] = f.type === "text" ? "" : null;
+        }
       }
       domainState.cards = [card];
-    }
-
-    for (const f of domain.domainFields || []) {
-      if (f.type === "scored_dropdown") domainState[f.id] = rating;
-      else if (f.type === "text") domainState[f.id] = domain.id === "overall_feedback" ? (overallNotes || notes) : notes;
-      else domainState[f.id] = null;
+      // Domain-level text fields (remarks)
+      for (const f of domain.domainFields || []) {
+        domainState[f.id] = f.type === "text" ? notes : null;
+      }
+    } else {
+      // No cards: single domain-level rating + remarks
+      const raw    = domainData[`${domain.id}_rating`];
+      const rating = raw !== "" && raw != null ? parseFloat(raw) : null;
+      for (const f of domain.domainFields || []) {
+        if (f.type === "scored_dropdown") domainState[f.id] = rating;
+        else if (f.type === "text") domainState[f.id] = domain.id === "overall_feedback" ? (overallNotes || notes) : notes;
+        else domainState[f.id] = null;
+      }
     }
 
     feedbackDomains[domain.id] = domainState;
@@ -227,15 +236,40 @@ function downloadImportTemplate(template) {
     const sorted = [...template.domains]
       .filter(d => d.enabled !== false)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
     for (const d of sorted) {
-      domainHeaders.push(`${d.id}_rating`, `${d.id}_notes`);
-      domainExample.push(d.id === "overall_feedback" ? "" : "4", d.id === "overall_feedback" ? "" : `Good performance in ${d.label}`);
+      if (d.id === "overall_feedback") {
+        // overall_feedback has no rating, just notes (domain_remarks)
+        domainHeaders.push(`${d.id}_notes`);
+        domainExample.push("");
+        continue;
+      }
+
+      const hasCardFields = (d.cardFields || []).length > 0;
+
+      if (hasCardFields) {
+        // One column per scored_dropdown field in the card
+        for (const f of d.cardFields) {
+          if (f.type === "scored_dropdown") {
+            domainHeaders.push(`${d.id}_${f.id}_rating`);
+            domainExample.push("3");
+          }
+        }
+      } else {
+        // Domain-level single rating (e.g. resume)
+        domainHeaders.push(`${d.id}_rating`);
+        domainExample.push("3");
+      }
+
+      // Notes column for every domain
+      domainHeaders.push(`${d.id}_notes`);
+      domainExample.push(`Remarks for ${d.label}`);
     }
   }
 
   const rows = [
     [...baseHeaders, ...domainHeaders].join(","),
-    [...baseExample, ...domainExample].map(v => v.includes(",") ? `"${v}"` : v).join(","),
+    [...baseExample, ...domainExample].map(v => (v.includes(",") || v.includes(" ")) ? `"${v}"` : v).join(","),
   ];
 
   const a = document.createElement("a");
@@ -821,8 +855,9 @@ export default function InterviewsPage() {
                     ["round",            "No",  "Round 1 (default)"],
                     ["verdict",          "No",  "Proceed / Hold / Reject"],
                     ["notes",            "No",  "Overall feedback notes"],
-                    ["{domainId}_rating","No",  "coding_rating → 1–5 score for that domain"],
-                    ["{domainId}_notes", "No",  "coding_notes → text remarks for that domain"],
+                    ["{domainId}_{fieldId}_rating","No",  "e.g. coding_ps_rating → score for that specific card field (0–5)"],
+                    ["{domainId}_rating",         "No",  "e.g. resume_rating → for domains with no card fields"],
+                    ["{domainId}_notes",           "No",  "e.g. coding_notes → overall remarks for that domain"],
                   ].map(([col, req, ex]) => (
                     <tr key={col}>
                       <td className="py-1.5 pr-4 font-mono text-[11px] text-indigo-700">{col}</td>
