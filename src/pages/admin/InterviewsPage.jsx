@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { materializeFeedback } from "../../utils/templateEngine";
 import { useAuth } from "../../AuthContext";
 import {
   subscribeToInterviews, getCandidates, getAllUsers,
@@ -133,25 +134,113 @@ function parseImportCSV(text, candidates, interviewers, templates, existing) {
 
       const verdict = raw.verdict ? (VERDICT_MAP[raw.verdict.toLowerCase()] || raw.verdict) : "";
 
+      // Collect domain columns: any header ending in _rating or _notes
+      const domainData = {};
+      headers.forEach((h, j) => {
+        if (h.endsWith("_rating") || h.endsWith("_notes")) domainData[h] = (f[j] || "").trim();
+      });
+
+      // Validate numeric ratings are 1-5
+      Object.entries(domainData).forEach(([k, v]) => {
+        if (k.endsWith("_rating") && v) {
+          const n = parseFloat(v);
+          if (isNaN(n) || n < 1 || n > 5) warnings.push(`${k}: "${v}" is not a valid 1–5 rating`);
+        }
+      });
+
+      const hasDomainFeedback = Object.values(domainData).some(Boolean);
+
       if (candidate && scheduledDate) {
         const dup = existing.some(iv => iv.candidateId === candidate.id && iv.scheduledDate === scheduledDate);
         if (dup) warnings.push("Duplicate: interview for this candidate on this date already exists");
       }
 
-      return { rowNum: i + 2, raw, resolved: { candidate, interviewer, template, scheduledDate, scheduledTime, verdict }, errors, warnings };
+      return { rowNum: i + 2, raw, resolved: { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback }, errors, warnings };
     }),
   };
 }
 
-function downloadImportTemplate() {
-  const csv = [
-    "candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes",
-    'john.doe@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,"Strong fundamentals, good React knowledge"',
-    'jane.smith@example.com,other@nxtwave.tech,Product Mastery - Novice,20/06/2026,14:00,Round 1,Hold,Needs improvement in system design',
-  ].join("\n");
+// Builds a proper feedback.domains object from flat CSV domain columns.
+// Stores a synthetic card (with the rating on every scored_dropdown) for card-based
+// domains, and sets the domainField directly for card-less domains (resume, overall_feedback).
+function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
+  const hasDomainData = Object.keys(domainData).some(k => domainData[k]);
+
+  if (!template?.domains || !hasDomainData) {
+    return {
+      overallRecommendation: verdict,
+      comments: overallNotes,
+      importedFromSheet: true,
+      submittedAt: new Date().toISOString(),
+    };
+  }
+
+  const feedbackDomains = {};
+
+  for (const domain of template.domains.filter(d => d.enabled !== false)) {
+    const ratingRaw = domainData[`${domain.id}_rating`];
+    const rating    = ratingRaw ? parseFloat(ratingRaw) : null;
+    const notes     = domainData[`${domain.id}_notes`] || "";
+    const hasCards  = (domain.cardFields || []).length > 0;
+
+    const domainState = { cards: [] };
+
+    if (hasCards) {
+      const card = {};
+      for (const f of domain.cardFields) {
+        if (f.type === "scored_dropdown") card[f.id] = rating;
+        else card[f.id] = f.type === "text" ? "" : null;
+      }
+      domainState.cards = [card];
+    }
+
+    for (const f of domain.domainFields || []) {
+      if (f.type === "scored_dropdown") domainState[f.id] = rating;
+      else if (f.type === "text") domainState[f.id] = domain.id === "overall_feedback" ? (overallNotes || notes) : notes;
+      else domainState[f.id] = null;
+    }
+
+    feedbackDomains[domain.id] = domainState;
+  }
+
+  const materialized = materializeFeedback(template, { domains: feedbackDomains });
+  return {
+    ...materialized,
+    overallRecommendation: verdict,
+    importedFromSheet: true,
+    submittedAt: new Date().toISOString(),
+  };
+}
+
+function downloadImportTemplate(template) {
+  const baseHeaders = ["candidateEmail", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes"];
+  const baseExample = [
+    "john.doe@example.com", "interviewer@nxtwave.tech",
+    template?.name || "Product Mastery - Novice",
+    "15/06/2026", "10:00 AM", "Round 1", "Proceed", "Overall interview notes",
+  ];
+
+  const domainHeaders = [];
+  const domainExample = [];
+
+  if (template?.domains) {
+    const sorted = [...template.domains]
+      .filter(d => d.enabled !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    for (const d of sorted) {
+      domainHeaders.push(`${d.id}_rating`, `${d.id}_notes`);
+      domainExample.push(d.id === "overall_feedback" ? "" : "4", d.id === "overall_feedback" ? "" : `Good performance in ${d.label}`);
+    }
+  }
+
+  const rows = [
+    [...baseHeaders, ...domainHeaders].join(","),
+    [...baseExample, ...domainExample].map(v => v.includes(",") ? `"${v}"` : v).join(","),
+  ];
+
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-  a.download = "interview_import_template.csv";
+  a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+  a.download = template ? `import_${template.name.replace(/\s+/g, "_")}.csv` : "interview_import_template.csv";
   a.click();
 }
 
@@ -190,10 +279,11 @@ export default function InterviewsPage() {
   const [inviting,      setInviting]      = useState({});  // { [interviewId]: true }
   const [feedbackModal, setFeedbackModal] = useState(null); // { interview, template }
   const [toast,         setToast]         = useState(null);
-  const [showImport,    setShowImport]    = useState(false);
-  const [csvText,       setCsvText]       = useState("");
-  const [parsedRows,    setParsedRows]    = useState(null);
-  const [importing,     setImporting]     = useState(false);
+  const [showImport,      setShowImport]      = useState(false);
+  const [csvText,         setCsvText]         = useState("");
+  const [parsedRows,      setParsedRows]      = useState(null);
+  const [importing,       setImporting]       = useState(false);
+  const [dlTemplateId,    setDlTemplateId]    = useState("");
 
   useEffect(() => {
     const unsub = subscribeToInterviews(setInterviews);
@@ -373,7 +463,8 @@ export default function InterviewsPage() {
     const failed = [];
     for (const row of validRows) {
       try {
-        const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict } = row.resolved;
+        const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData } = row.resolved;
+        const feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
         await importCompletedInterview({
           candidateId:      candidate.id,
           candidateName:    candidate.name,
@@ -387,12 +478,7 @@ export default function InterviewsPage() {
           scheduledTime,
           round:    row.raw.round,
           meetLink: "",
-          feedback: {
-            overallRecommendation: verdict,
-            comments:              row.raw.notes,
-            importedFromSheet:     true,
-            submittedAt:           new Date().toISOString(),
-          },
+          feedback,
         });
         done++;
       } catch (e) { failed.push(`Row ${row.rowNum}: ${e.message}`); }
@@ -715,13 +801,7 @@ export default function InterviewsPage() {
 
           {/* Format reference */}
           <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">CSV Format</p>
-              <button onClick={downloadImportTemplate}
-                className="text-xs text-indigo-600 font-semibold hover:underline">
-                Download template
-              </button>
-            </div>
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">CSV Format</p>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -741,6 +821,8 @@ export default function InterviewsPage() {
                     ["round",            "No",  "Round 1 (default)"],
                     ["verdict",          "No",  "Proceed / Hold / Reject"],
                     ["notes",            "No",  "Overall feedback notes"],
+                    ["{domainId}_rating","No",  "coding_rating → 1–5 score for that domain"],
+                    ["{domainId}_notes", "No",  "coding_notes → text remarks for that domain"],
                   ].map(([col, req, ex]) => (
                     <tr key={col}>
                       <td className="py-1.5 pr-4 font-mono text-[11px] text-indigo-700">{col}</td>
@@ -754,6 +836,26 @@ export default function InterviewsPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Template-specific CSV download */}
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <p className="text-xs text-gray-500 mb-2">Download a ready-to-fill CSV with domain columns for a specific template:</p>
+              <div className="flex gap-2">
+                <select
+                  value={dlTemplateId}
+                  onChange={e => setDlTemplateId(e.target.value)}
+                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">— Select template —</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <button
+                  disabled={!dlTemplateId}
+                  onClick={() => downloadImportTemplate(templates.find(t => t.id === dlTemplateId))}
+                  className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-40">
+                  Download CSV
+                </button>
+              </div>
             </div>
           </div>
 
@@ -803,7 +905,7 @@ export default function InterviewsPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["#", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", ""].map(h => (
+                      {["#", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", "Feedback", ""].map(h => (
                         <th key={h} className="text-left font-semibold text-gray-400 uppercase tracking-wide px-3 py-2">{h}</th>
                       ))}
                     </tr>
@@ -836,6 +938,15 @@ export default function InterviewsPage() {
                               <span className={`font-semibold ${row.resolved.verdict === "Proceed" ? "text-emerald-600" : row.resolved.verdict === "Reject" ? "text-red-500" : "text-amber-600"}`}>
                                 {row.resolved.verdict}
                               </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.resolved.hasDomainFeedback ? (
+                              <span className="text-xs text-indigo-600 font-semibold">
+                                {Object.keys(row.resolved.domainData).filter(k => k.endsWith("_rating") && row.resolved.domainData[k]).length} domains
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-300">verdict only</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
