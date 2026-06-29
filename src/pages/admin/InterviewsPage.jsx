@@ -4,7 +4,7 @@ import {
   subscribeToInterviews, getCandidates, getAllUsers,
   createInterview, updateInterview, deleteInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
-  getTemplates, getTemplate, DEFAULT_ROUNDS,
+  getTemplates, getTemplate, DEFAULT_ROUNDS, importCompletedInterview,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Badge from "../../components/Badge";
@@ -35,6 +35,124 @@ function fmt(dateStr) {
   if (!dateStr) return "—";
   const [y, m, d] = dateStr.split("-");
   return `${d}/${m}/${y}`;
+}
+
+// ── CSV import helpers ────────────────────────────────────────────────────────
+
+function parseLine(line) {
+  const fields = [];
+  let field = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i + 1] === '"') { field += '"'; i++; }
+      else inQ = !inQ;
+    } else if (c === "," && !inQ) { fields.push(field.trim()); field = ""; }
+    else field += c;
+  }
+  fields.push(field.trim());
+  return fields;
+}
+
+function normalizeDate(s) {
+  if (!s) return null;
+  s = s.trim();
+  const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  return null;
+}
+
+function normalizeTime(s) {
+  if (!s) return null;
+  s = s.trim();
+  const ampm = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampm) return `${ampm[1]}:${ampm[2]} ${ampm[3].toUpperCase()}`;
+  const h24 = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (h24) {
+    let h = parseInt(h24[1]);
+    const m = h24[2];
+    const suf = h >= 12 ? "PM" : "AM";
+    if (h === 0) h = 12;
+    else if (h > 12) h -= 12;
+    return `${h}:${m} ${suf}`;
+  }
+  return null;
+}
+
+const VERDICT_MAP = { proceed: "Proceed", hold: "Hold", reject: "Reject" };
+
+function parseImportCSV(text, candidates, interviewers, templates, existing) {
+  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return { globalError: "Need at least a header row and one data row." };
+
+  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ""));
+  const REQ = ["candidateemail", "intervieweremail", "templatename", "date", "time"];
+  const missing = REQ.filter(h => !headers.includes(h));
+  if (missing.length) return { globalError: `Missing columns: ${missing.join(", ")}` };
+
+  const idx = name => headers.indexOf(name.toLowerCase().replace(/\s+/g, ""));
+
+  return {
+    rows: lines.slice(1).map((line, i) => {
+      const f = parseLine(line);
+      const g = name => (f[idx(name)] || "").trim();
+
+      const raw = {
+        candidateEmail:  g("candidateEmail"),
+        interviewerEmail: g("interviewerEmail"),
+        templateName:    g("templateName"),
+        date:            g("date"),
+        time:            g("time"),
+        round:           g("round") || "Round 1",
+        verdict:         g("verdict"),
+        notes:           g("notes"),
+      };
+
+      const errors = [], warnings = [];
+
+      const candidate = candidates.find(c => c.email?.toLowerCase() === raw.candidateEmail.toLowerCase());
+      if (!raw.candidateEmail) errors.push("candidateEmail required");
+      else if (!candidate) errors.push(`Candidate not found: ${raw.candidateEmail}`);
+
+      const interviewer = interviewers.find(u => u.email?.toLowerCase() === raw.interviewerEmail.toLowerCase());
+      if (!raw.interviewerEmail) errors.push("interviewerEmail required");
+      else if (!interviewer) errors.push(`Interviewer not found: ${raw.interviewerEmail}`);
+
+      const template = templates.find(t => t.name.toLowerCase() === raw.templateName.toLowerCase());
+      if (!raw.templateName) errors.push("templateName required");
+      else if (!template) errors.push(`Template not found: "${raw.templateName}"`);
+
+      const scheduledDate = normalizeDate(raw.date);
+      if (!raw.date) errors.push("date required");
+      else if (!scheduledDate) errors.push(`Bad date format: "${raw.date}" — use DD/MM/YYYY`);
+
+      const scheduledTime = normalizeTime(raw.time);
+      if (!raw.time) errors.push("time required");
+      else if (!scheduledTime) errors.push(`Bad time format: "${raw.time}" — use "10:00 AM" or "14:00"`);
+
+      const verdict = raw.verdict ? (VERDICT_MAP[raw.verdict.toLowerCase()] || raw.verdict) : "";
+
+      if (candidate && scheduledDate) {
+        const dup = existing.some(iv => iv.candidateId === candidate.id && iv.scheduledDate === scheduledDate);
+        if (dup) warnings.push("Duplicate: interview for this candidate on this date already exists");
+      }
+
+      return { rowNum: i + 2, raw, resolved: { candidate, interviewer, template, scheduledDate, scheduledTime, verdict }, errors, warnings };
+    }),
+  };
+}
+
+function downloadImportTemplate() {
+  const csv = [
+    "candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes",
+    'john.doe@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,"Strong fundamentals, good React knowledge"',
+    'jane.smith@example.com,other@nxtwave.tech,Product Mastery - Novice,20/06/2026,14:00,Round 1,Hold,Needs improvement in system design',
+  ].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "interview_import_template.csv";
+  a.click();
 }
 
 // ── Calendar API helpers ──────────────────────────────────────────────────────
@@ -72,6 +190,10 @@ export default function InterviewsPage() {
   const [inviting,      setInviting]      = useState({});  // { [interviewId]: true }
   const [feedbackModal, setFeedbackModal] = useState(null); // { interview, template }
   const [toast,         setToast]         = useState(null);
+  const [showImport,    setShowImport]    = useState(false);
+  const [csvText,       setCsvText]       = useState("");
+  const [parsedRows,    setParsedRows]    = useState(null);
+  const [importing,     setImporting]     = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToInterviews(setInterviews);
@@ -238,6 +360,52 @@ export default function InterviewsPage() {
     setFeedbackModal({ interview: iv, template: tmpl });
   };
 
+  const handleParseCSV = () => {
+    const result = parseImportCSV(csvText, candidates, interviewers, templates, interviews);
+    if (result.globalError) { setToast({ message: result.globalError, type: "error" }); return; }
+    setParsedRows(result.rows);
+  };
+
+  const handleImport = async () => {
+    const validRows = parsedRows.filter(r => r.errors.length === 0);
+    setImporting(true);
+    let done = 0;
+    const failed = [];
+    for (const row of validRows) {
+      try {
+        const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict } = row.resolved;
+        await importCompletedInterview({
+          candidateId:      candidate.id,
+          candidateName:    candidate.name,
+          candidateEmail:   candidate.email,
+          interviewerId:    interviewer.id,
+          interviewerEmail: interviewer.email,
+          interviewerName:  interviewer.displayName || interviewer.email,
+          templateId:       template?.id   || "",
+          templateName:     template?.name || "",
+          scheduledDate,
+          scheduledTime,
+          round:    row.raw.round,
+          meetLink: "",
+          feedback: {
+            overallRecommendation: verdict,
+            comments:              row.raw.notes,
+            importedFromSheet:     true,
+            submittedAt:           new Date().toISOString(),
+          },
+        });
+        done++;
+      } catch (e) { failed.push(`Row ${row.rowNum}: ${e.message}`); }
+    }
+    setImporting(false);
+    if (failed.length) {
+      setToast({ message: `${done} imported, ${failed.length} failed. Check console.`, type: "error" });
+    } else {
+      setToast({ message: `${done} interview${done !== 1 ? "s" : ""} imported successfully.` });
+      setShowImport(false); setCsvText(""); setParsedRows(null);
+    }
+  };
+
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const filtered = interviews.filter(i => {
@@ -260,13 +428,22 @@ export default function InterviewsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Interviews</h1>
           <p className="text-sm text-gray-500 mt-0.5">{interviews.length} total interviews</p>
         </div>
-        <button onClick={openNew}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Schedule Interview
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => { setShowImport(true); setCsvText(""); setParsedRows(null); }}
+            className="flex items-center gap-2 border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M8 12l4-4m0 0l4 4m-4-4v12" />
+            </svg>
+            Import from Sheet
+          </button>
+          <button onClick={openNew}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Schedule Interview
+          </button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -530,6 +707,182 @@ export default function InterviewsPage() {
             </div>
           );
         })()}
+      </Modal>
+
+      {/* Import from Sheet Modal */}
+      <Modal open={showImport} onClose={() => setShowImport(false)} title="Import Interviews from Sheet" wide>
+        <div className="space-y-5">
+
+          {/* Format reference */}
+          <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">CSV Format</p>
+              <button onClick={downloadImportTemplate}
+                className="text-xs text-indigo-600 font-semibold hover:underline">
+                Download template
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    {["Column", "Required", "Example"].map(h => (
+                      <th key={h} className="text-left font-semibold text-gray-500 pb-1.5 pr-4">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="text-gray-600 divide-y divide-gray-100">
+                  {[
+                    ["candidateEmail",   "Yes", "john@example.com"],
+                    ["interviewerEmail", "Yes", "interviewer@nxtwave.tech"],
+                    ["templateName",     "Yes", "Product Mastery - Novice"],
+                    ["date",             "Yes", "15/06/2026 or 2026-06-15"],
+                    ["time",             "Yes", "10:00 AM or 14:30"],
+                    ["round",            "No",  "Round 1 (default)"],
+                    ["verdict",          "No",  "Proceed / Hold / Reject"],
+                    ["notes",            "No",  "Overall feedback notes"],
+                  ].map(([col, req, ex]) => (
+                    <tr key={col}>
+                      <td className="py-1.5 pr-4 font-mono text-[11px] text-indigo-700">{col}</td>
+                      <td className="py-1.5 pr-4">
+                        {req === "Yes"
+                          ? <span className="text-red-500 font-semibold">Yes</span>
+                          : <span className="text-gray-400">No</span>}
+                      </td>
+                      <td className="py-1.5 text-gray-500">{ex}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* CSV input */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Paste CSV or upload file</label>
+              <label className="text-xs text-indigo-600 font-semibold hover:underline cursor-pointer">
+                Upload file
+                <input type="file" accept=".csv,.txt" className="hidden" onChange={e => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = ev => { setCsvText(ev.target.result); setParsedRows(null); };
+                  reader.readAsText(file);
+                  e.target.value = "";
+                }} />
+              </label>
+            </div>
+            <textarea
+              rows={6}
+              value={csvText}
+              onChange={e => { setCsvText(e.target.value); setParsedRows(null); }}
+              placeholder={"candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes\njohn@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,Good candidate"}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+          </div>
+
+          <button
+            onClick={handleParseCSV}
+            disabled={!csvText.trim()}
+            className="w-full border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg py-2 text-sm font-semibold hover:bg-indigo-100 disabled:opacity-40">
+            Parse & Preview
+          </button>
+
+          {/* Preview */}
+          {parsedRows && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Preview — {parsedRows.length} row{parsedRows.length !== 1 ? "s" : ""}
+                {parsedRows.filter(r => r.errors.length > 0).length > 0 &&
+                  <span className="text-red-500 ml-2">· {parsedRows.filter(r => r.errors.length > 0).length} with errors</span>}
+                {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 &&
+                  <span className="text-amber-500 ml-2">· {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length} with warnings</span>}
+              </p>
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {["#", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", ""].map(h => (
+                        <th key={h} className="text-left font-semibold text-gray-400 uppercase tracking-wide px-3 py-2">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {parsedRows.map(row => {
+                      const hasErr = row.errors.length > 0;
+                      const hasWarn = row.warnings.length > 0 && !hasErr;
+                      return (
+                        <tr key={row.rowNum} className={hasErr ? "bg-red-50" : hasWarn ? "bg-amber-50" : "bg-white"}>
+                          <td className="px-3 py-2 text-gray-400">{row.rowNum}</td>
+                          <td className="px-3 py-2 font-medium text-gray-800">
+                            {row.resolved.candidate?.name || <span className="text-red-500">{row.raw.candidateEmail}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.resolved.interviewer?.displayName || row.resolved.interviewer?.email || <span className="text-red-500">{row.raw.interviewerEmail}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.resolved.template?.name || <span className="text-red-500">{row.raw.templateName}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.resolved.scheduledDate ? fmt(row.resolved.scheduledDate) : <span className="text-red-500">{row.raw.date}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.resolved.scheduledTime || <span className="text-red-500">{row.raw.time}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{row.raw.round}</td>
+                          <td className="px-3 py-2">
+                            {row.resolved.verdict && (
+                              <span className={`font-semibold ${row.resolved.verdict === "Proceed" ? "text-emerald-600" : row.resolved.verdict === "Reject" ? "text-red-500" : "text-amber-600"}`}>
+                                {row.resolved.verdict}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2">
+                            {hasErr && (
+                              <div className="text-red-600 space-y-0.5">
+                                {row.errors.map((e, i) => <p key={i}>✕ {e}</p>)}
+                              </div>
+                            )}
+                            {hasWarn && (
+                              <div className="text-amber-600 space-y-0.5">
+                                {row.warnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
+                              </div>
+                            )}
+                            {!hasErr && !hasWarn && <span className="text-emerald-500">✓</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {parsedRows.filter(r => r.errors.length === 0).length > 0 && (
+                <div className="flex gap-3 mt-4">
+                  <button
+                    onClick={handleImport}
+                    disabled={importing}
+                    className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                    {importing
+                      ? "Importing…"
+                      : `Import ${parsedRows.filter(r => r.errors.length === 0).length} Interview${parsedRows.filter(r => r.errors.length === 0).length !== 1 ? "s" : ""}`}
+                  </button>
+                  <button onClick={() => setShowImport(false)}
+                    className="px-5 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200">
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {parsedRows.every(r => r.errors.length > 0) && (
+                <div className="mt-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+                  All rows have errors — fix the CSV and re-parse.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

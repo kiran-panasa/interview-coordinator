@@ -188,6 +188,21 @@ export async function submitFeedback(id, feedback) {
   });
 }
 
+export async function importCompletedInterview(data) {
+  const ref = await addDoc(collection(db, "interviews"), {
+    ...data,
+    status: "completed",
+    candidateJoined: true,
+    attendanceMarkedAt: new Date().toISOString(),
+    questionsAsked: [],
+    questionRemarks: {},
+    importedFromSheet: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return ref.id;
+}
+
 // ── Availability ──────────────────────────────────────────────────────────────
 
 export async function getInterviewerAvailability(interviewerId) {
