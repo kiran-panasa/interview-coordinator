@@ -10,6 +10,9 @@ import { usePagination } from "../../hooks/usePagination";
 
 const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", program: "", templateIds: [] };
 
+const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
+const isSwapped = (c) => isUUID(c.name) && !!c.uid && !isUUID(c.uid);
+
 // ── CSV helpers ───────────────────────────────────────────────────────────────
 
 function splitCSVRow(line) {
@@ -158,6 +161,12 @@ export default function CandidatesPage() {
     if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
     await deleteCandidate(c.id);
     setToast({ message: "Candidate deleted." });
+    load();
+  };
+
+  const handleSwapNameUID = async (c) => {
+    await updateCandidate(c.id, { name: c.uid, uid: c.name });
+    setToast({ message: "Name and UID fixed." });
     load();
   };
 
@@ -352,11 +361,18 @@ export default function CandidatesPage() {
                       className="accent-indigo-600 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-semibold text-gray-900">{c.name}</p>
+                    <p className="font-semibold text-gray-900">{isSwapped(c) ? c.uid : c.name}</p>
                     {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
+                    {isSwapped(c) && (
+                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full mt-0.5 inline-block">
+                        ⚠ Name/UID swapped
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">{c.uid || "—"}</span>
+                    <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                      {isSwapped(c) ? c.name : (c.uid || "—")}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{c.email || "—"}</td>
                   <td className="px-4 py-3">
@@ -381,6 +397,7 @@ export default function CandidatesPage() {
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
                       { label: "Edit",   onClick: () => openEdit(c) },
+                      ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
                       { label: "Delete", onClick: () => handleDelete(c), danger: true },
                     ]} />
                   </td>

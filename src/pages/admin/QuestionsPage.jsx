@@ -391,16 +391,16 @@ export default function QuestionsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      <div className="flex border-b border-gray-200 mb-6">
         {[
           { key: "bank",   label: "Question Bank" },
           { key: "review", label: "Review Queue", count: pendingAdhoc.length },
         ].map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-colors flex items-center gap-2 ${
+            className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
               activeTab === tab.key
-                ? "bg-white border border-b-white border-gray-200 text-indigo-700 -mb-px"
-                : "text-gray-500 hover:text-gray-700"
+                ? "border-indigo-600 text-indigo-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}>
             {tab.label}
             {tab.count > 0 && (
@@ -485,11 +485,15 @@ export default function QuestionsPage() {
                             if (!qd.length) return <span className="text-xs text-gray-300">—</span>;
                             return (
                               <div className="flex flex-wrap gap-1">
-                                {qd.slice(0, 2).map(val => (
-                                  <span key={val} className="text-[10px] font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                                    {allDomainTypes.find(d => d.value === val)?.label || val}
-                                  </span>
-                                ))}
+                                {qd.slice(0, 2).map(val => {
+                                  const label = allDomainTypes.find(d => d.value === val)?.label || val;
+                                  return (
+                                    <span key={val} title={label}
+                                      className="text-[10px] text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full truncate max-w-[130px] inline-block">
+                                      {label}
+                                    </span>
+                                  );
+                                })}
                                 {qd.length > 2 && <span className="text-[10px] text-gray-400">+{qd.length - 2}</span>}
                               </div>
                             );
