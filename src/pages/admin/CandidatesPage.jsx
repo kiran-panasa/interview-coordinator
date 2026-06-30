@@ -114,6 +114,7 @@ export default function CandidatesPage() {
   const [csvPreview,   setCsvPreview]   = useState([]);
   const [csvErrors,    setCsvErrors]    = useState([]);
   const [csvImporting, setCsvImporting] = useState(false);
+  const [csvMode,      setCsvMode]      = useState(null); // null | "append" | "replace"
   const fileRef = useRef();
 
   const load = () => getCandidates().then(c => { setCandidates(c); setLoading(false); });
@@ -192,22 +193,28 @@ export default function CandidatesPage() {
     prev.includes(tid) ? prev.filter(id => id !== tid) : [...prev, tid]
   );
 
+  const findExisting = (row) =>
+    candidates.find(c =>
+      (row.email && c.email?.toLowerCase() === row.email.toLowerCase()) ||
+      (row.uid   && c.uid?.toLowerCase()   === row.uid.toLowerCase())
+    );
+
   const handleCSVFile = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const { rows, errors } = parseCandidatesCSV(ev.target.result);
-      setCsvPreview(rows); setCsvErrors(errors);
+      setCsvPreview(rows); setCsvErrors(errors); setCsvMode(null);
     };
     reader.readAsText(file);
     e.target.value = "";
   };
 
-  const handleCSVImport = async () => {
+  const handleCSVImport = async (mode) => {
     if (!csvPreview.length) return;
     setCsvImporting(true);
-    let imported = 0;
+    let created = 0, updated = 0, skipped = 0;
     for (const row of csvPreview) {
       try {
         const { programName, templateNames, ...rest } = row;
@@ -215,16 +222,26 @@ export default function CandidatesPage() {
         const resolvedTemplates = (templateNames || [])
           .map(name => templates.find(t => t.name.toLowerCase() === name.toLowerCase())?.id)
           .filter(Boolean);
-        await createCandidate({ ...rest, program: resolvedProgram, templateIds: resolvedTemplates, createdBy: currentUser.uid });
-        imported++;
+        const payload = { ...rest, program: resolvedProgram, templateIds: resolvedTemplates };
+        const existing = findExisting(row);
+        if (existing) {
+          if (mode === "replace") { await updateCandidate(existing.id, payload); updated++; }
+          else skipped++;
+        } else {
+          await createCandidate({ ...payload, createdBy: currentUser.uid }); created++;
+        }
       } catch { /* skip */ }
     }
-    setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]);
+    setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null);
     load();
-    setToast({ message: `${imported} candidate${imported !== 1 ? "s" : ""} imported.` });
+    const parts = [];
+    if (created) parts.push(`${created} added`);
+    if (updated) parts.push(`${updated} updated`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    setToast({ message: parts.join(", ") + "." });
   };
 
-  const closeCSV = () => { setShowCSV(false); setCsvPreview([]); setCsvErrors([]); };
+  const closeCSV = () => { setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null); };
 
   const filtered = candidates.filter(c =>
     c.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -489,6 +506,28 @@ export default function CandidatesPage() {
             </div>
           )}
 
+          {csvPreview.length > 0 && (() => {
+            const dupeCount = csvPreview.filter(r => findExisting(r)).length;
+            return dupeCount > 0 && csvMode === null ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                <p className="text-sm font-semibold text-amber-800">
+                  {dupeCount} of {csvPreview.length} candidate{dupeCount !== 1 ? "s" : ""} already exist{dupeCount === 1 ? "s" : ""} (matched by email or UID).
+                </p>
+                <p className="text-xs text-amber-700">How would you like to handle duplicates?</p>
+                <div className="flex gap-2">
+                  <button onClick={() => setCsvMode("append")}
+                    className="flex-1 py-2 bg-white border border-amber-300 text-amber-800 text-xs font-semibold rounded-lg hover:bg-amber-100 transition-colors">
+                    Skip duplicates — only add {csvPreview.length - dupeCount} new
+                  </button>
+                  <button onClick={() => setCsvMode("replace")}
+                    className="flex-1 py-2 bg-amber-600 text-white text-xs font-semibold rounded-lg hover:bg-amber-700 transition-colors">
+                    Update existing + add new
+                  </button>
+                </div>
+              </div>
+            ) : null;
+          })()}
+
           {csvPreview.length > 0 && (
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{csvPreview.length} candidates ready to import</p>
@@ -526,10 +565,19 @@ export default function CandidatesPage() {
           <div className="flex gap-3 pt-1">
             <button onClick={closeCSV}
               className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
-            <button onClick={handleCSVImport} disabled={csvImporting || csvPreview.length === 0}
-              className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors">
-              {csvImporting ? "Importing…" : `Import ${csvPreview.length || ""} Candidates`}
-            </button>
+            {csvPreview.length > 0 && (() => {
+              const hasDupes = csvPreview.some(r => findExisting(r));
+              const needsChoice = hasDupes && csvMode === null;
+              const effectiveMode = csvMode || (hasDupes ? null : "append");
+              return (
+                <button
+                  onClick={() => effectiveMode && handleCSVImport(effectiveMode)}
+                  disabled={csvImporting || csvPreview.length === 0 || needsChoice}
+                  className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors">
+                  {csvImporting ? "Importing…" : needsChoice ? "Choose how to handle duplicates ↑" : `Import ${csvPreview.length} Candidates`}
+                </button>
+              );
+            })()}
           </div>
         </div>
       </Modal>
