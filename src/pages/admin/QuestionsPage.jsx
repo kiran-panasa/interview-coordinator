@@ -18,7 +18,7 @@ const DIFF_BADGE = {
   hard:   "bg-red-50 text-red-700 border-red-200",
 };
 
-const BLANK_FORM = { text: "", domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [] };
+const BLANK_FORM = { text: "", domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" };
 
 // ── CSV helpers ────────────────────────────────────────────────────────────────
 
@@ -47,12 +47,13 @@ function parseCSV(text) {
 
   const rawHeaders = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, ""));
   const colMap = {
-    text:       rawHeaders.indexOf("text"),
-    domaintype: rawHeaders.indexOf("domaintype"),
-    difficulty: rawHeaders.indexOf("difficulty"),
-    topic:      rawHeaders.indexOf("topic"),
-    skills:     rawHeaders.indexOf("skills"),
-    templates:  rawHeaders.indexOf("templates"),
+    text:            rawHeaders.indexOf("text"),
+    domaintype:      rawHeaders.indexOf("domaintype"),
+    difficulty:      rawHeaders.indexOf("difficulty"),
+    topic:           rawHeaders.indexOf("topic"),
+    skills:          rawHeaders.indexOf("skills"),
+    templates:       rawHeaders.indexOf("templates"),
+    suggestedanswer: rawHeaders.indexOf("suggestedanswer"),
   };
   if (colMap.text === -1)       return { rows: [], errors: ['Required column "text" not found.'] };
   if (colMap.domaintype === -1) return { rows: [], errors: ['Required column "domainType" not found.'] };
@@ -74,18 +75,19 @@ function parseCSV(text) {
       text,
       domainType,
       difficulty: diff || "medium",
-      topic: get(colMap.topic),
-      skills:    get(colMap.skills).split("|").map(s => s.trim()).filter(Boolean),
-      templates: get(colMap.templates).split("|").map(t => t.trim()).filter(Boolean),
+      topic:           get(colMap.topic),
+      skills:          get(colMap.skills).split("|").map(s => s.trim()).filter(Boolean),
+      templates:       get(colMap.templates).split("|").map(t => t.trim()).filter(Boolean),
+      suggestedAnswer: get(colMap.suggestedanswer),
     });
   }
   return { rows, errors };
 }
 
-const SAMPLE_CSV = `text,domainType,difficulty,topic,skills,templates
-"What is a closure in JavaScript?",coding,medium,Closures,JavaScript,
-"Explain React's reconciliation algorithm.",react_coding,hard,React Internals,ReactJS|JavaScript,
-"Write a function to reverse a linked list.",coding,hard,Data Structures,Python|Java,Template A
+const SAMPLE_CSV = `text,domainType,difficulty,topic,skills,templates,suggestedAnswer
+"What is a closure in JavaScript?",coding,medium,Closures,JavaScript,,"A closure is a function that retains access to its outer scope even after the outer function has returned."
+"Explain React's reconciliation algorithm.",react_coding,hard,React Internals,ReactJS|JavaScript,,"React uses a diffing algorithm to compare virtual DOM trees and update only the changed nodes."
+"Write a function to reverse a linked list.",coding,hard,Data Structures,Python|Java,Template A,
 `;
 
 function downloadSampleCSV() {
@@ -169,6 +171,7 @@ export default function QuestionsPage() {
       text: q.text, domainType: q.domainType || "", skills: q.skills || [],
       topic: q.topic || "", difficulty: q.difficulty || "medium",
       templateIds: templateIdsForQuestion(q.id),
+      suggestedAnswer: q.suggestedAnswer || "",
     });
     setEditTarget(q);
     setShowModal(true);
@@ -257,6 +260,7 @@ export default function QuestionsPage() {
         const qid = await createQuestion({
           text: row.text, domainType: row.domainType,
           difficulty: row.difficulty, topic: row.topic, skills: skillIds,
+          suggestedAnswer: row.suggestedAnswer || "",
         });
         if (templateMatchIds.length > 0) {
           await Promise.all(templateMatchIds.map(tid => addQuestionToTemplate(tid, qid)));
@@ -293,7 +297,7 @@ export default function QuestionsPage() {
 
   const openApprove = (q) => {
     setApproveTarget(q);
-    setApproveForm({ text: q.text, domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [] });
+    setApproveForm({ text: q.text, domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" });
   };
 
   const handleApprove = async () => {
@@ -753,6 +757,16 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggle
         <textarea rows={3} value={form.text}
           onChange={e => setForm(f => ({ ...f, text: e.target.value }))}
           placeholder="e.g. Explain the difference between useMemo and useCallback in React."
+          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+        />
+      </div>
+
+      {/* Suggested answer */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Suggested Answer</label>
+        <textarea rows={4} value={form.suggestedAnswer || ""}
+          onChange={e => setForm(f => ({ ...f, suggestedAnswer: e.target.value }))}
+          placeholder="Key points, expected depth, or a model answer for interviewers to reference…"
           className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
         />
       </div>
