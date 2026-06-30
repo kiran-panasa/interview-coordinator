@@ -21,6 +21,17 @@ function makeFieldId(label) {
   return slug + "_" + Math.random().toString(36).slice(2, 7);
 }
 
+function slugify(label) {
+  return (label || "")
+    .toLowerCase()
+    .replace(/[–—]/g, "_")
+    .replace(/[^a-z0-9\s_]/g, " ")
+    .trim()
+    .replace(/[\s_]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 40) || "domain";
+}
+
 const makeEmptyForm = () => ({
   name: "",
   domains: DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i })),
@@ -63,9 +74,10 @@ function parseTemplateCSV(text) {
 
     } else if (type === "domain") {
       currentField = null;
+      const domainSlug = row[1]?.trim() || slugify(row[2] || "domain");
       currentDomain = {
-        id:             row[1] || `domain_${domainOrder}`,
-        type:           row[1] || "custom",
+        id:             domainSlug,
+        type:           domainSlug,
         label:          row[2] || "Domain",
         order:          domainOrder++,
         enabled:        true,
@@ -525,12 +537,16 @@ function DomainRow({ domain, isFirst, isLast, onChange, onRemove, onMove }) {
         </button>
 
         <input type="text" value={domain.label}
-          onChange={e => onChange({ ...domain, label: e.target.value })}
+          onChange={e => {
+            const label = e.target.value;
+            const slug = slugify(label);
+            onChange({ ...domain, label, id: slug, type: slug });
+          }}
           disabled={!domain.enabled}
           className={`flex-1 text-sm font-semibold bg-transparent border-b border-transparent hover:border-gray-200 focus:border-indigo-400 focus:outline-none py-0.5 transition-colors min-w-0 ${domain.enabled ? "text-gray-800" : "text-gray-400"}`}
         />
 
-        <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-mono flex-shrink-0">{domain.type}</span>
+        <span className="text-[11px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-mono flex-shrink-0">{slugify(domain.label)}</span>
 
         <div className="flex gap-0.5 flex-shrink-0">
           <button type="button" disabled={isFirst} onClick={() => onMove("up")}
@@ -749,6 +765,7 @@ export default function TemplatesPage() {
   const [qbSearch,      setQbSearch]      = useState("");
   const [qbDomainFilter,setQbDomainFilter]= useState("");
   const [saving,        setSaving]        = useState(false);
+  const [migrating,     setMigrating]     = useState(false);
   const [toast,         setToast]         = useState(null);
   const [csvErrors,     setCsvErrors]     = useState([]);
   const csvFileRef = useRef(null);
@@ -853,7 +870,11 @@ export default function TemplatesPage() {
     const rawDomains = (source.domains || []).length > 0
       ? source.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: deepClone(migrateDomainsForEdit(rawDomains)) });
+    const resluggedDomains = deepClone(migrateDomainsForEdit(rawDomains)).map(d => {
+      const slug = slugify(d.label) || d.id;
+      return { ...d, id: slug, type: slug };
+    });
+    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: resluggedDomains });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setAssignedQIds(source.questionIds || []);
     setQbSearch(""); setQbDomainFilter("");
@@ -1078,6 +1099,27 @@ export default function TemplatesPage() {
     return t.program === activeProgram;
   });
 
+  const handleMigrateDomainIds = async () => {
+    if (!confirm(
+      `This will re-generate domain IDs from their labels for all ${templates.length} template(s).\n\nExample: "Drill Down on Web Coding Questions" → drill_down_on_web_coding_questions\n\nContinue?`
+    )) return;
+    setMigrating(true);
+    try {
+      for (const t of templates) {
+        const newDomains = (t.domains || []).map(d => {
+          const slug = slugify(d.label) || d.id;
+          return { ...d, id: slug, type: slug };
+        });
+        await updateTemplate(t.id, { domains: newDomains });
+      }
+      setToast({ message: `${templates.length} template(s) migrated — domain IDs now match labels.` });
+      load();
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setMigrating(false);
+  };
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -1085,13 +1127,22 @@ export default function TemplatesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Interview Templates</h1>
           <p className="text-sm text-gray-500 mt-0.5">Define domains, evaluation fields, and question banks</p>
         </div>
-        <button onClick={openNew}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Template
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleMigrateDomainIds} disabled={migrating || templates.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-50 disabled:opacity-40 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {migrating ? "Migrating…" : "Sync Domain IDs"}
+          </button>
+          <button onClick={openNew}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Template
+          </button>
+        </div>
       </div>
 
       {/* ── Program Tabs ── */}
