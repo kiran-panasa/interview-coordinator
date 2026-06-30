@@ -299,21 +299,21 @@ export default function CandidatesPage() {
 
       {/* ── Program Tabs ── */}
       {programs.length > 0 && (
-        <div className="flex items-center gap-1 mb-5 flex-wrap">
+        <div className="flex border-b border-gray-200 mb-5">
           {[
             { id: "all",        label: "All",        count: candidates.length },
             ...programs.map(p => ({ id: p.id, label: p.name, count: candidates.filter(c => c.program === p.id).length })),
             { id: "unassigned", label: "Unassigned", count: candidates.filter(c => !c.program).length },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
                 activeProgram === tab.id
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900"
+                  ? "border-indigo-600 text-indigo-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}>
               {tab.label}
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                activeProgram === tab.id ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-500"
+                activeProgram === tab.id ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-500"
               }`}>{tab.count}</span>
             </button>
           ))}

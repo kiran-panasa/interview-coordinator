@@ -108,7 +108,7 @@ function downloadInviteSampleExcel() {
   XLSX.writeFile(wb, "invites_sample.xlsx");
 }
 
-const SECTIONS = ["User Management", "Programs"];
+const SECTIONS = ["User Management", "General"];
 
 export default function SettingsPage() {
   const { currentUser } = useAuth();
@@ -615,6 +615,14 @@ export default function SettingsPage() {
             </div>
           )}
 
+        </>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          GENERAL SECTION
+      ══════════════════════════════════════════════════════════════════════ */}
+      {activeSection === "General" && (
+        <div>
           {/* Skills */}
           <div className="mb-8">
             {sectionTitle("bg-violet-400", "Skills")}
@@ -672,18 +680,11 @@ export default function SettingsPage() {
               )}
             </div>
           </div>
-        </>
-      )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          PROGRAMS SECTION
-      ══════════════════════════════════════════════════════════════════════ */}
-      {activeSection === "Programs" && (
-        <div>
-          <div className="flex items-center justify-between mb-6">
-            <p className="text-sm text-gray-500">
-              Programs group templates and candidates. They are used as filter tabs across the app.
-            </p>
+          {/* Programs */}
+          <div className="mb-6">
+            {sectionTitle("bg-indigo-400", "Programs")}
+            <p className="text-xs text-gray-400 mb-4">Programs group templates and candidates. They are used as filter tabs across the app.</p>
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
