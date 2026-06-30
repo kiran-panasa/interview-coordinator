@@ -64,6 +64,17 @@ function normalizeDate(s) {
   return null;
 }
 
+function slugify(label) {
+  return (label || "")
+    .toLowerCase()
+    .replace(/[–—]/g, "_")
+    .replace(/[^a-z0-9\s_]/g, " ")
+    .trim()
+    .replace(/[\s_]+/g, "_")
+    .replace(/^_|_$/g, "")
+    .slice(0, 40) || "field";
+}
+
 function normalizeTime(s) {
   if (!s) return null;
   s = s.trim();
@@ -187,7 +198,9 @@ function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
       const card = {};
       for (const f of domain.cardFields) {
         if (f.type === "scored_dropdown") {
-          const raw = domainData[`${domain.id}_${f.id}_rating`];
+          // Try label-slug column first (new format), fall back to field ID (old format)
+          const raw = domainData[`${domain.id}_${slugify(f.label)}_rating`]
+                   ?? domainData[`${domain.id}_${f.id}_rating`];
           card[f.id] = raw !== "" && raw != null ? parseFloat(raw) : null;
         } else {
           card[f.id] = f.type === "text" ? "" : null;
@@ -248,10 +261,10 @@ function downloadImportTemplate(template) {
       const hasCardFields = (d.cardFields || []).length > 0;
 
       if (hasCardFields) {
-        // One column per scored_dropdown field in the card
+        // One column per scored_dropdown field in the card, named by label slug
         for (const f of d.cardFields) {
           if (f.type === "scored_dropdown") {
-            domainHeaders.push(`${d.id}_${f.id}_rating`);
+            domainHeaders.push(`${d.id}_${slugify(f.label)}_rating`);
             domainExample.push("3");
           }
         }
