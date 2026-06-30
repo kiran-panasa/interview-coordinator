@@ -18,7 +18,7 @@ const DIFF_BADGE = {
   hard:   "bg-red-50 text-red-700 border-red-200",
 };
 
-const BLANK_FORM = { text: "", domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" };
+const BLANK_FORM = { text: "", domainTypes: [], skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" };
 
 // ── CSV helpers ────────────────────────────────────────────────────────────────
 
@@ -64,16 +64,16 @@ function parseCSV(text) {
     const vals = parseCSVLine(lines[i]).map(v => v.trim().replace(/^"|"$/g, "").trim());
     const get  = (col) => (col === -1 ? "" : vals[col] || "");
     const text = get(colMap.text);
-    const domainType = get(colMap.domaintype);
-    if (!text)       { errors.push(`Row ${i + 1}: "text" is empty — skipped.`); continue; }
-    if (!domainType) { errors.push(`Row ${i + 1}: "domainType" is empty — skipped.`); continue; }
+    const domainTypes = get(colMap.domaintype).split("|").map(s => s.trim()).filter(Boolean);
+    if (!text)            { errors.push(`Row ${i + 1}: "text" is empty — skipped.`); continue; }
+    if (!domainTypes.length) { errors.push(`Row ${i + 1}: "domainType" is empty — skipped.`); continue; }
     const diff = get(colMap.difficulty).toLowerCase();
     if (diff && !["easy", "medium", "hard"].includes(diff)) {
       errors.push(`Row ${i + 1}: difficulty "${diff}" invalid (use easy/medium/hard) — skipped.`); continue;
     }
     rows.push({
       text,
-      domainType,
+      domainTypes,
       difficulty: diff || "medium",
       topic:           get(colMap.topic),
       skills:          get(colMap.skills).split("|").map(s => s.trim()).filter(Boolean),
@@ -86,7 +86,7 @@ function parseCSV(text) {
 
 const SAMPLE_CSV = `text,domainType,difficulty,topic,skills,templates,suggestedAnswer
 "What is a closure in JavaScript?",coding,medium,Closures,JavaScript,,"A closure is a function that retains access to its outer scope even after the outer function has returned."
-"Explain React's reconciliation algorithm.",react_coding,hard,React Internals,ReactJS|JavaScript,,"React uses a diffing algorithm to compare virtual DOM trees and update only the changed nodes."
+"Explain React's reconciliation algorithm.",react_coding|coding,hard,React Internals,ReactJS|JavaScript,,"React uses a diffing algorithm to compare virtual DOM trees and update only the changed nodes."
 "Write a function to reverse a linked list.",coding,hard,Data Structures,Python|Java,Template A,
 `;
 
@@ -152,7 +152,8 @@ export default function QuestionsPage() {
       })
     );
     questions.forEach(q => {
-      if (q.domainType && !map.has(q.domainType)) map.set(q.domainType, q.domainType);
+      const types = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
+      types.forEach(val => { if (val && !map.has(val)) map.set(val, val); });
     });
     return [...map.entries()]
       .map(([value, label]) => ({ value, label }))
@@ -168,7 +169,9 @@ export default function QuestionsPage() {
   const openCreate = () => { setForm(BLANK_FORM); setEditTarget(null); setShowModal(true); };
   const openEdit   = (q) => {
     setForm({
-      text: q.text, domainType: q.domainType || "", skills: q.skills || [],
+      text: q.text,
+      domainTypes: Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []),
+      skills: q.skills || [],
       topic: q.topic || "", difficulty: q.difficulty || "medium",
       templateIds: templateIdsForQuestion(q.id),
       suggestedAnswer: q.suggestedAnswer || "",
@@ -190,8 +193,8 @@ export default function QuestionsPage() {
   };
 
   const handleSave = async () => {
-    if (!form.text.trim())       return setToast({ message: "Question text is required.", type: "error" });
-    if (!form.domainType.trim()) return setToast({ message: "Domain type is required.", type: "error" });
+    if (!form.text.trim())          return setToast({ message: "Question text is required.", type: "error" });
+    if (!form.domainTypes?.length)  return setToast({ message: "Select at least one domain type.", type: "error" });
     setSaving(true);
     try {
       const { templateIds, ...questionData } = form;
@@ -258,7 +261,7 @@ export default function QuestionsPage() {
           return t?.id;
         }).filter(Boolean);
         const qid = await createQuestion({
-          text: row.text, domainType: row.domainType,
+          text: row.text, domainTypes: row.domainTypes,
           difficulty: row.difficulty, topic: row.topic, skills: skillIds,
           suggestedAnswer: row.suggestedAnswer || "",
         });
@@ -278,6 +281,14 @@ export default function QuestionsPage() {
 
   // ── Adhoc review actions ─────────────────────────────────────────────────────
 
+  const toggleDomain = (val) => setForm(f => ({
+    ...f,
+    domainTypes: f.domainTypes.includes(val) ? f.domainTypes.filter(d => d !== val) : [...f.domainTypes, val],
+  }));
+  const toggleApproveDomain = (val) => setApproveForm(f => ({
+    ...f,
+    domainTypes: f.domainTypes.includes(val) ? f.domainTypes.filter(d => d !== val) : [...f.domainTypes, val],
+  }));
   const toggleSkill = (sid) => setForm(f => ({
     ...f,
     skills: f.skills.includes(sid) ? f.skills.filter(s => s !== sid) : [...f.skills, sid],
@@ -297,12 +308,12 @@ export default function QuestionsPage() {
 
   const openApprove = (q) => {
     setApproveTarget(q);
-    setApproveForm({ text: q.text, domainType: "", skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" });
+    setApproveForm({ text: q.text, domainTypes: [], skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" });
   };
 
   const handleApprove = async () => {
-    if (!approveForm.text.trim())       return setToast({ message: "Question text is required.", type: "error" });
-    if (!approveForm.domainType.trim()) return setToast({ message: "Domain type is required.", type: "error" });
+    if (!approveForm.text.trim())          return setToast({ message: "Question text is required.", type: "error" });
+    if (!approveForm.domainTypes?.length)  return setToast({ message: "Select at least one domain type.", type: "error" });
     setSaving(true);
     try {
       const { templateIds, ...questionData } = approveForm;
@@ -327,8 +338,9 @@ export default function QuestionsPage() {
   const filtered = questions.filter(q => {
     if (!showArchived && q.status === "archived") return false;
     if (showArchived  && q.status !== "archived") return false;
-    if (filterDomain     && q.domainType !== filterDomain)          return false;
-    if (filterDifficulty && q.difficulty !== filterDifficulty)      return false;
+    const qDomains = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
+    if (filterDomain     && !qDomains.includes(filterDomain))        return false;
+    if (filterDifficulty && q.difficulty !== filterDifficulty)       return false;
     if (filterSkill      && !(q.skills || []).includes(filterSkill)) return false;
     if (filterTemplate   && !(templates.find(t => t.id === filterTemplate)?.questionIds || []).includes(q.id)) return false;
     if (search) {
@@ -336,7 +348,7 @@ export default function QuestionsPage() {
       return (
         q.text?.toLowerCase().includes(sq) ||
         q.topic?.toLowerCase().includes(sq) ||
-        q.domainType?.toLowerCase().includes(sq)
+        qDomains.some(d => d?.toLowerCase().includes(sq))
       );
     }
     return true;
@@ -467,10 +479,21 @@ export default function QuestionsPage() {
                           <p className="text-gray-900 text-sm leading-snug line-clamp-2">{q.text}</p>
                           <p className="text-[10px] font-mono text-gray-300 mt-0.5">#{q.id.slice(0, 8)}</p>
                         </td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full">
-                            {q.domainType || "—"}
-                          </span>
+                        <td className="px-4 py-3 max-w-[160px]">
+                          {(() => {
+                            const qd = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
+                            if (!qd.length) return <span className="text-xs text-gray-300">—</span>;
+                            return (
+                              <div className="flex flex-wrap gap-1">
+                                {qd.slice(0, 2).map(val => (
+                                  <span key={val} className="text-[10px] font-mono text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                                    {allDomainTypes.find(d => d.value === val)?.label || val}
+                                  </span>
+                                ))}
+                                {qd.length > 2 && <span className="text-[10px] text-gray-400">+{qd.length - 2}</span>}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-500 max-w-[100px]">{q.topic || "—"}</td>
                         <td className="px-4 py-3">
@@ -600,7 +623,7 @@ export default function QuestionsPage() {
         <QuestionForm
           form={form} setForm={setForm}
           skills={skills} allDomainTypes={allDomainTypes} templates={templates}
-          toggleSkill={toggleSkill} toggleTemplate={toggleTemplate}
+          toggleDomain={toggleDomain} toggleSkill={toggleSkill} toggleTemplate={toggleTemplate}
           onSave={handleSave} onCancel={() => setShowModal(false)}
           saving={saving} submitLabel={editTarget ? "Update Question" : "Add to Bank"}
         />
@@ -617,7 +640,7 @@ export default function QuestionsPage() {
             <QuestionForm
               form={approveForm} setForm={setApproveForm}
               skills={skills} allDomainTypes={allDomainTypes} templates={templates}
-              toggleSkill={toggleApproveSkill} toggleTemplate={toggleApproveTemplate}
+              toggleDomain={toggleApproveDomain} toggleSkill={toggleApproveSkill} toggleTemplate={toggleApproveTemplate}
               onSave={handleApprove} onCancel={() => setApproveTarget(null)}
               saving={saving} submitLabel="Approve & Add to Bank"
             />
@@ -635,7 +658,7 @@ export default function QuestionsPage() {
               <p className="text-sm font-semibold text-gray-700">CSV Format</p>
               <p className="text-xs text-gray-400 mt-0.5">
                 Columns: <span className="font-mono">text, domainType, difficulty, topic, skills, templates</span>
-                <br />Use <span className="font-mono">|</span> to separate multiple skills or templates per row.
+                <br />Use <span className="font-mono">|</span> to separate multiple domains, skills, or templates per row.
               </p>
             </div>
             <button onClick={downloadSampleCSV}
@@ -711,7 +734,7 @@ export default function QuestionsPage() {
                             <td className="px-3 py-2 max-w-[200px]">
                               <p className="line-clamp-1 text-gray-800">{r.text}</p>
                             </td>
-                            <td className="px-3 py-2 font-mono text-indigo-600">{r.domainType}</td>
+                            <td className="px-3 py-2 font-mono text-indigo-600">{r.domainTypes.join(", ") || "—"}</td>
                             <td className="px-3 py-2 capitalize text-gray-600">{r.difficulty}</td>
                             <td className="px-3 py-2 text-gray-500">{r.templates.join(", ") || "—"}</td>
                           </tr>
@@ -746,7 +769,7 @@ export default function QuestionsPage() {
 
 // ── Reusable question form ────────────────────────────────────────────────────
 
-function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggleSkill, toggleTemplate, onSave, onCancel, saving, submitLabel }) {
+function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggleDomain, toggleSkill, toggleTemplate, onSave, onCancel, saving, submitLabel }) {
   return (
     <div className="space-y-4">
       {/* Question text */}
@@ -771,37 +794,48 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggle
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        {/* Domain type */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-            Domain Type <span className="text-red-400">*</span>
-          </label>
-          <select value={form.domainType}
-            onChange={e => setForm(f => ({ ...f, domainType: e.target.value }))}
-            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-            <option value="">— Select domain type —</option>
+      {/* Domain types */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+          Domain Type <span className="text-red-400">*</span>
+        </label>
+        {allDomainTypes.length === 0 ? (
+          <p className="text-xs text-gray-400">No domain types defined yet — create a template with domains first.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
             {allDomainTypes.map(({ value, label }) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Difficulty */}
-        <div>
-          <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Difficulty</label>
-          <div className="flex gap-2">
-            {["easy", "medium", "hard"].map(d => (
-              <button key={d} type="button" onClick={() => setForm(f => ({ ...f, difficulty: d }))}
-                className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                  form.difficulty === d
-                    ? { easy: "bg-emerald-50 text-emerald-700 border-emerald-300", medium: "bg-amber-50 text-amber-700 border-amber-300", hard: "bg-red-50 text-red-700 border-red-300" }[d]
-                    : "border-gray-200 text-gray-500 hover:bg-gray-50"
+              <button key={value} type="button" onClick={() => toggleDomain(value)}
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                  (form.domainTypes || []).includes(value)
+                    ? "bg-indigo-600 text-white border-indigo-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
                 }`}>
-                {d.charAt(0).toUpperCase() + d.slice(1)}
+                {label}
               </button>
             ))}
           </div>
+        )}
+        {(form.domainTypes || []).length > 0 && (
+          <p className="text-[10px] text-gray-400 mt-1">
+            {(form.domainTypes || []).length} domain{(form.domainTypes || []).length !== 1 ? "s" : ""} selected
+          </p>
+        )}
+      </div>
+
+      {/* Difficulty */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Difficulty</label>
+        <div className="flex gap-2">
+          {["easy", "medium", "hard"].map(d => (
+            <button key={d} type="button" onClick={() => setForm(f => ({ ...f, difficulty: d }))}
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                form.difficulty === d
+                  ? { easy: "bg-emerald-50 text-emerald-700 border-emerald-300", medium: "bg-amber-50 text-amber-700 border-amber-300", hard: "bg-red-50 text-red-700 border-red-300" }[d]
+                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
+              }`}>
+              {d.charAt(0).toUpperCase() + d.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
