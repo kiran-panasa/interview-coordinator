@@ -1098,7 +1098,7 @@ export default function TemplatesPage() {
             {migrating ? "Migrating…" : "Sync Domain IDs"}
           </button>
           <button onClick={openNew}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700">
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
@@ -1223,7 +1223,7 @@ export default function TemplatesPage() {
                       <td className="px-4 py-3 font-semibold text-gray-900">{t.name}</td>
                       <td className="px-4 py-3">
                         {programName
-                          ? <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">{programName}</span>
+                          ? <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full whitespace-nowrap">{programName}</span>
                           : <span className="text-xs text-gray-300">—</span>}
                       </td>
                       <td className="px-4 py-3">

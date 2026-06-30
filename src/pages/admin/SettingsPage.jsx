@@ -579,29 +579,33 @@ export default function SettingsPage() {
                             <td className="px-4 py-3 text-gray-400 text-xs">{inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}</td>
                             <td className="px-4 py-3">
                               {inv.status === "registered" ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                   </svg>
                                   Registered
                                 </span>
                               ) : (
-                                <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">Awaiting signup</span>
+                                <span className="inline-flex items-center text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                  Awaiting signup
+                                </span>
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex gap-3 items-center">
+                              <div className="flex items-center gap-3 whitespace-nowrap">
                                 {inv.status === "pending" && (
                                   <button onClick={() => copyLink(inv.id, inv.email)}
-                                    className={`text-xs font-medium transition-colors flex items-center gap-1 ${copiedId === inv.id ? "text-emerald-600" : "text-indigo-600 hover:text-indigo-800"}`}>
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    className={`text-xs font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap ${copiedId === inv.id ? "text-emerald-600" : "text-indigo-600 hover:text-indigo-800"}`}>
+                                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={copiedId === inv.id ? "M5 13l4 4L19 7" : "M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"} />
                                     </svg>
                                     {copiedId === inv.id ? "Copied!" : "Copy link"}
                                   </button>
                                 )}
                                 <button onClick={() => handleRemoveInvite(inv)}
-                                  className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors">Remove</button>
+                                  className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors whitespace-nowrap">
+                                  Remove
+                                </button>
                               </div>
                             </td>
                           </tr>

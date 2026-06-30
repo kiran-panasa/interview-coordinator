@@ -27,7 +27,7 @@ const LABELS = {
 export default function Badge({ value }) {
   const cls = STYLES[value] || "bg-gray-100 text-gray-600 ring-gray-200";
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${cls}`}>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 whitespace-nowrap ${cls}`}>
       {LABELS[value] ?? value}
     </span>
   );
