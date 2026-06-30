@@ -139,10 +139,23 @@ export default function QuestionsPage() {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
-  const allDomainTypes = [...new Set([
-    ...questions.map(q => q.domainType).filter(Boolean),
-    ...templates.flatMap(t => (t.domains || []).map(d => d.type)).filter(Boolean),
-  ])].sort();
+  // Build { value, label } pairs from template domains (source of truth),
+  // plus any domainTypes already on existing questions that aren't in any template.
+  const allDomainTypes = (() => {
+    const map = new Map(); // value → label
+    templates.forEach(t =>
+      (t.domains || []).forEach(d => {
+        const val = d.id || d.type;
+        if (val && !map.has(val)) map.set(val, d.label || val);
+      })
+    );
+    questions.forEach(q => {
+      if (q.domainType && !map.has(q.domainType)) map.set(q.domainType, q.domainType);
+    });
+    return [...map.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  })();
 
   // compute which template IDs contain a given question ID
   const templateIdsForQuestion = (qid) =>
@@ -395,7 +408,7 @@ export default function QuestionsPage() {
             <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">All Domains</option>
-              {allDomainTypes.map(d => <option key={d} value={d}>{d}</option>)}
+              {allDomainTypes.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
             </select>
             <select value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -750,15 +763,14 @@ function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggle
           <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
             Domain Type <span className="text-red-400">*</span>
           </label>
-          <input list="domain-types-list" value={form.domainType}
+          <select value={form.domainType}
             onChange={e => setForm(f => ({ ...f, domainType: e.target.value }))}
-            placeholder="e.g. react_coding"
-            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <datalist id="domain-types-list">
-            {allDomainTypes.map(d => <option key={d} value={d} />)}
-          </datalist>
-          <p className="text-[10px] text-gray-400 mt-1">Type or pick from existing domain types</p>
+            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+            <option value="">— Select domain type —</option>
+            {allDomainTypes.map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Difficulty */}
