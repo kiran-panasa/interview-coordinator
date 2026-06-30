@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../AuthContext";
-import { getCandidates, createCandidate, updateCandidate, deleteCandidate, getPrograms, getTemplates } from "../../api/firestore";
+import { getCandidates, createCandidate, updateCandidate, deleteCandidate, subscribeToPrograms, getTemplates } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
@@ -91,11 +91,12 @@ function downloadSampleExcel() {
 
 export default function CandidatesPage() {
   const { currentUser } = useAuth();
-  const [candidates, setCandidates] = useState([]);
-  const [programs,   setPrograms]   = useState([]);
-  const [templates,  setTemplates]  = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [search,     setSearch]     = useState("");
+  const [candidates,     setCandidates]     = useState([]);
+  const [programs,       setPrograms]       = useState([]);
+  const [templates,      setTemplates]      = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [activeProgram,  setActiveProgram]  = useState("all");
+  const [search,         setSearch]         = useState("");
   const [showModal,  setShowModal]  = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form,       setForm]       = useState(EMPTY);
@@ -121,8 +122,9 @@ export default function CandidatesPage() {
 
   useEffect(() => {
     load();
-    getPrograms().then(setPrograms);
     getTemplates().then(setTemplates);
+    const unsubPrograms = subscribeToPrograms(setPrograms);
+    return () => unsubPrograms();
   }, []);
 
   const openNew  = () => { setEditTarget(null); setForm(EMPTY); setShowModal(true); };
@@ -243,11 +245,16 @@ export default function CandidatesPage() {
 
   const closeCSV = () => { setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null); };
 
-  const filtered = candidates.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.uid?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = candidates.filter(c => {
+    if (activeProgram === "unassigned" && c.program) return false;
+    if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
+    const q = search.toLowerCase();
+    return (
+      c.name?.toLowerCase().includes(q) ||
+      c.uid?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q)
+    );
+  });
   const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
 
   const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
@@ -289,6 +296,29 @@ export default function CandidatesPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Program Tabs ── */}
+      {programs.length > 0 && (
+        <div className="flex items-center gap-1 mb-5 flex-wrap">
+          {[
+            { id: "all",        label: "All",        count: candidates.length },
+            ...programs.map(p => ({ id: p.id, label: p.name, count: candidates.filter(c => c.program === p.id).length })),
+            { id: "unassigned", label: "Unassigned", count: candidates.filter(c => !c.program).length },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                activeProgram === tab.id
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900"
+              }`}>
+              {tab.label}
+              <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                activeProgram === tab.id ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-500"
+              }`}>{tab.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       <input type="text" placeholder="Search by name, UID, or email…" value={search}
         onChange={e => setSearch(e.target.value)}

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate,
-  subscribeToPrograms, createProgram, updateProgram, deleteProgram,
+  subscribeToPrograms,
   subscribeToInterviews, subscribeToSkills, subscribeToQuestions,
 } from "../../api/firestore";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -774,10 +774,6 @@ export default function TemplatesPage() {
   const [skills,         setSkills]         = useState([]);
 
   const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
-  const [addingProgram,  setAddingProgram]  = useState(false);
-  const [newProgramName, setNewProgramName] = useState("");
-  const [editingProgram, setEditingProgram] = useState(null); // { id, name }
-  const newProgramRef = useRef(null);
 
   const load = () => getTemplates().then(t => { setTemplates(t); setLoading(false); });
   useEffect(() => { load(); }, []);
@@ -789,10 +785,6 @@ export default function TemplatesPage() {
     const unsub4 = subscribeToQuestions(qs => setBankQuestions(qs.filter(q => q.status !== "archived")));
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
-
-  useEffect(() => {
-    if (addingProgram) newProgramRef.current?.focus();
-  }, [addingProgram]);
 
   // Stats per templateId: { [id]: { scheduled, completed, cancelled } }
   const templateStats = interviews.reduce((acc, iv) => {
@@ -894,36 +886,6 @@ export default function TemplatesPage() {
     setQbSearch(""); setQbDomainFilter("");
     setActiveTab("domains");
     setShowModal(true);
-  };
-
-  // Program CRUD
-  const handleAddProgram = async () => {
-    const name = newProgramName.trim();
-    if (!name) return;
-    await createProgram(name, programs.length);
-    setNewProgramName("");
-    setAddingProgram(false);
-  };
-
-  const handleRenameProgram = async () => {
-    if (!editingProgram || !editingProgram.name.trim()) return;
-    await updateProgram(editingProgram.id, { name: editingProgram.name.trim() });
-    setEditingProgram(null);
-  };
-
-  const handleDeleteProgram = async (p) => {
-    const count = templates.filter(t => t.program === p.id).length;
-    const msg = count > 0
-      ? `Delete "${p.name}"? ${count} template(s) will become Unassigned.`
-      : `Delete program "${p.name}"?`;
-    if (!confirm(msg)) return;
-    if (count > 0) {
-      await Promise.all(templates.filter(t => t.program === p.id).map(t => updateTemplate(t.id, { program: "" })));
-    }
-    await deleteProgram(p.id);
-    if (activeProgram === p.id) setActiveProgram("all");
-    setToast({ message: `"${p.name}" deleted.` });
-    load();
   };
 
   // ── CSV import ─────────────────────────────────────────────────────────────
@@ -1145,84 +1107,25 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      {/* ── Program Tabs ── */}
+      {/* ── Program Tabs (filter only — manage programs in Settings) ── */}
       <div className="flex items-center gap-1 mb-6 flex-wrap">
-        {/* All tab */}
         {[
           { id: "all",        label: "All",        count: templates.length },
-          ...programs.map(p => ({ id: p.id, label: p.name, count: templates.filter(t => t.program === p.id).length, prog: p })),
-          { id: "unassigned", label: "Unassigned",  count: templates.filter(t => !t.program).length },
+          ...programs.map(p => ({ id: p.id, label: p.name, count: templates.filter(t => t.program === p.id).length })),
+          { id: "unassigned", label: "Unassigned", count: templates.filter(t => !t.program).length },
         ].map(tab => (
-          <div key={tab.id} className="relative group flex items-center">
-            {editingProgram?.id === tab.id ? (
-              <input
-                autoFocus
-                value={editingProgram.name}
-                onChange={e => setEditingProgram(s => ({ ...s, name: e.target.value }))}
-                onKeyDown={e => { if (e.key === "Enter") handleRenameProgram(); if (e.key === "Escape") setEditingProgram(null); }}
-                onBlur={handleRenameProgram}
-                className="px-3 py-1.5 rounded-lg border border-indigo-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 w-36"
-              />
-            ) : (
-              <button
-                onClick={() => setActiveProgram(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  activeProgram === tab.id
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900"
-                }`}
-              >
-                {tab.label}
-                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                  activeProgram === tab.id ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-500"
-                }`}>{tab.count}</span>
-              </button>
-            )}
-            {/* Rename / delete on program tabs (not All or Unassigned) */}
-            {tab.prog && editingProgram?.id !== tab.id && (
-              <div className="hidden group-hover:flex items-center gap-0.5 absolute -top-2 right-0 bg-white border border-gray-200 rounded-lg shadow-sm px-1 py-0.5 z-10">
-                <button
-                  onClick={() => setEditingProgram({ id: tab.id, name: tab.label })}
-                  className="p-0.5 text-gray-400 hover:text-indigo-600 transition-colors"
-                  title="Rename">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                  </svg>
-                </button>
-                <button
-                  onClick={() => handleDeleteProgram(tab.prog)}
-                  className="p-0.5 text-gray-400 hover:text-red-500 transition-colors"
-                  title="Delete program">
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                </button>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {/* + Add Program */}
-        {addingProgram ? (
-          <input
-            ref={newProgramRef}
-            value={newProgramName}
-            onChange={e => setNewProgramName(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") handleAddProgram(); if (e.key === "Escape") { setAddingProgram(false); setNewProgramName(""); } }}
-            onBlur={() => { if (!newProgramName.trim()) { setAddingProgram(false); setNewProgramName(""); } }}
-            placeholder="Program name…"
-            className="px-3 py-1.5 rounded-lg border border-indigo-400 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-40"
-          />
-        ) : (
-          <button
-            onClick={() => setAddingProgram(true)}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium text-indigo-600 border border-dashed border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-            </svg>
-            Add Program
+          <button key={tab.id} onClick={() => setActiveProgram(tab.id)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              activeProgram === tab.id
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "bg-white border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900"
+            }`}>
+            {tab.label}
+            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+              activeProgram === tab.id ? "bg-indigo-500 text-white" : "bg-gray-100 text-gray-500"
+            }`}>{tab.count}</span>
           </button>
-        )}
+        ))}
       </div>
 
       {/* ── Template list ── */}
