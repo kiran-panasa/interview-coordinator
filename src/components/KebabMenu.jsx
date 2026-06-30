@@ -31,9 +31,12 @@ export default function KebabMenu({ actions }) {
   const handleOpen = () => {
     if (!open) {
       const rect = btnRef.current.getBoundingClientRect();
+      const estimatedHeight = visible.length * 36 + 8;
+      const flipUp = rect.bottom + estimatedHeight > window.innerHeight - 8;
       setPos({
-        top:   rect.bottom + 4,
-        right: window.innerWidth - rect.right,
+        top:    flipUp ? rect.top - estimatedHeight - 4 : rect.bottom + 4,
+        right:  window.innerWidth - rect.right,
+        flipUp,
       });
     }
     setOpen(o => !o);
