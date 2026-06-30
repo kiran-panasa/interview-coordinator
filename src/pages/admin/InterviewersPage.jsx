@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
 import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser, deleteUser, getTemplates } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -36,6 +37,14 @@ export default function InterviewersPage() {
   const [saving,       setSaving]       = useState(false);
   const [search,       setSearch]       = useState("");
   const [toast,        setToast]        = useState(null);
+  const [showExport,   setShowExport]   = useState(false);
+  const exportRef = useRef(null);
+
+  useEffect(() => {
+    const close = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
 
   useEffect(() => {
     const unsub1 = subscribeToUsers(users => {
@@ -97,6 +106,45 @@ export default function InterviewersPage() {
     }
   };
 
+  const buildExportRows = () =>
+    interviewers.map(u => ({
+      name:        u.displayName || "",
+      email:       u.email || "",
+      phone:       u.phone || "",
+      role:        u.role || "",
+      company:     u.company || "",
+      title:       u.companyRole || "",
+      experience:  u.experience != null ? u.experience : "",
+      linkedin:    u.linkedin || "",
+      skills:      (u.skills || []).map(sid => skills.find(s => s.id === sid)?.name || sid).join(" | "),
+      templates:   (u.templateIds || []).map(tid => templates.find(t => t.id === tid)?.name || tid).join(" | "),
+    }));
+
+  const downloadCSV = () => {
+    const cols = ["name", "email", "phone", "role", "company", "title", "experience", "linkedin", "skills", "templates"];
+    const header = cols.join(",");
+    const rows = buildExportRows().map(r =>
+      cols.map(c => {
+        const v = String(r[c] ?? "");
+        return v.includes(",") || v.includes('"') || v.includes("\n") ? `"${v.replace(/"/g, '""')}"` : v;
+      }).join(",")
+    );
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "interviewers.csv" });
+    a.click();
+    setShowExport(false);
+  };
+
+  const downloadExcel = () => {
+    const cols = ["name", "email", "phone", "role", "company", "title", "experience", "linkedin", "skills", "templates"];
+    const ws = XLSX.utils.json_to_sheet(buildExportRows(), { header: cols });
+    ws["!cols"] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 30 }, { wch: 30 }, { wch: 40 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Interviewers");
+    XLSX.writeFile(wb, "interviewers.xlsx");
+    setShowExport(false);
+  };
+
   const today = new Date().toISOString().slice(0, 10);
 
   const filtered = interviewers.filter(u => {
@@ -117,13 +165,49 @@ export default function InterviewersPage() {
           <h1 className="text-2xl font-bold text-gray-900">Interviewers</h1>
           <p className="text-sm text-gray-500 mt-0.5">{interviewers.length} active interviewer{interviewers.length !== 1 ? "s" : ""}</p>
         </div>
-        <input
-          type="text"
-          placeholder="Search by name, email, company…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-64 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+        <div className="flex items-center gap-2">
+          {/* Export dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExport(v => !v)}
+              disabled={interviewers.length === 0}
+              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export
+              <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showExport && (
+              <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden">
+                <button onClick={downloadExcel}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                  <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download Excel (.xlsx)
+                </button>
+                <button onClick={downloadCSV}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-100 transition-colors">
+                  <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download CSV
+                </button>
+              </div>
+            )}
+          </div>
+
+          <input
+            type="text"
+            placeholder="Search by name, email, company…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-64 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
