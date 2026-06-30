@@ -31,12 +31,14 @@ function parseCandidatesCSV(text) {
   const headers = splitCSVRow(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ""));
   const idx = (names) => names.map(n => headers.findIndex(h => h.includes(n))).find(i => i >= 0) ?? -1;
 
-  const nameIdx    = idx(["name"]);
-  const uidIdx     = idx(["uid", "studentid", "id"]);
-  const emailIdx   = idx(["email"]);
-  const phoneIdx   = idx(["phone", "mobile"]);
-  const resumeIdx  = idx(["resume", "link"]);
-  const notesIdx   = idx(["notes", "remarks"]);
+  const nameIdx      = idx(["name"]);
+  const uidIdx       = idx(["uid", "studentid", "id"]);
+  const emailIdx     = idx(["email"]);
+  const phoneIdx     = idx(["phone", "mobile"]);
+  const resumeIdx    = idx(["resume", "link"]);
+  const notesIdx     = idx(["notes", "remarks"]);
+  const programIdx   = idx(["program"]);
+  const templatesIdx = idx(["templates", "template"]);
 
   if (nameIdx === -1) return { rows: [], errors: ["Missing required column: name"] };
 
@@ -47,11 +49,15 @@ function parseCandidatesCSV(text) {
     if (!name) { errors.push(`Row ${i + 1}: name is required`); continue; }
     rows.push({
       name,
-      uid:        uidIdx    >= 0 ? c[uidIdx]?.trim()    || "" : "",
-      email:      emailIdx  >= 0 ? c[emailIdx]?.trim()  || "" : "",
-      phone:      phoneIdx  >= 0 ? c[phoneIdx]?.trim()  || "" : "",
-      resumeLink: resumeIdx >= 0 ? c[resumeIdx]?.trim() || "" : "",
-      notes:      notesIdx  >= 0 ? c[notesIdx]?.trim()  || "" : "",
+      uid:           uidIdx       >= 0 ? c[uidIdx]?.trim()       || "" : "",
+      email:         emailIdx     >= 0 ? c[emailIdx]?.trim()     || "" : "",
+      phone:         phoneIdx     >= 0 ? c[phoneIdx]?.trim()     || "" : "",
+      resumeLink:    resumeIdx    >= 0 ? c[resumeIdx]?.trim()    || "" : "",
+      notes:         notesIdx     >= 0 ? c[notesIdx]?.trim()     || "" : "",
+      programName:   programIdx   >= 0 ? c[programIdx]?.trim()   || "" : "",
+      templateNames: templatesIdx >= 0
+        ? (c[templatesIdx] || "").split("|").map(t => t.trim()).filter(Boolean)
+        : [],
     });
   }
   return { rows, errors };
@@ -59,9 +65,9 @@ function parseCandidatesCSV(text) {
 
 function downloadSampleCSV() {
   const content = [
-    "name,uid,email,phone,resumeLink,notes",
-    "John Doe,STU-2024-001,john.doe@example.com,+91 98765 43210,https://drive.google.com/file/sample,Strong candidate",
-    "Jane Smith,STU-2024-002,jane.smith@example.com,+91 98765 43211,,",
+    "name,uid,email,phone,resumeLink,notes,program,templates",
+    "John Doe,STU-2024-001,john.doe@example.com,+91 98765 43210,https://drive.google.com/file/sample,Strong candidate,NIAT,Product Mastery - Novice|Systems Mastery - Novice || V1",
+    "Jane Smith,STU-2024-002,jane.smith@example.com,+91 98765 43211,,,Academy,",
   ].join("\n");
   const blob = new Blob([content], { type: "text/csv" });
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "candidates_sample.csv" });
@@ -70,11 +76,12 @@ function downloadSampleCSV() {
 
 function downloadSampleExcel() {
   const rows = [
-    { name: "John Doe", uid: "STU-2024-001", email: "john.doe@example.com", phone: "+91 98765 43210", resumeLink: "https://drive.google.com/file/sample", notes: "Strong candidate" },
-    { name: "Jane Smith", uid: "STU-2024-002", email: "jane.smith@example.com", phone: "+91 98765 43211", resumeLink: "", notes: "" },
+    { name: "John Doe", uid: "STU-2024-001", email: "john.doe@example.com", phone: "+91 98765 43210", resumeLink: "https://drive.google.com/file/sample", notes: "Strong candidate", program: "NIAT", templates: "Product Mastery - Novice|Systems Mastery - Novice || V1" },
+    { name: "Jane Smith", uid: "STU-2024-002", email: "jane.smith@example.com", phone: "+91 98765 43211", resumeLink: "", notes: "", program: "Academy", templates: "" },
   ];
-  const ws = XLSX.utils.json_to_sheet(rows, { header: ["name", "uid", "email", "phone", "resumeLink", "notes"] });
-  ws["!cols"] = [{ wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 36 }, { wch: 24 }];
+  const header = ["name", "uid", "email", "phone", "resumeLink", "notes", "program", "templates"];
+  const ws = XLSX.utils.json_to_sheet(rows, { header });
+  ws["!cols"] = [{ wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 36 }, { wch: 24 }, { wch: 14 }, { wch: 48 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Candidates");
   XLSX.writeFile(wb, "candidates_sample.xlsx");
@@ -202,8 +209,15 @@ export default function CandidatesPage() {
     setCsvImporting(true);
     let imported = 0;
     for (const row of csvPreview) {
-      try { await createCandidate({ ...row, createdBy: currentUser.uid }); imported++; }
-      catch { /* skip */ }
+      try {
+        const { programName, templateNames, ...rest } = row;
+        const resolvedProgram = programs.find(p => p.name.toLowerCase() === programName.toLowerCase())?.id || "";
+        const resolvedTemplates = (templateNames || [])
+          .map(name => templates.find(t => t.name.toLowerCase() === name.toLowerCase())?.id)
+          .filter(Boolean);
+        await createCandidate({ ...rest, program: resolvedProgram, templateIds: resolvedTemplates, createdBy: currentUser.uid });
+        imported++;
+      } catch { /* skip */ }
     }
     setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]);
     load();
@@ -442,7 +456,10 @@ export default function CandidatesPage() {
         <div className="space-y-5">
           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-sm font-semibold text-gray-700 mb-0.5">Template format</p>
-            <p className="text-xs text-gray-400 mb-3">Columns: name, uid, email, phone, resumeLink, notes</p>
+            <p className="text-xs text-gray-400 mb-3">
+              Columns: <span className="font-mono">name, uid, email, phone, resumeLink, notes, program, templates</span>
+              <br />Use <span className="font-mono">|</span> to separate multiple templates (e.g. <span className="font-mono">Template A|Template B</span>). Program and template values must match exact names in the system.
+            </p>
             <div className="flex gap-2">
               <button onClick={downloadSampleExcel}
                 className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-3 py-1.5 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
@@ -479,7 +496,7 @@ export default function CandidatesPage() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-gray-50">
                     <tr className="border-b border-gray-200">
-                      {["Name", "UID", "Email", "Phone"].map(h => (
+                      {["Name", "UID", "Email", "Program", "Templates"].map(h => (
                         <th key={h} className="text-left font-semibold text-gray-400 uppercase tracking-wide px-3 py-2">{h}</th>
                       ))}
                     </tr>
@@ -490,7 +507,14 @@ export default function CandidatesPage() {
                         <td className="px-3 py-2 font-semibold text-gray-800">{r.name}</td>
                         <td className="px-3 py-2 font-mono text-gray-600">{r.uid || "—"}</td>
                         <td className="px-3 py-2 text-gray-600">{r.email || "—"}</td>
-                        <td className="px-3 py-2 text-gray-600">{r.phone || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600">{r.programName || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600">
+                          {r.templateNames?.length
+                            ? r.templateNames.map((t, j) => (
+                                <span key={j} className="inline-block text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full mr-1 mb-0.5">{t}</span>
+                              ))
+                            : "—"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
