@@ -410,28 +410,55 @@ export default function InterviewersPage() {
           const upcoming = viewAvail.slots
             .filter(s => s.date >= today)
             .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+          const flaggedSlots = upcoming.filter(s => s.flagged);
           const byDate = {};
           upcoming.forEach(s => { if (!byDate[s.date]) byDate[s.date] = []; byDate[s.date].push(s); });
-          return Object.keys(byDate).length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No upcoming availability set.</p>
-          ) : (
+          return (
             <div className="space-y-4">
-              {Object.entries(byDate).map(([date, daySlots]) => {
-                const [y, m, d] = date.split("-");
-                return (
-                  <div key={date}>
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{`${d}/${m}/${y}`}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {daySlots.map(s => (
-                        <span key={s.id}
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${s.isBooked ? "bg-orange-100 text-orange-700" : "bg-emerald-50 text-emerald-700"}`}>
-                          {s.time} {s.isBooked ? "· Booked" : "· Free"}
-                        </span>
-                      ))}
-                    </div>
+              {/* Flagged conflict banner */}
+              {flaggedSlots.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                  <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  </svg>
+                  <div>
+                    <p className="text-sm font-semibold text-red-700">
+                      {flaggedSlots.length} conflict{flaggedSlots.length !== 1 ? "s" : ""} flagged by interviewer
+                    </p>
+                    <p className="text-xs text-red-500 mt-0.5">
+                      {flaggedSlots.map(s => `${s.date} at ${s.time}`).join(" · ")}
+                    </p>
+                    <p className="text-xs text-red-400 mt-1">Please reassign or cancel the affected interview(s).</p>
                   </div>
-                );
-              })}
+                </div>
+              )}
+
+              {Object.keys(byDate).length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">No upcoming availability set.</p>
+              ) : (
+                Object.entries(byDate).map(([date, daySlots]) => {
+                  const [y, m, d] = date.split("-");
+                  return (
+                    <div key={date}>
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{`${d}/${m}/${y}`}</p>
+                      <div className="flex flex-wrap gap-2">
+                        {daySlots.map(s => (
+                          <span key={s.id}
+                            className={`px-3 py-1 rounded-full text-xs font-medium border ${
+                              s.flagged
+                                ? "bg-red-100 text-red-700 border-red-300"
+                                : s.isBooked
+                                  ? "bg-orange-100 text-orange-700 border-orange-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            }`}>
+                            {s.flagged && "⚑ "}{s.time} · {s.flagged ? "Conflict" : s.isBooked ? "Booked" : "Free"}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           );
         })()}

@@ -253,6 +253,10 @@ export async function markSlotFree(interviewerId, slotId) {
   });
 }
 
+export async function flagAvailabilitySlot(interviewerId, slotId, flagged) {
+  await updateDoc(doc(db, "availability", interviewerId, "slots", slotId), { flagged });
+}
+
 // Returns { [interviewerId]: slot[] } for a list of interviewer ids
 export async function getSlotsForInterviewers(interviewerIds) {
   const result = {};
