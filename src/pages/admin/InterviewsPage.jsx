@@ -32,6 +32,8 @@ const EMPTY_FORM = {
   duration: 60, meetLink: "", round: "", notes: "", templateId: "",
 };
 
+const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
+
 function fmt(dateStr) {
   if (!dateStr) return "—";
   const [y, m, d] = dateStr.split("-");
@@ -495,6 +497,26 @@ export default function InterviewsPage() {
     }
   };
 
+  // When candidateName was stored as a UUID (name/uid swap at import time),
+  // resolve the real name from the candidates list for display.
+  const resolvedName = (iv) => {
+    if (!isUUID(iv.candidateName)) return iv.candidateName;
+    const c = candidates.find(c => c.id === iv.candidateId);
+    if (!c) return iv.candidateName;
+    return isUUID(c.name) && c.uid ? c.uid : c.name;
+  };
+
+  const handleFixName = async (iv) => {
+    const correctName = resolvedName(iv);
+    if (correctName === iv.candidateName) return;
+    try {
+      await updateInterview(iv.id, { candidateName: correctName });
+      setToast({ message: "Candidate name corrected." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   const openFeedback = async (iv) => {
     const tmpl = iv.templateId ? await getTemplate(iv.templateId) : null;
     setFeedbackModal({ interview: iv, template: tmpl });
@@ -645,7 +667,7 @@ export default function InterviewsPage() {
             ) : pagedInterviews.map(iv => (
               <tr key={iv.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-gray-900">{iv.candidateName}</p>
+                  <p className="font-semibold text-gray-900">{resolvedName(iv)}</p>
                   <p className="text-xs text-gray-400">{iv.candidateEmail}</p>
                 </td>
                 <td className="px-4 py-3 text-gray-700 text-xs">
@@ -673,6 +695,12 @@ export default function InterviewsPage() {
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
+                    {
+                      label: "Fix: Correct Name",
+                      onClick: () => handleFixName(iv),
+                      show: isUUID(iv.candidateName),
+                      highlight: true,
+                    },
                     {
                       label: inviting[iv.id] ? "Sending…" : iv.eventId ? "✓ Invite Sent" : "Send Invite",
                       onClick: () => { if (!iv.eventId && !inviting[iv.id]) sendInvite(iv); },
