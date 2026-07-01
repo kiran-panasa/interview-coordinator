@@ -155,7 +155,7 @@ export default function LoginPage() {
               )}
               <p className="text-center text-sm text-gray-500">
                 {mode === "login" ? "No account? " : "Already have one? "}
-                <button type="button" onClick={() => { setMode(m => m === "login" ? "signup" : "login"); setError(""); }}
+                <button type="button" onClick={() => { setMode(m => m === "login" ? "signup" : "login"); setError(""); setPassword(""); setName(""); }}
                   className="text-indigo-600 font-semibold hover:underline">
                   {mode === "login" ? "Sign up" : "Sign in"}
                 </button>
