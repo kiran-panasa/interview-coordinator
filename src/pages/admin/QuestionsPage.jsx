@@ -20,6 +20,14 @@ const DIFF_BADGE = {
 
 const BLANK_FORM = { text: "", domainTypes: [], skills: [], topic: "", difficulty: "medium", templateIds: [], suggestedAnswer: "" };
 
+const BLANK_BULK = {
+  difficulty: "",
+  topic: "", topicEnabled: false,
+  skills: [], skillsMode: "add",
+  domains: [], domainsMode: "add",
+  templateIds: [], templatesMode: "add",
+};
+
 // ── CSV helpers ────────────────────────────────────────────────────────────────
 
 function parseCSVLine(line) {
@@ -133,6 +141,13 @@ export default function QuestionsPage() {
   const [filterTopic,      setFilterTopic]      = useState("");
   const [filterTemplate,   setFilterTemplate]   = useState("");
 
+  // Bulk edit
+  const [selected,      setSelected]      = useState(new Set());
+  const [showBulkEdit,  setShowBulkEdit]  = useState(false);
+  const [bulkForm,      setBulkForm]      = useState(BLANK_BULK);
+  const [bulkSaving,    setBulkSaving]    = useState(false);
+  const [bulkProgress,  setBulkProgress]  = useState(null);
+
   useEffect(() => {
     const unsub1 = subscribeToQuestions(setQuestions);
     const unsub2 = subscribeToSkills(setSkills);
@@ -229,6 +244,96 @@ export default function QuestionsPage() {
       setToast({ message: "Question restored." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
+
+  // ── Bulk select / edit ──────────────────────────────────────────────────────
+
+  const toggleSelect = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleSelectAll = () => {
+    if (selected.size === filtered.length && filtered.length > 0) setSelected(new Set());
+    else setSelected(new Set(filtered.map(q => q.id)));
+  };
+
+  const toggleBulkDomain = (val) => setBulkForm(f => ({
+    ...f,
+    domains: f.domains.includes(val) ? f.domains.filter(d => d !== val) : [...f.domains, val],
+  }));
+  const toggleBulkSkill = (sid) => setBulkForm(f => ({
+    ...f,
+    skills: f.skills.includes(sid) ? f.skills.filter(s => s !== sid) : [...f.skills, sid],
+  }));
+  const toggleBulkTemplate = (tid) => setBulkForm(f => ({
+    ...f,
+    templateIds: f.templateIds.includes(tid) ? f.templateIds.filter(t => t !== tid) : [...f.templateIds, tid],
+  }));
+
+  const handleBulkEdit = async () => {
+    const ids = [...selected];
+    const total = ids.length;
+    setBulkSaving(true);
+    setBulkProgress({ done: 0, total });
+    try {
+      for (let i = 0; i < ids.length; i++) {
+        const qid = ids[i];
+        const q = questions.find(x => x.id === qid);
+        const updates = {};
+
+        if (bulkForm.difficulty) updates.difficulty = bulkForm.difficulty;
+
+        if (bulkForm.topicEnabled) updates.topic = bulkForm.topic;
+
+        if (bulkForm.skills.length > 0) {
+          if (bulkForm.skillsMode === "replace") {
+            updates.skills = bulkForm.skills;
+          } else {
+            updates.skills = [...new Set([...(q?.skills || []), ...bulkForm.skills])];
+          }
+        }
+
+        if (bulkForm.domains.length > 0) {
+          const existing = Array.isArray(q?.domainTypes) ? q.domainTypes : (q?.domainType ? [q.domainType] : []);
+          if (bulkForm.domainsMode === "replace") {
+            updates.domainTypes = bulkForm.domains;
+          } else {
+            updates.domainTypes = [...new Set([...existing, ...bulkForm.domains])];
+          }
+        }
+
+        if (Object.keys(updates).length > 0) await updateQuestion(qid, updates);
+
+        if (bulkForm.templateIds.length > 0) {
+          const prevTids = templateIdsForQuestion(qid);
+          if (bulkForm.templatesMode === "add") {
+            const toAdd = bulkForm.templateIds.filter(tid => !prevTids.includes(tid));
+            if (toAdd.length) await Promise.all(toAdd.map(tid => addQuestionToTemplate(tid, qid)));
+          } else {
+            const toRemove = bulkForm.templateIds.filter(tid => prevTids.includes(tid));
+            if (toRemove.length) await Promise.all(toRemove.map(tid => removeQuestionFromTemplate(tid, qid)));
+          }
+        }
+
+        setBulkProgress({ done: i + 1, total });
+      }
+
+      if (bulkForm.templateIds.length > 0) getTemplates().then(setTemplates);
+      setShowBulkEdit(false);
+      setSelected(new Set());
+      setBulkForm(BLANK_BULK);
+      setBulkProgress(null);
+      setToast({ message: `${total} question${total !== 1 ? "s" : ""} updated.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+      setBulkProgress(null);
+    }
+    setBulkSaving(false);
+  };
+
+  const bulkHasChanges = bulkForm.difficulty || bulkForm.topicEnabled ||
+    bulkForm.skills.length > 0 || bulkForm.domains.length > 0 || bulkForm.templateIds.length > 0;
 
   // ── Bulk upload ──────────────────────────────────────────────────────────────
 
@@ -376,6 +481,15 @@ export default function QuestionsPage() {
         </div>
         {activeTab === "bank" && (
           <div className="flex gap-2">
+            {selected.size > 0 && (
+              <button onClick={() => setShowBulkEdit(true)}
+                className="flex items-center gap-2 bg-amber-50 border border-amber-300 text-amber-800 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-amber-100 transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit selected ({selected.size})
+              </button>
+            )}
             <button onClick={() => setShowBulkModal(true)}
               className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -474,6 +588,14 @@ export default function QuestionsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
+                    <th className="pl-4 pr-2 py-3 w-8">
+                      <input type="checkbox"
+                        checked={filtered.length > 0 && selected.size === filtered.length}
+                        ref={el => { if (el) el.indeterminate = selected.size > 0 && selected.size < filtered.length; }}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                    </th>
                     {["Question", "Domain", "Topic", "Skills", "Difficulty", "Templates", "Used", ""].map((h, i) => (
                       <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                     ))}
@@ -483,7 +605,12 @@ export default function QuestionsPage() {
                   {paged.map(q => {
                     const qTemplates = templates.filter(t => (t.questionIds || []).includes(q.id));
                     return (
-                      <tr key={q.id} className={`hover:bg-gray-50 ${q.status === "archived" ? "opacity-50" : ""}`}>
+                      <tr key={q.id} className={`hover:bg-gray-50 ${selected.has(q.id) ? "bg-indigo-50/60" : ""} ${q.status === "archived" ? "opacity-50" : ""}`}>
+                        <td className="pl-4 pr-2 py-3 w-8">
+                          <input type="checkbox" checked={selected.has(q.id)} onChange={() => toggleSelect(q.id)}
+                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          />
+                        </td>
                         <td className="px-4 py-3 max-w-[220px]">
                           <p className="text-gray-900 text-sm leading-snug line-clamp-2">{q.text}</p>
                           <p className="text-[10px] font-mono text-gray-300 mt-0.5">#{q.id.slice(0, 8)}</p>
@@ -772,6 +899,156 @@ export default function QuestionsPage() {
               </div>
             </div>
           )}
+        </div>
+      </Modal>
+
+      {/* Bulk Edit modal */}
+      <Modal open={showBulkEdit} onClose={() => { setShowBulkEdit(false); setBulkForm(BLANK_BULK); }} title={`Bulk Edit — ${selected.size} Question${selected.size !== 1 ? "s" : ""}`} wide>
+        <div className="space-y-5">
+          {/* Difficulty */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Difficulty</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setBulkForm(f => ({ ...f, difficulty: "" }))}
+                className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${!bulkForm.difficulty ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"}`}>
+                No change
+              </button>
+              {DIFFICULTIES.map(d => (
+                <button key={d} type="button" onClick={() => setBulkForm(f => ({ ...f, difficulty: d }))}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors capitalize ${
+                    bulkForm.difficulty === d
+                      ? "bg-indigo-600 text-white border-indigo-600"
+                      : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                  }`}>
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Topic */}
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Topic</label>
+              <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer">
+                <input type="checkbox" checked={bulkForm.topicEnabled} onChange={e => setBulkForm(f => ({ ...f, topicEnabled: e.target.checked }))}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Overwrite topic on all selected
+              </label>
+            </div>
+            {bulkForm.topicEnabled && (
+              <input type="text" value={bulkForm.topic} onChange={e => setBulkForm(f => ({ ...f, topic: e.target.value }))}
+                placeholder="e.g. Data Structures"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            )}
+          </div>
+
+          {/* Skills */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Skills</label>
+              <div className="flex gap-1 text-xs">
+                {["add", "replace"].map(mode => (
+                  <button key={mode} type="button" onClick={() => setBulkForm(f => ({ ...f, skillsMode: mode }))}
+                    className={`px-2.5 py-1 rounded-lg border capitalize transition-colors ${bulkForm.skillsMode === mode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                    {mode === "add" ? "Add to existing" : "Replace all"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
+              {skills.map(s => (
+                <button key={s.id} type="button" onClick={() => toggleBulkSkill(s.id)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    bulkForm.skills.includes(s.id) ? "bg-violet-600 text-white border-violet-600" : "bg-white text-gray-600 border-gray-200 hover:border-violet-300"
+                  }`}>
+                  {s.name}
+                </button>
+              ))}
+              {skills.length === 0 && <p className="text-xs text-gray-400">No skills defined.</p>}
+            </div>
+          </div>
+
+          {/* Domain Types */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Domain Types</label>
+              <div className="flex gap-1 text-xs">
+                {["add", "replace"].map(mode => (
+                  <button key={mode} type="button" onClick={() => setBulkForm(f => ({ ...f, domainsMode: mode }))}
+                    className={`px-2.5 py-1 rounded-lg border capitalize transition-colors ${bulkForm.domainsMode === mode ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                    {mode === "add" ? "Add to existing" : "Replace all"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
+              {allDomainTypes.map(({ value, label }) => (
+                <button key={value} type="button" onClick={() => toggleBulkDomain(value)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    bulkForm.domains.includes(value) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Templates */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Templates</label>
+              <div className="flex gap-1 text-xs">
+                {[{ key: "add", label: "Add to" }, { key: "remove", label: "Remove from" }].map(({ key, label }) => (
+                  <button key={key} type="button" onClick={() => setBulkForm(f => ({ ...f, templatesMode: key }))}
+                    className={`px-2.5 py-1 rounded-lg border transition-colors ${bulkForm.templatesMode === key ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
+              {templates.map(t => (
+                <button key={t.id} type="button" onClick={() => toggleBulkTemplate(t.id)}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                    bulkForm.templateIds.includes(t.id) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-200 hover:border-emerald-300"
+                  }`}>
+                  {t.name}
+                </button>
+              ))}
+              {templates.length === 0 && <p className="text-xs text-gray-400">No templates defined.</p>}
+            </div>
+          </div>
+
+          {/* Progress */}
+          {bulkProgress && (
+            <div className="space-y-1.5">
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>Saving…</span>
+                <span>{bulkProgress.done} / {bulkProgress.total}</span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                <div
+                  className="bg-indigo-600 h-1.5 rounded-full transition-all"
+                  style={{ width: `${Math.round((bulkProgress.done / bulkProgress.total) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleBulkEdit} disabled={bulkSaving || !bulkHasChanges}
+              className="flex-1 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              {bulkSaving ? "Saving…" : `Apply to ${selected.size} Question${selected.size !== 1 ? "s" : ""}`}
+            </button>
+            <button onClick={() => { setShowBulkEdit(false); setBulkForm(BLANK_BULK); }}
+              className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-200 transition-colors">
+              Cancel
+            </button>
+          </div>
         </div>
       </Modal>
 
