@@ -363,11 +363,6 @@ export default function CandidatesPage() {
                   <td className="px-4 py-3">
                     <p className="font-semibold text-gray-900">{isSwapped(c) ? c.uid : c.name}</p>
                     {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
-                    {isSwapped(c) && (
-                      <span className="text-[10px] text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full mt-0.5 inline-block">
-                        ⚠ Name/UID swapped
-                      </span>
-                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
