@@ -8,11 +8,15 @@ import {
   addQuestionToTemplate, removeQuestionFromTemplate,
 } from "../../api/firestore";
 import { useSkills, useTemplates, QK } from "../../hooks/queries";
+import { parseCSV as parseQuestionCSV, downloadSampleCSV } from "../../utils/questionCSV";
+import QuestionForm from "../../components/questions/QuestionForm";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
 const DIFF_BADGE = {
@@ -30,84 +34,6 @@ const BLANK_BULK = {
   domains: [], domainsMode: "add",
   templateIds: [], templatesMode: "add",
 };
-
-// ── CSV helpers ────────────────────────────────────────────────────────────────
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current); current = "";
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
-}
-
-function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
-  if (lines.length < 2) return { rows: [], errors: ["Need a header row plus at least one data row."] };
-
-  const rawHeaders = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, ""));
-  const colMap = {
-    text:            rawHeaders.indexOf("text"),
-    domaintype:      rawHeaders.indexOf("domaintype"),
-    difficulty:      rawHeaders.indexOf("difficulty"),
-    topic:           rawHeaders.indexOf("topic"),
-    skills:          rawHeaders.indexOf("skills"),
-    templates:       rawHeaders.indexOf("templates"),
-    suggestedanswer: rawHeaders.indexOf("suggestedanswer"),
-  };
-  if (colMap.text === -1)       return { rows: [], errors: ['Required column "text" not found.'] };
-  if (colMap.domaintype === -1) return { rows: [], errors: ['Required column "domainType" not found.'] };
-
-  const rows = [];
-  const errors = [];
-  for (let i = 1; i < lines.length; i++) {
-    const vals = parseCSVLine(lines[i]).map(v => v.trim().replace(/^"|"$/g, "").trim());
-    const get  = (col) => (col === -1 ? "" : vals[col] || "");
-    const text = get(colMap.text);
-    const domainTypes = get(colMap.domaintype).split("|").map(s => s.trim()).filter(Boolean);
-    if (!text)            { errors.push(`Row ${i + 1}: "text" is empty — skipped.`); continue; }
-    if (!domainTypes.length) { errors.push(`Row ${i + 1}: "domainType" is empty — skipped.`); continue; }
-    const diff = get(colMap.difficulty).toLowerCase();
-    if (diff && !["easy", "medium", "hard"].includes(diff)) {
-      errors.push(`Row ${i + 1}: difficulty "${diff}" invalid (use easy/medium/hard) — skipped.`); continue;
-    }
-    rows.push({
-      text,
-      domainTypes,
-      difficulty: diff || "medium",
-      topic:           get(colMap.topic),
-      skills:          get(colMap.skills).split("|").map(s => s.trim()).filter(Boolean),
-      templates:       get(colMap.templates).split("|").map(t => t.trim()).filter(Boolean),
-      suggestedAnswer: get(colMap.suggestedanswer),
-    });
-  }
-  return { rows, errors };
-}
-
-const SAMPLE_CSV = `text,domainType,difficulty,topic,skills,templates,suggestedAnswer
-"What is a closure in JavaScript?",coding,medium,Closures,JavaScript,,"A closure is a function that retains access to its outer scope even after the outer function has returned."
-"Explain React's reconciliation algorithm.",react_coding|coding,hard,React Internals,ReactJS|JavaScript,,"React uses a diffing algorithm to compare virtual DOM trees and update only the changed nodes."
-"Write a function to reverse a linked list.",coding,hard,Data Structures,Python|Java,Template A,
-`;
-
-function downloadSampleCSV() {
-  const blob = new Blob([SAMPLE_CSV], { type: "text/csv" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href = url; a.download = "questions_template.csv"; a.click();
-  URL.revokeObjectURL(url);
-}
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -350,7 +276,7 @@ export default function QuestionsPage() {
   };
 
   const handleBulkParse = () => {
-    const result = parseCSV(bulkText);
+    const result = parseQuestionCSV(bulkText);
     setBulkPreview(result);
   };
 
@@ -1057,145 +983,3 @@ export default function QuestionsPage() {
   );
 }
 
-// ── Reusable question form ────────────────────────────────────────────────────
-
-function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggleDomain, toggleSkill, toggleTemplate, onSave, onCancel, saving, submitLabel }) {
-  return (
-    <div className="space-y-4">
-      {/* Question text */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-          Question <span className="text-red-400">*</span>
-        </label>
-        <textarea rows={3} value={form.text}
-          onChange={e => setForm(f => ({ ...f, text: e.target.value }))}
-          placeholder="e.g. Explain the difference between useMemo and useCallback in React."
-          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-        />
-      </div>
-
-      {/* Suggested answer */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Suggested Answer</label>
-        <textarea rows={4} value={form.suggestedAnswer || ""}
-          onChange={e => setForm(f => ({ ...f, suggestedAnswer: e.target.value }))}
-          placeholder="Key points, expected depth, or a model answer for interviewers to reference…"
-          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-        />
-      </div>
-
-      {/* Domain types */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
-          Domain Type <span className="text-red-400">*</span>
-        </label>
-        {allDomainTypes.length === 0 ? (
-          <p className="text-xs text-gray-400">No domain types defined yet — create a template with domains first.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
-            {allDomainTypes.map(({ value, label }) => (
-              <button key={value} type="button" onClick={() => toggleDomain(value)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                  (form.domainTypes || []).includes(value)
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
-                }`}>
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-        {(form.domainTypes || []).length > 0 && (
-          <p className="text-[10px] text-gray-400 mt-1">
-            {(form.domainTypes || []).length} domain{(form.domainTypes || []).length !== 1 ? "s" : ""} selected
-          </p>
-        )}
-      </div>
-
-      {/* Difficulty */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Difficulty</label>
-        <div className="flex gap-2">
-          {["easy", "medium", "hard"].map(d => (
-            <button key={d} type="button" onClick={() => setForm(f => ({ ...f, difficulty: d }))}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
-                form.difficulty === d
-                  ? { easy: "bg-emerald-50 text-emerald-700 border-emerald-300", medium: "bg-amber-50 text-amber-700 border-amber-300", hard: "bg-red-50 text-red-700 border-red-300" }[d]
-                  : "border-gray-200 text-gray-500 hover:bg-gray-50"
-              }`}>
-              {d.charAt(0).toUpperCase() + d.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Topic */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Topic</label>
-        <input value={form.topic}
-          onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
-          placeholder="e.g. React Hooks, Async JS, System Design…"
-          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
-
-      {/* Skills */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Skills</label>
-        {skills.length === 0 ? (
-          <p className="text-xs text-gray-400">No skills defined yet — add them in Admin Panel.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
-            {skills.map(s => (
-              <button key={s.id} type="button" onClick={() => toggleSkill(s.id)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                  form.skills.includes(s.id)
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
-                }`}>
-                {s.name}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Templates */}
-      <div>
-        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Assign to Templates</label>
-        {templates.length === 0 ? (
-          <p className="text-xs text-gray-400">No templates defined yet.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-3 max-h-28 overflow-y-auto">
-            {templates.map(t => (
-              <button key={t.id} type="button" onClick={() => toggleTemplate(t.id)}
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
-                  (form.templateIds || []).includes(t.id)
-                    ? "bg-violet-600 text-white border-violet-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-violet-300"
-                }`}>
-                {t.name}
-              </button>
-            ))}
-          </div>
-        )}
-        {(form.templateIds || []).length > 0 && (
-          <p className="text-[10px] text-gray-400 mt-1">
-            Assigned to {(form.templateIds || []).length} template{(form.templateIds || []).length !== 1 ? "s" : ""}
-          </p>
-        )}
-      </div>
-
-      <div className="flex gap-3 pt-1">
-        <button onClick={onSave} disabled={saving}
-          className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-          {saving ? "Saving…" : submitLabel}
-        </button>
-        <button onClick={onCancel}
-          className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
