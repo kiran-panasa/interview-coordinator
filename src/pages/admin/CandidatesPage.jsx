@@ -147,12 +147,15 @@ export default function CandidatesPage() {
     try {
       if (editTarget) {
         await updateCandidate(editTarget.id, form);
+        setCandidates(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...form } : c));
         setToast({ message: "Candidate updated." });
       } else {
-        await createCandidate({ ...form, createdBy: currentUser.uid });
+        const createdAt = new Date().toISOString();
+        const id = await createCandidate({ ...form, createdBy: currentUser.uid });
+        setCandidates(prev => [{ id, ...form, createdAt, createdBy: currentUser.uid }, ...prev]);
         setToast({ message: "Candidate added." });
       }
-      setShowModal(false); load();
+      setShowModal(false);
     } catch (e) { setToast({ message: e.message, type: "error" }); }
     setSaving(false);
   };
@@ -160,14 +163,14 @@ export default function CandidatesPage() {
   const handleDelete = async (c) => {
     if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
     await deleteCandidate(c.id);
+    setCandidates(prev => prev.filter(x => x.id !== c.id));
     setToast({ message: "Candidate deleted." });
-    load();
   };
 
   const handleSwapNameUID = async (c) => {
     await updateCandidate(c.id, { name: c.uid, uid: c.name });
+    setCandidates(prev => prev.map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
     setToast({ message: "Name and UID fixed." });
-    load();
   };
 
   const handleBulkSave = async () => {
@@ -180,11 +183,11 @@ export default function CandidatesPage() {
       if (bulkProgram)           updates.program     = bulkProgram;
       if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
       for (const id of selected) await updateCandidate(id, updates);
+      setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c));
       setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
       setShowBulk(false);
       setSelected(new Set());
       setBulkProgram(""); setBulkTemplates([]);
-      load();
     } catch (e) { setToast({ message: e.message, type: "error" }); }
     setBulkSaving(false);
   };
@@ -226,6 +229,7 @@ export default function CandidatesPage() {
     if (!csvPreview.length) return;
     setCsvImporting(true);
     let created = 0, updated = 0, skipped = 0;
+    const newRows = [], updatedRows = [];
     for (const row of csvPreview) {
       try {
         const { programName, templateNames, ...rest } = row;
@@ -236,15 +240,25 @@ export default function CandidatesPage() {
         const payload = { ...rest, program: resolvedProgram, templateIds: resolvedTemplates };
         const existing = findExisting(row);
         if (existing) {
-          if (mode === "replace") { await updateCandidate(existing.id, payload); updated++; }
-          else skipped++;
+          if (mode === "replace") {
+            await updateCandidate(existing.id, payload);
+            updatedRows.push({ id: existing.id, ...payload });
+            updated++;
+          } else skipped++;
         } else {
-          await createCandidate({ ...payload, createdBy: currentUser.uid }); created++;
+          const createdAt = new Date().toISOString();
+          const id = await createCandidate({ ...payload, createdBy: currentUser.uid });
+          newRows.push({ id, ...payload, createdAt, createdBy: currentUser.uid });
+          created++;
         }
       } catch { /* skip */ }
     }
+    setCandidates(prev => {
+      const updatedMap = new Map(updatedRows.map(r => [r.id, r]));
+      const merged = prev.map(c => updatedMap.has(c.id) ? { ...c, ...updatedMap.get(c.id) } : c);
+      return [...newRows, ...merged];
+    });
     setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null);
-    load();
     const parts = [];
     if (created) parts.push(`${created} added`);
     if (updated) parts.push(`${updated} updated`);

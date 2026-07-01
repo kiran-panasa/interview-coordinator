@@ -579,6 +579,15 @@ export async function markOtpUsed(id) {
 // ── Available slots for a template + date range ───────────────────────────────
 
 export async function getAvailableSlotsForTemplate(templateId, dateStart, dateEnd) {
+  const cacheKey = `avail_${templateId}_${dateStart}_${dateEnd}`;
+  try {
+    const cached = sessionStorage.getItem(cacheKey);
+    if (cached) {
+      const { data, ts } = JSON.parse(cached);
+      if (Date.now() - ts < 5 * 60 * 1000) return data;
+    }
+  } catch { /* sessionStorage unavailable */ }
+
   const usersSnap = await getDocs(collection(db, "users"));
   const interviewers = usersSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
@@ -589,7 +598,7 @@ export async function getAvailableSlotsForTemplate(templateId, dateStart, dateEn
     );
 
   const result = [];
-  for (const ivr of interviewers) {
+  await Promise.all(interviewers.map(async ivr => {
     const slotsSnap = await getDocs(query(
       collection(db, "availability", ivr.id, "slots"),
       where("date", ">=", dateStart),
@@ -599,17 +608,21 @@ export async function getAvailableSlotsForTemplate(templateId, dateStart, dateEn
       const slot = d.data();
       if (!slot.isBooked) {
         result.push({
-          slotId:          d.id,
-          interviewerId:   ivr.id,
-          interviewerName: ivr.displayName || ivr.email,
+          slotId:           d.id,
+          interviewerId:    ivr.id,
+          interviewerName:  ivr.displayName || ivr.email,
           interviewerEmail: ivr.email,
           date: slot.date,
           time: slot.time,
         });
       }
     });
-  }
+  }));
   result.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+
+  try { sessionStorage.setItem(cacheKey, JSON.stringify({ data: result, ts: Date.now() })); }
+  catch { /* sessionStorage full or unavailable */ }
+
   return result;
 }
 

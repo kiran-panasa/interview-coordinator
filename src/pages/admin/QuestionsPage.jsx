@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import { useOutletContext } from "react-router-dom";
 import {
   subscribeToQuestions, createQuestion, updateQuestion, archiveQuestion,
   subscribeToSkills, getTemplates,
-  subscribeToAdhocQuestions, approveAdhocQuestion, rejectAdhocQuestion,
+  approveAdhocQuestion, rejectAdhocQuestion,
   addQuestionToTemplate, removeQuestionFromTemplate,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
@@ -109,9 +110,9 @@ function downloadSampleCSV() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function QuestionsPage() {
+  const { adhocQs = [] } = useOutletContext() || {};
   const [activeTab,    setActiveTab]    = useState("bank");
   const [questions,    setQuestions]    = useState([]);
-  const [adhocQs,      setAdhocQs]      = useState([]);
   const [skills,       setSkills]       = useState([]);
   const [templates,    setTemplates]    = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -151,10 +152,9 @@ export default function QuestionsPage() {
   useEffect(() => {
     const unsub1 = subscribeToQuestions(setQuestions);
     const unsub2 = subscribeToSkills(setSkills);
-    const unsub3 = subscribeToAdhocQuestions(setAdhocQs);
     setLoading(false);
     getTemplates().then(setTemplates);
-    return () => { unsub1(); unsub2(); unsub3(); };
+    return () => { unsub1(); unsub2(); };
   }, []);
 
   // Build { value, label } pairs from template domains (source of truth),

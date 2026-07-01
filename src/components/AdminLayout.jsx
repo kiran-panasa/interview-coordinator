@@ -25,17 +25,16 @@ export default function AdminLayout() {
   const role = userProfile?.role || "admin";
   const nav = ALL_NAV.filter(item => item.roles.includes(role));
 
-  const [unread,       setUnread]       = useState(0);
-  const [pendingAdhoc, setPendingAdhoc] = useState(0);
+  const [unread,    setUnread]    = useState(0);
+  const [adhocQs,   setAdhocQs]  = useState([]);
+  const pendingAdhoc = adhocQs.filter(q => q.status === "pending").length;
 
   useEffect(() => {
     if (!currentUser?.uid) return;
     const unsub1 = subscribeToUserNotifications(currentUser.uid, (notifs) => {
       setUnread(notifs.filter(n => n.type === "response" && n.status === "unread").length);
     });
-    const unsub2 = subscribeToAdhocQuestions((qs) => {
-      setPendingAdhoc(qs.filter(q => q.status === "pending").length);
-    });
+    const unsub2 = subscribeToAdhocQuestions(setAdhocQs);
     return () => { unsub1(); unsub2(); };
   }, [currentUser?.uid]);
 
@@ -96,7 +95,7 @@ export default function AdminLayout() {
       </aside>
 
       <main className="ml-60 flex-1 min-h-screen">
-        <Outlet />
+        <Outlet context={{ adhocQs }} />
       </main>
     </div>
   );

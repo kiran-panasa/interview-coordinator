@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate,
   subscribeToPrograms,
-  subscribeToInterviews, subscribeToSkills, subscribeToQuestions,
+  subscribeToInterviews, subscribeToSkills, getQuestions,
 } from "../../api/firestore";
 import SkillsSelect from "../../components/SkillsSelect";
 import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
@@ -760,7 +760,8 @@ export default function TemplatesPage() {
   const [form,          setForm]          = useState(makeEmptyForm);
   const [qbTexts,       setQbTexts]       = useState({ theory: "", coding: "", project: "", resume: "" });
   const [activeTab,     setActiveTab]     = useState("domains");
-  const [bankQuestions, setBankQuestions] = useState([]);
+  const [bankQuestions,       setBankQuestions]       = useState([]);
+  const [bankQuestionsLoaded, setBankQuestionsLoaded] = useState(false);
   const [assignedQIds,  setAssignedQIds]  = useState([]);
   const [qbSearch,      setQbSearch]      = useState("");
   const [qbDomainFilter,setQbDomainFilter]= useState("");
@@ -782,9 +783,18 @@ export default function TemplatesPage() {
     const unsub1 = subscribeToPrograms(setPrograms);
     const unsub2 = subscribeToInterviews(setInterviews);
     const unsub3 = subscribeToSkills(setSkills);
-    const unsub4 = subscribeToQuestions(qs => setBankQuestions(qs.filter(q => q.status !== "archived")));
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
+    return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
+
+  // Lazy-load bank questions only when the question bank tab is first opened
+  useEffect(() => {
+    if (activeTab === "questionbank" && !bankQuestionsLoaded) {
+      getQuestions().then(qs => {
+        setBankQuestions(qs.filter(q => q.status !== "archived"));
+        setBankQuestionsLoaded(true);
+      });
+    }
+  }, [activeTab, bankQuestionsLoaded]);
 
   // Stats per templateId: { [id]: { scheduled, completed, cancelled } }
   const templateStats = interviews.reduce((acc, iv) => {

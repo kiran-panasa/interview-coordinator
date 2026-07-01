@@ -6,7 +6,7 @@ import {
   createNotification, updateNotification,
   subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate,
-  getPrograms, subscribeToSlotsForInterviewers,
+  getPrograms, getSlotsForInterviewers,
 } from "../../api/firestore";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -79,6 +79,7 @@ export default function NudgePage() {
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
   const [ivrSlots,        setIvrSlots]        = useState({});
+  const [slotsLoading,    setSlotsLoading]    = useState(false);
 
   // ── Candidates tab state ──
   const [dateStart,      setDateStart]      = useState(today());
@@ -108,17 +109,17 @@ export default function NudgePage() {
     u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
   );
 
-  // Real-time slot subscription — re-subscribes when the interviewer list changes
+  // One-shot slot fetch — re-fetches when the interviewer list changes
   const ivrIdsKey = activeInterviewers.map(u => u.id).join(",");
-  const prevUnsub = useRef(null);
+  const fetchSlots = async (ids) => {
+    if (!ids.length) return;
+    setSlotsLoading(true);
+    try { setIvrSlots(await getSlotsForInterviewers(ids)); }
+    finally { setSlotsLoading(false); }
+  };
   useEffect(() => {
-    if (prevUnsub.current) prevUnsub.current();
-    if (activeInterviewers.length === 0) return;
-    prevUnsub.current = subscribeToSlotsForInterviewers(
-      activeInterviewers.map(u => u.id),
-      setIvrSlots
-    );
-    return () => { if (prevUnsub.current) prevUnsub.current(); };
+    if (!activeInterviewers.length) return;
+    fetchSlots(activeInterviewers.map(u => u.id));
   }, [ivrIdsKey]); // eslint-disable-line
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -472,10 +473,19 @@ export default function NudgePage() {
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
                 Matched Interviewers ({matchedInterviewers.length})
               </p>
-              <button onClick={openNudge} disabled={matchedInterviewers.length === 0}
-                className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
-                Nudge All
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => fetchSlots(activeInterviewers.map(u => u.id))} disabled={slotsLoading}
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50 px-2 py-1.5 rounded-lg border border-gray-200 bg-white transition-colors">
+                  <svg className={`w-3.5 h-3.5 ${slotsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  {slotsLoading ? "Loading…" : "Refresh slots"}
+                </button>
+                <button onClick={openNudge} disabled={matchedInterviewers.length === 0}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+                  Nudge All
+                </button>
+              </div>
             </div>
             <table className="w-full text-sm">
               <thead>
