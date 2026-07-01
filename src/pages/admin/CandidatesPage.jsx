@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { createCandidate, updateCandidate, deleteCandidate } from "../../api/firestore";
+import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -102,6 +102,7 @@ export default function CandidatesPage() {
   const { data: templates  = [] } = useTemplates();
   const [activeProgram,  setActiveProgram]  = useState("all");
   const [search,         setSearch]         = useState("");
+  const [showArchived,   setShowArchived]   = useState(false);
   const [showModal,  setShowModal]  = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form,       setForm]       = useState(EMPTY);
@@ -159,6 +160,18 @@ export default function CandidatesPage() {
     await deleteCandidate(c.id);
     queryClient.setQueryData(QK.candidates, prev => (prev || []).filter(x => x.id !== c.id));
     setToast({ message: "Candidate deleted." });
+  };
+
+  const handleArchive = async (c) => {
+    await archiveCandidate(c.id);
+    queryClient.setQueryData(QK.candidates, prev => (prev || []).map(x => x.id === c.id ? { ...x, archived: true, archivedAt: new Date().toISOString() } : x));
+    setToast({ message: "Candidate archived." });
+  };
+
+  const handleUnarchive = async (c) => {
+    await unarchiveCandidate(c.id);
+    queryClient.setQueryData(QK.candidates, prev => (prev || []).map(x => x.id === c.id ? { ...x, archived: false, archivedAt: null } : x));
+    setToast({ message: "Candidate restored to active." });
   };
 
   const handleSwapNameUID = async (c) => {
@@ -262,7 +275,10 @@ export default function CandidatesPage() {
 
   const closeCSV = () => { setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null); };
 
-  const filtered = candidates.filter(c => {
+  const archivedCount = candidates.filter(c => c.archived === true).length;
+  const workingSet    = candidates.filter(c => (c.archived === true) === showArchived);
+
+  const filtered = workingSet.filter(c => {
     if (activeProgram === "unassigned" && c.program) return false;
     if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
     const q = search.toLowerCase();
@@ -288,7 +304,9 @@ export default function CandidatesPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Candidates</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{candidates.length} candidates</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {candidates.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
+          </p>
         </div>
         <div className="flex gap-2">
           {selected.size > 0 && (
@@ -318,9 +336,9 @@ export default function CandidatesPage() {
       {programs.length > 0 && (
         <div className="flex border-b border-gray-200 mb-5">
           {[
-            { id: "all",        label: "All",        count: candidates.length },
-            ...programs.map(p => ({ id: p.id, label: p.name, count: candidates.filter(c => c.program === p.id).length })),
-            { id: "unassigned", label: "Unassigned", count: candidates.filter(c => !c.program).length },
+            { id: "all",        label: "All",        count: workingSet.length },
+            ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(c => c.program === p.id).length })),
+            { id: "unassigned", label: "Unassigned", count: workingSet.filter(c => !c.program).length },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
@@ -337,9 +355,20 @@ export default function CandidatesPage() {
         </div>
       )}
 
-      <input type="text" placeholder="Search by name, UID, or email…" value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      <div className="flex items-center gap-3 mb-5">
+        <input type="text" placeholder="Search by name, UID, or email…" value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <button
+          onClick={() => { setShowArchived(s => !s); setCandPage(1); setSearch(""); }}
+          className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${
+            showArchived
+              ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
+              : "text-gray-500 border-gray-200 hover:bg-gray-50"
+          }`}>
+          {showArchived ? "← Active" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+        </button>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
@@ -399,8 +428,10 @@ export default function CandidatesPage() {
                   </td>
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
-                      { label: "Edit",   onClick: () => openEdit(c) },
+                      { label: "Edit",   onClick: () => openEdit(c), show: !showArchived },
                       ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
+                      { label: "Archive",   onClick: () => handleArchive(c),   show: c.archived !== true },
+                      { label: "Unarchive", onClick: () => handleUnarchive(c), show: c.archived === true },
                       { label: "Delete", onClick: () => handleDelete(c), danger: true },
                     ]} />
                   </td>

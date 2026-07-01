@@ -36,6 +36,8 @@ export interface Candidate {
   program?: string;
   templateId?: string;
   status?: string;
+  archived?: boolean;
+  archivedAt?: string | null;
   createdAt: string;
   createdBy?: string;
 }
@@ -186,6 +188,8 @@ export interface Interview {
   nextNudgeAt?: string | null;
   nudgeCount?: number;
   importedFromSheet?: boolean;
+  archived?: boolean;
+  archivedAt?: string | null;
   createdAt: string;
   updatedAt?: string;
 }

@@ -24,3 +24,17 @@ export async function updateCandidate(id: string, data: Partial<Omit<Candidate, 
 export async function deleteCandidate(id: string): Promise<void> {
   await deleteDoc(doc(db, "candidates", id));
 }
+
+export async function archiveCandidate(id: string): Promise<void> {
+  await updateDoc(doc(db, "candidates", id), {
+    archived: true,
+    archivedAt: new Date().toISOString(),
+  });
+}
+
+export async function unarchiveCandidate(id: string): Promise<void> {
+  await updateDoc(doc(db, "candidates", id), {
+    archived: false,
+    archivedAt: null,
+  });
+}

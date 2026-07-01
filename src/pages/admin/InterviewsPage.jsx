@@ -5,6 +5,7 @@ import { useAuth } from "../../AuthContext";
 import {
   subscribeToInterviews,
   createInterview, updateInterview, deleteInterview,
+  archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview,
 } from "../../api/firestore";
@@ -67,6 +68,7 @@ export default function InterviewsPage() {
   const [parsedRows,      setParsedRows]      = useState(null);
   const [importing,       setImporting]       = useState(false);
   const [dlTemplateId,    setDlTemplateId]    = useState("");
+  const [showArchived,    setShowArchived]    = useState(false);
 
   useEffect(() => {
     const unsubInterviews = subscribeToInterviews(setInterviews);
@@ -221,6 +223,20 @@ export default function InterviewsPage() {
     }
   };
 
+  const handleArchive = async (iv) => {
+    try {
+      await archiveInterview(iv.id);
+      setToast({ message: "Interview archived." });
+    } catch (e) { setToast({ message: e.message, type: "error" }); }
+  };
+
+  const handleUnarchive = async (iv) => {
+    try {
+      await unarchiveInterview(iv.id);
+      setToast({ message: "Interview restored to active." });
+    } catch (e) { setToast({ message: e.message, type: "error" }); }
+  };
+
   // When candidateName was stored as a UUID (name/uid swap at import time),
   // resolve the real name from the candidates list for display.
   const resolvedName = (iv) => {
@@ -293,7 +309,10 @@ export default function InterviewsPage() {
   const templateProgram = (templateId) =>
     templates.find(t => t.id === templateId)?.program || "";
 
-  const filtered = interviews.filter(i => {
+  const archivedCount = interviews.filter(i => i.archived === true).length;
+  const workingSet    = interviews.filter(i => (i.archived === true) === showArchived);
+
+  const filtered = workingSet.filter(i => {
     if (activeProgram === "unassigned" && templateProgram(i.templateId)) return false;
     if (activeProgram !== "all" && activeProgram !== "unassigned" && templateProgram(i.templateId) !== activeProgram) return false;
     if (filterStatus !== "All" && i.status !== filterStatus) return false;
@@ -303,7 +322,7 @@ export default function InterviewsPage() {
   });
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
-  const uniqueIvrs = [...new Set(interviews.map(i => i.interviewerEmail))].filter(Boolean).sort();
+  const uniqueIvrs = [...new Set(workingSet.map(i => i.interviewerEmail))].filter(Boolean).sort();
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
@@ -313,7 +332,9 @@ export default function InterviewsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Interviews</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{interviews.length} total interviews</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {interviews.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => { setShowImport(true); setCsvText(""); setParsedRows(null); }}
@@ -337,9 +358,9 @@ export default function InterviewsPage() {
       {programs.length > 0 && (
         <div className="flex border-b border-gray-200 mb-5">
           {[
-            { id: "all",        label: "All",        count: interviews.length },
-            ...programs.map(p => ({ id: p.id, label: p.name, count: interviews.filter(i => templateProgram(i.templateId) === p.id).length })),
-            { id: "unassigned", label: "Unassigned", count: interviews.filter(i => !templateProgram(i.templateId)).length },
+            { id: "all",        label: "All",        count: workingSet.length },
+            ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(i => templateProgram(i.templateId) === p.id).length })),
+            { id: "unassigned", label: "Unassigned", count: workingSet.filter(i => !templateProgram(i.templateId)).length },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setIvrPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
@@ -373,6 +394,15 @@ export default function InterviewsPage() {
           <button onClick={() => { setFilterStatus("All"); setFilterDate(""); setFilterIvr("All"); }}
             className="text-sm text-gray-500 hover:text-gray-800 px-2">Clear</button>
         )}
+        <button
+          onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
+          className={`ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+            showArchived
+              ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
+              : "text-gray-500 border-gray-200 hover:bg-gray-50"
+          }`}>
+          {showArchived ? "← Active" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+        </button>
       </div>
 
       {/* Table */}
@@ -440,6 +470,16 @@ export default function InterviewsPage() {
                       onClick: () => openFeedback(iv),
                       show: iv.status === "completed" && !!iv.feedback,
                       highlight: true,
+                    },
+                    {
+                      label: "Archive",
+                      onClick: () => handleArchive(iv),
+                      show: iv.archived !== true && (iv.status === "completed" || iv.status === "cancelled" || iv.status === "no_show"),
+                    },
+                    {
+                      label: "Unarchive",
+                      onClick: () => handleUnarchive(iv),
+                      show: iv.archived === true,
                     },
                     {
                       label: "Cancel",

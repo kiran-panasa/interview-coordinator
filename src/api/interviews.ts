@@ -199,6 +199,22 @@ export function subscribeToInterviewerInterviews(
   });
 }
 
+export async function archiveInterview(id: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", id), {
+    archived: true,
+    archivedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function unarchiveInterview(id: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", id), {
+    archived: false,
+    archivedAt: null,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function getCandidateAskedQuestions(
   candidateId: string,
   excludeInterviewId: string | null = null
