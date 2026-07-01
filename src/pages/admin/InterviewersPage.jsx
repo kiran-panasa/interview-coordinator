@@ -8,6 +8,15 @@ import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
+const EXP_RANGES = [
+  { label: "0–2 yrs",  test: (e) => e >= 0 && e <= 2  },
+  { label: "3–5 yrs",  test: (e) => e >= 3 && e <= 5  },
+  { label: "6–10 yrs", test: (e) => e >= 6 && e <= 10 },
+  { label: "10+ yrs",  test: (e) => e > 10             },
+];
+
+const SEL = "border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white";
+
 function initials(name, email) {
   return (name || email || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
 }
@@ -35,9 +44,13 @@ export default function InterviewersPage() {
   const [viewAvail,    setViewAvail]    = useState(null);
   const [editModal,    setEditModal]    = useState(null); // { user, draftSkills, draftTemplates }
   const [saving,       setSaving]       = useState(false);
-  const [search,       setSearch]       = useState("");
-  const [toast,        setToast]        = useState(null);
-  const [showExport,   setShowExport]   = useState(false);
+  const [search,         setSearch]         = useState("");
+  const [filterSkill,    setFilterSkill]    = useState("");
+  const [filterTemplate, setFilterTemplate] = useState("");
+  const [filterCompany,  setFilterCompany]  = useState("");
+  const [filterExp,      setFilterExp]      = useState("");
+  const [toast,          setToast]          = useState(null);
+  const [showExport,     setShowExport]     = useState(false);
   const exportRef = useRef(null);
 
   useEffect(() => {
@@ -147,7 +160,17 @@ export default function InterviewersPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  const uniqueCompanies = [...new Set(interviewers.map(u => u.company).filter(Boolean))].sort();
+
   const filtered = interviewers.filter(u => {
+    if (filterSkill    && !(u.skills      || []).includes(filterSkill))    return false;
+    if (filterTemplate && !(u.templateIds || []).includes(filterTemplate)) return false;
+    if (filterCompany  && u.company !== filterCompany)                     return false;
+    if (filterExp) {
+      const range = EXP_RANGES.find(r => r.label === filterExp);
+      const exp   = parseFloat(u.experience);
+      if (!range || isNaN(exp) || !range.test(exp)) return false;
+    }
     const q = search.toLowerCase();
     return !q ||
       u.displayName?.toLowerCase().includes(q) ||
@@ -155,6 +178,9 @@ export default function InterviewersPage() {
       u.company?.toLowerCase().includes(q) ||
       u.companyRole?.toLowerCase().includes(q);
   });
+
+  const hasFilters = search || filterSkill || filterTemplate || filterCompany || filterExp;
+  const clearFilters = () => { setSearch(""); setFilterSkill(""); setFilterTemplate(""); setFilterCompany(""); setFilterExp(""); };
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
 
@@ -200,14 +226,35 @@ export default function InterviewersPage() {
             )}
           </div>
 
-          <input
-            type="text"
-            placeholder="Search by name, email, company…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-64 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
         </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-5">
+        <input type="text" placeholder="Search by name, email, company…" value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="w-56 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <select value={filterSkill} onChange={e => setFilterSkill(e.target.value)} className={SEL}>
+          <option value="">All Skills</option>
+          {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)} className={SEL}>
+          <option value="">All Templates</option>
+          {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} className={SEL}>
+          <option value="">All Companies</option>
+          {uniqueCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filterExp} onChange={e => setFilterExp(e.target.value)} className={SEL}>
+          <option value="">All Experience</option>
+          {EXP_RANGES.map(r => <option key={r.label} value={r.label}>{r.label}</option>)}
+        </select>
+        {hasFilters && (
+          <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
+            Clear
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

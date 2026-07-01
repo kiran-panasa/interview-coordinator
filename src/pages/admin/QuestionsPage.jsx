@@ -130,6 +130,7 @@ export default function QuestionsPage() {
   const [filterDomain,     setFilterDomain]     = useState("");
   const [filterDifficulty, setFilterDifficulty] = useState("");
   const [filterSkill,      setFilterSkill]      = useState("");
+  const [filterTopic,      setFilterTopic]      = useState("");
   const [filterTemplate,   setFilterTemplate]   = useState("");
 
   useEffect(() => {
@@ -159,6 +160,8 @@ export default function QuestionsPage() {
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
   })();
+
+  const allTopics = [...new Set(questions.filter(q => q.topic).map(q => q.topic))].sort();
 
   // compute which template IDs contain a given question ID
   const templateIdsForQuestion = (qid) =>
@@ -342,6 +345,7 @@ export default function QuestionsPage() {
     if (filterDomain     && !qDomains.includes(filterDomain))        return false;
     if (filterDifficulty && q.difficulty !== filterDifficulty)       return false;
     if (filterSkill      && !(q.skills || []).includes(filterSkill)) return false;
+    if (filterTopic      && q.topic !== filterTopic)                return false;
     if (filterTemplate   && !(templates.find(t => t.id === filterTemplate)?.questionIds || []).includes(q.id)) return false;
     if (search) {
       const sq = search.toLowerCase();
@@ -435,6 +439,11 @@ export default function QuestionsPage() {
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">All Skills</option>
               {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Topics</option>
+              {allTopics.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
               className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
