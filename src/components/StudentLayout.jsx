@@ -1,3 +1,5 @@
+import ErrorBoundary from "./ErrorBoundary";
+
 export default function StudentLayout({ children }) {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
@@ -14,7 +16,9 @@ export default function StudentLayout({ children }) {
             <p className="text-xs text-indigo-600 font-semibold leading-tight">Coordinator</p>
           </div>
         </div>
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </div>
     </div>
   );

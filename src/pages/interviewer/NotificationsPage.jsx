@@ -1,14 +1,10 @@
 import { useState, useEffect } from "react";
+import { formatDate, formatDateTime } from "../../utils/dates";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { subscribeToUserNotifications, updateNotification, createNotification } from "../../api/firestore";
 import Toast from "../../components/Toast";
 
-function fmtDate(d) {
-  if (!d) return "";
-  const [y, m, day] = d.split("-");
-  return `${day}/${m}/${y}`;
-}
 
 export default function NotificationsPage() {
   const { currentUser, userProfile } = useAuth();
@@ -39,7 +35,7 @@ export default function NotificationsPage() {
       senderName:   userProfile?.displayName || userProfile?.email || "Interviewer",
       templateName: n.templateName,
       date:         n.date,
-      message:      `${userProfile?.displayName || userProfile?.email} is available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${fmtDate(n.dateRangeStart)} – ${fmtDate(n.dateRangeEnd)})` : n.date ? ` on ${fmtDate(n.date)}` : ""}.`,
+      message:      `${userProfile?.displayName || userProfile?.email} is available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})` : n.date ? ` on ${formatDate(n.date)}` : ""}.`,
       status:       "unread",
       originalNotificationId: n.id,
     });
@@ -61,7 +57,7 @@ export default function NotificationsPage() {
       senderName:   userProfile?.displayName || userProfile?.email || "Interviewer",
       templateName: n.templateName,
       date:         n.date,
-      message:      `${userProfile?.displayName || userProfile?.email} is NOT available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${fmtDate(n.dateRangeStart)} – ${fmtDate(n.dateRangeEnd)})` : n.date ? ` on ${fmtDate(n.date)}` : ""}${reason ? ` — "${reason}"` : "."}`,
+      message:      `${userProfile?.displayName || userProfile?.email} is NOT available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})` : n.date ? ` on ${formatDate(n.date)}` : ""}${reason ? ` — "${reason}"` : "."}`,
       status:       "unread",
       originalNotificationId: n.id,
     });
@@ -112,7 +108,7 @@ export default function NotificationsPage() {
                       {n.type === "feedback_reminder" ? (
                         <>
                           <p className="text-sm font-bold text-gray-900">Feedback Reminder — {n.candidateName || "Interview"}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
                         </>
                       ) : (
                         <>
@@ -122,12 +118,12 @@ export default function NotificationsPage() {
                               <span className="font-normal text-gray-500">
                                 {" · "}
                                 {n.dateRangeStart
-                                  ? `${fmtDate(n.dateRangeStart)} – ${fmtDate(n.dateRangeEnd)}`
-                                  : fmtDate(n.date)}
+                                  ? `${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)}`
+                                  : formatDate(n.date)}
                               </span>
                             )}
                           </p>
-                          <p className="text-xs text-gray-400 mt-0.5">From {n.senderName} · {n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">From {n.senderName} · {n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
                         </>
                       )}
                     </div>

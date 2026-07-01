@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { materializeFeedback } from "../../utils/templateEngine";
+import { formatDate, formatDateTime } from "../../utils/dates";
 import { useAuth } from "../../AuthContext";
 import {
-  subscribeToInterviews, subscribeToPrograms, getCandidates, getAllUsers,
+  subscribeToInterviews,
   createInterview, updateInterview, deleteInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
-  getTemplates, getTemplate, DEFAULT_ROUNDS, importCompletedInterview,
+  getTemplate, DEFAULT_ROUNDS, importCompletedInterview,
 } from "../../api/firestore";
+import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -33,12 +35,6 @@ const EMPTY_FORM = {
 };
 
 const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
-
-function fmt(dateStr) {
-  if (!dateStr) return "—";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
-}
 
 // ── CSV import helpers ────────────────────────────────────────────────────────
 
@@ -311,11 +307,14 @@ async function callAppsScript(payload) {
 
 export default function InterviewsPage() {
   const { currentUser, userProfile } = useAuth();
+  const { data: candidates  = [] } = useCandidates();
+  const { data: usersAll    = [] } = useUsers();
+  const { data: templates   = [] } = useTemplates();
+  const { data: programs    = [] } = usePrograms();
+  const interviewers = usersAll.filter(u =>
+    (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
+  );
   const [interviews,    setInterviews]    = useState([]);
-  const [candidates,    setCandidates]    = useState([]);
-  const [interviewers,  setInterviewers]  = useState([]);
-  const [templates,     setTemplates]     = useState([]);
-  const [programs,      setPrograms]      = useState([]);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,  setFilterStatus]  = useState("All");
   const [filterDate,    setFilterDate]    = useState("");
@@ -338,15 +337,7 @@ export default function InterviewsPage() {
 
   useEffect(() => {
     const unsubInterviews = subscribeToInterviews(setInterviews);
-    const unsubPrograms   = subscribeToPrograms(setPrograms);
-    getCandidates().then(setCandidates);
-    getAllUsers().then(users =>
-      setInterviewers(users.filter(u =>
-        (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
-      ))
-    );
-    getTemplates().then(setTemplates);
-    return () => { unsubInterviews(); unsubPrograms(); };
+    return () => unsubInterviews();
   }, []);
 
   useEffect(() => {
@@ -472,7 +463,7 @@ export default function InterviewsPage() {
   };
 
   const handleDelete = async (iv) => {
-    const label = `${iv.candidateName} — ${iv.round} on ${fmt(iv.scheduledDate)}`;
+    const label = `${iv.candidateName} — ${iv.round} on ${formatDate(iv.scheduledDate)}`;
     if (!confirm(`Permanently delete interview:\n"${label}"?\n\nThis cannot be undone.`)) return;
     try {
       if (iv.eventId) {
@@ -675,7 +666,7 @@ export default function InterviewsPage() {
                 </td>
                 <td className="px-4 py-3 text-gray-600">{iv.round}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
-                  <p className="text-gray-700">{fmt(iv.scheduledDate)}</p>
+                  <p className="text-gray-700">{formatDate(iv.scheduledDate)}</p>
                   <p className="text-xs text-gray-400">{iv.scheduledTime}{iv.duration ? ` · ${iv.duration}m` : ""}</p>
                 </td>
                 <td className="px-4 py-3">
@@ -762,7 +753,7 @@ export default function InterviewsPage() {
               {availDates.length > 0 ? (
                 <select value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls}>
                   <option value="">— Select date —</option>
-                  {availDates.map(d => <option key={d} value={d}>{fmt(d)}</option>)}
+                  {availDates.map(d => <option key={d} value={d}>{formatDate(d)}</option>)}
                 </select>
               ) : (
                 <div>
@@ -844,9 +835,9 @@ export default function InterviewsPage() {
               <div className="flex flex-wrap gap-3 text-xs text-gray-500 pb-2 border-b border-gray-100">
                 <span><span className="font-semibold text-gray-700">Interviewer:</span> {feedbackModal.interview.interviewerName || feedbackModal.interview.interviewerEmail}</span>
                 <span><span className="font-semibold text-gray-700">Round:</span> {feedbackModal.interview.round}</span>
-                <span><span className="font-semibold text-gray-700">Date:</span> {fmt(feedbackModal.interview.scheduledDate)}</span>
+                <span><span className="font-semibold text-gray-700">Date:</span> {formatDate(feedbackModal.interview.scheduledDate)}</span>
                 {fb?.submittedAt && (
-                  <span><span className="font-semibold text-gray-700">Submitted:</span> {new Date(fb.submittedAt).toLocaleString()}</span>
+                  <span><span className="font-semibold text-gray-700">Submitted:</span> {formatDateTime(fb.submittedAt)}</span>
                 )}
               </div>
 
@@ -1034,7 +1025,7 @@ export default function InterviewsPage() {
                             {row.resolved.template?.name || <span className="text-red-500">{row.raw.templateName}</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">
-                            {row.resolved.scheduledDate ? fmt(row.resolved.scheduledDate) : <span className="text-red-500">{row.raw.date}</span>}
+                            {row.resolved.scheduledDate ? formatDate(row.resolved.scheduledDate) : <span className="text-red-500">{row.raw.date}</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">
                             {row.resolved.scheduledTime || <span className="text-red-500">{row.raw.time}</span>}

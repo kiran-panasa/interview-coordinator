@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDate, toInterviewDateTime } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { subscribeToInterviewerInterviews } from "../../api/firestore";
@@ -7,12 +8,6 @@ import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
 const TABS = ["Upcoming", "Past", "All"];
-
-function fmt(dateStr) {
-  if (!dateStr) return "—";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
-}
 
 export default function MyInterviewsPage() {
   const { userProfile } = useAuth();
@@ -38,7 +33,7 @@ export default function MyInterviewsPage() {
     const ampm = match[3]?.toUpperCase();
     if (ampm === "PM" && h < 12) h += 12;
     if (ampm === "AM" && h === 12) h = 0;
-    return new Date(`${scheduledDate}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00`) < now;
+    return toInterviewDateTime(scheduledDate, h, m) < now;
   }
 
   let filtered = interviews;
@@ -104,7 +99,7 @@ export default function MyInterviewsPage() {
                 <td className="px-4 py-3 font-semibold text-gray-900">{i.candidateName}</td>
                 <td className="px-4 py-3 text-gray-600">{i.roleAppliedFor || "—"}</td>
                 <td className="px-4 py-3 text-gray-600">{i.round || "—"}</td>
-                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{fmt(i.scheduledDate)}</td>
+                <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(i.scheduledDate)}</td>
                 <td className="px-4 py-3 text-gray-600">{i.scheduledTime || "—"}</td>
                 <td className="px-4 py-3">
                   <Badge value={i.status} />

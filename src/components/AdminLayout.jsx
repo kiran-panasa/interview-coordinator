@@ -4,6 +4,7 @@ import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useEffect, useState } from "react";
 import { subscribeToUserNotifications, subscribeToAdhocQuestions } from "../api/firestore";
+import ErrorBoundary from "./ErrorBoundary";
 
 const ALL_NAV = [
   { to: "/admin/dashboard",    label: "Dashboard",           roles: ["admin"],                                        icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -95,7 +96,9 @@ export default function AdminLayout() {
       </aside>
 
       <main className="ml-60 flex-1 min-h-screen">
-        <Outlet context={{ adhocQs }} />
+        <ErrorBoundary>
+          <Outlet context={{ adhocQs }} />
+        </ErrorBoundary>
       </main>
     </div>
   );

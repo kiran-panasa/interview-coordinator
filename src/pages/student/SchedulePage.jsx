@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDate, formatDateLong } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -31,18 +32,7 @@ function maskEmail(email = "") {
   return `${masked}@${domain}`;
 }
 
-function fmt(dateStr) {
-  if (!dateStr) return "";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
-}
 
-function fmtLong(dateStr) {
-  if (!dateStr) return "";
-  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-IN", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-}
 
 // ── Step components ───────────────────────────────────────────────────────────
 
@@ -158,8 +148,8 @@ export default function SchedulePage() {
         otp:       code,
         link,
         template:  invite.templateName || "Interview",
-        dateStart: fmt(invite.dateRangeStart),
-        dateEnd:   fmt(invite.dateRangeEnd),
+        dateStart: formatDate(invite.dateRangeStart),
+        dateEnd:   formatDate(invite.dateRangeEnd),
       });
       setStep("otp");
     } catch (e) {
@@ -287,7 +277,7 @@ export default function SchedulePage() {
             <h2 className="text-lg font-bold text-gray-900 mb-2">Already Scheduled</h2>
             <p className="text-sm text-gray-500">Your interview has been confirmed. Check your email for the calendar invite.</p>
             {invite?.bookedDate && (
-              <p className="mt-3 text-sm font-semibold text-indigo-700">{fmtLong(invite.bookedDate)} · {invite.bookedTime}</p>
+              <p className="mt-3 text-sm font-semibold text-indigo-700">{formatDateLong(invite.bookedDate)} · {invite.bookedTime}</p>
             )}
           </div>
         </Card>
@@ -308,7 +298,7 @@ export default function SchedulePage() {
             <h2 className="text-lg font-bold text-gray-900 mb-2">Slot Reserved!</h2>
             {bookedInfo && (
               <p className="text-base font-semibold text-indigo-700 mb-3">
-                {fmtLong(bookedInfo.date)} · {bookedInfo.time}
+                {formatDateLong(bookedInfo.date)} · {bookedInfo.time}
               </p>
             )}
             <p className="text-sm text-gray-500 leading-relaxed">
@@ -331,7 +321,7 @@ export default function SchedulePage() {
           <div className="space-y-5">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Schedule Your Interview</h2>
-              <p className="text-sm text-gray-500 mt-1">{invite?.templateName} · {fmt(invite?.dateRangeStart)} – {fmt(invite?.dateRangeEnd)}</p>
+              <p className="text-sm text-gray-500 mt-1">{invite?.templateName} · {formatDate(invite?.dateRangeStart)} – {formatDate(invite?.dateRangeEnd)}</p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Your registered email</label>
@@ -404,7 +394,7 @@ export default function SchedulePage() {
               <div className="space-y-4 max-h-96 overflow-y-auto pr-1">
                 {Object.entries(slotsByDate).map(([date, daySlots]) => (
                   <div key={date}>
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{fmtLong(date)}</p>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{formatDateLong(date)}</p>
                     <div className="flex flex-wrap gap-2">
                       {daySlots.map(s => {
                         const isSelected = selected?.slotId === s.slotId && selected?.interviewerId === s.interviewerId;
@@ -428,7 +418,7 @@ export default function SchedulePage() {
 
             {selected && (
               <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 text-sm text-indigo-800 font-medium">
-                Selected: {fmtLong(selected.date)} · {selected.time}
+                Selected: {formatDateLong(selected.date)} · {selected.time}
               </div>
             )}
 

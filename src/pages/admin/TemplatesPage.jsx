@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
+import { formatDateShort } from "../../utils/dates";
 import * as XLSX from "xlsx";
+import { useQueryClient } from "@tanstack/react-query";
 import {
-  getTemplates, createTemplate, updateTemplate, deleteTemplate,
-  subscribeToPrograms,
-  subscribeToInterviews, subscribeToSkills, getQuestions,
+  createTemplate, updateTemplate, deleteTemplate,
+  subscribeToInterviews, getQuestions,
 } from "../../api/firestore";
+import { useSkills, usePrograms, useTemplates, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
 import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
@@ -749,10 +751,11 @@ function QuestionBankSection({ bankKey, label, placeholder, note, value, onChang
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TemplatesPage() {
-  const [templates,     setTemplates]     = useState([]);
-  const [programs,      setPrograms]      = useState([]);
+  const queryClient = useQueryClient();
+  const { data: templates = [], isLoading } = useTemplates();
+  const { data: programs  = [] } = usePrograms();
+  const { data: skills    = [] } = useSkills();
   const [interviews,    setInterviews]    = useState([]);
-  const [loading,       setLoading]       = useState(true);
   const [showNewPicker, setShowNewPicker] = useState(false);
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
@@ -771,19 +774,11 @@ export default function TemplatesPage() {
   const [csvErrors,     setCsvErrors]     = useState([]);
   const csvFileRef = useRef(null);
 
-  // Program tabs state
-  const [skills,         setSkills]         = useState([]);
-
   const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
 
-  const load = () => getTemplates().then(t => { setTemplates(t); setLoading(false); });
-  useEffect(() => { load(); }, []);
-
   useEffect(() => {
-    const unsub1 = subscribeToPrograms(setPrograms);
-    const unsub2 = subscribeToInterviews(setInterviews);
-    const unsub3 = subscribeToSkills(setSkills);
-    return () => { unsub1(); unsub2(); unsub3(); };
+    const unsub = subscribeToInterviews(setInterviews);
+    return unsub;
   }, []);
 
   // Lazy-load bank questions only when the question bank tab is first opened
@@ -1017,11 +1012,9 @@ export default function TemplatesPage() {
         setToast({ message: "Template created." });
       }
       setShowModal(false);
-      const fresh = await getTemplates();
-      setTemplates(fresh);
-      if (previewTarget && editTarget && previewTarget.id === editTarget.id) {
-        const updated = fresh.find(t => t.id === editTarget.id);
-        if (updated) setPreviewTarget(updated);
+      queryClient.invalidateQueries({ queryKey: QK.templates });
+      if (editTarget && previewTarget?.id === editTarget.id) {
+        setPreviewTarget(prev => ({ ...prev, ...data }));
       }
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -1032,8 +1025,8 @@ export default function TemplatesPage() {
   const handleDelete = async (t) => {
     if (!confirm(`Delete "${t.name}"? This won't affect existing interviews.`)) return;
     await deleteTemplate(t.id);
+    queryClient.invalidateQueries({ queryKey: QK.templates });
     setToast({ message: "Template deleted." });
-    load();
   };
 
   // ── Derived state ────────────────────────────────────────────────────────────
@@ -1085,7 +1078,7 @@ export default function TemplatesPage() {
         await updateTemplate(t.id, { domains: newDomains });
       }
       setToast({ message: `${templates.length} template(s) migrated — domain IDs now match labels.` });
-      load();
+      queryClient.invalidateQueries({ queryKey: QK.templates });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -1139,7 +1132,7 @@ export default function TemplatesPage() {
       </div>
 
       {/* ── Template list ── */}
-      {loading ? (
+      {isLoading ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : visibleTemplates.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
@@ -1200,7 +1193,7 @@ export default function TemplatesPage() {
                   </div>
                 )}
 
-                <p className="text-xs text-gray-400">Created {new Date(t.createdAt).toLocaleDateString()}</p>
+                <p className="text-xs text-gray-400">Created {formatDateShort(t.createdAt)}</p>
               </div>
             );
           })}
@@ -1208,7 +1201,7 @@ export default function TemplatesPage() {
       )}
 
       {/* ── Interview Stats Table ── */}
-      {!loading && visibleTemplates.length > 0 && (
+      {!isLoading && visibleTemplates.length > 0 && (
         <div className="mt-8">
           <h2 className="text-sm font-bold text-gray-700 mb-3">Interview Stats</h2>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

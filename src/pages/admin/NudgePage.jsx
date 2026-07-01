@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from "react";
+import { formatDate, formatDateShort, formatDateTime } from "../../utils/dates";
 import { useAuth } from "../../AuthContext";
 import {
-  getTemplates, getAllUsers, getCandidates,
-  subscribeToSkills, subscribeToUserNotifications,
+  subscribeToUserNotifications,
   createNotification, updateNotification,
   subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate,
-  getPrograms, getSlotsForInterviewers,
+  getSlotsForInterviewers,
 } from "../../api/firestore";
+import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
@@ -29,11 +30,6 @@ function today() { return new Date().toISOString().slice(0, 10); }
 function inDays(n) {
   const d = new Date(); d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
-}
-function fmtDate(d) {
-  if (!d) return "—";
-  const [y, m, day] = d.split("-");
-  return `${day}/${m}/${y}`;
 }
 
 function skillOverlap(templateSkills = [], userSkills = []) {
@@ -61,11 +57,12 @@ export default function NudgePage() {
   const [activeTab, setActiveTab] = useState("interviewers");
 
   // ── Shared data ──
-  const [templates,  setTemplates]  = useState([]);
-  const [users,      setUsers]      = useState([]);
-  const [skills,     setSkills]     = useState([]);
-  const [programs,   setPrograms]   = useState([]);
-  const [candidates, setCandidates] = useState([]);
+  const { data: templates  = [] } = useTemplates();
+  const { data: usersAll   = [] } = useUsers();
+  const { data: skills     = [] } = useSkills();
+  const { data: programs   = [] } = usePrograms();
+  const { data: candidates = [] } = useCandidates();
+  const users = usersAll;
   const [responses,  setResponses]  = useState([]);
   const [invites,    setInvites]    = useState([]);
   const [toast,      setToast]      = useState(null);
@@ -95,14 +92,9 @@ export default function NudgePage() {
   const [copiedId,       setCopiedId]       = useState(null);
 
   useEffect(() => {
-    const u2 = subscribeToSkills(setSkills);
     const u3 = subscribeToUserNotifications(currentUser.uid, setResponses);
     const u4 = subscribeToScheduleInvites(setInvites);
-    getTemplates().then(setTemplates);
-    getAllUsers().then(setUsers);
-    getCandidates().then(setCandidates);
-    getPrograms().then(setPrograms);
-    return () => { u2(); u3(); u4(); };
+    return () => { u3(); u4(); };
   }, [currentUser.uid]);
 
   const activeInterviewers = users.filter(
@@ -153,7 +145,7 @@ export default function NudgePage() {
     const templateName = nudgeTemplate?.name || "Interview";
     const msg =
       `Hi {{name}},\n\nWe need interviewers for "${templateName}" sessions between ` +
-      `${fmtDate(nudgeDateStart)} and ${fmtDate(nudgeDateEnd)}.\n\n` +
+      `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}.\n\n` +
       `Please add your available time slots for this period so we can schedule candidates.\n\n` +
       `Click here to respond and add your slots:\n${portal}\n\n` +
       `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`;
@@ -180,7 +172,7 @@ export default function NudgePage() {
       if (APPS_SCRIPT_URL) {
         await callAppsScript({
           action: "sendEmail",
-          subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${fmtDate(nudgeDateStart)} – ${fmtDate(nudgeDateEnd)}`,
+          subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
           body: message,
           recipients: recipients.map(r => ({ email: r.email, name: r.displayName || r.email })),
         });
@@ -269,7 +261,7 @@ export default function NudgePage() {
           recipients: [{ email: c.email, name: c.name }],
           body:
             `Hi ${c.name},\n\nYou've been invited to schedule your interview.\n\n` +
-            `Template: ${tmpl?.name || ""}\nDate Range: ${fmtDate(dateStart)} – ${fmtDate(dateEnd)}\n\n` +
+            `Template: ${tmpl?.name || ""}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n\n` +
             `Click below to pick your slot (link valid for ${expiryHours} hours):\n${link}?invite=${inviteToken}\n\n` +
             `NxtWave Interview Team`,
         });
@@ -353,7 +345,7 @@ export default function NudgePage() {
         recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
         body:
           `Hi ${inv.candidateName},\n\nYou've been invited to schedule your interview.\n\n` +
-          `Template: ${inv.templateName || ""}\nDate Range: ${fmtDate(inv.dateRangeStart)} – ${fmtDate(inv.dateRangeEnd)}\n\n` +
+          `Template: ${inv.templateName || ""}\nDate Range: ${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}\n\n` +
           `Click below to pick your slot (link valid for ${inv.expiryHours || 24} hours):\n${link}?invite=${newToken}\n\n` +
           `NxtWave Interview Team`,
       });
@@ -379,7 +371,7 @@ export default function NudgePage() {
         inv.candidateName,
         inv.candidateEmail,
         inv.templateName || "",
-        `${fmtDate(inv.dateRangeStart)} – ${fmtDate(inv.dateRangeEnd)}`,
+        `${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}`,
         STATUS_LABEL[inv.status] || inv.status,
         link,
       ]);
@@ -538,7 +530,7 @@ export default function NudgePage() {
                               {lastResp.message?.includes("NOT available") ? "Not Available" : "Available"}
                             </span>
                             <p className="text-[10px] text-gray-300 mt-0.5">
-                              {lastResp.createdAt ? new Date(lastResp.createdAt).toLocaleDateString() : ""}
+                              {lastResp.createdAt ? formatDateShort(lastResp.createdAt) : ""}
                             </p>
                           </div>
                         ) : (
@@ -570,7 +562,7 @@ export default function NudgePage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-gray-900">{n.senderName}</p>
                       <p className="text-sm text-gray-600 mt-0.5">{n.message}</p>
-                      <p className="text-xs text-gray-300 mt-1">{n.createdAt ? new Date(n.createdAt).toLocaleString() : ""}</p>
+                      <p className="text-xs text-gray-300 mt-1">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
                     </div>
                     {n.status === "unread" && (
                       <button onClick={() => markResponseRead(n)} className="flex-shrink-0 text-xs text-gray-400 hover:text-gray-700 font-medium">Mark read</button>
@@ -594,7 +586,7 @@ export default function NudgePage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-                  Available Slots · {fmtDate(dateStart)} – {fmtDate(dateEnd)}
+                  Available Slots · {formatDate(dateStart)} – {formatDate(dateEnd)}
                 </p>
               </div>
               <div className="divide-y divide-gray-50">
@@ -756,7 +748,7 @@ export default function NudgePage() {
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-600">{inv.templateName || "—"}</td>
                         <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
-                          {fmtDate(inv.dateRangeStart)} – {fmtDate(inv.dateRangeEnd)}
+                          {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
@@ -764,7 +756,7 @@ export default function NudgePage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
-                          {inv.sentAt ? new Date(inv.sentAt).toLocaleString("en-GB", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
+                          {inv.sentAt ? formatDateTime(inv.sentAt) : "—"}
                         </td>
                         <td className="px-4 py-3 w-20">
                           <div className="flex items-center gap-1.5">
@@ -832,7 +824,7 @@ export default function NudgePage() {
                       <p className="text-xs text-gray-400">{inv.candidateEmail}</p>
                       <div className="flex gap-4 mt-1.5">
                         <span className="text-xs font-semibold text-indigo-700">{inv.templateName}</span>
-                        <span className="text-xs text-gray-600">{fmtDate(inv.bookedDate)} · {inv.bookedTime}</span>
+                        <span className="text-xs text-gray-600">{formatDate(inv.bookedDate)} · {inv.bookedTime}</span>
                         <span className="text-xs text-gray-400">{users.find(u => u.id === inv.bookedInterviewerId)?.displayName || "Interviewer"}</span>
                       </div>
                     </div>
@@ -860,7 +852,7 @@ export default function NudgePage() {
 
       {/* Nudge Modal */}
       <Modal open={!!nudgeTarget} onClose={() => setNudgeTarget(null)}
-        title={`Nudge Interviewers — ${nudgeTarget?.template?.name || "All Templates"} · ${fmtDate(nudgeDateStart)} – ${fmtDate(nudgeDateEnd)}`} wide>
+        title={`Nudge Interviewers — ${nudgeTarget?.template?.name || "All Templates"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`} wide>
         {nudgeTarget && (
           <div className="space-y-5">
             <div>

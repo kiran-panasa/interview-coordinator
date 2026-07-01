@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../AuthContext";
-import { getCandidates, createCandidate, updateCandidate, deleteCandidate, subscribeToPrograms, getTemplates } from "../../api/firestore";
+import { useQueryClient } from "@tanstack/react-query";
+import { createCandidate, updateCandidate, deleteCandidate } from "../../api/firestore";
+import { usePrograms, useTemplates, useCandidates, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
@@ -94,10 +96,10 @@ function downloadSampleExcel() {
 
 export default function CandidatesPage() {
   const { currentUser } = useAuth();
-  const [candidates,     setCandidates]     = useState([]);
-  const [programs,       setPrograms]       = useState([]);
-  const [templates,      setTemplates]      = useState([]);
-  const [loading,        setLoading]        = useState(true);
+  const queryClient = useQueryClient();
+  const { data: candidates = [], isLoading } = useCandidates();
+  const { data: programs   = [] } = usePrograms();
+  const { data: templates  = [] } = useTemplates();
   const [activeProgram,  setActiveProgram]  = useState("all");
   const [search,         setSearch]         = useState("");
   const [showModal,  setShowModal]  = useState(false);
@@ -121,14 +123,6 @@ export default function CandidatesPage() {
   const [csvMode,      setCsvMode]      = useState(null); // null | "append" | "replace"
   const fileRef = useRef();
 
-  const load = () => getCandidates().then(c => { setCandidates(c); setLoading(false); });
-
-  useEffect(() => {
-    load();
-    getTemplates().then(setTemplates);
-    const unsubPrograms = subscribeToPrograms(setPrograms);
-    return () => unsubPrograms();
-  }, []);
 
   const openNew  = () => { setEditTarget(null); setForm(EMPTY); setShowModal(true); };
   const openEdit = (c) => {
@@ -147,12 +141,12 @@ export default function CandidatesPage() {
     try {
       if (editTarget) {
         await updateCandidate(editTarget.id, form);
-        setCandidates(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...form } : c));
+        queryClient.setQueryData(QK.candidates, prev => (prev || []).map(c => c.id === editTarget.id ? { ...c, ...form } : c));
         setToast({ message: "Candidate updated." });
       } else {
         const createdAt = new Date().toISOString();
         const id = await createCandidate({ ...form, createdBy: currentUser.uid });
-        setCandidates(prev => [{ id, ...form, createdAt, createdBy: currentUser.uid }, ...prev]);
+        queryClient.setQueryData(QK.candidates, prev => [{ id, ...form, createdAt, createdBy: currentUser.uid }, ...(prev || [])]);
         setToast({ message: "Candidate added." });
       }
       setShowModal(false);
@@ -163,13 +157,13 @@ export default function CandidatesPage() {
   const handleDelete = async (c) => {
     if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
     await deleteCandidate(c.id);
-    setCandidates(prev => prev.filter(x => x.id !== c.id));
+    queryClient.setQueryData(QK.candidates, prev => (prev || []).filter(x => x.id !== c.id));
     setToast({ message: "Candidate deleted." });
   };
 
   const handleSwapNameUID = async (c) => {
     await updateCandidate(c.id, { name: c.uid, uid: c.name });
-    setCandidates(prev => prev.map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
+    queryClient.setQueryData(QK.candidates, prev => (prev || []).map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
     setToast({ message: "Name and UID fixed." });
   };
 
@@ -183,7 +177,7 @@ export default function CandidatesPage() {
       if (bulkProgram)           updates.program     = bulkProgram;
       if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
       for (const id of selected) await updateCandidate(id, updates);
-      setCandidates(prev => prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c));
+      queryClient.setQueryData(QK.candidates, prev => (prev || []).map(c => selected.has(c.id) ? { ...c, ...updates } : c));
       setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
       setShowBulk(false);
       setSelected(new Set());
@@ -253,9 +247,9 @@ export default function CandidatesPage() {
         }
       } catch { /* skip */ }
     }
-    setCandidates(prev => {
+    queryClient.setQueryData(QK.candidates, prev => {
       const updatedMap = new Map(updatedRows.map(r => [r.id, r]));
-      const merged = prev.map(c => updatedMap.has(c.id) ? { ...c, ...updatedMap.get(c.id) } : c);
+      const merged = (prev || []).map(c => updatedMap.has(c.id) ? { ...c, ...updatedMap.get(c.id) } : c);
       return [...newRows, ...merged];
     });
     setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null);
@@ -348,7 +342,7 @@ export default function CandidatesPage() {
         className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
+        {isLoading ? (
           <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
         ) : (
           <table className="w-full text-sm">

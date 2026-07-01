@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDateLong } from "../../utils/dates";
 import { useAuth } from "../../AuthContext";
 import {
   subscribeToInterviewerAvailability,
@@ -28,11 +29,6 @@ function toAmPm(hhmm) {
   return `${String(h12).padStart(2, "0")}:${mm} ${ampm}`;
 }
 
-function fmtDate(dateStr) {
-  return new Date(dateStr + "T12:00:00").toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-}
 
 // Inline confirm component — avoids window.confirm and keeps the UI in-page
 function InlineConfirm({ message, onConfirm, onCancel }) {
@@ -342,7 +338,7 @@ export default function AvailabilityPage() {
           ) : (
             <>
               <div className="flex items-start justify-between mb-1">
-                <h2 className="text-base font-bold text-gray-900">{fmtDate(selectedDate)}</h2>
+                <h2 className="text-base font-bold text-gray-900">{formatDateLong(selectedDate)}</h2>
                 {/* Clear all free slots */}
                 {freeCount > 0 && selectedDate >= todayStr && (
                   confirming?.slotId === "clearAll" ? (
@@ -442,9 +438,7 @@ export default function AvailabilityPage() {
                       <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : ""}`}>
                         <td className="px-4 py-3 font-medium text-gray-900">
                           {i === 0
-                            ? new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
-                                weekday: "short", day: "numeric", month: "short", year: "numeric",
-                              })
+                            ? new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
                             : ""}
                         </td>
                         <td className="px-4 py-3 text-gray-700 font-mono text-xs">{s.time}</td>

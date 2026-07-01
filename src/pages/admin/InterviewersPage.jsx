@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
-import { getInterviewerAvailability, subscribeToUsers, subscribeToSkills, updateUser, deleteUser, getTemplates } from "../../api/firestore";
+import { useQueryClient } from "@tanstack/react-query";
+import { getInterviewerAvailability, updateUser, deleteUser } from "../../api/firestore";
+import { useSkills, useTemplates, useUsers, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -37,10 +39,13 @@ function avatarColor(id) {
 }
 
 export default function InterviewersPage() {
-  const [interviewers, setInterviewers] = useState([]);
-  const [skills,       setSkills]       = useState([]);
-  const [templates,    setTemplates]    = useState([]);
-  const [loading,      setLoading]      = useState(true);
+  const queryClient = useQueryClient();
+  const { data: usersAll = [], isLoading } = useUsers();
+  const interviewers = usersAll.filter(u =>
+    (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
+  );
+  const { data: skills    = [] } = useSkills();
+  const { data: templates = [] } = useTemplates();
   const [viewAvail,    setViewAvail]    = useState(null);
   const [editModal,    setEditModal]    = useState(null); // { user, draftSkills, draftTemplates }
   const [saving,       setSaving]       = useState(false);
@@ -59,20 +64,6 @@ export default function InterviewersPage() {
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
-  useEffect(() => {
-    const unsub1 = subscribeToUsers(users => {
-      setInterviewers(
-        users.filter(u =>
-          (u.role === "interviewer" || u.role === "interviewer_content") &&
-          u.status === "active"
-        )
-      );
-      setLoading(false);
-    });
-    const unsub2 = subscribeToSkills(setSkills);
-    getTemplates().then(setTemplates);
-    return () => { unsub1(); unsub2(); };
-  }, []);
 
   const openEdit = (u) => setEditModal({
     user: u,
@@ -88,6 +79,7 @@ export default function InterviewersPage() {
         skills:      editModal.draftSkills,
         templateIds: editModal.draftTemplates,
       });
+      queryClient.invalidateQueries({ queryKey: QK.users });
       setToast({ message: "Interviewer updated." });
       setEditModal(null);
     } catch (e) {
@@ -113,6 +105,7 @@ export default function InterviewersPage() {
     if (!confirm(`Remove interviewer "${name}" from the platform?\n\nThis deletes their account record. Their past interviews will remain.`)) return;
     try {
       await deleteUser(u.id);
+      queryClient.invalidateQueries({ queryKey: QK.users });
       setToast({ message: `${name} removed.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -258,7 +251,7 @@ export default function InterviewersPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
+        {isLoading ? (
           <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">

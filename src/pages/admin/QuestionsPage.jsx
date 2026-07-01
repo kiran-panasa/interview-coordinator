@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
+import { formatDateShort } from "../../utils/dates";
 import { useOutletContext } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   subscribeToQuestions, createQuestion, updateQuestion, archiveQuestion,
-  subscribeToSkills, getTemplates,
   approveAdhocQuestion, rejectAdhocQuestion,
   addQuestionToTemplate, removeQuestionFromTemplate,
 } from "../../api/firestore";
+import { useSkills, useTemplates, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
@@ -110,12 +112,13 @@ function downloadSampleCSV() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function QuestionsPage() {
+  const queryClient = useQueryClient();
   const { adhocQs = [] } = useOutletContext() || {};
   const [activeTab,    setActiveTab]    = useState("bank");
   const [questions,    setQuestions]    = useState([]);
-  const [skills,       setSkills]       = useState([]);
-  const [templates,    setTemplates]    = useState([]);
   const [loading,      setLoading]      = useState(true);
+  const { data: skills    = [] } = useSkills();
+  const { data: templates = [] } = useTemplates();
   const [toast,        setToast]        = useState(null);
   const [showModal,    setShowModal]    = useState(false);
   const [editTarget,   setEditTarget]   = useState(null);
@@ -150,11 +153,8 @@ export default function QuestionsPage() {
   const [bulkProgress,  setBulkProgress]  = useState(null);
 
   useEffect(() => {
-    const unsub1 = subscribeToQuestions(setQuestions);
-    const unsub2 = subscribeToSkills(setSkills);
-    setLoading(false);
-    getTemplates().then(setTemplates);
-    return () => { unsub1(); unsub2(); };
+    const unsub = subscribeToQuestions(qs => { setQuestions(qs); setLoading(false); });
+    return unsub;
   }, []);
 
   // Build { value, label } pairs from template domains (source of truth),
@@ -206,7 +206,7 @@ export default function QuestionsPage() {
       ...toRemove.map(tid => removeQuestionFromTemplate(tid, questionId)),
     ]);
     if (toAdd.length > 0 || toRemove.length > 0) {
-      getTemplates().then(setTemplates);
+      queryClient.invalidateQueries({ queryKey: QK.templates });
     }
   };
 
@@ -319,7 +319,7 @@ export default function QuestionsPage() {
         setBulkProgress({ done: i + 1, total });
       }
 
-      if (bulkForm.templateIds.length > 0) getTemplates().then(setTemplates);
+      if (bulkForm.templateIds.length > 0) queryClient.invalidateQueries({ queryKey: QK.templates });
       setShowBulkEdit(false);
       setSelected(new Set());
       setBulkForm(BLANK_BULK);
@@ -378,7 +378,7 @@ export default function QuestionsPage() {
         }
         imported++;
       }
-      if (bulkPreview.rows.some(r => r.templates.length > 0)) getTemplates().then(setTemplates);
+      if (bulkPreview.rows.some(r => r.templates.length > 0)) queryClient.invalidateQueries({ queryKey: QK.templates });
       setShowBulkModal(false);
       setBulkPreview(null);
       setBulkText("");
@@ -727,7 +727,7 @@ export default function QuestionsPage() {
                         <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-400">
                           {q.interviewId && <span>Interview: <span className="font-mono text-gray-500">#{q.interviewId.slice(0, 8)}</span></span>}
                           {q.templateId  && <span>Template: <span className="font-mono text-gray-500">#{q.templateId.slice(0, 8)}</span></span>}
-                          {q.createdAt   && <span>{new Date(q.createdAt).toLocaleDateString()}</span>}
+                          {q.createdAt   && <span>{formatDateShort(q.createdAt)}</span>}
                           {q.status === "approved" && q.promotedQuestionId && (
                             <span className="text-emerald-600">Promoted → #{q.promotedQuestionId.slice(0, 8)}</span>
                           )}

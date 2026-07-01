@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDate } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { subscribeToInterviewerInterviews } from "../../api/firestore";
@@ -11,12 +12,6 @@ function StatCard({ label, value, color }) {
       <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
     </div>
   );
-}
-
-function fmt(dateStr) {
-  if (!dateStr) return "—";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
 }
 
 export default function InterviewerDashboard() {
@@ -55,7 +50,7 @@ export default function InterviewerDashboard() {
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-bold text-gray-900">Today</h2>
-            <span className="text-xs text-gray-400">{fmt(today)}</span>
+            <span className="text-xs text-gray-400">{formatDate(today)}</span>
           </div>
           {todayList.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-10">No interviews today</p>
@@ -92,7 +87,7 @@ export default function InterviewerDashboard() {
                   className="flex items-center justify-between px-5 py-3 hover:bg-gray-50">
                   <div>
                     <p className="text-sm font-semibold text-gray-900">{i.candidateName}</p>
-                    <p className="text-xs text-gray-500">{i.round} · {fmt(i.scheduledDate)} at {i.scheduledTime}</p>
+                    <p className="text-xs text-gray-500">{i.round} · {formatDate(i.scheduledDate)} at {i.scheduledTime}</p>
                   </div>
                   <Badge value={i.status} />
                 </Link>

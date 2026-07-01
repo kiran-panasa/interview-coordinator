@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDate, formatDateShort, toInterviewDateTime } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import {
   getInterview, updateInterview, saveFeedbackDraft,
@@ -15,12 +16,6 @@ import {
 } from "../../components/StructuredFeedbackForm";
 import DynamicFeedbackForm, { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
 
-function fmt(dateStr) {
-  if (!dateStr) return "—";
-  const [y, m, d] = dateStr.split("-");
-  return `${d}/${m}/${y}`;
-}
-
 function isPastInterviewTime(scheduledDate, scheduledTime) {
   if (!scheduledDate || !scheduledTime) return false;
   try {
@@ -31,8 +26,7 @@ function isPastInterviewTime(scheduledDate, scheduledTime) {
     const ampm = match[3]?.toUpperCase();
     if (ampm === "PM" && h < 12) h += 12;
     if (ampm === "AM" && h === 12) h = 0;
-    const start = new Date(`${scheduledDate}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
-    return Date.now() >= start.getTime();
+    return Date.now() >= toInterviewDateTime(scheduledDate, h, m).getTime();
   } catch { return false; }
 }
 
@@ -255,7 +249,7 @@ export default function InterviewDetail() {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Date</p>
-            <p className="text-sm font-semibold text-gray-800">{fmt(interview.scheduledDate)}</p>
+            <p className="text-sm font-semibold text-gray-800">{formatDate(interview.scheduledDate)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Time</p>
@@ -295,7 +289,7 @@ export default function InterviewDetail() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
           <p className="text-sm font-semibold text-amber-800 mb-1">Awaiting your response</p>
           <p className="text-xs text-amber-600 mb-4">
-            {fmt(interview.scheduledDate)} at {interview.scheduledTime} · {interview.round}
+            {formatDate(interview.scheduledDate)} at {interview.scheduledTime} · {interview.round}
           </p>
           <div className="flex gap-3">
             <button onClick={handleAccept} disabled={saving}
@@ -315,7 +309,7 @@ export default function InterviewDetail() {
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
           <p className="text-sm font-bold text-amber-800 mb-1">Did the candidate join?</p>
           <p className="text-xs text-amber-600 mb-4">
-            Scheduled for {interview.scheduledTime} · {fmt(interview.scheduledDate)}
+            Scheduled for {interview.scheduledTime} · {formatDate(interview.scheduledDate)}
           </p>
           <div className="flex gap-3">
             <button onClick={handleCandidateJoined} disabled={saving}
@@ -469,7 +463,7 @@ export default function InterviewDetail() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
-                Submitted {new Date(interview.feedback.submittedAt).toLocaleDateString()}
+                Submitted {formatDateShort(interview.feedback.submittedAt)}
               </span>
             )}
           </div>

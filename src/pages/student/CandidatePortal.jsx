@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatDate } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -30,11 +31,6 @@ function maskEmail(email = "") {
   return `${masked}@${domain}`;
 }
 
-function fmtDate(d) {
-  if (!d) return "—";
-  const [y, m, day] = d.split("-");
-  return `${day}/${m}/${y}`;
-}
 
 const STATUS_LABEL = {
   sent:                 "Invite Sent",
@@ -216,7 +212,7 @@ export default function CandidatePortal() {
                         <div>
                           <p className="font-bold text-gray-900">{inv.templateName || "Interview"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {fmtDate(inv.dateRangeStart)} – {fmtDate(inv.dateRangeEnd)}
+                            {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
                           </p>
                         </div>
                         <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_STYLE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
@@ -250,7 +246,7 @@ export default function CandidatePortal() {
                         <div>
                           <p className="font-semibold text-gray-700 text-sm">{inv.templateName || "Interview"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
-                            {fmtDate(inv.dateRangeStart)} – {fmtDate(inv.dateRangeEnd)}
+                            {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
                           </p>
                         </div>
                         <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
@@ -259,7 +255,7 @@ export default function CandidatePortal() {
                       </div>
                       {inv.status === "confirmed" && inv.bookedDate && (
                         <p className="text-xs text-emerald-700 font-semibold mt-2">
-                          {fmtDate(inv.bookedDate)} · {inv.bookedTime}
+                          {formatDate(inv.bookedDate)} · {inv.bookedTime}
                         </p>
                       )}
                     </div>

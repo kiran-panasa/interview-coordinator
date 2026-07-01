@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { formatDateShort } from "../../utils/dates";
 import * as XLSX from "xlsx";
 import {
   updateUser, deleteUser,
@@ -389,7 +390,7 @@ export default function AdminPanelPage() {
                   <tr key={u.id} className="hover:bg-amber-50">
                     <td className="px-4 py-3 font-semibold text-gray-900">{u.displayName || "—"}</td>
                     <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}</td>
+                    <td className="px-4 py-3 text-gray-400 text-xs">{u.createdAt ? formatDateShort(u.createdAt) : "—"}</td>
                     <td className="px-4 py-3">
                       <select
                         value={pendingRoles[u.id] || "interviewer"}
@@ -505,7 +506,7 @@ export default function AdminPanelPage() {
                       <td className="px-4 py-3 font-semibold text-gray-900">{inv.name || "—"}</td>
                       <td className="px-4 py-3 text-gray-600">{inv.phone || "—"}</td>
                       <td className="px-4 py-3 text-gray-600 font-mono text-xs">{inv.email}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">{inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">{inv.createdAt ? formatDateShort(inv.createdAt) : "—"}</td>
                       <td className="px-4 py-3">
                         {inv.status === "registered" ? (
                           <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
