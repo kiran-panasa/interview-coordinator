@@ -29,13 +29,14 @@ export default function ProfilePage() {
   useEffect(() => {
     if (userProfile) {
       setForm({
-        displayName: userProfile.displayName || "",
-        phone:       userProfile.phone       || "",
-        company:     userProfile.company     || "",
-        companyRole: userProfile.companyRole || "",
-        experience:  userProfile.experience  || "",
-        linkedin:    userProfile.linkedin    || "",
-        skills:      userProfile.skills      || [],
+        displayName:  userProfile.displayName  || "",
+        phone:        userProfile.phone        || "",
+        company:      userProfile.company      || "",
+        companyRole:  userProfile.companyRole  || "",
+        experience:   userProfile.experience   || "",
+        linkedin:     userProfile.linkedin     || "",
+        skills:       userProfile.skills       || [],
+        customSkills: userProfile.customSkills || [],
       });
       setChanged(false);
     }
@@ -51,13 +52,14 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       await updateUser(currentUser.uid, {
-        displayName: form.displayName.trim(),
-        phone:       form.phone.trim()       || null,
-        company:     form.company.trim()     || null,
-        companyRole: form.companyRole.trim() || null,
-        experience:  form.experience.trim()  || null,
-        linkedin:    form.linkedin.trim()    || null,
-        skills:      form.skills             || [],
+        displayName:  form.displayName.trim(),
+        phone:        form.phone.trim()       || null,
+        company:      form.company.trim()     || null,
+        companyRole:  form.companyRole.trim() || null,
+        experience:   form.experience.trim()  || null,
+        linkedin:     form.linkedin.trim()    || null,
+        skills:       form.skills             || [],
+        customSkills: form.customSkills       || [],
       });
       await refreshProfile();
       setChanged(false);
@@ -142,8 +144,16 @@ export default function ProfilePage() {
                 skills={skills}
                 value={form.skills || []}
                 onChange={v => set("skills", v)}
-                placeholder="Select your skills…"
+                customSkills={form.customSkills || []}
+                onAddCustom={name => set("customSkills", [...(form.customSkills || []), name])}
+                onRemoveCustom={name => set("customSkills", (form.customSkills || []).filter(s => s !== name))}
+                placeholder="Select or add your skills…"
               />
+              {(form.customSkills || []).length > 0 && (
+                <p className="text-[11px] text-amber-600 mt-1.5">
+                  Custom skills (amber) are visible to admins but not shared in the global skill list.
+                </p>
+              )}
             </Field>
           </div>
         </div>

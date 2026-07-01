@@ -1,7 +1,16 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function SkillsSelect({ skills = [], value = [], onChange, placeholder = "Select skills…", readOnly = false }) {
-  const [open, setOpen]   = useState(false);
+export default function SkillsSelect({
+  skills = [],
+  value = [],
+  onChange,
+  customSkills = [],
+  onAddCustom = null,
+  onRemoveCustom = null,
+  placeholder = "Select skills…",
+  readOnly = false,
+}) {
+  const [open,   setOpen]   = useState(false);
   const [search, setSearch] = useState("");
   const ref = useRef(null);
 
@@ -16,29 +25,54 @@ export default function SkillsSelect({ skills = [], value = [], onChange, placeh
     onChange(value.includes(id) ? value.filter(v => v !== id) : [...value, id]);
   };
 
-  const filtered  = skills.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
-  const selected  = skills.filter(s => value.includes(s.id));
+  const filtered = skills.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
+  const selected = skills.filter(s => value.includes(s.id));
+
+  const searchTrimmed = search.trim();
+  const alreadyInAdmin  = skills.some(s => s.name.toLowerCase() === searchTrimmed.toLowerCase());
+  const alreadyCustom   = customSkills.some(s => s.toLowerCase() === searchTrimmed.toLowerCase());
+  const canAddCustom    = onAddCustom && searchTrimmed && !alreadyInAdmin && !alreadyCustom;
+
+  const handleAddCustom = () => {
+    if (!canAddCustom) return;
+    onAddCustom(searchTrimmed);
+    setSearch("");
+  };
+
+  const clearAll = () => {
+    onChange([]);
+    if (onRemoveCustom) customSkills.forEach(n => onRemoveCustom(n));
+  };
+
+  const totalSelected = selected.length + customSkills.length;
 
   if (readOnly) {
     return (
       <div className="flex flex-wrap gap-1.5">
-        {selected.length === 0
-          ? <span className="text-xs text-gray-400">—</span>
-          : selected.map(s => (
-            <span key={s.id} className="text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{s.name}</span>
-          ))
-        }
+        {totalSelected === 0 ? (
+          <span className="text-xs text-gray-400">—</span>
+        ) : (
+          <>
+            {selected.map(s => (
+              <span key={s.id} className="text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{s.name}</span>
+            ))}
+            {customSkills.map(name => (
+              <span key={name} className="text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{name}</span>
+            ))}
+          </>
+        )}
       </div>
     );
   }
 
   return (
     <div ref={ref} className="relative">
+      {/* Chip trigger */}
       <div
         onClick={() => setOpen(o => !o)}
         className="min-h-[38px] w-full border border-gray-300 rounded-lg px-3 py-2 flex flex-wrap gap-1.5 cursor-pointer bg-white hover:border-gray-400 transition-colors"
       >
-        {selected.length === 0 && (
+        {totalSelected === 0 && (
           <span className="text-sm text-gray-400 self-center">{placeholder}</span>
         )}
         {selected.map(s => (
@@ -48,35 +82,70 @@ export default function SkillsSelect({ skills = [], value = [], onChange, placeh
               className="text-indigo-400 hover:text-indigo-700 leading-none font-bold">×</button>
           </span>
         ))}
+        {customSkills.map(name => (
+          <span key={name} className="flex items-center gap-1 text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+            {name}
+            {onRemoveCustom && (
+              <button type="button" onClick={e => { e.stopPropagation(); onRemoveCustom(name); }}
+                className="text-amber-400 hover:text-amber-700 leading-none font-bold">×</button>
+            )}
+          </span>
+        ))}
         <span className="ml-auto self-center text-gray-400 text-xs flex-shrink-0">▾</span>
       </div>
 
       {open && (
         <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          {/* Search input */}
           <div className="p-2 border-b border-gray-100">
             <input
               autoFocus
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Search skills…"
+              onKeyDown={e => { if (e.key === "Enter" && canAddCustom) handleAddCustom(); }}
+              placeholder={onAddCustom ? "Search or type to add a custom skill…" : "Search skills…"}
               className="w-full text-sm px-2 py-1 focus:outline-none"
             />
           </div>
+
+          {/* List */}
           <div className="max-h-52 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="text-xs text-gray-400 px-3 py-3 text-center">No skills match</p>
-            ) : filtered.map(s => (
-              <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                <input type="checkbox" checked={value.includes(s.id)} onChange={() => toggle(s.id)}
-                  className="accent-indigo-600 flex-shrink-0" />
-                <span className="text-sm text-gray-700">{s.name}</span>
-              </label>
-            ))}
+            {filtered.length === 0 && !canAddCustom ? (
+              <p className="text-xs text-gray-400 px-3 py-3 text-center">
+                {searchTrimmed ? `No skills match "${searchTrimmed}"` : "No skills defined"}
+              </p>
+            ) : (
+              <>
+                {filtered.map(s => (
+                  <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox" checked={value.includes(s.id)} onChange={() => toggle(s.id)}
+                      className="accent-indigo-600 flex-shrink-0" />
+                    <span className="text-sm text-gray-700">{s.name}</span>
+                  </label>
+                ))}
+
+                {/* Add custom skill row */}
+                {canAddCustom && (
+                  <button
+                    type="button"
+                    onClick={handleAddCustom}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-amber-50 text-sm text-amber-700 font-semibold border-t border-gray-100 transition-colors text-left">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add "{searchTrimmed}" as custom skill
+                  </button>
+                )}
+              </>
+            )}
           </div>
-          {selected.length > 0 && (
-            <div className="border-t border-gray-100 px-3 py-2">
-              <button type="button" onClick={() => onChange([])}
+
+          {/* Footer */}
+          {totalSelected > 0 && (
+            <div className="border-t border-gray-100 px-3 py-2 flex items-center justify-between">
+              <span className="text-xs text-gray-400">{totalSelected} selected</span>
+              <button type="button" onClick={clearAll}
                 className="text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
             </div>
           )}
