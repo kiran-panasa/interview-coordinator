@@ -3,54 +3,63 @@ import {
   collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
+import type { ScheduleInvite, OtpVerification } from "../types";
 
 // ── Schedule Invites ──────────────────────────────────────────────────────────
 
-export function subscribeToScheduleInvites(callback) {
+export function subscribeToScheduleInvites(
+  callback: (invites: ScheduleInvite[]) => void
+): () => void {
   return onSnapshot(
     query(collection(db, "scheduleInvites"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleInvite)))
   );
 }
 
-export async function createScheduleInvite(data) {
+export async function createScheduleInvite(
+  data: Omit<ScheduleInvite, "id" | "createdAt">
+): Promise<string> {
   const ref = await addDoc(collection(db, "scheduleInvites"), {
     ...data, createdAt: new Date().toISOString(),
   });
   return ref.id;
 }
 
-export async function updateScheduleInvite(id, data) {
+export async function updateScheduleInvite(
+  id: string,
+  data: Partial<Omit<ScheduleInvite, "id">>
+): Promise<void> {
   await updateDoc(doc(db, "scheduleInvites", id), {
     ...data, updatedAt: new Date().toISOString(),
   });
 }
 
-export async function deleteScheduleInvite(id) {
+export async function deleteScheduleInvite(id: string): Promise<void> {
   await deleteDoc(doc(db, "scheduleInvites", id));
 }
 
-export async function getScheduleInviteByToken(token) {
+export async function getScheduleInviteByToken(token: string): Promise<ScheduleInvite | null> {
   const snap = await getDocs(query(
     collection(db, "scheduleInvites"),
     where("inviteToken", "==", token)
   ));
-  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() };
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as ScheduleInvite;
 }
 
-export async function getScheduleInvitesByEmail(email) {
+export async function getScheduleInvitesByEmail(email: string): Promise<ScheduleInvite[]> {
   const snap = await getDocs(query(
     collection(db, "scheduleInvites"),
     where("candidateEmail", "==", email.toLowerCase()),
     orderBy("createdAt", "desc")
   ));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleInvite));
 }
 
 // ── OTP Verifications ─────────────────────────────────────────────────────────
 
-export async function createOtpVerification(data) {
-  // Invalidate any previous unused OTPs for this invite
+export async function createOtpVerification(
+  data: Omit<OtpVerification, "id" | "createdAt">
+): Promise<string> {
   const old = await getDocs(query(
     collection(db, "otpVerifications"),
     where("inviteToken", "==", data.inviteToken),
@@ -64,7 +73,9 @@ export async function createOtpVerification(data) {
   return ref.id;
 }
 
-export async function getLatestOtpByToken(inviteToken) {
+export async function getLatestOtpByToken(
+  inviteToken: string
+): Promise<OtpVerification | null> {
   const snap = await getDocs(query(
     collection(db, "otpVerifications"),
     where("inviteToken", "==", inviteToken),
@@ -72,18 +83,24 @@ export async function getLatestOtpByToken(inviteToken) {
   ));
   if (snap.empty) return null;
   const docs = snap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
+    .map(d => ({ id: d.id, ...d.data() } as OtpVerification))
     .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
   return docs[0];
 }
 
-export async function markOtpUsed(id) {
+export async function markOtpUsed(id: string): Promise<void> {
   await updateDoc(doc(db, "otpVerifications", id), { used: true });
 }
 
 // ── Atomic slot booking (Firestore transaction) ───────────────────────────────
 
-export async function bookSlotForCandidate(interviewerId, slotId, inviteId, bookedDate, bookedTime) {
+export async function bookSlotForCandidate(
+  interviewerId: string,
+  slotId: string,
+  inviteId: string,
+  bookedDate: string,
+  bookedTime: string
+): Promise<void> {
   const slotRef   = doc(db, "availability", interviewerId, "slots", slotId);
   const inviteRef = doc(db, "scheduleInvites", inviteId);
 

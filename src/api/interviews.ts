@@ -4,12 +4,20 @@ import {
   query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
 import { createNotification } from "./notifications";
+import type { Interview } from "../types";
 
 export const DEFAULT_ROUNDS = [
   "HR Round", "Technical Round 1", "Technical Round 2", "Final Round",
 ];
 
-export const DEFAULT_FEEDBACK_QUESTIONS = [
+interface FeedbackQuestion {
+  id: string;
+  label: string;
+  type: "rating" | "text" | "select";
+  options?: string[];
+}
+
+export const DEFAULT_FEEDBACK_QUESTIONS: FeedbackQuestion[] = [
   { id: "technical",       label: "Technical Skills",           type: "rating" },
   { id: "communication",   label: "Communication Skills",       type: "rating" },
   { id: "problem_solving", label: "Problem Solving Ability",    type: "rating" },
@@ -22,26 +30,28 @@ export const DEFAULT_FEEDBACK_QUESTIONS = [
   },
 ];
 
-export async function getAllInterviews() {
+export async function getAllInterviews(): Promise<Interview[]> {
   const snap = await getDocs(query(collection(db, "interviews"), orderBy("scheduledDate", "desc")));
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
 }
 
-export async function getInterviewerInterviews(interviewerEmail) {
+export async function getInterviewerInterviews(interviewerEmail: string): Promise<Interview[]> {
   const snap = await getDocs(query(
     collection(db, "interviews"),
     where("interviewerEmail", "==", interviewerEmail),
   ));
-  const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
   return docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 }
 
-export async function getInterview(id) {
+export async function getInterview(id: string): Promise<Interview | null> {
   const snap = await getDoc(doc(db, "interviews", id));
-  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+  return snap.exists() ? { id: snap.id, ...snap.data() } as Interview : null;
 }
 
-export async function createInterview(data) {
+export async function createInterview(
+  data: Omit<Interview, "id" | "status" | "createdAt">
+): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
     ...data,
     status: "pending_acceptance",
@@ -50,30 +60,36 @@ export async function createInterview(data) {
   return ref.id;
 }
 
-export async function updateInterview(id, data) {
+export async function updateInterview(
+  id: string,
+  data: Partial<Omit<Interview, "id">>
+): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     ...data, updatedAt: new Date().toISOString(),
   });
 }
 
-export async function deleteInterview(id) {
+export async function deleteInterview(id: string): Promise<void> {
   await deleteDoc(doc(db, "interviews", id));
 }
 
-export async function markCandidateAttendance(interviewId, joined) {
-  const update = {
+export async function markCandidateAttendance(
+  interviewId: string,
+  joined: boolean
+): Promise<void> {
+  const update: Record<string, unknown> = {
     candidateJoined: joined,
     attendanceMarkedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
   if (!joined) {
-    update.status     = "no_show";
+    update.status      = "no_show";
     update.nextNudgeAt = null;
   }
   await updateDoc(doc(db, "interviews", interviewId), update);
 }
 
-function parseInterviewStart(scheduledDate, scheduledTime) {
+function parseInterviewStart(scheduledDate: string, scheduledTime: string): Date | null {
   if (!scheduledDate || !scheduledTime) return null;
   try {
     const match = scheduledTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
@@ -87,15 +103,18 @@ function parseInterviewStart(scheduledDate, scheduledTime) {
   } catch { return null; }
 }
 
-export async function checkAndSendFeedbackNudges(interviewerId, interviewerEmail) {
+export async function checkAndSendFeedbackNudges(
+  interviewerId: string,
+  interviewerEmail: string
+): Promise<void> {
   const now  = new Date();
   const hour = now.getHours();
-  if (hour < 9 || hour >= 21) return; // only 9 AM – 9 PM
+  if (hour < 9 || hour >= 21) return;
 
   const snap = await getDocs(
     query(collection(db, "interviews"), where("interviewerEmail", "==", interviewerEmail))
   );
-  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
 
   for (const iv of rows) {
     if (iv.status !== "scheduled") continue;
@@ -128,14 +147,14 @@ export async function checkAndSendFeedbackNudges(interviewerId, interviewerEmail
   }
 }
 
-export async function saveFeedbackDraft(id, feedback) {
+export async function saveFeedbackDraft(id: string, feedback: Record<string, unknown>): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
     updatedAt: new Date().toISOString(),
   });
 }
 
-export async function submitFeedback(id, feedback) {
+export async function submitFeedback(id: string, feedback: Record<string, unknown>): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
     status: "completed",
@@ -143,7 +162,9 @@ export async function submitFeedback(id, feedback) {
   });
 }
 
-export async function importCompletedInterview(data) {
+export async function importCompletedInterview(
+  data: Omit<Interview, "id" | "status" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
+): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
     ...data,
     status: "completed",
@@ -158,32 +179,38 @@ export async function importCompletedInterview(data) {
   return ref.id;
 }
 
-export function subscribeToInterviews(callback) {
+export function subscribeToInterviews(callback: (interviews: Interview[]) => void): () => void {
   const q = query(collection(db, "interviews"), orderBy("scheduledDate", "desc"));
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview))));
 }
 
-export function subscribeToInterviewerInterviews(interviewerEmail, callback) {
+export function subscribeToInterviewerInterviews(
+  interviewerEmail: string,
+  callback: (interviews: Interview[]) => void
+): () => void {
   const q = query(
     collection(db, "interviews"),
     where("interviewerEmail", "==", interviewerEmail),
   );
   return onSnapshot(q, snap => {
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
     docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
     callback(docs);
   });
 }
 
-export async function getCandidateAskedQuestions(candidateId, excludeInterviewId = null) {
+export async function getCandidateAskedQuestions(
+  candidateId: string,
+  excludeInterviewId: string | null = null
+): Promise<Set<string>> {
   const snap = await getDocs(query(
     collection(db, "interviews"),
     where("candidateId", "==", candidateId)
   ));
-  const questionIds = new Set();
+  const questionIds = new Set<string>();
   snap.docs.forEach(d => {
     if (excludeInterviewId && d.id === excludeInterviewId) return;
-    (d.data().questionsAsked || []).forEach(q => {
+    (d.data().questionsAsked as (string | { questionId: string })[] || []).forEach(q => {
       if (typeof q === "string") questionIds.add(q);
       else if (q?.questionId) questionIds.add(q.questionId);
     });
