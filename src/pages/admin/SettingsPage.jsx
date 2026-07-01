@@ -11,8 +11,6 @@ import {
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
-import Pagination from "../../components/Pagination";
-import { usePagination } from "../../hooks/usePagination";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
 
@@ -109,6 +107,13 @@ function downloadInviteSampleExcel() {
 }
 
 const SECTIONS = ["User Management", "General"];
+
+const ROLE_GROUPS = [
+  { value: "admin",               label: "Admin",                 dot: "bg-purple-400",  badge: "text-purple-700 bg-purple-50 border-purple-200" },
+  { value: "interviewer",         label: "Interviewer",           dot: "bg-emerald-400", badge: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+  { value: "interviewer_content", label: "Interviewer + Content", dot: "bg-teal-400",    badge: "text-teal-700 bg-teal-50 border-teal-200" },
+  { value: "content_team",        label: "Content Team",          dot: "bg-blue-400",    badge: "text-blue-700 bg-blue-50 border-blue-200" },
+];
 
 export default function SettingsPage() {
   const { currentUser } = useAuth();
@@ -340,9 +345,14 @@ export default function SettingsPage() {
     setToast({ message: `"${p.name}" deleted.` });
   };
 
-  // ── Pagination ────────────────────────────────────────────────────────────
-  const usersPagination   = usePagination(activeUsers);
-  const invitesPagination = usePagination(invites);
+  // ── Role-grouped views ────────────────────────────────────────────────────
+  const usersByRole = ROLE_GROUPS
+    .map(g => ({ ...g, users: activeUsers.filter(u => u.role === g.value) }))
+    .filter(g => g.users.length > 0);
+
+  const pendingInvitesByRole = ROLE_GROUPS
+    .map(g => ({ ...g, invites: pendingInvites.filter(i => i.role === g.value) }))
+    .filter(g => g.invites.length > 0);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const sectionTitle = (dot, label, count) => (
@@ -491,42 +501,47 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          {/* All Active Users */}
+          {/* All Active Users — grouped by role */}
           <div className="mb-8">
             {sectionTitle("bg-emerald-500", "All Users", activeUsers.length)}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {loading ? (
-                <p className="text-center text-gray-400 py-10 text-sm">Loading…</p>
-              ) : activeUsers.length === 0 ? (
-                <p className="text-center text-gray-400 py-10 text-sm">No active users yet.</p>
-              ) : (
-                <>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        {["Name", "Email", "Role", "Actions"].map(h => (
-                          <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {usersPagination.paged.map(u => (
-                        <tr key={u.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900">{u.displayName || "—"}</span>
-                              {u.id === currentUser?.uid && (
-                                <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">You</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-600 font-mono text-xs">{u.email}</td>
-                          <td className="px-4 py-3">{roleBadge(u.role)}</td>
-                          <td className="px-4 py-3">
-                            {u.id === currentUser?.uid ? (
-                              <span className="text-xs text-gray-400">—</span>
-                            ) : (
-                              <div className="flex items-center gap-3">
+            {loading ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">Loading…</div>
+            ) : activeUsers.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">No active users yet.</div>
+            ) : (
+              <div className="space-y-4">
+                {usersByRole.map(group => (
+                  <div key={group.value} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    {/* Group header */}
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                      <span className={`w-2 h-2 rounded-full ${group.dot}`} />
+                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{group.label}</span>
+                      <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-white border border-gray-200 text-gray-500 rounded-full">{group.users.length}</span>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {["Name", "Email", "Change Role", "Actions"].map(h => (
+                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {group.users.map(u => (
+                          <tr key={u.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900">{u.displayName || "—"}</span>
+                                {u.id === currentUser?.uid && (
+                                  <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">You</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">{u.email}</td>
+                            <td className="px-4 py-3">
+                              {u.id === currentUser?.uid ? (
+                                <span className="text-xs text-gray-400">—</span>
+                              ) : (
                                 <select
                                   value={u.role || "interviewer"}
                                   disabled={saving[u.id]}
@@ -536,64 +551,61 @@ export default function SettingsPage() {
                                     <option key={r.value} value={r.value}>{r.label}</option>
                                   ))}
                                 </select>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              {u.id !== currentUser?.uid && (
                                 <button onClick={() => revoke(u)} disabled={saving[u.id]}
                                   className="text-xs text-red-500 font-medium hover:underline disabled:opacity-40">
                                   Revoke
                                 </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <Pagination page={usersPagination.page} totalPages={usersPagination.totalPages} total={usersPagination.total} pageSize={usersPagination.pageSize} onPageChange={usersPagination.setPage} />
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Invites */}
-          {(invites.length > 0 || loading) && (
-            <div className="mb-8">
-              {sectionTitle("bg-indigo-400", "Invited", pendingInvites.length > 0 ? pendingInvites.length : null)}
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                {loading ? (
-                  <p className="text-center text-gray-400 py-10 text-sm">Loading…</p>
-                ) : (
-                  <>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100">
-                          {["Name", "Phone", "Email", "Invited On", "Status", "Actions"].map(h => (
-                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {invitesPagination.paged.map(inv => (
-                          <tr key={inv.id} className={`hover:bg-gray-50 ${inv.status === "registered" ? "opacity-60" : ""}`}>
-                            <td className="px-4 py-3 font-semibold text-gray-900">{inv.name || "—"}</td>
-                            <td className="px-4 py-3 text-gray-600">{inv.phone || "—"}</td>
-                            <td className="px-4 py-3 text-gray-600 font-mono text-xs">{inv.email}</td>
-                            <td className="px-4 py-3 text-gray-400 text-xs">{inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}</td>
-                            <td className="px-4 py-3">
-                              {inv.status === "registered" ? (
-                                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Registered
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  Awaiting signup
-                                </span>
                               )}
                             </td>
-                            <td className="px-4 py-3">
-                              <div className="flex items-center gap-3 whitespace-nowrap">
-                                {inv.status === "pending" && (
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Invited — grouped by role, only pending (awaiting signup) */}
+          {(pendingInvites.length > 0 || loading) && (
+            <div className="mb-8">
+              {sectionTitle("bg-indigo-400", "Invited — Awaiting Signup", pendingInvites.length > 0 ? pendingInvites.length : null)}
+              {loading ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">Loading…</div>
+              ) : pendingInvitesByRole.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">No pending invites.</div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingInvitesByRole.map(group => (
+                    <div key={group.value} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                      {/* Group header */}
+                      <div className="flex items-center gap-2.5 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                        <span className={`w-2 h-2 rounded-full ${group.dot}`} />
+                        <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">{group.label}</span>
+                        <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-white border border-gray-200 text-gray-500 rounded-full">{group.invites.length}</span>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-100">
+                            {["Name", "Phone", "Email", "Invited On", "Actions"].map(h => (
+                              <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {group.invites.map(inv => (
+                            <tr key={inv.id} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 font-semibold text-gray-900">{inv.name || "—"}</td>
+                              <td className="px-4 py-3 text-gray-500 text-xs">{inv.phone || "—"}</td>
+                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">{inv.email}</td>
+                              <td className="px-4 py-3 text-gray-400 text-xs">{inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3 whitespace-nowrap">
                                   <button onClick={() => copyLink(inv.id, inv.email)}
                                     className={`text-xs font-medium transition-colors inline-flex items-center gap-1.5 whitespace-nowrap ${copiedId === inv.id ? "text-emerald-600" : "text-indigo-600 hover:text-indigo-800"}`}>
                                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -601,21 +613,20 @@ export default function SettingsPage() {
                                     </svg>
                                     {copiedId === inv.id ? "Copied!" : "Copy link"}
                                   </button>
-                                )}
-                                <button onClick={() => handleRemoveInvite(inv)}
-                                  className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors whitespace-nowrap">
-                                  Remove
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    <Pagination page={invitesPagination.page} totalPages={invitesPagination.totalPages} total={invitesPagination.total} pageSize={invitesPagination.pageSize} onPageChange={invitesPagination.setPage} />
-                  </>
-                )}
-              </div>
+                                  <button onClick={() => handleRemoveInvite(inv)}
+                                    className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors whitespace-nowrap">
+                                    Remove
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
