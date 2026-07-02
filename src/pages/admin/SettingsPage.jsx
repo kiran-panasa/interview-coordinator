@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { formatDateShort } from "../../utils/dates";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
 import {
@@ -93,13 +93,13 @@ export default function SettingsPage() {
   }, [addingProgram]);
 
   // ── User Management handlers ──────────────────────────────────────────────
-  const pending     = users.filter(u => u.status === "pending");
-  const activeUsers = users.filter(u => u.status === "active").sort((a, b) => {
+  const pending     = useMemo(() => users.filter(u => u.status === "pending"), [users]);
+  const activeUsers = useMemo(() => users.filter(u => u.status === "active").sort((a, b) => {
     if (a.role === "admin" && b.role !== "admin") return -1;
     if (b.role === "admin" && a.role !== "admin") return 1;
     return (a.displayName || "").localeCompare(b.displayName || "");
-  });
-  const pendingInvites = invites.filter(i => i.status === "pending");
+  }), [users]);
+  const pendingInvites = useMemo(() => invites.filter(i => i.status === "pending"), [invites]);
 
   const signupLink = (email) =>
     `${window.location.origin}/login?mode=signup&email=${encodeURIComponent(email)}`;
@@ -193,11 +193,8 @@ export default function SettingsPage() {
   const handleCSVImport = async () => {
     if (!csvPreview.length) return;
     setCsvImporting(true);
-    let imported = 0;
-    for (const row of csvPreview) {
-      try { await createInvite(row); imported++; }
-      catch { /* skip */ }
-    }
+    const results = await Promise.allSettled(csvPreview.map(row => createInvite(row)));
+    const imported = results.filter(r => r.status === "fulfilled").length;
     setCsvImporting(false);
     setShowCSV(false);
     setCsvPreview([]);
@@ -270,13 +267,17 @@ export default function SettingsPage() {
   };
 
   // ── Role-grouped views ────────────────────────────────────────────────────
-  const usersByRole = ROLE_GROUPS
-    .map(g => ({ ...g, users: activeUsers.filter(u => u.role === g.value) }))
-    .filter(g => g.users.length > 0);
+  const usersByRole = useMemo(() =>
+    ROLE_GROUPS
+      .map(g => ({ ...g, users: activeUsers.filter(u => u.role === g.value) }))
+      .filter(g => g.users.length > 0),
+  [activeUsers]);
 
-  const pendingInvitesByRole = ROLE_GROUPS
-    .map(g => ({ ...g, invites: pendingInvites.filter(i => i.role === g.value) }))
-    .filter(g => g.invites.length > 0);
+  const pendingInvitesByRole = useMemo(() =>
+    ROLE_GROUPS
+      .map(g => ({ ...g, invites: pendingInvites.filter(i => i.role === g.value) }))
+      .filter(g => g.invites.length > 0),
+  [pendingInvites]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   const sectionTitle = (dot, label, count) => (

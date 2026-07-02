@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { formatDateShort } from "../../utils/dates";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -67,7 +67,7 @@ export default function TemplatesPage() {
   }, [activeTab, bankQuestionsLoaded]);
 
   // Stats per templateId: { [id]: { scheduled, completed, cancelled } }
-  const templateStats = interviews.reduce((acc, iv) => {
+  const templateStats = useMemo(() => interviews.reduce((acc, iv) => {
     const tid = iv.templateId;
     if (!tid) return acc;
     if (!acc[tid]) acc[tid] = { scheduled: 0, completed: 0, cancelled: 0 };
@@ -75,7 +75,7 @@ export default function TemplatesPage() {
     else if (iv.status === "cancelled" || iv.status === "no_show")      acc[tid].cancelled++;
     else if (iv.status !== "declined")                                  acc[tid].scheduled++;
     return acc;
-  }, {});
+  }, {}), [interviews]);
 
   const toTexts = (qb = {}) => ({
     theory:  (qb.theory  || []).join("\n"),
@@ -306,11 +306,11 @@ export default function TemplatesPage() {
 
   // ── Derived state ────────────────────────────────────────────────────────────
 
-  const sortedDomains  = [...form.domains].sort((a, b) => a.order - b.order);
-  const enabledDomains = sortedDomains.filter(d => d.enabled);
-  const scoredDomains  = enabledDomains.filter(d => (d.weightInVerdict ?? 0) > 0);
-  const totalWeight    = scoredDomains.reduce((s, d) => s + (d.weightInVerdict ?? 0), 0);
-  const weightOk       = scoredDomains.length === 0 || Math.abs(totalWeight - 100) < 0.5;
+  const sortedDomains  = useMemo(() => [...form.domains].sort((a, b) => a.order - b.order), [form.domains]);
+  const enabledDomains = useMemo(() => sortedDomains.filter(d => d.enabled), [sortedDomains]);
+  const scoredDomains  = useMemo(() => enabledDomains.filter(d => (d.weightInVerdict ?? 0) > 0), [enabledDomains]);
+  const totalWeight    = useMemo(() => scoredDomains.reduce((s, d) => s + (d.weightInVerdict ?? 0), 0), [scoredDomains]);
+  const weightOk       = useMemo(() => scoredDomains.length === 0 || Math.abs(totalWeight - 100) < 0.5, [scoredDomains, totalWeight]);
 
   const previewTemplate = previewTarget && {
     ...previewTarget,
@@ -318,11 +318,19 @@ export default function TemplatesPage() {
   };
 
   // Filtered templates for the active program tab
-  const visibleTemplates = templates.filter(t => {
+  const visibleTemplates = useMemo(() => templates.filter(t => {
     if (activeProgram === "all")        return true;
     if (activeProgram === "unassigned") return !t.program;
     return t.program === activeProgram;
-  });
+  }), [templates, activeProgram]);
+
+  const programTemplateCounts = useMemo(() => {
+    const counts = new Map();
+    for (const t of templates) {
+      counts.set(t.program || "__unassigned__", (counts.get(t.program || "__unassigned__") || 0) + 1);
+    }
+    return counts;
+  }, [templates]);
 
   const handleMigrateDomainIds = async () => {
     if (!confirm(
@@ -374,8 +382,8 @@ export default function TemplatesPage() {
       <div className="flex border-b border-gray-200 mb-6">
         {[
           { id: "all",        label: "All",        count: templates.length },
-          ...programs.map(p => ({ id: p.id, label: p.name, count: templates.filter(t => t.program === p.id).length })),
-          { id: "unassigned", label: "Unassigned", count: templates.filter(t => !t.program).length },
+          ...programs.map(p => ({ id: p.id, label: p.name, count: programTemplateCounts.get(p.id) || 0 })),
+          { id: "unassigned", label: "Unassigned", count: programTemplateCounts.get("__unassigned__") || 0 },
         ].map(tab => (
           <button key={tab.id} onClick={() => setActiveProgram(tab.id)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${

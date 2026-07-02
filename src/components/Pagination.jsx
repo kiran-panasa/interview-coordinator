@@ -1,4 +1,6 @@
-export default function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
+import { memo } from "react";
+
+function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
   if (totalPages <= 1) return null;
 
   const start = (page - 1) * pageSize + 1;
@@ -53,3 +55,5 @@ export default function Pagination({ page, totalPages, total, pageSize, onPageCh
     </div>
   );
 }
+
+export default memo(Pagination);

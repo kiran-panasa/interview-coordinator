@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { formatDate, formatDateShort, toInterviewDateTime } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import {
@@ -15,6 +15,8 @@ import {
   StructuredFeedbackForm, StructuredFeedbackDisplay,
 } from "../../components/StructuredFeedbackForm";
 import DynamicFeedbackForm, { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
+
+const DIFF_BADGE = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
 
 function isPastInterviewTime(scheduledDate, scheduledTime) {
   if (!scheduledDate || !scheduledTime) return false;
@@ -80,6 +82,13 @@ export default function InterviewDetail() {
       setLoading(false);
     });
   }, [id]);
+
+  const byDomain = useMemo(() => templateQs.reduce((acc, q) => {
+    const key = q.domainType || "other";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(q);
+    return acc;
+  }, {}), [templateQs]);
 
   const setAnswer = (qid, val) => setAnswers(a => ({ ...a, [qid]: val }));
 
@@ -338,16 +347,7 @@ export default function InterviewDetail() {
       )}
 
       {/* ── Questions Asked ── */}
-      {showEvaluation && templateQs.length > 0 && (() => {
-        const byDomain = templateQs.reduce((acc, q) => {
-          const key = q.domainType || "other";
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(q);
-          return acc;
-        }, {});
-        const diffBadge = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
-
-        return (
+      {showEvaluation && templateQs.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-bold text-gray-900">Questions Asked</h2>
@@ -381,7 +381,7 @@ export default function InterviewDetail() {
                               <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
                               <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                 {q.difficulty && (
-                                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded capitalize ${diffBadge[q.difficulty] || "bg-gray-100 text-gray-600"}`}>
+                                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded capitalize ${DIFF_BADGE[q.difficulty] || "bg-gray-100 text-gray-600"}`}>
                                     {q.difficulty}
                                   </span>
                                 )}
@@ -450,8 +450,7 @@ export default function InterviewDetail() {
               </div>
             )}
           </div>
-        );
-      })()}
+      )}
 
       {/* ── Evaluation section (scheduled or completed) ── */}
       {showEvaluation && (

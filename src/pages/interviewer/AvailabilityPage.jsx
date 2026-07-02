@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { formatDateLong } from "../../utils/dates";
 import { useAuth } from "../../AuthContext";
 import {
@@ -71,20 +71,25 @@ export default function AvailabilityPage() {
   const firstDayOfWeek = new Date(year, month, 1).getDay();
   const daysInMonth    = new Date(year, month + 1, 0).getDate();
 
-  const slotsByDate = {};
-  slots.forEach(s => {
-    if (!slotsByDate[s.date]) slotsByDate[s.date] = [];
-    slotsByDate[s.date].push(s);
-  });
+  const slotsByDate = useMemo(() => {
+    const map = {};
+    for (const s of slots) {
+      if (!map[s.date]) map[s.date] = [];
+      map[s.date].push(s);
+    }
+    return map;
+  }, [slots]);
 
   const isoDate = (d) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
-  const daySlots = selectedDate
-    ? (slotsByDate[selectedDate] || []).sort((a, b) => a.time.localeCompare(b.time))
-    : [];
+  const daySlots = useMemo(() =>
+    selectedDate
+      ? (slotsByDate[selectedDate] || []).slice().sort((a, b) => a.time.localeCompare(b.time))
+      : [],
+  [slotsByDate, selectedDate]);
 
-  const freeCount = daySlots.filter(s => !s.isBooked).length;
+  const freeCount = useMemo(() => daySlots.filter(s => !s.isBooked).length, [daySlots]);
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
@@ -241,15 +246,17 @@ export default function AvailabilityPage() {
   };
 
   // ── Upcoming slots (all future) ───────────────────────────────────────────────
-  const upcoming = slots
-    .filter(s => s.date >= todayStr)
-    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  const upcoming = useMemo(() =>
+    slots
+      .filter(s => s.date >= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)),
+  [slots, todayStr]);
 
-  const grouped = upcoming.reduce((acc, s) => {
+  const grouped = useMemo(() => upcoming.reduce((acc, s) => {
     if (!acc[s.date]) acc[s.date] = [];
     acc[s.date].push(s);
     return acc;
-  }, {});
+  }, {}), [upcoming]);
 
   return (
     <div className="p-8">

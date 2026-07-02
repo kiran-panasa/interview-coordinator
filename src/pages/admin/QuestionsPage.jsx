@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { formatDateShort } from "../../utils/dates";
 import { useOutletContext } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -83,10 +83,8 @@ export default function QuestionsPage() {
     return unsub;
   }, []);
 
-  // Build { value, label } pairs from template domains (source of truth),
-  // plus any domainTypes already on existing questions that aren't in any template.
-  const allDomainTypes = (() => {
-    const map = new Map(); // value → label
+  const allDomainTypes = useMemo(() => {
+    const map = new Map();
     templates.forEach(t =>
       (t.domains || []).forEach(d => {
         const val = d.id || d.type;
@@ -100,13 +98,29 @@ export default function QuestionsPage() {
     return [...map.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  })();
+  }, [templates, questions]);
 
-  const allTopics = [...new Set(questions.filter(q => q.topic).map(q => q.topic))].sort();
+  const allTopics = useMemo(
+    () => [...new Set(questions.filter(q => q.topic).map(q => q.topic))].sort(),
+    [questions]
+  );
 
-  // compute which template IDs contain a given question ID
-  const templateIdsForQuestion = (qid) =>
-    templates.filter(t => (t.questionIds || []).includes(qid)).map(t => t.id);
+  // reverse map: questionId → [template objects] for O(1) per-question lookups
+  const qToTemplatesMap = useMemo(() => {
+    const map = new Map();
+    templates.forEach(t => {
+      (t.questionIds || []).forEach(qid => {
+        if (!map.has(qid)) map.set(qid, []);
+        map.get(qid).push(t);
+      });
+    });
+    return map;
+  }, [templates]);
+
+  const templateIdsForQuestion = useCallback(
+    (qid) => (qToTemplatesMap.get(qid) || []).map(t => t.id),
+    [qToTemplatesMap]
+  );
 
   // ── Question Bank actions ────────────────────────────────────────────────────
 
@@ -283,17 +297,12 @@ export default function QuestionsPage() {
   const handleBulkImport = async () => {
     if (!bulkPreview?.rows?.length) return;
     setBulkImporting(true);
+    const skillNameMap    = new Map(skills.map(s    => [s.name.toLowerCase(),    s.id]));
+    const templateNameMap = new Map(templates.map(t => [t.name.toLowerCase(), t.id]));
     try {
-      let imported = 0;
-      for (const row of bulkPreview.rows) {
-        const skillIds = row.skills.map(name => {
-          const s = skills.find(s => s.name.toLowerCase() === name.toLowerCase());
-          return s?.id;
-        }).filter(Boolean);
-        const templateMatchIds = row.templates.map(name => {
-          const t = templates.find(t => t.name.toLowerCase() === name.toLowerCase());
-          return t?.id;
-        }).filter(Boolean);
+      await Promise.all(bulkPreview.rows.map(async (row) => {
+        const skillIds        = row.skills.map(n => skillNameMap.get(n.toLowerCase())).filter(Boolean);
+        const templateMatchIds = row.templates.map(n => templateNameMap.get(n.toLowerCase())).filter(Boolean);
         const qid = await createQuestion({
           text: row.text, domainTypes: row.domainTypes,
           difficulty: row.difficulty, topic: row.topic, skills: skillIds,
@@ -302,12 +311,12 @@ export default function QuestionsPage() {
         if (templateMatchIds.length > 0) {
           await Promise.all(templateMatchIds.map(tid => addQuestionToTemplate(tid, qid)));
         }
-        imported++;
-      }
+      }));
       if (bulkPreview.rows.some(r => r.templates.length > 0)) queryClient.invalidateQueries({ queryKey: QK.templates });
       setShowBulkModal(false);
       setBulkPreview(null);
       setBulkText("");
+      const imported = bulkPreview.rows.length;
       setToast({ message: `${imported} question${imported !== 1 ? "s" : ""} imported.` });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
     setBulkImporting(false);
@@ -369,7 +378,12 @@ export default function QuestionsPage() {
 
   // ── Filtered list ────────────────────────────────────────────────────────────
 
-  const filtered = questions.filter(q => {
+  const templateQuestionSet = useMemo(
+    () => filterTemplate ? new Set(templates.find(t => t.id === filterTemplate)?.questionIds || []) : null,
+    [filterTemplate, templates]
+  );
+
+  const filtered = useMemo(() => questions.filter(q => {
     if (!showArchived && q.status === "archived") return false;
     if (showArchived  && q.status !== "archived") return false;
     const qDomains = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
@@ -377,7 +391,7 @@ export default function QuestionsPage() {
     if (filterDifficulty && q.difficulty !== filterDifficulty)       return false;
     if (filterSkill      && !(q.skills || []).includes(filterSkill)) return false;
     if (filterTopic      && q.topic !== filterTopic)                return false;
-    if (filterTemplate   && !(templates.find(t => t.id === filterTemplate)?.questionIds || []).includes(q.id)) return false;
+    if (templateQuestionSet && !templateQuestionSet.has(q.id))       return false;
     if (search) {
       const sq = search.toLowerCase();
       return (
@@ -387,11 +401,16 @@ export default function QuestionsPage() {
       );
     }
     return true;
-  });
+  }), [questions, showArchived, filterDomain, filterDifficulty, filterSkill, filterTopic, templateQuestionSet, search]);
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered, 20);
-  const activeCount   = questions.filter(q => q.status !== "archived").length;
-  const archivedCount = questions.filter(q => q.status === "archived").length;
+
+  const { activeCount, archivedCount } = useMemo(() => {
+    let active = 0, archived = 0;
+    questions.forEach(q => { if (q.status === "archived") archived++; else active++; });
+    return { activeCount: active, archivedCount: archived };
+  }, [questions]);
+
   const pendingAdhoc  = adhocQs.filter(q => q.status === "pending");
 
   return (
@@ -529,7 +548,7 @@ export default function QuestionsPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {paged.map(q => {
-                    const qTemplates = templates.filter(t => (t.questionIds || []).includes(q.id));
+                    const qTemplates = qToTemplatesMap.get(q.id) || [];
                     return (
                       <tr key={q.id} className={`hover:bg-gray-50 ${selected.has(q.id) ? "bg-indigo-50/60" : ""} ${q.status === "archived" ? "opacity-50" : ""}`}>
                         <td className="pl-4 pr-2 py-3 w-8">

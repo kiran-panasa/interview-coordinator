@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, memo } from "react";
 import {
   initFeedbackState,
   computeCardRating,
@@ -206,7 +206,7 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
 
 // ── Domain section ─────────────────────────────────────────────────────────────
 
-function DomainSection({ domain, domainData, onChange, disabled, questionBank, defaultOpen }) {
+const DomainSection = memo(function DomainSection({ domain, domainData, onChange, disabled, questionBank, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
 
   const updateCard = useCallback((i, newCard) => {
@@ -319,7 +319,7 @@ function DomainSection({ domain, domainData, onChange, disabled, questionBank, d
       )}
     </div>
   );
-}
+});
 
 // ── Final Verdict banner ──────────────────────────────────────────────────────
 
@@ -352,17 +352,22 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
     }));
   }, []);
 
-  const finalVerdict = computeFinalVerdict(template, feedbackData);
+  const enabledDomains = useMemo(() =>
+    (template?.domains || [])
+      .filter(d => d.enabled !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  [template?.domains]);
+
+  const finalVerdict = useMemo(
+    () => computeFinalVerdict(template, feedbackData),
+    [template, feedbackData]
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (previewMode) return;
     onSubmit(materializeFeedback(template, feedbackData));
   };
-
-  const enabledDomains = (template?.domains || [])
-    .filter(d => d.enabled !== false)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -397,14 +402,21 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
 
 // ── Read-only display of a submitted evaluation ───────────────────────────────
 
+const NOOP = () => {};
+
 export function DynamicFeedbackDisplay({ template, feedbackData }) {
+  const enabledDomains = useMemo(() =>
+    (template?.domains || [])
+      .filter(d => d.enabled !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+  [template?.domains]);
+
+  const finalVerdict = useMemo(
+    () => feedbackData?.finalVerdict ?? computeFinalVerdict(template, feedbackData),
+    [template, feedbackData]
+  );
+
   if (!template || !feedbackData) return null;
-
-  const enabledDomains = (template?.domains || [])
-    .filter(d => d.enabled !== false)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-
-  const finalVerdict = feedbackData.finalVerdict ?? computeFinalVerdict(template, feedbackData);
 
   return (
     <div className="space-y-4">
@@ -413,7 +425,7 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
           key={domain.id}
           domain={domain}
           domainData={feedbackData.domains?.[domain.id] || { cards: [] }}
-          onChange={() => {}}
+          onChange={NOOP}
           disabled
           questionBank={template?.questionBank}
           defaultOpen
