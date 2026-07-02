@@ -180,6 +180,7 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
   return {
     ...materialized,
     overallRecommendation: verdict,
+    ...(overallNotes ? { comments: overallNotes } : {}),
     importedFromSheet: true,
     submittedAt: new Date().toISOString(),
   };

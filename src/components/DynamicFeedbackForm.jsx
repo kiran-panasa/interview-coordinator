@@ -431,6 +431,12 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
           defaultOpen
         />
       ))}
+      {feedbackData.comments && (
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Overall Notes</p>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedbackData.comments}</p>
+        </div>
+      )}
       <VerdictBanner value={finalVerdict} />
     </div>
   );
