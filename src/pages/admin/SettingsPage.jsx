@@ -54,6 +54,11 @@ export default function SettingsPage() {
 
   const [pendingRoles, setPendingRoles] = useState({});
 
+  // ── Set phone modal ────────────────────────────────────────────────────────
+  const [phoneModal,    setPhoneModal]    = useState(null); // user object | null
+  const [phoneInput,    setPhoneInput]    = useState("");
+  const [phoneSaving,   setPhoneSaving]   = useState(false);
+
   const [skills,       setSkills]       = useState([]);
   const [newSkillName, setNewSkillName] = useState("");
   const [editingSkill, setEditingSkill] = useState(null);
@@ -152,6 +157,20 @@ export default function SettingsPage() {
     } catch {
       setToast({ message: "Failed to send reset email. Try again.", type: "error" });
     }
+  };
+
+  const openPhoneModal = (u) => { setPhoneModal(u); setPhoneInput(u.phone || ""); };
+  const handleSetPhone = async (e) => {
+    e.preventDefault();
+    setPhoneSaving(true);
+    try {
+      await updateUser(phoneModal.id, { phone: phoneInput.trim() || null });
+      setToast({ message: `Phone updated for ${phoneModal.displayName || phoneModal.email}.` });
+      setPhoneModal(null);
+    } catch {
+      setToast({ message: "Failed to update phone. Try again.", type: "error" });
+    }
+    setPhoneSaving(false);
   };
 
   const handleInviteSubmit = async (e) => {
@@ -494,6 +513,11 @@ export default function SettingsPage() {
                                 <button onClick={() => sendReset(u)}
                                   className="text-xs text-indigo-600 font-medium hover:underline">
                                   Send reset
+                                </button>
+                                <button onClick={() => openPhoneModal(u)}
+                                  className={`text-xs font-medium hover:underline ${u.phone ? "text-emerald-600" : "text-amber-600"}`}
+                                  title={u.phone ? `Phone: ${u.phone}` : "No phone — set one to enable OTP recovery"}>
+                                  {u.phone ? "✓ Phone" : "Set phone"}
                                 </button>
                                 {u.id !== currentUser?.uid && (
                                   <button onClick={() => revoke(u)} disabled={saving[u.id]}
@@ -905,6 +929,44 @@ export default function SettingsPage() {
             </button>
           </div>
         </div>
+      </Modal>
+
+      {/* ── Set phone modal ── */}
+      <Modal open={!!phoneModal} onClose={() => setPhoneModal(null)} title="Set Phone Number">
+        {phoneModal && (
+          <form onSubmit={handleSetPhone} className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Set a phone number for <strong>{phoneModal.displayName || phoneModal.email}</strong>.
+              Once saved, they can use OTP-based password recovery from the login page.
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Phone Number
+              </label>
+              <input
+                type="tel"
+                autoFocus
+                value={phoneInput}
+                onChange={e => setPhoneInput(e.target.value)}
+                placeholder="+91 98765 43210"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+              <p className="text-xs text-gray-400 mt-1.5">
+                Include country code, e.g. +91 for India. Leave blank to remove the phone number.
+              </p>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button type="submit" disabled={phoneSaving}
+                className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                {phoneSaving ? "Saving…" : "Save"}
+              </button>
+              <button type="button" onClick={() => setPhoneModal(null)}
+                className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
