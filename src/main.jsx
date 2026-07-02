@@ -15,11 +15,15 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
+const MIN = 60 * 1000;
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      staleTime: 2 * MIN,
+      gcTime:    10 * MIN,
     },
   },
 });

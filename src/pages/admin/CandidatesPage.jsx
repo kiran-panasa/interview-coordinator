@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -189,7 +189,7 @@ export default function CandidatesPage() {
       const updates = {};
       if (bulkProgram)           updates.program     = bulkProgram;
       if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
-      for (const id of selected) await updateCandidate(id, updates);
+      await Promise.all([...selected].map(id => updateCandidate(id, updates)));
       queryClient.setQueryData(QK.candidates, prev => (prev || []).map(c => selected.has(c.id) ? { ...c, ...updates } : c));
       setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
       setShowBulk(false);
@@ -235,31 +235,38 @@ export default function CandidatesPage() {
   const handleCSVImport = async (mode) => {
     if (!csvPreview.length) return;
     setCsvImporting(true);
-    let created = 0, updated = 0, skipped = 0;
-    const newRows = [], updatedRows = [];
-    for (const row of csvPreview) {
+    const programMap  = new Map(programs.map(p  => [p.name.toLowerCase(),  p.id]));
+    const templateMap = new Map(templates.map(t => [t.name.toLowerCase(), t.id]));
+
+    const results = await Promise.all(csvPreview.map(async (row) => {
       try {
         const { programName, templateNames, ...rest } = row;
-        const resolvedProgram = programs.find(p => p.name.toLowerCase() === programName.toLowerCase())?.id || "";
+        const resolvedProgram   = programMap.get(programName.toLowerCase()) || "";
         const resolvedTemplates = (templateNames || [])
-          .map(name => templates.find(t => t.name.toLowerCase() === name.toLowerCase())?.id)
+          .map(name => templateMap.get(name.toLowerCase()))
           .filter(Boolean);
-        const payload = { ...rest, program: resolvedProgram, templateIds: resolvedTemplates };
+        const payload  = { ...rest, program: resolvedProgram, templateIds: resolvedTemplates };
         const existing = findExisting(row);
         if (existing) {
           if (mode === "replace") {
             await updateCandidate(existing.id, payload);
-            updatedRows.push({ id: existing.id, ...payload });
-            updated++;
-          } else skipped++;
+            return { type: "updated", row: { id: existing.id, ...payload } };
+          }
+          return { type: "skipped" };
         } else {
           const createdAt = new Date().toISOString();
           const id = await createCandidate({ ...payload, createdBy: currentUser.uid });
-          newRows.push({ id, ...payload, createdAt, createdBy: currentUser.uid });
-          created++;
+          return { type: "created", row: { id, ...payload, createdAt, createdBy: currentUser.uid } };
         }
-      } catch { /* skip */ }
-    }
+      } catch { return { type: "skipped" }; }
+    }));
+
+    const newRows    = results.filter(r => r.type === "created").map(r => r.row);
+    const updatedRows = results.filter(r => r.type === "updated").map(r => r.row);
+    const created = newRows.length;
+    const updated = updatedRows.length;
+    const skipped = results.filter(r => r.type === "skipped").length;
+
     queryClient.setQueryData(QK.candidates, prev => {
       const updatedMap = new Map(updatedRows.map(r => [r.id, r]));
       const merged = (prev || []).map(c => updatedMap.has(c.id) ? { ...c, ...updatedMap.get(c.id) } : c);
@@ -275,22 +282,38 @@ export default function CandidatesPage() {
 
   const closeCSV = () => { setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null); };
 
-  const archivedCount = candidates.filter(c => c.archived === true).length;
-  const workingSet    = candidates.filter(c => (c.archived === true) === showArchived);
+  const programNameMap = useMemo(
+    () => new Map(programs.map(p => [p.id, p.name])),
+    [programs]
+  );
+  const programName = useCallback(
+    (id) => programNameMap.get(id) || id || "—",
+    [programNameMap]
+  );
 
-  const filtered = workingSet.filter(c => {
-    if (activeProgram === "unassigned" && c.program) return false;
-    if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
+  const archivedCount = useMemo(
+    () => candidates.filter(c => c.archived === true).length,
+    [candidates]
+  );
+  const workingSet = useMemo(
+    () => candidates.filter(c => (c.archived === true) === showArchived),
+    [candidates, showArchived]
+  );
+
+  const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return (
-      c.name?.toLowerCase().includes(q) ||
-      c.uid?.toLowerCase().includes(q) ||
-      c.email?.toLowerCase().includes(q)
-    );
-  });
-  const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
+    return workingSet.filter(c => {
+      if (activeProgram === "unassigned" && c.program) return false;
+      if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
+      return (
+        c.name?.toLowerCase().includes(q) ||
+        c.uid?.toLowerCase().includes(q) ||
+        c.email?.toLowerCase().includes(q)
+      );
+    });
+  }, [workingSet, activeProgram, search]);
 
-  const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
+  const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";

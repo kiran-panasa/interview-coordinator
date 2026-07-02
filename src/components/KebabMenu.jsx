@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 
-export default function KebabMenu({ actions }) {
+function KebabMenu({ actions }) {
   const [open, setOpen] = useState(false);
   const [pos,  setPos]  = useState({ top: 0, right: 0 });
   const btnRef      = useRef();
@@ -85,3 +85,5 @@ export default function KebabMenu({ actions }) {
     </div>
   );
 }
+
+export default memo(KebabMenu);

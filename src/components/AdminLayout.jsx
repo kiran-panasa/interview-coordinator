@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { subscribeToUserNotifications, subscribeToAdhocQuestions } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
 
@@ -24,7 +24,7 @@ export default function AdminLayout() {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const role = userProfile?.role || "admin";
-  const nav = ALL_NAV.filter(item => item.roles.includes(role));
+  const nav = useMemo(() => ALL_NAV.filter(item => item.roles.includes(role)), [role]);
 
   const [unread,    setUnread]    = useState(0);
   const [adhocQs,   setAdhocQs]  = useState([]);

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import { parseImportCSV, buildFeedbackFromCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { useAuth } from "../../AuthContext";
@@ -45,8 +45,9 @@ export default function InterviewsPage() {
   const { data: usersAll    = [] } = useUsers();
   const { data: templates   = [] } = useTemplates();
   const { data: programs    = [] } = usePrograms();
-  const interviewers = usersAll.filter(u =>
-    (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
+  const interviewers = useMemo(() =>
+    usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"),
+    [usersAll]
   );
   const [interviews,    setInterviews]    = useState([]);
   const [activeProgram, setActiveProgram] = useState("all");
@@ -271,9 +272,7 @@ export default function InterviewsPage() {
   const handleImport = async () => {
     const validRows = parsedRows.filter(r => r.errors.length === 0);
     setImporting(true);
-    let done = 0;
-    const failed = [];
-    for (const row of validRows) {
+    const results = await Promise.all(validRows.map(async (row) => {
       try {
         const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData } = row.resolved;
         const feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
@@ -292,10 +291,14 @@ export default function InterviewsPage() {
           meetLink: "",
           feedback,
         });
-        done++;
-      } catch (e) { failed.push(`Row ${row.rowNum}: ${e.message}`); }
-    }
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, msg: `Row ${row.rowNum}: ${e.message}` };
+      }
+    }));
     setImporting(false);
+    const done   = results.filter(r => r.ok).length;
+    const failed = results.filter(r => !r.ok).map(r => r.msg);
     if (failed.length) {
       setToast({ message: `${done} imported, ${failed.length} failed. Check console.`, type: "error" });
     } else {
@@ -306,23 +309,39 @@ export default function InterviewsPage() {
 
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  const templateProgram = (templateId) =>
-    templates.find(t => t.id === templateId)?.program || "";
+  const templateProgramMap = useMemo(
+    () => new Map(templates.map(t => [t.id, t.program || ""])),
+    [templates]
+  );
+  const templateProgram = useCallback(
+    (templateId) => templateProgramMap.get(templateId) || "",
+    [templateProgramMap]
+  );
 
-  const archivedCount = interviews.filter(i => i.archived === true).length;
-  const workingSet    = interviews.filter(i => (i.archived === true) === showArchived);
+  const archivedCount = useMemo(
+    () => interviews.filter(i => i.archived === true).length,
+    [interviews]
+  );
+  const workingSet = useMemo(
+    () => interviews.filter(i => (i.archived === true) === showArchived),
+    [interviews, showArchived]
+  );
 
-  const filtered = workingSet.filter(i => {
+  const filtered = useMemo(() => workingSet.filter(i => {
     if (activeProgram === "unassigned" && templateProgram(i.templateId)) return false;
     if (activeProgram !== "all" && activeProgram !== "unassigned" && templateProgram(i.templateId) !== activeProgram) return false;
     if (filterStatus !== "All" && i.status !== filterStatus) return false;
     if (filterDate && i.scheduledDate !== filterDate) return false;
     if (filterIvr  !== "All" && i.interviewerEmail !== filterIvr) return false;
     return true;
-  });
+  }), [workingSet, activeProgram, filterStatus, filterDate, filterIvr, templateProgram]);
+
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
-  const uniqueIvrs = [...new Set(workingSet.map(i => i.interviewerEmail))].filter(Boolean).sort();
+  const uniqueIvrs = useMemo(
+    () => [...new Set(workingSet.map(i => i.interviewerEmail))].filter(Boolean).sort(),
+    [workingSet]
+  );
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";

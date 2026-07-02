@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useCallback, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, getAnyInviteByEmail, updateInvite } from "./api/firestore";
@@ -67,10 +67,17 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
-  const refreshProfile = () => currentUser && loadProfile(currentUser);
+  const refreshProfile = useCallback(() => {
+    if (currentUser) loadProfile(currentUser);
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ctxValue = useMemo(
+    () => ({ currentUser, userProfile, authLoading, refreshProfile }),
+    [currentUser, userProfile, authLoading, refreshProfile]
+  );
 
   return (
-    <AuthContext.Provider value={{ currentUser, userProfile, authLoading, refreshProfile }}>
+    <AuthContext.Provider value={ctxValue}>
       {children}
     </AuthContext.Provider>
   );
