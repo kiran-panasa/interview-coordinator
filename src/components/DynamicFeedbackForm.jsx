@@ -437,6 +437,12 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedbackData.comments}</p>
         </div>
       )}
+      {feedbackData.overallRecommendation && (
+        <div className="bg-indigo-50 rounded-2xl border border-indigo-100 px-5 py-4 flex items-center gap-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Overall Recommendation</p>
+          <span className="text-sm font-bold text-indigo-700">{feedbackData.overallRecommendation}</span>
+        </div>
+      )}
       <VerdictBanner value={finalVerdict} />
     </div>
   );
