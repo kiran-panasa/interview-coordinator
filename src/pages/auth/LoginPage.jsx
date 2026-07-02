@@ -25,7 +25,7 @@ const FIREBASE_ERRORS = {
   "auth/invalid-verification-code":   "Incorrect code. Try again.",
   "auth/code-expired":                "Code expired. Go back and request a new one.",
   "auth/missing-phone-number":        "No phone number found. Contact your admin.",
-  "auth/operation-not-allowed":       "Phone sign-in is not enabled. Contact your admin.",
+  "auth/operation-not-allowed":       "SMS for this region is not enabled. Go to Firebase Console → Authentication → Sign-in method → Phone → SMS regions and enable India (+91).",
 };
 
 function toE164(raw = "") {
