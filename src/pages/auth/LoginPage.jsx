@@ -143,7 +143,8 @@ export default function LoginPage() {
       setConfirmResult(result);
       setOtpStep(2);
     } catch (err) {
-      setError(FIREBASE_ERRORS[err.code] || "Could not send OTP. Try again.");
+      console.error("OTP send error:", err.code, err.message);
+      setError(FIREBASE_ERRORS[err.code] || `Could not send OTP. (${err.code || err.message})`);
       verifierRef.current = null;
     }
     setLoading(false);
