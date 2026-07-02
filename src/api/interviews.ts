@@ -162,6 +162,22 @@ export async function submitFeedback(id: string, feedback: Record<string, unknow
   });
 }
 
+export async function importScheduledInterview(
+  data: Omit<Interview, "id" | "status" | "feedback" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
+): Promise<string> {
+  const ref = await addDoc(collection(db, "interviews"), {
+    ...data,
+    status: "pending_acceptance",
+    candidateJoined: false,
+    questionsAsked: [],
+    questionRemarks: {},
+    importedFromSheet: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  return ref.id;
+}
+
 export async function importCompletedInterview(
   data: Omit<Interview, "id" | "status" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
 ): Promise<string> {

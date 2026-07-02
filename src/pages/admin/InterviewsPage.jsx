@@ -7,7 +7,7 @@ import {
   createInterview, updateInterview, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
-  getTemplate, DEFAULT_ROUNDS, importCompletedInterview,
+  getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
 } from "../../api/firestore";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
 import Modal from "../../components/Modal";
@@ -274,23 +274,30 @@ export default function InterviewsPage() {
     setImporting(true);
     const results = await Promise.all(validRows.map(async (row) => {
       try {
-        const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData } = row.resolved;
-        const feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
-        await importCompletedInterview({
+        const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback } = row.resolved;
+        const interviewerEmail = interviewer?.email || row.raw.interviewerEmail;
+        const interviewerName  = interviewer?.displayName || row.raw.interviewerEmail;
+        const interviewerId    = interviewer?.id || "";
+        const base = {
           candidateId:      candidate.id,
           candidateName:    candidate.name,
           candidateEmail:   candidate.email,
-          interviewerId:    interviewer.id,
-          interviewerEmail: interviewer.email,
-          interviewerName:  interviewer.displayName || interviewer.email,
+          interviewerId,
+          interviewerEmail,
+          interviewerName,
           templateId:       template?.id   || "",
           templateName:     template?.name || "",
           scheduledDate,
           scheduledTime,
           round:    row.raw.round,
           meetLink: "",
-          feedback,
-        });
+        };
+        if (verdict || hasDomainFeedback) {
+          const feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
+          await importCompletedInterview({ ...base, feedback });
+        } else {
+          await importScheduledInterview(base);
+        }
         return { ok: true };
       } catch (e) {
         return { ok: false, msg: `Row ${row.rowNum}: ${e.message}` };
@@ -703,12 +710,12 @@ export default function InterviewsPage() {
                 <tbody className="text-gray-600 divide-y divide-gray-100">
                   {[
                     ["candidateEmail",   "Yes", "john@example.com"],
-                    ["interviewerEmail", "Yes", "interviewer@nxtwave.tech"],
+                    ["interviewerEmail", "Yes", "interviewer@nxtwave.tech (need not be signed up yet)"],
                     ["templateName",     "Yes", "Product Mastery - Novice"],
                     ["date",             "Yes", "15/06/2026 or 2026-06-15"],
                     ["time",             "Yes", "10:00 AM or 14:30"],
                     ["round",            "No",  "Round 1 (default)"],
-                    ["verdict",          "No",  "Proceed / Hold / Reject"],
+                    ["verdict",          "No",  "Proceed / Hold / Reject — omit to create as scheduled (pending)"],
                     ["notes",            "No",  "Overall feedback notes"],
                     ["{domainId}_{fieldId}_rating","No",  "e.g. coding_ps_rating → score for that specific card field (0–5)"],
                     ["{domainId}_rating",         "No",  "e.g. resume_rating → for domains with no card fields"],

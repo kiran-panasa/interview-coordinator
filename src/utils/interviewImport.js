@@ -89,7 +89,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
 
       const interviewer = interviewers.find(u => u.email?.toLowerCase() === raw.interviewerEmail.toLowerCase());
       if (!raw.interviewerEmail) errors.push("interviewerEmail required");
-      else if (!interviewer) errors.push(`Interviewer not found: ${raw.interviewerEmail}`);
+      else if (!interviewer) warnings.push(`Interviewer not yet onboarded (${raw.interviewerEmail}) — interview will appear on their dashboard when they sign up`);
 
       const template = templates.find(t => t.name.toLowerCase() === raw.templateName.toLowerCase());
       if (!raw.templateName) errors.push("templateName required");
