@@ -101,6 +101,11 @@ export default function ProfilePage() {
             <Field label="Phone Number">
               <input value={form.phone} onChange={e => set("phone", e.target.value)}
                 placeholder="+91 98765 43210" className={inputCls} />
+              {!form.phone && (
+                <p className="text-[11px] text-amber-600 mt-1.5">
+                  Required for OTP-based password recovery if you lose email access.
+                </p>
+              )}
             </Field>
             <Field label="Email">
               <input value={userProfile?.email || ""} readOnly
