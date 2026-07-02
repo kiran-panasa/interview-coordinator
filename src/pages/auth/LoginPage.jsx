@@ -8,7 +8,7 @@ import {
   signInWithPhoneNumber,
   RecaptchaVerifier,
 } from "firebase/auth";
-import { getUserByEmail } from "../../api/firestore";
+import { getUserByPhone } from "../../api/firestore";
 
 const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
 
@@ -25,6 +25,7 @@ const FIREBASE_ERRORS = {
   "auth/invalid-verification-code":   "Incorrect code. Try again.",
   "auth/code-expired":                "Code expired. Go back and request a new one.",
   "auth/missing-phone-number":        "No phone number found. Contact your admin.",
+  "auth/operation-not-allowed":       "Phone sign-in is not enabled. Contact your admin.",
 };
 
 function toE164(raw = "") {
@@ -38,6 +39,12 @@ function toE164(raw = "") {
 function maskPhone(raw = "") {
   const d = raw.replace(/\D/g, "");
   return d.length >= 4 ? `×× ×× ×× ${d.slice(-4)}` : "your registered number";
+}
+
+function maskEmail(email = "") {
+  const [user, domain] = email.split("@");
+  if (!domain) return email;
+  return `${user[0]}${"*".repeat(Math.max(user.length - 1, 2))}@${domain}`;
 }
 
 export default function LoginPage() {
@@ -61,11 +68,12 @@ export default function LoginPage() {
   const [resetSent,   setResetSent]   = useState(false);
 
   // OTP flow
-  const [otpStep,      setOtpStep]      = useState(1); // 1=enter email, 2=enter code, 3=done
-  const [otpEmail,     setOtpEmail]     = useState("");
-  const [otpPhoneHint, setOtpPhoneHint] = useState("");
-  const [otpE164,      setOtpE164]      = useState("");
-  const [otpCode,      setOtpCode]      = useState("");
+  const [otpStep,       setOtpStep]       = useState(1); // 1=enter phone, 2=enter code, 3=done
+  const [otpPhone,      setOtpPhone]      = useState("");
+  const [otpE164,       setOtpE164]       = useState("");
+  const [foundEmail,    setFoundEmail]    = useState(""); // account email found by phone lookup
+  const [maskedEmail,   setMaskedEmail]   = useState(""); // e.g. m***@nxtwave.co.in
+  const [otpCode,       setOtpCode]       = useState("");
   const [confirmResult, setConfirmResult] = useState(null);
   const recaptchaRef = useRef(null);
   const verifierRef  = useRef(null);
@@ -109,24 +117,24 @@ export default function LoginPage() {
 
   const handleFindAccount = async (e) => {
     e.preventDefault();
-    if (!otpEmail.trim()) { setError("Enter your email address."); return; }
+    if (!otpPhone.trim()) { setError("Enter your phone number."); return; }
     setError(""); setLoading(true);
     try {
-      const user = await getUserByEmail(otpEmail.trim());
-      if (!user) { setError("No account found with this email."); setLoading(false); return; }
+      const e164 = toE164(otpPhone.trim());
+      if (!e164) { setError("Enter a valid phone number (e.g. +91 98765 43210)."); setLoading(false); return; }
 
-      const rawPhone = user.phone || user.phoneNumber;
-      if (!rawPhone) {
-        setError("No phone number on this account. Please contact your admin.");
+      const user = await getUserByPhone(otpPhone.trim());
+      if (!user) {
+        setError("No account found with this phone number. Contact your admin.");
         setLoading(false); return;
       }
-      const e164 = toE164(rawPhone);
-      if (!e164) {
-        setError("Phone number format not recognised. Contact your admin.");
+      if (!user.email) {
+        setError("Account found but has no email on file. Contact your admin.");
         setLoading(false); return;
       }
+      setFoundEmail(user.email);
+      setMaskedEmail(maskEmail(user.email));
       setOtpE164(e164);
-      setOtpPhoneHint(maskPhone(rawPhone));
 
       if (!verifierRef.current) {
         verifierRef.current = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
@@ -136,7 +144,7 @@ export default function LoginPage() {
       setOtpStep(2);
     } catch (err) {
       setError(FIREBASE_ERRORS[err.code] || "Could not send OTP. Try again.");
-      verifierRef.current = null; // reset so it can be recreated
+      verifierRef.current = null;
     }
     setLoading(false);
   };
@@ -151,7 +159,7 @@ export default function LoginPage() {
       await confirmResult.confirm(otpCode.replace(/\D/g, ""));
       // AuthContext detects phone-only sign-in and immediately signs out.
       // We fire the reset email here; no auth state changes needed.
-      await sendPasswordResetEmail(auth, otpEmail.trim());
+      await sendPasswordResetEmail(auth, foundEmail);
       setOtpStep(3);
     } catch (err) {
       setError(FIREBASE_ERRORS[err.code] || "Invalid code. Try again.");
@@ -179,7 +187,7 @@ export default function LoginPage() {
 
   const openReset = () => {
     setResetMode(true); setResetMethod(""); setResetSent(false);
-    setOtpStep(1); setOtpEmail(email); setOtpCode(""); setConfirmResult(null);
+    setOtpStep(1); setOtpPhone(""); setOtpCode(""); setFoundEmail(""); setMaskedEmail(""); setConfirmResult(null);
     setError("");
   };
 
@@ -306,14 +314,14 @@ export default function LoginPage() {
                       <div>
                         <p className="font-semibold text-gray-900 mb-1">Verify via phone OTP</p>
                         <p className="text-sm text-gray-500 mb-4">
-                          Enter your account email. We'll send a code to your registered phone.
+                          Enter your registered phone number. We'll send a one-time code to verify it's you.
                         </p>
                         <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                          Email
+                          Phone Number
                         </label>
-                        <input type="email" placeholder="you@example.com" value={otpEmail}
-                          onChange={e => setOtpEmail(e.target.value)} required
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input type="tel" placeholder="+91 98765 43210" value={otpPhone}
+                          onChange={e => setOtpPhone(e.target.value)} required
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                       </div>
                       {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
                       <button type="submit" disabled={loading}
@@ -339,7 +347,7 @@ export default function LoginPage() {
                         </div>
                         <p className="font-semibold text-gray-900">Enter the 6-digit code</p>
                         <p className="text-sm text-gray-500 mt-1">
-                          Sent to <span className="font-mono font-semibold">{otpPhoneHint}</span>
+                          Sent to <span className="font-mono font-semibold">{maskPhone(otpPhone)}</span>
                         </p>
                       </div>
                       <input
@@ -359,7 +367,7 @@ export default function LoginPage() {
                       <div className="flex items-center justify-between text-sm">
                         <button type="button" onClick={() => { setOtpStep(1); setOtpCode(""); setError(""); }}
                           className="text-gray-500 hover:text-gray-700">
-                          ← Change email
+                          ← Change number
                         </button>
                         <button type="button" onClick={handleResendOtp} disabled={loading}
                           className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50">
@@ -381,7 +389,7 @@ export default function LoginPage() {
                       <p className="text-sm text-gray-500 mb-2">
                         A password reset link has been sent to
                       </p>
-                      <p className="text-sm font-semibold text-indigo-700 mb-6">{otpEmail}</p>
+                      <p className="text-sm font-semibold text-indigo-700 mb-6">{maskedEmail}</p>
                       <p className="text-xs text-gray-400 mb-6">
                         Can't find the email? Check your spam folder or ask your admin to resend it.
                       </p>
