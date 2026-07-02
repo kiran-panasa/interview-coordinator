@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useCallback, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, getAnyInviteByEmail, updateInvite } from "./api/firestore";
 import { logError } from "./utils/logger";
@@ -58,6 +58,15 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (user) => {
+      // Phone-only sign-in means OTP identity verification on the login page.
+      // Don't update auth state — sign out immediately and let the login page handle it.
+      const phoneOnly = user?.providerData?.length === 1
+        && user.providerData[0].providerId === "phone";
+      if (phoneOnly) {
+        signOut(auth);
+        return;
+      }
+
       setAuthLoading(true);
       setCurrentUser(user);
       if (user) await loadProfile(user);

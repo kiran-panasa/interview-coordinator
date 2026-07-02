@@ -64,6 +64,14 @@ export async function deleteInvite(id: string): Promise<void> {
   await deleteDoc(doc(db, "invites", id));
 }
 
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const snap = await getDocs(query(
+    collection(db, "users"),
+    where("email", "==", email.toLowerCase().trim()),
+  ));
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User;
+}
+
 export async function getInviteByEmail(email: string): Promise<Invite | null> {
   const snap = await getDocs(query(
     collection(db, "invites"),

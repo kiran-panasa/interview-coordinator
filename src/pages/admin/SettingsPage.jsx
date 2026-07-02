@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { formatDateShort } from "../../utils/dates";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "../../firebase";
 import {
   updateUser, deleteUser,
   createInvite, deleteInvite,
@@ -141,6 +143,15 @@ export default function SettingsPage() {
     if (!confirm(`Revoke access for ${u.email}? They will be moved to pending.`)) return;
     await updateUser(u.id, { status: "pending", role: null });
     setToast({ message: "Access revoked." });
+  };
+
+  const sendReset = async (u) => {
+    try {
+      await sendPasswordResetEmail(auth, u.email);
+      setToast({ message: `Password reset email sent to ${u.email}.` });
+    } catch {
+      setToast({ message: "Failed to send reset email. Try again.", type: "error" });
+    }
   };
 
   const handleInviteSubmit = async (e) => {
@@ -447,7 +458,7 @@ export default function SettingsPage() {
                       <thead>
                         <tr className="border-b border-gray-100">
                           {["Name", "Email", "Change Role", "Actions"].map(h => (
-                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5">{h}</th>
+                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5 whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -479,12 +490,18 @@ export default function SettingsPage() {
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              {u.id !== currentUser?.uid && (
-                                <button onClick={() => revoke(u)} disabled={saving[u.id]}
-                                  className="text-xs text-red-500 font-medium hover:underline disabled:opacity-40">
-                                  Revoke
+                              <div className="flex items-center gap-3 whitespace-nowrap">
+                                <button onClick={() => sendReset(u)}
+                                  className="text-xs text-indigo-600 font-medium hover:underline">
+                                  Send reset
                                 </button>
-                              )}
+                                {u.id !== currentUser?.uid && (
+                                  <button onClick={() => revoke(u)} disabled={saving[u.id]}
+                                    className="text-xs text-red-500 font-medium hover:underline disabled:opacity-40">
+                                    Revoke
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
