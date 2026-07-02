@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import KebabMenu from "../../components/KebabMenu";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
 
@@ -476,8 +477,8 @@ export default function SettingsPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-100">
-                          {["Name", "Email", "Change Role", "Actions"].map(h => (
-                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5 whitespace-nowrap">{h}</th>
+                          {["Name", "Email", "Change Role", ""].map(h => (
+                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -509,23 +510,11 @@ export default function SettingsPage() {
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-3 whitespace-nowrap">
-                                <button onClick={() => sendReset(u)}
-                                  className="text-xs text-indigo-600 font-medium hover:underline">
-                                  Send reset
-                                </button>
-                                <button onClick={() => openPhoneModal(u)}
-                                  className={`text-xs font-medium hover:underline ${u.phone ? "text-emerald-600" : "text-amber-600"}`}
-                                  title={u.phone ? `Phone: ${u.phone}` : "No phone — set one to enable OTP recovery"}>
-                                  {u.phone ? "✓ Phone" : "Set phone"}
-                                </button>
-                                {u.id !== currentUser?.uid && (
-                                  <button onClick={() => revoke(u)} disabled={saving[u.id]}
-                                    className="text-xs text-red-500 font-medium hover:underline disabled:opacity-40">
-                                    Revoke
-                                  </button>
-                                )}
-                              </div>
+                              <KebabMenu actions={[
+                                { label: "Send reset email",              onClick: () => sendReset(u) },
+                                { label: u.phone ? "Update phone" : "Set phone", onClick: () => openPhoneModal(u) },
+                                { label: "Revoke access", onClick: () => revoke(u), danger: true, disabled: saving[u.id], show: u.id !== currentUser?.uid },
+                              ]} />
                             </td>
                           </tr>
                         ))}
