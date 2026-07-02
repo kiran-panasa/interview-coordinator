@@ -145,6 +145,7 @@ export default function LoginPage() {
     } catch (err) {
       console.error("OTP send error:", err.code, err.message);
       setError(FIREBASE_ERRORS[err.code] || `Could not send OTP. (${err.code || err.message})`);
+      verifierRef.current?.clear?.();
       verifierRef.current = null;
     }
     setLoading(false);
@@ -171,7 +172,8 @@ export default function LoginPage() {
   const handleResendOtp = async () => {
     setError(""); setLoading(true);
     try {
-      verifierRef.current = null; // force new reCAPTCHA
+      verifierRef.current?.clear?.();
+      verifierRef.current = null;
       verifierRef.current = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
       const result = await signInWithPhoneNumber(auth, otpE164, verifierRef.current);
       setConfirmResult(result);
@@ -179,6 +181,7 @@ export default function LoginPage() {
       setError("");
     } catch (err) {
       setError(FIREBASE_ERRORS[err.code] || "Could not resend OTP.");
+      verifierRef.current?.clear?.();
       verifierRef.current = null;
     }
     setLoading(false);
