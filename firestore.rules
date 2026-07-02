@@ -1,6 +1,14 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Allow unauthenticated reads on users so the phone-OTP password reset
+    // flow can look up an account by phone number before the user is logged in.
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
     match /{document=**} {
       allow read, write: if request.auth != null;
     }
