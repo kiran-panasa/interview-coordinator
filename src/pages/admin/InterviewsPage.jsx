@@ -52,7 +52,8 @@ export default function InterviewsPage() {
   const [interviews,    setInterviews]    = useState([]);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
-  const [filterDate,     setFilterDate]     = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState("");
+  const [filterDateTo,   setFilterDateTo]   = useState("");
   const [filterIvr,      setFilterIvr]      = useState("All");
   const [filterTemplate, setFilterTemplate] = useState("All");
   const [showModal,     setShowModal]     = useState(false);
@@ -345,11 +346,12 @@ export default function InterviewsPage() {
 
   const filtered = useMemo(() => programWorkingSet.filter(i => {
     if (filterStatus !== "All" && i.status !== filterStatus) return false;
-    if (filterDate && i.scheduledDate !== filterDate) return false;
+    if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
+    if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
     if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
     if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
     return true;
-  }), [programWorkingSet, filterStatus, filterDate, filterIvr, filterTemplate]);
+  }), [programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterTemplate]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -362,6 +364,43 @@ export default function InterviewsPage() {
     () => [...new Set(programWorkingSet.map(i => i.templateName))].filter(Boolean).sort(),
     [programWorkingSet]
   );
+
+  function exportToCSV() {
+    const csvEsc = v => {
+      const s = (v == null ? "" : String(v)).replace(/"/g, '""');
+      return /[,"\n\r]/.test(s) ? `"${s}"` : s;
+    };
+    const headers = [
+      "Candidate Name", "Candidate Email",
+      "Interviewer Name", "Interviewer Email",
+      "Template", "Program", "Round",
+      "Scheduled Date", "Scheduled Time", "Status",
+      "Overall Recommendation", "Final Verdict", "Notes",
+    ];
+    const programName = id => programs.find(p => p.id === id)?.name || "";
+    const rows = filtered.map(iv => [
+      iv.candidateName   || "",
+      iv.candidateEmail  || "",
+      iv.interviewerName || iv.interviewerEmail || "",
+      iv.interviewerEmail || "",
+      iv.templateName    || "",
+      programName(templateProgram(iv.templateId)),
+      iv.round           || "",
+      iv.scheduledDate   || "",
+      iv.scheduledTime   || "",
+      iv.status          || "",
+      iv.feedback?.overallRecommendation || "",
+      iv.feedback?.finalVerdict != null ? iv.feedback.finalVerdict : "",
+      iv.feedback?.comments      || "",
+    ].map(csvEsc).join(","));
+
+    const csv = [headers.join(","), ...rows].join("\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const today = new Date().toISOString().slice(0, 10);
+    a.download = `interviews_export_${today}.csv`;
+    a.click();
+  }
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
@@ -417,36 +456,47 @@ export default function InterviewsPage() {
       )}
 
       {/* Filters */}
-      <div className="flex gap-3 mb-5 flex-wrap">
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+      <div className="flex gap-3 mb-5 flex-wrap items-center">
+        <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setIvrPage(1); }}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
         </select>
-        <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <div className="flex items-center gap-1.5">
+          <input type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <span className="text-gray-400 text-sm">–</span>
+          <input type="date" value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        </div>
         <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="All">All Templates</option>
           {uniqueTemplates.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterIvr} onChange={e => setFilterIvr(e.target.value)}
+        <select value={filterIvr} onChange={e => { setFilterIvr(e.target.value); setIvrPage(1); }}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="All">All Interviewers</option>
           {uniqueIvrs.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDate || filterIvr !== "All" || filterTemplate !== "All") && (
-          <button onClick={() => { setFilterStatus("All"); setFilterDate(""); setFilterIvr("All"); setFilterTemplate("All"); }}
+        {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All") && (
+          <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setIvrPage(1); }}
             className="text-sm text-gray-500 hover:text-gray-800 px-2">Clear</button>
         )}
-        <button
-          onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
-          className={`ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-            showArchived
-              ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
-              : "text-gray-500 border-gray-200 hover:bg-gray-50"
-          }`}>
-          {showArchived ? "← Active" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button onClick={exportToCSV}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+            ↓ Export{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
+          </button>
+          <button
+            onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+              showArchived
+                ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
+                : "text-gray-500 border-gray-200 hover:bg-gray-50"
+            }`}>
+            {showArchived ? "← Active" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+          </button>
+        </div>
       </div>
 
       {/* Table */}
