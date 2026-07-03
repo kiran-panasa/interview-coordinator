@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import { parseImportCSV, buildFeedbackFromCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { useAuth } from "../../AuthContext";
@@ -67,6 +67,8 @@ export default function InterviewsPage() {
   const [showImport,      setShowImport]      = useState(false);
   const [csvText,         setCsvText]         = useState("");
   const [parsedRows,      setParsedRows]      = useState(null);
+  const firstErrorRowRef  = useRef(null);
+  const firstWarnRowRef   = useRef(null);
   const [importing,       setImporting]       = useState(false);
   const [dlTemplateId,    setDlTemplateId]    = useState("");
   const [showArchived,    setShowArchived]    = useState(false);
@@ -793,10 +795,20 @@ export default function InterviewsPage() {
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                 Preview — {parsedRows.length} row{parsedRows.length !== 1 ? "s" : ""}
-                {parsedRows.filter(r => r.errors.length > 0).length > 0 &&
-                  <span className="text-red-500 ml-2">· {parsedRows.filter(r => r.errors.length > 0).length} with errors</span>}
-                {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 &&
-                  <span className="text-amber-500 ml-2">· {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length} with warnings</span>}
+                {parsedRows.filter(r => r.errors.length > 0).length > 0 && (
+                  <button
+                    className="text-red-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-red-700"
+                    onClick={() => firstErrorRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                    · {parsedRows.filter(r => r.errors.length > 0).length} with errors
+                  </button>
+                )}
+                {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 && (
+                  <button
+                    className="text-amber-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-amber-700"
+                    onClick={() => firstWarnRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                    · {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length} with warnings
+                  </button>
+                )}
               </p>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
                 <table className="w-full text-xs">
@@ -808,12 +820,19 @@ export default function InterviewsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
+                    {(() => { firstErrorRowRef.current = null; firstWarnRowRef.current = null; return null; })()}
                     {parsedRows.map(row => {
                       const hasErr = row.errors.length > 0;
                       const hasWarn = row.warnings.length > 0 && !hasErr;
+                      const setErrRef  = hasErr  && !firstErrorRowRef.current  ? (el => { firstErrorRowRef.current = el; })  : undefined;
+                      const setWarnRef = hasWarn && !firstWarnRowRef.current   ? (el => { firstWarnRowRef.current = el; })   : undefined;
                       return (
-                        <tr key={row.rowNum} className={hasErr ? "bg-red-50" : hasWarn ? "bg-amber-50" : "bg-white"}>
-                          <td className="px-3 py-2 text-gray-400">{row.rowNum}</td>
+                        <tr key={row.rowNum} ref={setErrRef || setWarnRef} className={hasErr ? "bg-red-50" : hasWarn ? "bg-amber-50" : "bg-white"}>
+                          <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
+                            {row.rowNum}
+                            {hasErr  && <span className="ml-1 text-red-500"  title={row.errors.join(" · ")}>✕</span>}
+                            {hasWarn && <span className="ml-1 text-amber-500" title={row.warnings.join(" · ")}>⚠</span>}
+                          </td>
                           <td className="px-3 py-2 font-medium text-gray-800">
                             {row.resolved.candidate?.name || <span className="text-red-500">{row.raw.candidateEmail}</span>}
                           </td>
