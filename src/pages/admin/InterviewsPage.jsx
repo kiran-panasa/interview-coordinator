@@ -51,9 +51,10 @@ export default function InterviewsPage() {
   );
   const [interviews,    setInterviews]    = useState([]);
   const [activeProgram, setActiveProgram] = useState("all");
-  const [filterStatus,  setFilterStatus]  = useState("All");
-  const [filterDate,    setFilterDate]    = useState("");
-  const [filterIvr,     setFilterIvr]     = useState("All");
+  const [filterStatus,   setFilterStatus]   = useState("All");
+  const [filterDate,     setFilterDate]     = useState("");
+  const [filterIvr,      setFilterIvr]      = useState("All");
+  const [filterTemplate, setFilterTemplate] = useState("All");
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
   const [form,          setForm]          = useState(EMPTY_FORM);
@@ -336,20 +337,30 @@ export default function InterviewsPage() {
     [interviews, showArchived]
   );
 
-  const filtered = useMemo(() => workingSet.filter(i => {
-    if (activeProgram === "unassigned" && templateProgram(i.templateId)) return false;
-    if (activeProgram !== "all" && activeProgram !== "unassigned" && templateProgram(i.templateId) !== activeProgram) return false;
+  const programWorkingSet = useMemo(() => workingSet.filter(i => {
+    if (activeProgram === "unassigned") return !templateProgram(i.templateId);
+    if (activeProgram !== "all") return templateProgram(i.templateId) === activeProgram;
+    return true;
+  }), [workingSet, activeProgram, templateProgram]);
+
+  const filtered = useMemo(() => programWorkingSet.filter(i => {
     if (filterStatus !== "All" && i.status !== filterStatus) return false;
     if (filterDate && i.scheduledDate !== filterDate) return false;
-    if (filterIvr  !== "All" && i.interviewerEmail !== filterIvr) return false;
+    if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
+    if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
     return true;
-  }), [workingSet, activeProgram, filterStatus, filterDate, filterIvr, templateProgram]);
+  }), [programWorkingSet, filterStatus, filterDate, filterIvr, filterTemplate]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
   const uniqueIvrs = useMemo(
-    () => [...new Set(workingSet.map(i => i.interviewerEmail))].filter(Boolean).sort(),
-    [workingSet]
+    () => [...new Set(programWorkingSet.map(i => i.interviewerEmail))].filter(Boolean).sort(),
+    [programWorkingSet]
+  );
+
+  const uniqueTemplates = useMemo(
+    () => [...new Set(programWorkingSet.map(i => i.templateName))].filter(Boolean).sort(),
+    [programWorkingSet]
   );
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
@@ -390,7 +401,7 @@ export default function InterviewsPage() {
             ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(i => templateProgram(i.templateId) === p.id).length })),
             { id: "unassigned", label: "Unassigned", count: workingSet.filter(i => !templateProgram(i.templateId)).length },
           ].map(tab => (
-            <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setIvrPage(1); }}
+            <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setFilterTemplate("All"); setIvrPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
                 activeProgram === tab.id
                   ? "border-indigo-600 text-indigo-600"
@@ -413,13 +424,18 @@ export default function InterviewsPage() {
         </select>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+        <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <option value="All">All Templates</option>
+          {uniqueTemplates.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
         <select value={filterIvr} onChange={e => setFilterIvr(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="All">All Interviewers</option>
           {uniqueIvrs.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDate || filterIvr !== "All") && (
-          <button onClick={() => { setFilterStatus("All"); setFilterDate(""); setFilterIvr("All"); }}
+        {(filterStatus !== "All" || filterDate || filterIvr !== "All" || filterTemplate !== "All") && (
+          <button onClick={() => { setFilterStatus("All"); setFilterDate(""); setFilterIvr("All"); setFilterTemplate("All"); }}
             className="text-sm text-gray-500 hover:text-gray-800 px-2">Clear</button>
         )}
         <button
@@ -438,14 +454,14 @@ export default function InterviewsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
-              {["Candidate", "Interviewer", "Round", "Date & Time", "Meet", "Status", ""].map(h => (
+              {["Candidate", "Interviewer", "Template", "Round", "Date & Time", "Meet", "Status", ""].map(h => (
                 <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
-              <tr><td colSpan={7} className="text-center text-gray-400 py-12">No interviews found</td></tr>
+              <tr><td colSpan={8} className="text-center text-gray-400 py-12">No interviews found</td></tr>
             ) : pagedInterviews.map(iv => (
               <tr key={iv.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
@@ -454,6 +470,9 @@ export default function InterviewsPage() {
                 </td>
                 <td className="px-4 py-3 text-gray-700 text-xs">
                   <p>{iv.interviewerName || iv.interviewerEmail}</p>
+                </td>
+                <td className="px-4 py-3 text-gray-600 text-xs max-w-[140px]">
+                  <span className="line-clamp-2">{iv.templateName || "—"}</span>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{iv.round}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
