@@ -811,7 +811,8 @@ export default function InterviewsPage() {
                 )}
               </p>
               <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[700px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       {["#", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", "Feedback", ""].map(h => (
@@ -883,6 +884,7 @@ export default function InterviewsPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
               </div>
 
               {parsedRows.filter(r => r.errors.length === 0).length > 0 && (
