@@ -2,6 +2,28 @@ import { materializeFeedback } from "./templateEngine";
 
 export const VERDICT_MAP = { proceed: "Proceed", hold: "Hold", reject: "Reject" };
 
+function splitCSVLines(text) {
+  const lines = [];
+  let current = "";
+  let inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '"') {
+      if (inQ && text[i + 1] === '"') { current += '""'; i++; }
+      else { inQ = !inQ; current += c; }
+    } else if (c === '\r') {
+      // skip
+    } else if (c === '\n' && !inQ) {
+      if (current.trim()) lines.push(current);
+      current = "";
+    } else {
+      current += c;
+    }
+  }
+  if (current.trim()) lines.push(current);
+  return lines;
+}
+
 function parseLine(line) {
   const fields = [];
   let field = "", inQ = false;
@@ -55,7 +77,7 @@ function normalizeTime(s) {
 }
 
 export function parseImportCSV(text, candidates, interviewers, templates, existing) {
-  const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+  const lines = splitCSVLines(text);
   if (lines.length < 2) return { globalError: "Need at least a header row and one data row." };
 
   const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ""));
