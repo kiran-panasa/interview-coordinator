@@ -3,6 +3,8 @@ import * as XLSX from "xlsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { getInterviewerAvailability, updateUser, deleteUser } from "../../api/firestore";
 import { useSkills, useTemplates, useUsers, QK } from "../../hooks/queries";
+import { useAuth } from "../../AuthContext";
+import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -40,6 +42,8 @@ function avatarColor(id) {
 
 export default function InterviewersPage() {
   const queryClient = useQueryClient();
+  const { currentUser } = useAuth();
+  const canDelete = currentUser?.email?.toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
   const { data: usersAll = [], isLoading } = useUsers();
   const interviewers = usersAll.filter(u =>
     (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
@@ -449,7 +453,7 @@ export default function InterviewersPage() {
                     <KebabMenu actions={[
                       { label: "View Availability", onClick: () => viewAvailability(u) },
                       { label: "Edit",              onClick: () => openEdit(u) },
-                      { label: "Remove",            onClick: () => handleDelete(u), danger: true },
+                      ...(canDelete ? [{ label: "Remove", onClick: () => handleDelete(u), danger: true }] : []),
                     ]} />
                   </td>
                 </tr>
