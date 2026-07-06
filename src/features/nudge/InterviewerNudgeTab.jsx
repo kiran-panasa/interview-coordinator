@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { formatDate, formatDateShort, formatDateTime } from "../../utils/dates";
 import { createNotification, updateNotification } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
@@ -14,7 +14,12 @@ function inDays(n) {
   const d = new Date(); d.setDate(d.getDate() + n);
   return d.toISOString().slice(0, 10);
 }
-
+function formatTime(t) {
+  if (!t) return "";
+  const [h, m] = t.split(":");
+  const hr = parseInt(h, 10);
+  return `${hr % 12 || 12}:${m} ${hr < 12 ? "AM" : "PM"}`;
+}
 function skillOverlap(templateSkills = [], userSkills = []) {
   const ts = new Set(templateSkills);
   return userSkills.filter(s => ts.has(s));
@@ -30,10 +35,16 @@ export default function InterviewerNudgeTab({
   const [nudgeTemplateId, setNudgeTemplateId] = useState("");
   const [nudgeDateStart,  setNudgeDateStart]  = useState(today());
   const [nudgeDateEnd,    setNudgeDateEnd]    = useState(inDays(7));
+  const [nudgeTimeStart,  setNudgeTimeStart]  = useState("09:00");
+  const [nudgeTimeEnd,    setNudgeTimeEnd]    = useState("18:00");
   const [nudgeTarget,     setNudgeTarget]     = useState(null);
   const [selectedIvrs,    setSelectedIvrs]    = useState(new Set());
+  const [manuallyAdded,   setManuallyAdded]   = useState(new Set());
+  const [showAddPicker,   setShowAddPicker]   = useState(false);
+  const [addSearch,       setAddSearch]       = useState("");
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
+  const addPickerRef = useRef(null);
 
   const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
 
@@ -44,9 +55,41 @@ export default function InterviewerNudgeTab({
       })
     : activeInterviewers;
 
+  const manualInterviewers = activeInterviewers.filter(u =>
+    manuallyAdded.has(u.id) && !matchedInterviewers.some(m => m.id === u.id)
+  );
+  const displayedInterviewers = [...matchedInterviewers, ...manualInterviewers];
+
+  // When template changes, reset selection to all matched + clear manual adds
+  useEffect(() => {
+    setSelectedIvrs(new Set(matchedInterviewers.map(u => u.id)));
+    setManuallyAdded(new Set());
+    setShowAddPicker(false);
+  }, [nudgeTemplateId]); // eslint-disable-line
+
+  // Close add picker on outside click
+  useEffect(() => {
+    if (!showAddPicker) return;
+    const handler = (e) => {
+      if (addPickerRef.current && !addPickerRef.current.contains(e.target))
+        setShowAddPicker(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showAddPicker]);
+
   const freeSlotCount = (ivrId) => {
     const slots = ivrSlots[ivrId] || [];
-    return slots.filter(s => !s.isBooked && s.date >= nudgeDateStart && s.date <= nudgeDateEnd).length;
+    return slots.filter(s => {
+      if (s.isBooked) return false;
+      if (s.date < nudgeDateStart || s.date > nudgeDateEnd) return false;
+      if (s.startTime) {
+        const t = s.startTime.slice(0, 5);
+        if (nudgeTimeStart && t < nudgeTimeStart) return false;
+        if (nudgeTimeEnd   && t > nudgeTimeEnd)   return false;
+      }
+      return true;
+    }).length;
   };
 
   const lastNudgeResponse = (ivrId) => {
@@ -56,17 +99,40 @@ export default function InterviewerNudgeTab({
     return relevant[0] || null;
   };
 
+  const toggleIvr = (id) => setSelectedIvrs(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+
+  const addInterviewer = (u) => {
+    setManuallyAdded(prev => new Set([...prev, u.id]));
+    setSelectedIvrs(prev => new Set([...prev, u.id]));
+    setAddSearch("");
+    setShowAddPicker(false);
+  };
+
+  const availableToAdd = activeInterviewers.filter(u =>
+    !displayedInterviewers.some(d => d.id === u.id) &&
+    (!addSearch ||
+      u.displayName?.toLowerCase().includes(addSearch.toLowerCase()) ||
+      u.email?.toLowerCase().includes(addSearch.toLowerCase()))
+  );
+
   const openNudge = () => {
+    const toSend = displayedInterviewers.filter(u => selectedIvrs.has(u.id));
+    if (!toSend.length) return;
     const portal = `${window.location.origin}/interviewer/notifications`;
     const templateName = nudgeTemplate?.name || "Interview";
+    const timeRange = nudgeTimeStart && nudgeTimeEnd
+      ? ` (${formatTime(nudgeTimeStart)} – ${formatTime(nudgeTimeEnd)})`
+      : "";
     const msg =
       `Hi {{name}},\n\nWe need interviewers for "${templateName}" sessions between ` +
-      `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}.\n\n` +
+      `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}${timeRange}.\n\n` +
       `Please add your available time slots for this period so we can schedule candidates.\n\n` +
       `Click here to respond and add your slots:\n${portal}\n\n` +
       `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`;
-    setNudgeTarget({ template: nudgeTemplate, interviewers: matchedInterviewers });
-    setSelectedIvrs(new Set(matchedInterviewers.map(u => u.id)));
+    setNudgeTarget({ template: nudgeTemplate, interviewers: toSend });
+    setSelectedIvrs(new Set(toSend.map(u => u.id)));
     setMessage(msg);
   };
 
@@ -81,6 +147,7 @@ export default function InterviewerNudgeTab({
           senderId: currentUser.uid, senderName: userProfile?.displayName || userProfile?.email,
           templateId: nudgeTarget.template?.id || "", templateName: nudgeTarget.template?.name || "General",
           dateRangeStart: nudgeDateStart, dateRangeEnd: nudgeDateEnd,
+          timeRangeStart: nudgeTimeStart, timeRangeEnd: nudgeTimeEnd,
           message: message.replace(/\{\{name\}\}/g, r.displayName || r.email),
           status: "unread",
         });
@@ -104,20 +171,17 @@ export default function InterviewerNudgeTab({
   const unreadResponses   = incomingResponses.filter(n => n.status === "unread").length;
   const skillName = (id) => skills.find(s => s.id === id)?.name || id;
 
-  const toggleIvr = (id) => setSelectedIvrs(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const ivrPagination = usePagination(displayedInterviewers);
 
-  const ivrPagination = usePagination(matchedInterviewers);
+  const allChecked = displayedInterviewers.length > 0 && selectedIvrs.size === displayedInterviewers.length;
+  const someChecked = selectedIvrs.size > 0 && selectedIvrs.size < displayedInterviewers.length;
 
   return (
     <div className="space-y-8">
-      {/* Config row */}
+      {/* Config */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Request Campaign</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template</label>
             <select value={nudgeTemplateId} onChange={e => setNudgeTemplateId(e.target.value)}
@@ -137,92 +201,181 @@ export default function InterviewerNudgeTab({
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
           </div>
         </div>
-      </div>
-
-      {/* Matched interviewers table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-            Matched Interviewers ({matchedInterviewers.length})
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs font-semibold text-gray-500 mb-3">
+            Daily time window
+            <span className="text-gray-400 font-normal ml-1">— ask interviewers for slots within this range</span>
           </p>
-          <div className="flex items-center gap-2">
-            <button onClick={() => fetchSlots(activeInterviewers.map(u => u.id))} disabled={slotsLoading}
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50 px-2 py-1.5 rounded-lg border border-gray-200 bg-white transition-colors">
-              <svg className={`w-3.5 h-3.5 ${slotsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {slotsLoading ? "Loading…" : "Refresh slots"}
-            </button>
-            <button onClick={openNudge} disabled={matchedInterviewers.length === 0}
-              className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
-              Nudge All
-            </button>
+          <div className="flex items-end gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Start Time</label>
+              <input type="time" value={nudgeTimeStart} onChange={e => setNudgeTimeStart(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <span className="text-gray-400 pb-2.5">—</span>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">End Time</label>
+              <input type="time" value={nudgeTimeEnd} onChange={e => setNudgeTimeEnd(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            {nudgeTimeStart && nudgeTimeEnd && (
+              <p className="text-xs text-gray-400 pb-2.5">{formatTime(nudgeTimeStart)} – {formatTime(nudgeTimeEnd)}</p>
+            )}
           </div>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-100">
-              {["Interviewer", "Skills", "Free Slots in Range", "Last Response"].map(h => (
-                <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {matchedInterviewers.length === 0 ? (
-              <tr><td colSpan={4} className="text-center text-gray-400 py-10 text-sm">
-                No interviewers match the selected template.
-              </td></tr>
-            ) : ivrPagination.paged.map(u => {
-              const slots    = freeSlotCount(u.id);
-              const lastResp = lastNudgeResponse(u.id);
-              const overlap  = skillOverlap(nudgeTemplate?.skills || [], u.skills || []);
-              return (
-                <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-gray-900">{u.displayName || u.email}</p>
-                    <p className="text-xs text-gray-400">{u.email}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1">
-                      {overlap.length > 0
-                        ? overlap.map(sid => (
-                            <span key={sid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
-                              {skillName(sid)}
-                            </span>
-                          ))
-                        : <span className="text-xs text-gray-300">—</span>
-                      }
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`text-sm font-bold ${slots > 0 ? "text-emerald-600" : "text-amber-500"}`}>
-                      {slots} slot{slots !== 1 ? "s" : ""}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {lastResp ? (
-                      <div>
-                        <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${
-                          lastResp.message?.includes("NOT available")
-                            ? "bg-red-50 text-red-600 border-red-200"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        }`}>
-                          {lastResp.message?.includes("NOT available") ? "Not Available" : "Available"}
-                        </span>
-                        <p className="text-[10px] text-gray-300 mt-0.5">
-                          {lastResp.createdAt ? formatDateShort(lastResp.createdAt) : ""}
-                        </p>
+      </div>
+
+      {/* Interviewers table */}
+      <div>
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+              Matched Interviewers ({matchedInterviewers.length})
+              {manualInterviewers.length > 0 && (
+                <span className="ml-2 font-normal text-indigo-500">+{manualInterviewers.length} manual</span>
+              )}
+            </p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => fetchSlots(activeInterviewers.map(u => u.id))} disabled={slotsLoading}
+                className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50 px-2 py-1.5 rounded-lg border border-gray-200 bg-white transition-colors">
+                <svg className={`w-3.5 h-3.5 ${slotsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {slotsLoading ? "Loading…" : "Refresh slots"}
+              </button>
+              <button onClick={openNudge} disabled={selectedIvrs.size === 0}
+                className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+                Nudge Selected ({selectedIvrs.size})
+              </button>
+            </div>
+          </div>
+
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-100">
+                <th className="pl-4 pr-2 py-3 w-8">
+                  <input type="checkbox"
+                    checked={allChecked}
+                    ref={el => { if (el) el.indeterminate = someChecked; }}
+                    onChange={() => setSelectedIvrs(allChecked ? new Set() : new Set(displayedInterviewers.map(u => u.id)))}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
+                {["Interviewer", "Skills", "Free Slots in Range", "Last Response"].map(h => (
+                  <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {displayedInterviewers.length === 0 ? (
+                <tr><td colSpan={5} className="text-center text-gray-400 py-10 text-sm">
+                  No interviewers match the selected template.
+                </td></tr>
+              ) : ivrPagination.paged.map(u => {
+                const slots    = freeSlotCount(u.id);
+                const lastResp = lastNudgeResponse(u.id);
+                const overlap  = skillOverlap(nudgeTemplate?.skills || [], u.skills || []);
+                const isManual = manuallyAdded.has(u.id);
+                return (
+                  <tr key={u.id} className={`hover:bg-gray-50 ${selectedIvrs.has(u.id) ? "bg-indigo-50/40" : ""}`}>
+                    <td className="pl-4 pr-2 py-3 w-8">
+                      <input type="checkbox" checked={selectedIvrs.has(u.id)} onChange={() => toggleIvr(u.id)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-semibold text-gray-900">{u.displayName || u.email}</p>
+                          <p className="text-xs text-gray-400">{u.email}</p>
+                        </div>
+                        {isManual && (
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full">
+                            Manual
+                          </span>
+                        )}
                       </div>
-                    ) : (
-                      <span className="text-xs text-gray-300">No response</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        <Pagination page={ivrPagination.page} totalPages={ivrPagination.totalPages} total={ivrPagination.total} pageSize={ivrPagination.pageSize} onPageChange={ivrPagination.setPage} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {overlap.length > 0
+                          ? overlap.map(sid => (
+                              <span key={sid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                                {skillName(sid)}
+                              </span>
+                            ))
+                          : <span className="text-xs text-gray-300">—</span>
+                        }
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`text-sm font-bold ${slots > 0 ? "text-emerald-600" : "text-amber-500"}`}>
+                        {slots} slot{slots !== 1 ? "s" : ""}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {lastResp ? (
+                        <div>
+                          <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${
+                            lastResp.message?.includes("NOT available")
+                              ? "bg-red-50 text-red-600 border-red-200"
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          }`}>
+                            {lastResp.message?.includes("NOT available") ? "Not Available" : "Available"}
+                          </span>
+                          <p className="text-[10px] text-gray-300 mt-0.5">
+                            {lastResp.createdAt ? formatDateShort(lastResp.createdAt) : ""}
+                          </p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300">No response</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <Pagination page={ivrPagination.page} totalPages={ivrPagination.totalPages} total={ivrPagination.total} pageSize={ivrPagination.pageSize} onPageChange={ivrPagination.setPage} />
+        </div>
+
+        {/* Add Interviewer — outside overflow-hidden container so dropdown isn't clipped */}
+        <div className="relative mt-2" ref={addPickerRef}>
+          <button
+            onClick={() => { setShowAddPicker(p => !p); setAddSearch(""); }}
+            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-1 py-1 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Interviewer Manually
+          </button>
+          {showAddPicker && (
+            <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg w-72">
+              <div className="p-2 border-b border-gray-100">
+                <input autoFocus type="text" value={addSearch} onChange={e => setAddSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+              <div className="max-h-52 overflow-y-auto">
+                {availableToAdd.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-5">
+                    {addSearch ? "No matches" : "All interviewers already listed"}
+                  </p>
+                ) : availableToAdd.map(u => (
+                  <button key={u.id} onClick={() => addInterviewer(u)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-indigo-50 text-left transition-colors">
+                    <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                      {(u.displayName || u.email || "?")[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{u.displayName || u.email}</p>
+                      <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Responses */}
