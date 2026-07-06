@@ -57,6 +57,10 @@ export default function InterviewersPage() {
   const [toast,          setToast]          = useState(null);
   const [showExport,     setShowExport]     = useState(false);
   const exportRef = useRef(null);
+  const [selectedIds,         setSelectedIds]         = useState(new Set());
+  const [bulkModal,           setBulkModal]           = useState(false);
+  const [bulkDraftTemplates,  setBulkDraftTemplates]  = useState([]);
+  const [bulkSaving,          setBulkSaving]          = useState(false);
 
   useEffect(() => {
     const close = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false); };
@@ -110,6 +114,48 @@ export default function InterviewersPage() {
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
+  };
+
+  const allPageSelected = paged => paged.length > 0 && paged.every(u => selectedIds.has(u.id));
+  const somePageSelected = paged => paged.some(u => selectedIds.has(u.id));
+
+  const toggleSelectAll = (paged) => {
+    if (allPageSelected(paged)) {
+      setSelectedIds(prev => { const next = new Set(prev); paged.forEach(u => next.delete(u.id)); return next; });
+    } else {
+      setSelectedIds(prev => { const next = new Set(prev); paged.forEach(u => next.add(u.id)); return next; });
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  };
+
+  const openBulkModal = () => {
+    const selectedIvrs = interviewers.filter(u => selectedIds.has(u.id));
+    const commonTemplates = templates
+      .filter(t => selectedIvrs.every(u => (u.templateIds || []).includes(t.id)))
+      .map(t => t.id);
+    setBulkDraftTemplates(commonTemplates);
+    setBulkModal(true);
+  };
+
+  const handleBulkSave = async () => {
+    setBulkSaving(true);
+    try {
+      await Promise.all([...selectedIds].map(id => updateUser(id, { templateIds: bulkDraftTemplates })));
+      queryClient.invalidateQueries({ queryKey: QK.users });
+      setToast({ message: `Templates updated for ${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""}.` });
+      setBulkModal(false);
+      setSelectedIds(new Set());
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setBulkSaving(false);
+  };
+
+  const toggleBulkTemplate = (tid) => {
+    setBulkDraftTemplates(prev => prev.includes(tid) ? prev.filter(id => id !== tid) : [...prev, tid]);
   };
 
   const buildExportRows = () =>
@@ -222,6 +268,26 @@ export default function InterviewersPage() {
         </div>
       </div>
 
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl">
+          <span className="text-sm font-semibold text-indigo-700">
+            {selectedIds.size} interviewer{selectedIds.size !== 1 ? "s" : ""} selected
+          </span>
+          <button onClick={openBulkModal}
+            className="flex items-center gap-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+            </svg>
+            Update Templates
+          </button>
+          <button onClick={() => setSelectedIds(new Set())}
+            className="text-sm text-indigo-500 hover:text-indigo-700 transition-colors">
+            Clear selection
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-5">
         <input type="text" placeholder="Search by name, email, company…" value={search}
@@ -265,6 +331,15 @@ export default function InterviewersPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    ref={el => { if (el) el.indeterminate = somePageSelected(paged) && !allPageSelected(paged); }}
+                    checked={allPageSelected(paged)}
+                    onChange={() => toggleSelectAll(paged)}
+                    className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                  />
+                </th>
                 {["Interviewer", "Company", "Contact", "Skills", "Templates", ""].map((h, i) => (
                   <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
@@ -272,7 +347,17 @@ export default function InterviewersPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {paged.map(u => (
-                <tr key={u.id} className="hover:bg-gray-50">
+                <tr key={u.id} className={`hover:bg-gray-50 ${selectedIds.has(u.id) ? "bg-indigo-50/40" : ""}`}>
+
+                  {/* Checkbox */}
+                  <td className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(u.id)}
+                      onChange={() => toggleSelect(u.id)}
+                      className="w-4 h-4 accent-indigo-600 cursor-pointer"
+                    />
+                  </td>
 
                   {/* Name + role */}
                   <td className="px-4 py-3">
@@ -441,6 +526,60 @@ export default function InterviewersPage() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Bulk template modal */}
+      <Modal open={bulkModal} onClose={() => setBulkModal(false)}
+        title={`Update Templates — ${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""}`} wide>
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Select the templates to assign. This will <span className="font-semibold text-gray-700">replace</span> existing template assignments for all selected interviewers.
+          </p>
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Interview Templates</p>
+              <span className="text-xs text-gray-400">{bulkDraftTemplates.length} selected</span>
+            </div>
+            {templates.length === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">No templates found.</p>
+            ) : (
+              <div className="border border-gray-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
+                {templates.map(t => (
+                  <label key={t.id}
+                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
+                      bulkDraftTemplates.includes(t.id) ? "bg-violet-50" : "hover:bg-gray-50"
+                    }`}>
+                    <input
+                      type="checkbox"
+                      checked={bulkDraftTemplates.includes(t.id)}
+                      onChange={() => toggleBulkTemplate(t.id)}
+                      className="accent-violet-600 flex-shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
+                      {t.program && <p className="text-xs text-gray-400">{t.program}</p>}
+                    </div>
+                    {bulkDraftTemplates.includes(t.id) && (
+                      <svg className="w-4 h-4 text-violet-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
+                      </svg>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleBulkSave} disabled={bulkSaving}
+              className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              {bulkSaving ? "Saving…" : `Update ${selectedIds.size} Interviewer${selectedIds.size !== 1 ? "s" : ""}`}
+            </button>
+            <button onClick={() => setBulkModal(false)}
+              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+              Cancel
+            </button>
+          </div>
+        </div>
       </Modal>
 
       {/* Availability modal */}
