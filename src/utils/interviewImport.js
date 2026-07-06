@@ -1,4 +1,5 @@
 import { splitCSVLines, parseLine } from "./csv";
+import { slugify } from "./strings";
 export { buildFeedbackFromCSV } from "../services/import.service";
 
 export const VERDICT_MAP = { proceed: "Proceed", hold: "Hold", reject: "Reject" };
@@ -130,10 +131,14 @@ export function downloadImportTemplate(template) {
       const hasCardFields = (d.cardFields || []).length > 0;
 
       if (hasCardFields) {
-        for (const f of d.cardFields) {
-          if (f.type === "scored_dropdown") {
-            domainHeaders.push(`${d.id}_${slugify(f.label)}_rating`);
-            domainExample.push("3");
+        const cardCount = Math.max(d.defaultCardCount || 1, 1);
+        for (let ci = 1; ci <= cardCount; ci++) {
+          const pfx = cardCount > 1 ? `${d.id}_${ci}` : d.id;
+          for (const f of d.cardFields) {
+            if (f.type === "scored_dropdown") {
+              domainHeaders.push(`${pfx}_${slugify(f.label)}_rating`);
+              domainExample.push("3");
+            }
           }
         }
       } else {

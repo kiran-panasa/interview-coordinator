@@ -21,17 +21,24 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
     const domainState = { cards: [] };
 
     if (hasCards) {
-      const card = {};
-      for (const f of domain.cardFields) {
-        if (f.type === "scored_dropdown") {
-          const raw = domainData[`${domain.id}_${slugify(f.label)}_rating`]
-                   ?? domainData[`${domain.id}_${f.id}_rating`];
-          card[f.id] = raw !== "" && raw != null ? parseFloat(raw) : null;
-        } else {
-          card[f.id] = f.type === "text" ? "" : null;
+      const cardCount = Math.max(domain.defaultCardCount || 1, 1);
+      const cards = [];
+      for (let ci = 1; ci <= cardCount; ci++) {
+        // Multi-card: coding_1_problem_solving_rating; single-card: coding_problem_solving_rating
+        const pfx = cardCount > 1 ? `${domain.id}_${ci}` : domain.id;
+        const card = {};
+        for (const f of domain.cardFields) {
+          if (f.type === "scored_dropdown") {
+            const raw = domainData[`${pfx}_${slugify(f.label)}_rating`]
+                     ?? domainData[`${pfx}_${f.id}_rating`];
+            card[f.id] = raw !== "" && raw != null ? parseFloat(raw) : null;
+          } else {
+            card[f.id] = f.type === "text" ? "" : null;
+          }
         }
+        cards.push(card);
       }
-      domainState.cards = [card];
+      domainState.cards = cards;
       for (const f of domain.domainFields || []) {
         domainState[f.id] = f.type === "text" ? notes : null;
       }
