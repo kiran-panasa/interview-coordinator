@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useQueryClient } from "@tanstack/react-query";
-import { getInterviewerAvailability, updateUser, deleteUser } from "../../api/firestore";
+import { getInterviewerAvailability, updateUser } from "../../api/firestore";
 import { useSkills, useTemplates, useUsers, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
@@ -110,11 +110,11 @@ export default function InterviewersPage() {
 
   const handleDelete = async (u) => {
     const name = u.displayName || u.email;
-    if (!confirm(`Remove interviewer "${name}" from the platform?\n\nThis deletes their account record. Their past interviews will remain.`)) return;
+    if (!confirm(`Archive interviewer "${name}"?\n\nThey will be hidden from the platform and lose access. All their data (past interviews, availability, profile) is preserved and can be restored anytime.`)) return;
     try {
-      await deleteUser(u.id);
+      await updateUser(u.id, { status: "archived" });
       queryClient.invalidateQueries({ queryKey: QK.users });
-      setToast({ message: `${name} removed.` });
+      setToast({ message: `${name} archived.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -453,7 +453,7 @@ export default function InterviewersPage() {
                     <KebabMenu actions={[
                       { label: "View Availability", onClick: () => viewAvailability(u) },
                       { label: "Edit",              onClick: () => openEdit(u) },
-                      ...(canDelete ? [{ label: "Remove", onClick: () => handleDelete(u), danger: true }] : []),
+                      ...(canDelete ? [{ label: "Archive", onClick: () => handleDelete(u), danger: true }] : []),
                     ]} />
                   </td>
                 </tr>
