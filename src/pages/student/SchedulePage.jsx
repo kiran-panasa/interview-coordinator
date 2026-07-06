@@ -9,27 +9,14 @@ import {
   getAvailableSlotsForTemplate, bookSlotForCandidate,
 } from "../../api/firestore";
 import StudentLayout from "../../components/StudentLayout";
+import { callAppsScript } from "../../lib/appsScript";
+import { maskEmail } from "../../utils/strings";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 
-async function callAppsScript(payload) {
-  if (!APPS_SCRIPT_URL) return;
-  await fetch(APPS_SCRIPT_URL, {
-    method: "POST", redirect: "follow",
-    body: JSON.stringify({ ...payload, secret: APPS_SCRIPT_SECRET }),
-  });
-}
-
 function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
-}
-
-function maskEmail(email = "") {
-  const [local, domain] = email.split("@");
-  if (!domain) return email;
-  const masked = local.slice(0, 2) + "***" + (local.length > 4 ? local.slice(-1) : "");
-  return `${masked}@${domain}`;
 }
 
 
@@ -141,7 +128,7 @@ export default function SchedulePage() {
       const id = await createOtpVerification({ inviteToken: token, email: email.trim().toLowerCase(), otp: code, expiresAt, used: false });
       setOtpId(id);
       const link = `${window.location.origin}/student/schedule?invite=${token}`;
-      await callAppsScript({
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action:    "sendOtp",
         email:     email.trim(),
         name:      invite.candidateName || "Candidate",

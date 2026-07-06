@@ -9,8 +9,8 @@ import {
   RecaptchaVerifier,
 } from "firebase/auth";
 import { getUserByPhone } from "../../api/firestore";
-
-const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
+import { BOOTSTRAP_EMAIL } from "../../constants/roles";
+import { maskEmail } from "../../utils/strings";
 
 const FIREBASE_ERRORS = {
   "auth/user-not-found":              "No account with this email.",
@@ -39,12 +39,6 @@ function toE164(raw = "") {
 function maskPhone(raw = "") {
   const d = raw.replace(/\D/g, "");
   return d.length >= 4 ? `×× ×× ×× ${d.slice(-4)}` : "your registered number";
-}
-
-function maskEmail(email = "") {
-  const [user, domain] = email.split("@");
-  if (!domain) return email;
-  return `${user[0]}${"*".repeat(Math.max(user.length - 1, 2))}@${domain}`;
 }
 
 export default function LoginPage() {

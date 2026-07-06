@@ -12,22 +12,10 @@ import { usePagination } from "../../hooks/usePagination";
 
 const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", program: "", templateIds: [] };
 
-const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
+import { isUUID } from "../../utils/strings";
+import { splitCSVRow } from "../../utils/csv";
+
 const isSwapped = (c) => isUUID(c.name) && !!c.uid && !isUUID(c.uid);
-
-// ── CSV helpers ───────────────────────────────────────────────────────────────
-
-function splitCSVRow(line) {
-  const cols = [];
-  let curr = "", inQ = false;
-  for (const ch of line) {
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === "," && !inQ) { cols.push(curr.trim()); curr = ""; }
-    else { curr += ch; }
-  }
-  cols.push(curr.trim());
-  return cols;
-}
 
 function parseCandidatesCSV(text) {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);

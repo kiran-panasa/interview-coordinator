@@ -27,7 +27,7 @@ const InterviewerAboutPage = lazy(() => import("./pages/interviewer/AboutPage"))
 const SchedulePage         = lazy(() => import("./pages/student/SchedulePage"));
 const CandidatePortal      = lazy(() => import("./pages/student/CandidatePortal"));
 
-const ADMIN_ROLES = ["admin", "content_team", "interviewer_content"];
+import { ADMIN_ROLES } from "./constants/roles";
 
 const PageFallback = () => (
   <div className="min-h-screen flex items-center justify-center text-gray-400">Loading…</div>

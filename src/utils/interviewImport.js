@@ -1,43 +1,8 @@
 import { materializeFeedback } from "./templateEngine";
+import { splitCSVLines, parseLine } from "./csv";
+import { slugify } from "./strings";
 
 export const VERDICT_MAP = { proceed: "Proceed", hold: "Hold", reject: "Reject" };
-
-function splitCSVLines(text) {
-  const lines = [];
-  let current = "";
-  let inQ = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '"') {
-      if (inQ && text[i + 1] === '"') { current += '""'; i++; }
-      else { inQ = !inQ; current += c; }
-    } else if (c === '\r') {
-      // skip
-    } else if (c === '\n' && !inQ) {
-      if (current.trim()) lines.push(current);
-      current = "";
-    } else {
-      current += c;
-    }
-  }
-  if (current.trim()) lines.push(current);
-  return lines;
-}
-
-function parseLine(line) {
-  const fields = [];
-  let field = "", inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const c = line[i];
-    if (c === '"') {
-      if (inQ && line[i + 1] === '"') { field += '"'; i++; }
-      else inQ = !inQ;
-    } else if (c === "," && !inQ) { fields.push(field.trim()); field = ""; }
-    else field += c;
-  }
-  fields.push(field.trim());
-  return fields;
-}
 
 function normalizeDate(s) {
   if (!s) return null;
@@ -46,17 +11,6 @@ function normalizeDate(s) {
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   return null;
-}
-
-function slugify(label) {
-  return (label || "")
-    .toLowerCase()
-    .replace(/[–—]/g, "_")
-    .replace(/[^a-z0-9\s_]/g, " ")
-    .trim()
-    .replace(/[\s_]+/g, "_")
-    .replace(/^_|_$/g, "")
-    .slice(0, 40) || "field";
 }
 
 function normalizeTime(s) {
@@ -261,14 +215,4 @@ export function downloadImportTemplate(template) {
   a.click();
 }
 
-export async function callAppsScript(url, secret, payload) {
-  if (!url) throw new Error("VITE_APPS_SCRIPT_URL is not set in .env");
-  const res = await fetch(url, {
-    method:   "POST",
-    redirect: "follow",
-    body:     JSON.stringify({ ...payload, secret }),
-  });
-  const json = await res.json();
-  if (!json.success) throw new Error(json.error || "Apps Script call failed");
-  return json;
-}
+export { callAppsScript } from "../lib/appsScript";

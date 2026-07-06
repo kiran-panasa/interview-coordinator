@@ -1,18 +1,6 @@
 import * as XLSX from "xlsx";
 import { makeFieldId, slugify } from "./templateHelpers";
-
-function splitCSVRow(line) {
-  const cols = [];
-  let curr = "";
-  let inQ = false;
-  for (const ch of line) {
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === "," && !inQ) { cols.push(curr.trim()); curr = ""; }
-    else { curr += ch; }
-  }
-  cols.push(curr.trim());
-  return cols;
-}
+import { splitCSVRow } from "./csv";
 
 export function parseTemplateCSV(text) {
   const errors = [];

@@ -2,15 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { subscribeToInterviews, getAllUsers } from "../../api/firestore";
 import Badge from "../../components/Badge";
-
-function StatCard({ label, value, color }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
-    </div>
-  );
-}
+import StatCard from "../../components/ui/StatCard";
 
 function isThisWeek(dateStr) {
   if (!dateStr) return false;

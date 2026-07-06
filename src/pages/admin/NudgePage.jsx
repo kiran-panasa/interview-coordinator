@@ -15,16 +15,10 @@ import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
+import { callAppsScript } from "../../lib/appsScript";
+
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
-
-async function callAppsScript(payload) {
-  if (!APPS_SCRIPT_URL) return;
-  await fetch(APPS_SCRIPT_URL, {
-    method: "POST", redirect: "follow",
-    body: JSON.stringify({ ...payload, secret: APPS_SCRIPT_SECRET }),
-  });
-}
 
 function today() { return new Date().toISOString().slice(0, 10); }
 function inDays(n) {
@@ -170,7 +164,7 @@ export default function NudgePage() {
         });
       }
       if (APPS_SCRIPT_URL) {
-        await callAppsScript({
+        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
           action: "sendEmail",
           subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
           body: message,
@@ -255,7 +249,7 @@ export default function NudgePage() {
           expiresAt,
           sentBy:         currentUser.uid,
         });
-        await callAppsScript({
+        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
           action:    "sendEmail",
           subject:   `Schedule Your Interview — ${tmpl?.name || "Interview"}`,
           recipients: [{ email: c.email, name: c.name }],
@@ -339,7 +333,7 @@ export default function NudgePage() {
         bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null,
       });
       const link = `${window.location.origin}/student/schedule`;
-      await callAppsScript({
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action: "sendEmail",
         subject: `Schedule Your Interview — ${inv.templateName || "Interview"}`,
         recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],

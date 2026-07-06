@@ -17,3 +17,6 @@ export const ADMIN_ROLES = [ROLE.ADMIN, ROLE.CONTENT_TEAM, ROLE.INTERVIEWER_CONT
 
 // Roles that see content management (templates, questions)
 export const CONTENT_ROLES = [ROLE.ADMIN, ROLE.CONTENT_TEAM, ROLE.INTERVIEWER_CONTENT];
+
+// Bootstrap admin — this account is always provisioned as admin on first sign-in
+export const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";

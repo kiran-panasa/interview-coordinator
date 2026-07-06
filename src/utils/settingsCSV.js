@@ -1,18 +1,7 @@
 import * as XLSX from "xlsx";
+import { splitCSVRow } from "./csv";
 
 const VALID_ROLES = new Set(["interviewer", "admin", "content_team"]);
-
-function splitCSVRow(line) {
-  const cols = [];
-  let curr = "", inQ = false;
-  for (const ch of line) {
-    if (ch === '"') { inQ = !inQ; }
-    else if (ch === "," && !inQ) { cols.push(curr.trim()); curr = ""; }
-    else { curr += ch; }
-  }
-  cols.push(curr.trim());
-  return cols;
-}
 
 export function parseInvitesCSV(text) {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);

@@ -3,8 +3,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, getAnyInviteByEmail, updateInvite } from "./api/firestore";
 import { logError } from "./utils/logger";
-
-const BOOTSTRAP_EMAIL = "kiran.p@nxtwave.tech";
+import { BOOTSTRAP_EMAIL } from "./constants/roles";
 
 const AuthContext = createContext(null);
 export const useAuth = () => useContext(AuthContext);
