@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { formatDateShort } from "../../utils/dates";
+import UserManagementTab from "../../features/settings/UserManagementTab";
+import GeneralTab from "../../features/settings/GeneralTab";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -14,8 +15,6 @@ import {
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
-import KebabMenu from "../../components/KebabMenu";
-import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
@@ -89,8 +88,6 @@ export default function SettingsPage() {
   const [newProgramName, setNewProgramName] = useState("");
   const [editingProgram, setEditingProgram] = useState(null);
   const [deletingProgram, setDeletingProgram] = useState(false);
-  const newProgramRef = useRef(null);
-
   useEffect(() => {
     let usersReady = false, invitesReady = false;
     const checkReady = () => { if (usersReady && invitesReady) setLoading(false); };
@@ -100,10 +97,6 @@ export default function SettingsPage() {
     const unsubPrograms = subscribeToPrograms(setPrograms);
     return () => { unsubUsers(); unsubInvites(); unsubSkills(); unsubPrograms(); };
   }, []);
-
-  useEffect(() => {
-    if (addingProgram) newProgramRef.current?.focus();
-  }, [addingProgram]);
 
   // ── User Management handlers ──────────────────────────────────────────────
   const pending     = useMemo(() => users.filter(u => u.status === "pending"), [users]);
@@ -317,17 +310,6 @@ export default function SettingsPage() {
   const usersPagination   = usePagination(filteredUsers,   10);
   const invitesPagination = usePagination(filteredInvites, 10);
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const sectionTitle = (dot, label, count) => (
-    <h2 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-      <span className={`w-2 h-2 rounded-full inline-block ${dot}`} />
-      {label}
-      {count != null && count > 0 && (
-        <span className="ml-1 px-2 py-0.5 text-xs font-bold bg-gray-100 text-gray-600 rounded-full">{count}</span>
-      )}
-    </h2>
-  );
-
   const roleBadge = (role) => {
     if (role === "admin") return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
@@ -383,375 +365,40 @@ export default function SettingsPage() {
           USER MANAGEMENT SECTION
       ══════════════════════════════════════════════════════════════════════ */}
       {activeSection === "User Management" && (
-        <>
-          {/* Action buttons */}
-          <div className="flex justify-end gap-2 mb-8">
-            <button
-              onClick={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}
-              className="flex items-center gap-2 border border-gray-300 text-gray-700 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Import CSV
-            </button>
-            <button
-              onClick={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); setInviteError(""); setShowInviteModal(true); }}
-              className="flex items-center gap-2 bg-indigo-600 text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-indigo-700 transition-colors shadow-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Invite
-            </button>
-          </div>
-
-          {/* Users — flat table, pending + active merged */}
-          <div className="mb-8">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full inline-block bg-emerald-500" />
-                Users
-                <span className="px-2 py-0.5 text-xs font-bold bg-gray-100 text-gray-600 rounded-full">
-                  {activeUsers.length + pending.length}
-                </span>
-                {pending.length > 0 && (
-                  <span className="px-2 py-0.5 text-xs font-bold bg-amber-100 text-amber-700 rounded-full">
-                    {pending.length} pending
-                  </span>
-                )}
-              </h2>
-              <select
-                value={userRoleFilter}
-                onChange={e => setUserRoleFilter(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-gray-600 cursor-pointer">
-                <option value="">All roles</option>
-                <option value="pending">Pending</option>
-                {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-              </select>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              {loading ? (
-                <p className="text-center text-gray-400 py-10 text-sm">Loading…</p>
-              ) : filteredUsers.length === 0 ? (
-                <p className="text-center text-gray-400 py-10 text-sm">No users match this filter.</p>
-              ) : (
-                <>
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100">
-                        {["Name", "Email", "Role", ""].map(h => (
-                          <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {usersPagination.paged.map(u => u.status === "pending" ? (
-                        <tr key={u.id} className="hover:bg-amber-50 bg-amber-50/50">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900">{u.displayName || "—"}</span>
-                              <span className="text-[10px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-full">Pending</span>
-                            </div>
-                            <p className="text-xs text-gray-400 mt-0.5">{u.createdAt ? formatDateShort(u.createdAt) : ""}</p>
-                          </td>
-                          <td className="px-4 py-3 text-gray-500 font-mono text-xs">{u.email}</td>
-                          <td className="px-4 py-3">
-                            <select
-                              value={pendingRoles[u.id] || "interviewer"}
-                              onChange={e => setPendingRoles(s => ({ ...s, [u.id]: e.target.value }))}
-                              disabled={saving[u.id]}
-                              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-amber-400 bg-white text-gray-700 disabled:opacity-60 cursor-pointer">
-                              {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                            </select>
-                          </td>
-                          <td className="px-4 py-3">
-                            <KebabMenu actions={[
-                              { label: saving[u.id] ? "Approving…" : "Approve", onClick: () => approve(u), highlight: true, disabled: saving[u.id] },
-                              { label: "Reject", onClick: () => reject(u), danger: true },
-                            ]} />
-                          </td>
-                        </tr>
-                      ) : (
-                        <tr key={u.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900">{u.displayName || "—"}</span>
-                              {u.id === currentUser?.uid && (
-                                <span className="text-[10px] font-bold text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded-full">You</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-gray-500 font-mono text-xs">{u.email}</td>
-                          <td className="px-4 py-3">
-                            {u.id === currentUser?.uid ? (
-                              roleBadge(u.role)
-                            ) : (
-                              <select
-                                value={u.role || "interviewer"}
-                                disabled={saving[u.id]}
-                                onChange={e => changeRole(u, e.target.value)}
-                                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-gray-700 disabled:opacity-60 cursor-pointer">
-                                {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                              </select>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <KebabMenu actions={[
-                              { label: "Send reset email", onClick: () => sendReset(u) },
-                              { label: u.phone ? "Update phone" : "Set phone", onClick: () => openPhoneModal(u) },
-                              { label: "Revoke access", onClick: () => revoke(u), danger: true, disabled: saving[u.id], show: u.id !== currentUser?.uid },
-                            ]} />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  <Pagination
-                    page={usersPagination.page}
-                    totalPages={usersPagination.totalPages}
-                    total={usersPagination.total}
-                    pageSize={usersPagination.pageSize}
-                    onPageChange={usersPagination.setPage}
-                  />
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Invited — flat, awaiting signup */}
-          {(pendingInvites.length > 0 || loading) && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full inline-block bg-indigo-400" />
-                  Invited — Awaiting Signup
-                  {pendingInvites.length > 0 && (
-                    <span className="px-2 py-0.5 text-xs font-bold bg-gray-100 text-gray-600 rounded-full">{pendingInvites.length}</span>
-                  )}
-                </h2>
-                <select
-                  value={inviteRoleFilter}
-                  onChange={e => setInviteRoleFilter(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white text-gray-600 cursor-pointer">
-                  <option value="">All roles</option>
-                  {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                </select>
-              </div>
-              {loading ? (
-                <div className="bg-white rounded-xl border border-gray-200 p-10 text-center text-sm text-gray-400">Loading…</div>
-              ) : (
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                  {filteredInvites.length === 0 ? (
-                    <p className="text-center text-gray-400 py-10 text-sm">No invites match this filter.</p>
-                  ) : (
-                    <>
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-100">
-                            {["Name", "Email", "Role", "Invited On", ""].map(h => (
-                              <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-2.5">{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                          {invitesPagination.paged.map(inv => (
-                            <tr key={inv.id} className="hover:bg-gray-50">
-                              <td className="px-4 py-3 font-semibold text-gray-900">{inv.name || "—"}</td>
-                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">{inv.email}</td>
-                              <td className="px-4 py-3">{roleBadge(inv.role)}</td>
-                              <td className="px-4 py-3 text-gray-400 text-xs">{inv.createdAt ? formatDateShort(inv.createdAt) : "—"}</td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-3 whitespace-nowrap">
-                                  <button onClick={() => copyLink(inv.id, inv.email)}
-                                    className={`text-xs font-medium transition-colors inline-flex items-center gap-1.5 ${copiedId === inv.id ? "text-emerald-600" : "text-indigo-600 hover:text-indigo-800"}`}>
-                                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={copiedId === inv.id ? "M5 13l4 4L19 7" : "M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"} />
-                                    </svg>
-                                    {copiedId === inv.id ? "Copied!" : "Copy link"}
-                                  </button>
-                                  <button onClick={() => handleRemoveInvite(inv)}
-                                    className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors">
-                                    Remove
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <Pagination
-                        page={invitesPagination.page}
-                        totalPages={invitesPagination.totalPages}
-                        total={invitesPagination.total}
-                        pageSize={invitesPagination.pageSize}
-                        onPageChange={invitesPagination.setPage}
-                      />
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-        </>
+        <UserManagementTab
+          loading={loading}
+          filteredUsers={filteredUsers} usersPagination={usersPagination}
+          filteredInvites={filteredInvites} invitesPagination={invitesPagination} pendingInvites={pendingInvites}
+          userRoleFilter={userRoleFilter} setUserRoleFilter={setUserRoleFilter}
+          inviteRoleFilter={inviteRoleFilter} setInviteRoleFilter={setInviteRoleFilter}
+          activeUsers={activeUsers} pending={pending}
+          pendingRoles={pendingRoles} setPendingRoles={setPendingRoles}
+          saving={saving}
+          currentUser={currentUser}
+          copiedId={copiedId} copyLink={copyLink}
+          approve={approve} reject={reject} changeRole={changeRole} revoke={revoke}
+          sendReset={sendReset} openPhoneModal={openPhoneModal}
+          handleRemoveInvite={handleRemoveInvite}
+          onOpenInviteModal={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); setInviteError(""); setShowInviteModal(true); }}
+          onOpenCSV={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}
+        />
       )}
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          GENERAL SECTION
-      ══════════════════════════════════════════════════════════════════════ */}
+
       {activeSection === "General" && (
-        <div>
-          {/* Skills */}
-          <div className="mb-8">
-            {sectionTitle("bg-violet-400", "Skills")}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-xs text-gray-400 mb-4">These skills are shared across templates and interviewer profiles for matching.</p>
-              <div className="flex flex-wrap gap-2 mb-4">
-                {skills.map(s => (
-                  <div key={s.id} className="group flex items-center gap-1 bg-indigo-50 border border-indigo-200 rounded-full pl-3 pr-1 py-0.5">
-                    {editingSkill?.id === s.id ? (
-                      <input
-                        autoFocus
-                        value={editingSkill.name}
-                        onChange={e => setEditingSkill(x => ({ ...x, name: e.target.value }))}
-                        onKeyDown={e => { if (e.key === "Enter") handleRenameSkill(); if (e.key === "Escape") setEditingSkill(null); }}
-                        onBlur={handleRenameSkill}
-                        className="text-xs font-semibold text-indigo-700 bg-transparent border-b border-indigo-400 focus:outline-none w-24"
-                      />
-                    ) : (
-                      <span className="text-xs font-semibold text-indigo-700">{s.name}</span>
-                    )}
-                    <div className="flex items-center gap-0.5 ml-1">
-                      <button onClick={() => setEditingSkill({ id: s.id, name: s.name })}
-                        className="p-0.5 text-indigo-300 hover:text-indigo-600 transition-colors opacity-0 group-hover:opacity-100">
-                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                        </svg>
-                      </button>
-                      <button onClick={() => handleDeleteSkill(s)}
-                        className="p-0.5 text-indigo-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 font-bold text-sm leading-none">×</button>
-                    </div>
-                  </div>
-                ))}
-                {addingSkill ? (
-                  <input
-                    autoFocus
-                    value={newSkillName}
-                    onChange={e => setNewSkillName(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") handleAddSkill(); if (e.key === "Escape") { setAddingSkill(false); setNewSkillName(""); } }}
-                    onBlur={() => { if (!newSkillName.trim()) { setAddingSkill(false); setNewSkillName(""); } }}
-                    placeholder="Skill name…"
-                    className="text-xs border border-indigo-400 rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-36"
-                  />
-                ) : (
-                  <button onClick={() => setAddingSkill(true)}
-                    className="flex items-center gap-1 text-xs font-semibold text-indigo-600 border border-dashed border-indigo-300 rounded-full px-3 py-1 hover:bg-indigo-50 transition-colors">
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-                    </svg>
-                    Add Skill
-                  </button>
-                )}
-              </div>
-              {skills.length === 0 && !addingSkill && (
-                <p className="text-xs text-gray-400">No skills defined yet. Click "Add Skill" to create the first one.</p>
-              )}
-            </div>
-          </div>
-
-          {/* Programs */}
-          <div className="mb-6">
-            {sectionTitle("bg-indigo-400", "Programs")}
-            <p className="text-xs text-gray-400 mb-4">Programs group templates and candidates. They are used as filter tabs across the app.</p>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            {programs.length === 0 && !addingProgram ? (
-              <div className="flex flex-col items-center justify-center py-14 gap-3">
-                <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                <p className="text-sm text-gray-400">No programs yet.</p>
-                <button onClick={() => setAddingProgram(true)}
-                  className="text-sm font-semibold text-indigo-600 hover:underline">
-                  Create the first program →
-                </button>
-              </div>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {programs.map(p => (
-                  <li key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 group">
-                    <span className="w-2 h-2 rounded-full bg-indigo-400 flex-shrink-0" />
-                    {editingProgram?.id === p.id ? (
-                      <input
-                        autoFocus
-                        value={editingProgram.name}
-                        onChange={e => setEditingProgram(s => ({ ...s, name: e.target.value }))}
-                        onKeyDown={e => { if (e.key === "Enter") handleRenameProgram(); if (e.key === "Escape") setEditingProgram(null); }}
-                        onBlur={handleRenameProgram}
-                        className="flex-1 text-sm border-b border-indigo-400 focus:outline-none bg-transparent text-gray-900 font-medium"
-                      />
-                    ) : (
-                      <span className="flex-1 text-sm font-medium text-gray-900">{p.name}</span>
-                    )}
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => setEditingProgram({ id: p.id, name: p.name })}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                        title="Rename">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteProgram(p)}
-                        disabled={deletingProgram}
-                        className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
-                        title="Delete program">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                        </svg>
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {/* Add program row */}
-            <div className="px-5 py-3 border-t border-gray-100">
-              {addingProgram ? (
-                <div className="flex items-center gap-3">
-                  <span className="w-2 h-2 rounded-full bg-indigo-300 flex-shrink-0" />
-                  <input
-                    ref={newProgramRef}
-                    value={newProgramName}
-                    onChange={e => setNewProgramName(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") handleAddProgram(); if (e.key === "Escape") { setAddingProgram(false); setNewProgramName(""); } }}
-                    onBlur={() => { if (!newProgramName.trim()) { setAddingProgram(false); setNewProgramName(""); } }}
-                    placeholder="Program name…"
-                    className="flex-1 text-sm border-b border-indigo-400 focus:outline-none bg-transparent text-gray-900"
-                  />
-                  <button onClick={handleAddProgram}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1">
-                    Add
-                  </button>
-                  <button onClick={() => { setAddingProgram(false); setNewProgramName(""); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 px-1">
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <button onClick={() => setAddingProgram(true)}
-                  className="flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
-                  </svg>
-                  Add Program
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <GeneralTab
+          skills={skills} programs={programs}
+          addingSkill={addingSkill} setAddingSkill={setAddingSkill}
+          newSkillName={newSkillName} setNewSkillName={setNewSkillName}
+          editingSkill={editingSkill} setEditingSkill={setEditingSkill}
+          handleAddSkill={handleAddSkill} handleRenameSkill={handleRenameSkill}
+          handleDeleteSkill={handleDeleteSkill}
+          addingProgram={addingProgram} setAddingProgram={setAddingProgram}
+          newProgramName={newProgramName} setNewProgramName={setNewProgramName}
+          editingProgram={editingProgram} setEditingProgram={setEditingProgram}
+          handleAddProgram={handleAddProgram} handleRenameProgram={handleRenameProgram}
+          handleDeleteProgram={handleDeleteProgram} deletingProgram={deletingProgram}
+        />
       )}
 
       {/* ── Invite Modal ── */}

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useInterviews } from "../../hooks/subscriptions";
 import { formatDateShort } from "../../utils/dates";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createTemplate, updateTemplate, deleteTemplate,
-  subscribeToInterviews, getQuestions,
+  getQuestions,
 } from "../../api/firestore";
 import { useSkills, usePrograms, useTemplates, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -30,7 +31,7 @@ export default function TemplatesPage() {
   const { data: templates = [], isLoading } = useTemplates();
   const { data: programs  = [] } = usePrograms();
   const { data: skills    = [] } = useSkills();
-  const [interviews,    setInterviews]    = useState([]);
+  const interviews = useInterviews();
   const [showNewPicker, setShowNewPicker] = useState(false);
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
@@ -50,11 +51,6 @@ export default function TemplatesPage() {
   const csvFileRef = useRef(null);
 
   const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
-
-  useEffect(() => {
-    const unsub = subscribeToInterviews(setInterviews);
-    return unsub;
-  }, []);
 
   // Lazy-load bank questions only when the question bank tab is first opened
   useEffect(() => {

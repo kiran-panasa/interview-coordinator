@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { formatDate, formatDateTime } from "../../utils/dates";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { formatDate } from "../../utils/dates";
 import { parseImportCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
@@ -11,13 +11,15 @@ import {
 } from "../../api/firestore";
 import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
-import Modal from "../../components/Modal";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
-import { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
+import ScheduleInterviewModal from "../../features/interviews/ScheduleInterviewModal";
+import FeedbackViewModal from "../../features/interviews/FeedbackViewModal";
+import ImportModal from "../../features/interviews/ImportModal";
+import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -73,8 +75,6 @@ export default function InterviewsPage() {
   const [showImport,      setShowImport]      = useState(false);
   const [csvText,         setCsvText]         = useState("");
   const [parsedRows,      setParsedRows]      = useState(null);
-  const firstErrorRowRef  = useRef(null);
-  const firstWarnRowRef   = useRef(null);
   const [importing,       setImporting]       = useState(false);
   const [dlTemplateId,    setDlTemplateId]    = useState("");
   const [showArchived,    setShowArchived]    = useState(false);
@@ -434,9 +434,6 @@ export default function InterviewsPage() {
     a.click();
   }
 
-  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
-  const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
-
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -631,458 +628,38 @@ export default function InterviewsPage() {
         <Pagination page={ivrPage} totalPages={ivrTotalPages} total={ivrTotal} pageSize={ivrPageSize} onPageChange={setIvrPage} />
       </div>
 
-      {/* Schedule / Edit Modal */}
-      <Modal open={showModal} onClose={() => setShowModal(false)}
-        title={editTarget ? "Edit Interview" : "Schedule Interview"} wide>
-        <div className="space-y-4">
-          {/* Candidate */}
-          <div>
-            <label className={labelCls}>Candidate *</label>
-            <select value={form.candidateId} onChange={e => setField("candidateId", e.target.value)} className={inputCls}>
-              <option value="">— Select candidate —</option>
-              {candidates.map(c => <option key={c.id} value={c.id}>{c.name}{c.uid ? ` · ${c.uid}` : ""}</option>)}
-            </select>
-          </div>
+      <ScheduleInterviewModal
+        open={showModal} onClose={() => setShowModal(false)}
+        editTarget={editTarget} form={form} setField={setField}
+        handleSave={handleSave} saving={saving}
+        candidates={candidates} interviewers={interviewers} templates={templates}
+        availDates={availDates} availTimes={availTimes}
+        DEFAULT_ROUNDS={DEFAULT_ROUNDS} DURATIONS={DURATIONS}
+      />
 
-          {/* Interviewer */}
-          <div>
-            <label className={labelCls}>Interviewer *</label>
-            <select value={form.interviewerId} onChange={e => setField("interviewerId", e.target.value)} className={inputCls}>
-              <option value="">— Select interviewer —</option>
-              {interviewers.map(u => <option key={u.id} value={u.id}>{u.displayName || u.email}</option>)}
-            </select>
-          </div>
+      <FeedbackViewModal
+        feedbackModal={feedbackModal}
+        onClose={() => setFeedbackModal(null)}
+      />
 
-          {/* Date, Time, Duration */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className={labelCls}>Date *</label>
-              {availDates.length > 0 ? (
-                <select value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls}>
-                  <option value="">— Select date —</option>
-                  {availDates.map(d => <option key={d} value={d}>{formatDate(d)}</option>)}
-                </select>
-              ) : (
-                <div>
-                  <input type="date" value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
-                  {form.interviewerId && availDates.length === 0 &&
-                    <p className="text-xs text-amber-600 mt-1">⚠ No availability set</p>
-                  }
-                </div>
-              )}
-            </div>
-            <div>
-              <label className={labelCls}>Start Time *</label>
-              {availTimes.length > 0 ? (
-                <select value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls}>
-                  <option value="">— Select time —</option>
-                  {availTimes.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              ) : (
-                <input type="time" value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls} />
-              )}
-            </div>
-            <div>
-              <label className={labelCls}>Duration *</label>
-              <select value={form.duration} onChange={e => setField("duration", Number(e.target.value))} className={inputCls}>
-                {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
-              </select>
-            </div>
-          </div>
+      <ImportModal
+        open={showImport} onClose={() => setShowImport(false)}
+        csvText={csvText} setCsvText={setCsvText}
+        parsedRows={parsedRows} setParsedRows={setParsedRows}
+        dlTemplateId={dlTemplateId} setDlTemplateId={setDlTemplateId}
+        templates={templates}
+        handleParseCSV={handleParseCSV} handleImport={handleImport} importing={importing}
+        downloadImportTemplate={downloadImportTemplate}
+      />
 
-          {/* Round */}
-          <div>
-            <label className={labelCls}>Round *</label>
-            <select value={form.round} onChange={e => setField("round", e.target.value)} className={inputCls}>
-              <option value="">— Select round —</option>
-              {DEFAULT_ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className={labelCls}>Notes (admin only)</label>
-            <textarea rows={2} placeholder="Any notes for this interview…" value={form.notes}
-              onChange={e => setField("notes", e.target.value)}
-              className={`${inputCls} resize-none`} />
-          </div>
-
-          {/* Template */}
-          <div className="border-t border-gray-100 pt-4">
-            <label className={labelCls}>Evaluation Template</label>
-            <select value={form.templateId} onChange={e => setField("templateId", e.target.value)} className={inputCls}>
-              <option value="">— No template (generic feedback) —</option>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <button onClick={handleSave} disabled={saving}
-              className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-              {saving ? "Saving…" : editTarget ? "Update Interview" : "Schedule Interview"}
-            </button>
-            <button onClick={() => setShowModal(false)}
-              className="px-5 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Feedback Viewer Modal */}
-      <Modal open={!!feedbackModal} onClose={() => setFeedbackModal(null)}
-        title={feedbackModal ? `Feedback — ${feedbackModal.interview.candidateName}` : ""} wide>
-        {feedbackModal && (() => {
-          const fb = feedbackModal.interview.feedback;
-          const tmpl = feedbackModal.template;
-          const isDynamic = fb && (fb.domains || fb.sections);
-          return (
-            <div className="space-y-4">
-              {/* Meta row */}
-              <div className="flex flex-wrap gap-3 text-xs text-gray-500 pb-2 border-b border-gray-100">
-                <span><span className="font-semibold text-gray-700">Interviewer:</span> {feedbackModal.interview.interviewerName || feedbackModal.interview.interviewerEmail}</span>
-                <span><span className="font-semibold text-gray-700">Round:</span> {feedbackModal.interview.round}</span>
-                <span><span className="font-semibold text-gray-700">Date:</span> {formatDate(feedbackModal.interview.scheduledDate)}</span>
-                {fb?.submittedAt && (
-                  <span><span className="font-semibold text-gray-700">Submitted:</span> {formatDateTime(fb.submittedAt)}</span>
-                )}
-              </div>
-
-              {/* Dynamic template feedback */}
-              {isDynamic ? (
-                <DynamicFeedbackDisplay template={tmpl} feedbackData={fb} />
-              ) : (
-                /* Legacy feedback fallback */
-                <div className="space-y-3">
-                  {fb?.answers && Object.entries(fb.answers).map(([qid, val]) => (
-                    <div key={qid} className="bg-gray-50 rounded-lg px-4 py-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                        {qid.replace(/_/g, " ")}
-                      </p>
-                      {typeof val === "number" ? (
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-0.5">
-                            {[1,2,3,4,5].map(n => (
-                              <div key={n} className={`w-4 h-4 rounded-sm ${n <= val ? "bg-indigo-500" : "bg-gray-200"}`} />
-                            ))}
-                          </div>
-                          <span className="text-sm font-bold text-indigo-700">{val}/5</span>
-                        </div>
-                      ) : (
-                        <p className="text-sm text-gray-800">{val || "—"}</p>
-                      )}
-                    </div>
-                  ))}
-                  {fb?.comments && (
-                    <div className="bg-gray-50 rounded-lg px-4 py-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Comments</p>
-                      <p className="text-sm text-gray-800 whitespace-pre-wrap">{fb.comments}</p>
-                    </div>
-                  )}
-                  {fb?.overallRecommendation && (
-                    <div className="bg-indigo-50 rounded-lg px-4 py-3 flex items-center gap-3">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Recommendation</p>
-                      <span className="text-sm font-bold text-indigo-700">{fb.overallRecommendation}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div className="pt-2 flex justify-end">
-                <button onClick={() => setFeedbackModal(null)}
-                  className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2 text-sm font-semibold hover:bg-gray-200">
-                  Close
-                </button>
-              </div>
-            </div>
-          );
-        })()}
-      </Modal>
-
-      {/* Import from Sheet Modal */}
-      <Modal open={showImport} onClose={() => setShowImport(false)} title="Import Interviews from Sheet" wide>
-        <div className="space-y-5">
-
-          {/* Format reference */}
-          <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
-            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">CSV Format</p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    {["Column", "Required", "Example"].map(h => (
-                      <th key={h} className="text-left font-semibold text-gray-500 pb-1.5 pr-4">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="text-gray-600 divide-y divide-gray-100">
-                  {[
-                    ["candidateEmail",   "Yes", "john@example.com"],
-                    ["interviewerEmail", "Yes", "interviewer@nxtwave.tech (need not be signed up yet)"],
-                    ["templateName",     "Yes", "Product Mastery - Novice"],
-                    ["date",             "Yes", "15/06/2026 or 2026-06-15"],
-                    ["time",             "Yes", "10:00 AM or 14:30"],
-                    ["round",            "No",  "Round 1 (default)"],
-                    ["verdict",          "No",  "Proceed / Hold / Reject — omit to create as scheduled (pending)"],
-                    ["notes",            "No",  "Overall feedback notes"],
-                    ["{domainId}_{fieldId}_rating","No",  "e.g. coding_ps_rating → score for that specific card field (0–5)"],
-                    ["{domainId}_rating",         "No",  "e.g. resume_rating → for domains with no card fields"],
-                    ["{domainId}_notes",           "No",  "e.g. coding_notes → overall remarks for that domain"],
-                  ].map(([col, req, ex]) => (
-                    <tr key={col}>
-                      <td className="py-1.5 pr-4 font-mono text-[11px] text-indigo-700">{col}</td>
-                      <td className="py-1.5 pr-4">
-                        {req === "Yes"
-                          ? <span className="text-red-500 font-semibold">Yes</span>
-                          : <span className="text-gray-400">No</span>}
-                      </td>
-                      <td className="py-1.5 text-gray-500">{ex}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Template-specific CSV download */}
-            <div className="mt-3 pt-3 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-2">Download a ready-to-fill CSV with domain columns for a specific template:</p>
-              <div className="flex gap-2">
-                <select
-                  value={dlTemplateId}
-                  onChange={e => setDlTemplateId(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">— Select template —</option>
-                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-                <button
-                  disabled={!dlTemplateId}
-                  onClick={() => downloadImportTemplate(templates.find(t => t.id === dlTemplateId))}
-                  className="px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-40">
-                  Download CSV
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* CSV input */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Paste CSV or upload file</label>
-              <label className="text-xs text-indigo-600 font-semibold hover:underline cursor-pointer">
-                Upload file
-                <input type="file" accept=".csv,.txt" className="hidden" onChange={e => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = ev => { setCsvText(ev.target.result); setParsedRows(null); };
-                  reader.readAsText(file);
-                  e.target.value = "";
-                }} />
-              </label>
-            </div>
-            <textarea
-              rows={6}
-              value={csvText}
-              onChange={e => { setCsvText(e.target.value); setParsedRows(null); }}
-              placeholder={"candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes\njohn@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,Good candidate"}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-            />
-          </div>
-
-          <button
-            onClick={handleParseCSV}
-            disabled={!csvText.trim()}
-            className="w-full border border-indigo-300 text-indigo-700 bg-indigo-50 rounded-lg py-2 text-sm font-semibold hover:bg-indigo-100 disabled:opacity-40">
-            Parse & Preview
-          </button>
-
-          {/* Preview */}
-          {parsedRows && (
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Preview — {parsedRows.length} row{parsedRows.length !== 1 ? "s" : ""}
-                {parsedRows.filter(r => r.errors.length > 0).length > 0 && (
-                  <button
-                    className="text-red-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-red-700"
-                    onClick={() => firstErrorRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
-                    · {parsedRows.filter(r => r.errors.length > 0).length} with errors
-                  </button>
-                )}
-                {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 && (
-                  <button
-                    className="text-amber-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-amber-700"
-                    onClick={() => firstWarnRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
-                    · {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length} with warnings
-                  </button>
-                )}
-              </p>
-              <div className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                <table className="w-full text-xs min-w-[700px]">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      {["#", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", "Feedback", ""].map(h => (
-                        <th key={h} className="text-left font-semibold text-gray-400 uppercase tracking-wide px-3 py-2">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {(() => { firstErrorRowRef.current = null; firstWarnRowRef.current = null; return null; })()}
-                    {parsedRows.map(row => {
-                      const hasErr = row.errors.length > 0;
-                      const hasWarn = row.warnings.length > 0 && !hasErr;
-                      const setErrRef  = hasErr  && !firstErrorRowRef.current  ? (el => { firstErrorRowRef.current = el; })  : undefined;
-                      const setWarnRef = hasWarn && !firstWarnRowRef.current   ? (el => { firstWarnRowRef.current = el; })   : undefined;
-                      return (
-                        <tr key={row.rowNum} ref={setErrRef || setWarnRef} className={hasErr ? "bg-red-50" : hasWarn ? "bg-amber-50" : "bg-white"}>
-                          <td className="px-3 py-2 text-gray-400 whitespace-nowrap">
-                            {row.rowNum}
-                            {hasErr  && <span className="ml-1 text-red-500"  title={row.errors.join(" · ")}>✕</span>}
-                            {hasWarn && <span className="ml-1 text-amber-500" title={row.warnings.join(" · ")}>⚠</span>}
-                          </td>
-                          <td className="px-3 py-2 font-medium text-gray-800">
-                            {row.resolved.candidate?.name || <span className="text-red-500">{row.raw.candidateEmail}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">
-                            {row.resolved.interviewer?.displayName || row.resolved.interviewer?.email || <span className="text-red-500">{row.raw.interviewerEmail}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">
-                            {row.resolved.template?.name || <span className="text-red-500">{row.raw.templateName}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">
-                            {row.resolved.scheduledDate ? formatDate(row.resolved.scheduledDate) : <span className="text-red-500">{row.raw.date}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">
-                            {row.resolved.scheduledTime || <span className="text-red-500">{row.raw.time}</span>}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600">{row.raw.round}</td>
-                          <td className="px-3 py-2">
-                            {row.resolved.verdict && (
-                              <span className={`font-semibold ${row.resolved.verdict === "Proceed" ? "text-emerald-600" : row.resolved.verdict === "Reject" ? "text-red-500" : "text-amber-600"}`}>
-                                {row.resolved.verdict}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {row.resolved.hasDomainFeedback ? (
-                              <span className="text-xs text-indigo-600 font-semibold">
-                                {Object.keys(row.resolved.domainData).filter(k => k.endsWith("_rating") && row.resolved.domainData[k]).length} domains
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-300">verdict only</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2">
-                            {hasErr && (
-                              <div className="text-red-600 space-y-0.5">
-                                {row.errors.map((e, i) => <p key={i}>✕ {e}</p>)}
-                              </div>
-                            )}
-                            {hasWarn && (
-                              <div className="text-amber-600 space-y-0.5">
-                                {row.warnings.map((w, i) => <p key={i}>⚠ {w}</p>)}
-                              </div>
-                            )}
-                            {!hasErr && !hasWarn && <span className="text-emerald-500">✓</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                </div>
-              </div>
-
-              {parsedRows.filter(r => r.errors.length === 0).length > 0 && (
-                <div className="flex gap-3 mt-4">
-                  <button
-                    onClick={handleImport}
-                    disabled={importing}
-                    className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-                    {importing
-                      ? "Importing…"
-                      : `Import ${parsedRows.filter(r => r.errors.length === 0).length} Interview${parsedRows.filter(r => r.errors.length === 0).length !== 1 ? "s" : ""}`}
-                  </button>
-                  <button onClick={() => setShowImport(false)}
-                    className="px-5 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200">
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              {parsedRows.every(r => r.errors.length > 0) && (
-                <div className="mt-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-                  All rows have errors — fix the CSV and re-parse.
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </Modal>
-
-      {/* Add / Edit Feedback modal */}
-      <Modal
-        open={!!feedbackEditModal}
+      <FeedbackEditModal
+        feedbackEditModal={feedbackEditModal}
         onClose={() => setFeedbackEditModal(null)}
-        title={feedbackEditModal?.feedback?.overallRecommendation ? `Edit Feedback — ${feedbackEditModal.candidateName}` : `Add Feedback — ${feedbackEditModal?.candidateName}`}>
-        {feedbackEditModal && (
-          <div className="space-y-4">
-            <div className="text-xs text-gray-500 space-y-0.5">
-              <p><span className="font-semibold text-gray-600">Template:</span> {feedbackEditModal.templateName}</p>
-              <p><span className="font-semibold text-gray-600">Round:</span> {feedbackEditModal.round} · {formatDate(feedbackEditModal.scheduledDate)}</p>
-              <p><span className="font-semibold text-gray-600">Interviewer:</span> {feedbackEditModal.interviewerName || feedbackEditModal.interviewerEmail}</p>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Overall Recommendation</label>
-              <select
-                value={feedbackEditForm.overallRecommendation}
-                onChange={e => setFeedbackEditForm(f => ({ ...f, overallRecommendation: e.target.value }))}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="">— Select —</option>
-                <option value="Proceed">Proceed</option>
-                <option value="Hold">Hold</option>
-                <option value="Reject">Reject</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Notes</label>
-              <textarea
-                rows={4}
-                value={feedbackEditForm.comments}
-                onChange={e => setFeedbackEditForm(f => ({ ...f, comments: e.target.value }))}
-                placeholder="Overall notes about this interview…"
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
-            </div>
-
-            {feedbackEditModal.status !== "completed" && (
-              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={feedbackEditForm.markCompleted}
-                  onChange={e => setFeedbackEditForm(f => ({ ...f, markCompleted: e.target.checked }))}
-                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                Mark interview as Completed
-              </label>
-            )}
-
-            <div className="flex gap-3 pt-1">
-              <button
-                onClick={handleSaveFeedbackEdit}
-                disabled={feedbackEditSaving || !feedbackEditForm.overallRecommendation}
-                className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
-                {feedbackEditSaving ? "Saving…" : "Save Feedback"}
-              </button>
-              <button
-                onClick={() => setFeedbackEditModal(null)}
-                className="px-5 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200">
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
+        feedbackEditForm={feedbackEditForm}
+        setFeedbackEditForm={setFeedbackEditForm}
+        handleSaveFeedbackEdit={handleSaveFeedbackEdit}
+        feedbackEditSaving={feedbackEditSaving}
+      />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
