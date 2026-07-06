@@ -45,9 +45,14 @@ export default function InterviewersPage() {
   const { currentUser } = useAuth();
   const canDelete = currentUser?.email?.toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
   const { data: usersAll = [], isLoading } = useUsers();
+  const [showArchived, setShowArchived] = useState(false);
   const interviewers = usersAll.filter(u =>
     (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
   );
+  const archivedInterviewers = usersAll.filter(u =>
+    (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "archived"
+  );
+  const displayInterviewers = showArchived ? archivedInterviewers : interviewers;
   const { data: skills    = [] } = useSkills();
   const { data: templates = [] } = useTemplates();
   const [viewAvail,    setViewAvail]    = useState(null);
@@ -115,6 +120,17 @@ export default function InterviewersPage() {
       await updateUser(u.id, { status: "archived" });
       queryClient.invalidateQueries({ queryKey: QK.users });
       setToast({ message: `${name} archived.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
+  const handleRestore = async (u) => {
+    const name = u.displayName || u.email;
+    try {
+      await updateUser(u.id, { status: "active" });
+      queryClient.invalidateQueries({ queryKey: QK.users });
+      setToast({ message: `${name} restored.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -203,9 +219,9 @@ export default function InterviewersPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const uniqueCompanies = [...new Set(interviewers.map(u => u.company).filter(Boolean))].sort();
+  const uniqueCompanies = [...new Set(displayInterviewers.map(u => u.company).filter(Boolean))].sort();
 
-  const filtered = interviewers.filter(u => {
+  const filtered = displayInterviewers.filter(u => {
     if (filterSkill    && !(u.skills      || []).includes(filterSkill))    return false;
     if (filterTemplate && !(u.templateIds || []).includes(filterTemplate)) return false;
     if (filterCompany  && u.company !== filterCompany)                     return false;
@@ -232,7 +248,22 @@ export default function InterviewersPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Interviewers</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{interviewers.length} active interviewer{interviewers.length !== 1 ? "s" : ""}</p>
+          <div className="flex items-center gap-1 mt-2 bg-gray-100 rounded-lg p-0.5 w-fit">
+            <button
+              onClick={() => { setShowArchived(false); setSelectedIds(new Set()); }}
+              className={`text-xs font-semibold px-3 py-1 rounded-md transition-colors ${
+                !showArchived ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              Active · {interviewers.length}
+            </button>
+            <button
+              onClick={() => { setShowArchived(true); setSelectedIds(new Set()); }}
+              className={`text-xs font-semibold px-3 py-1 rounded-md transition-colors ${
+                showArchived ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              Archived{archivedInterviewers.length > 0 ? ` · ${archivedInterviewers.length}` : ""}
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Export dropdown */}
@@ -273,7 +304,7 @@ export default function InterviewersPage() {
       </div>
 
       {/* Bulk action bar */}
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 && !showArchived && (
         <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl">
           <span className="text-sm font-semibold text-indigo-700">
             {selectedIds.size} interviewer{selectedIds.size !== 1 ? "s" : ""} selected
@@ -328,7 +359,7 @@ export default function InterviewersPage() {
             <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <p className="text-sm text-gray-400">{interviewers.length === 0 ? "No interviewers yet." : "No results match your search."}</p>
+            <p className="text-sm text-gray-400">{displayInterviewers.length === 0 ? (showArchived ? "No archived interviewers." : "No interviewers yet.") : "No results match your search."}</p>
           </div>
         ) : (
           <>
@@ -451,9 +482,13 @@ export default function InterviewersPage() {
                   {/* Actions */}
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
-                      { label: "View Availability", onClick: () => viewAvailability(u) },
-                      { label: "Edit",              onClick: () => openEdit(u) },
-                      ...(canDelete ? [{ label: "Archive", onClick: () => handleDelete(u), danger: true }] : []),
+                      ...(!showArchived ? [
+                        { label: "View Availability", onClick: () => viewAvailability(u) },
+                        { label: "Edit",              onClick: () => openEdit(u) },
+                        ...(canDelete ? [{ label: "Archive", onClick: () => handleDelete(u), danger: true }] : []),
+                      ] : [
+                        ...(canDelete ? [{ label: "Restore", onClick: () => handleRestore(u) }] : []),
+                      ]),
                     ]} />
                   </td>
                 </tr>
