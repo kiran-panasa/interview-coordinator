@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { formatDate, toInterviewDateTime } from "../../utils/dates";
+import { useState } from "react";
+import { formatDate, parseInterviewStart } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
-import { subscribeToInterviewerInterviews } from "../../api/firestore";
+import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import Badge from "../../components/Badge";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
@@ -11,29 +11,17 @@ const TABS = ["Upcoming", "Past", "All"];
 
 export default function MyInterviewsPage() {
   const { userProfile } = useAuth();
-  const [interviews, setInterviews] = useState([]);
+  const interviews = useInterviewerInterviews(userProfile?.email);
   const [tab, setTab] = useState("Upcoming");
   const [filterStatus, setFilterStatus] = useState("All");
-
-  useEffect(() => {
-    if (!userProfile?.email) return;
-    const unsub = subscribeToInterviewerInterviews(userProfile.email, setInterviews);
-    return unsub;
-  }, [userProfile?.email]);
 
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
 
   function isPastStart(scheduledDate, scheduledTime) {
     if (!scheduledDate) return false;
-    const match = (scheduledTime || "").match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-    if (!match) return scheduledDate < today;
-    let h = parseInt(match[1]);
-    const m = parseInt(match[2]);
-    const ampm = match[3]?.toUpperCase();
-    if (ampm === "PM" && h < 12) h += 12;
-    if (ampm === "AM" && h === 12) h = 0;
-    return toInterviewDateTime(scheduledDate, h, m) < now;
+    const start = parseInterviewStart(scheduledDate, scheduledTime);
+    return start ? start < now : scheduledDate < today;
   }
 
   let filtered = interviews;

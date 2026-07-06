@@ -2,12 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { formatDate, formatDateShort, formatDateTime } from "../../utils/dates";
 import { useAuth } from "../../AuthContext";
 import {
-  subscribeToUserNotifications,
   createNotification, updateNotification,
-  subscribeToScheduleInvites, createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
+  createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate,
   getSlotsForInterviewers,
 } from "../../api/firestore";
+import { useUserNotifications, useScheduleInvites } from "../../hooks/subscriptions";
 import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -57,9 +57,9 @@ export default function NudgePage() {
   const { data: programs   = [] } = usePrograms();
   const { data: candidates = [] } = useCandidates();
   const users = usersAll;
-  const [responses,  setResponses]  = useState([]);
-  const [invites,    setInvites]    = useState([]);
-  const [toast,      setToast]      = useState(null);
+  const responses = useUserNotifications(currentUser.uid);
+  const invites   = useScheduleInvites();
+  const [toast,   setToast] = useState(null);
 
   // ── Interviewers tab state ──
   const [nudgeTemplateId, setNudgeTemplateId] = useState("");
@@ -84,12 +84,6 @@ export default function NudgePage() {
   const [resendingId,    setResendingId]    = useState(null);
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
-
-  useEffect(() => {
-    const u3 = subscribeToUserNotifications(currentUser.uid, setResponses);
-    const u4 = subscribeToScheduleInvites(setInvites);
-    return () => { u3(); u4(); };
-  }, [currentUser.uid]);
 
   const activeInterviewers = users.filter(
     u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"

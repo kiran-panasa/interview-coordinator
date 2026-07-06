@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
-import { subscribeToUserNotifications, updateNotification, createNotification } from "../../api/firestore";
+import { updateNotification, createNotification } from "../../api/firestore";
+import { useUserNotifications } from "../../hooks/subscriptions";
 import Toast from "../../components/Toast";
 
 
@@ -10,17 +11,13 @@ export default function NotificationsPage() {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
 
-  const [notifications, setNotifications] = useState([]);
-  const [responding,    setResponding]    = useState({}); // { [id]: true }
-  const [reasonModal,   setReasonModal]   = useState(null); // notification being declined
-  const [reason,        setReason]        = useState("");
-  const [toast,         setToast]         = useState(null);
+  const [responding,  setResponding]  = useState({});
+  const [reasonModal, setReasonModal] = useState(null);
+  const [reason,      setReason]      = useState("");
+  const [toast,       setToast]       = useState(null);
 
-  useEffect(() => {
-    return subscribeToUserNotifications(currentUser.uid, notifs =>
-      setNotifications(notifs.filter(n => n.type === "nudge" || n.type === "feedback_reminder"))
-    );
-  }, [currentUser.uid]);
+  const allNotifications = useUserNotifications(currentUser.uid);
+  const notifications    = allNotifications.filter(n => n.type === "nudge" || n.type === "feedback_reminder");
 
   const nudges   = notifications;
   const unread   = nudges.filter(n => n.status === "unread").length;

@@ -1,8 +1,7 @@
-import { useState, useEffect } from "react";
 import { formatDate } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
-import { subscribeToInterviewerInterviews } from "../../api/firestore";
+import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
 
@@ -27,13 +26,7 @@ function PhoneNudge({ userProfile }) {
 
 export default function InterviewerDashboard() {
   const { userProfile } = useAuth();
-  const [interviews, setInterviews] = useState([]);
-
-  useEffect(() => {
-    if (!userProfile?.email) return;
-    const unsub = subscribeToInterviewerInterviews(userProfile.email, setInterviews);
-    return unsub;
-  }, [userProfile?.email]);
+  const interviews = useInterviewerInterviews(userProfile?.email);
 
   const today = new Date().toISOString().slice(0, 10);
   const upcoming  = interviews.filter(i => i.scheduledDate >= today && (i.status === "scheduled" || i.status === "pending_acceptance"));

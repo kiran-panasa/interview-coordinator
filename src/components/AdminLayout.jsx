@@ -2,8 +2,8 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
-import { useEffect, useMemo, useState } from "react";
-import { subscribeToUserNotifications, subscribeToAdhocQuestions } from "../api/firestore";
+import { useMemo } from "react";
+import { useUserNotifications, useAdhocQuestions } from "../hooks/subscriptions";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 
@@ -25,18 +25,10 @@ export default function AdminLayout() {
   const role = userProfile?.role || "admin";
   const nav = useMemo(() => ALL_NAV.filter(item => item.roles.includes(role)), [role]);
 
-  const [unread,    setUnread]    = useState(0);
-  const [adhocQs,   setAdhocQs]  = useState([]);
-  const pendingAdhoc = adhocQs.filter(q => q.status === "pending").length;
-
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    const unsub1 = subscribeToUserNotifications(currentUser.uid, (notifs) => {
-      setUnread(notifs.filter(n => n.type === "response" && n.status === "unread").length);
-    });
-    const unsub2 = subscribeToAdhocQuestions(setAdhocQs);
-    return () => { unsub1(); unsub2(); };
-  }, [currentUser?.uid]);
+  const notifications = useUserNotifications(currentUser?.uid);
+  const adhocQs       = useAdhocQuestions();
+  const unread        = notifications.filter(n => n.type === "response" && n.status === "unread").length;
+  const pendingAdhoc  = adhocQs.filter(q => q.status === "pending").length;
 
   return (
     <div className="flex min-h-screen bg-gray-50">

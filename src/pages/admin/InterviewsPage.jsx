@@ -1,14 +1,15 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
-import { parseImportCSV, buildFeedbackFromCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
+import { parseImportCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
+import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  subscribeToInterviews,
   createInterview, updateInterview, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
 } from "../../api/firestore";
+import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Badge from "../../components/Badge";
@@ -49,7 +50,7 @@ export default function InterviewsPage() {
     usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"),
     [usersAll]
   );
-  const [interviews,    setInterviews]    = useState([]);
+  const interviews = useInterviews();
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -77,11 +78,6 @@ export default function InterviewsPage() {
   const [importing,       setImporting]       = useState(false);
   const [dlTemplateId,    setDlTemplateId]    = useState("");
   const [showArchived,    setShowArchived]    = useState(false);
-
-  useEffect(() => {
-    const unsubInterviews = subscribeToInterviews(setInterviews);
-    return () => unsubInterviews();
-  }, []);
 
   useEffect(() => {
     if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { subscribeToInterviews, getAllUsers } from "../../api/firestore";
+import { getAllUsers } from "../../api/firestore";
+import { useInterviews } from "../../hooks/subscriptions";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
 
@@ -14,13 +15,11 @@ function isThisWeek(dateStr) {
 }
 
 export default function AdminDashboard() {
-  const [interviews, setInterviews] = useState([]);
+  const interviews = useInterviews();
   const [pendingUsers, setPendingUsers] = useState([]);
 
   useEffect(() => {
-    const unsub = subscribeToInterviews(setInterviews);
     getAllUsers().then(users => setPendingUsers(users.filter(u => u.status === "pending")));
-    return unsub;
   }, []);
 
   const today = new Date().toISOString().slice(0, 10);

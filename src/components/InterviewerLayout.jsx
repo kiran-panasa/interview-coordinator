@@ -2,8 +2,9 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
-import { useEffect, useState } from "react";
-import { subscribeToUserNotifications, checkAndSendFeedbackNudges } from "../api/firestore";
+import { useEffect } from "react";
+import { useUserNotifications } from "../hooks/subscriptions";
+import { checkAndSendFeedbackNudges } from "../services/nudge.service";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 
@@ -24,15 +25,10 @@ export default function InterviewerLayout() {
   const role = userProfile?.role || "interviewer";
   const nav = role === "interviewer_content" ? [...NAV, TEMPLATES_NAV] : NAV;
 
-  const [unread, setUnread] = useState(0);
-  useEffect(() => {
-    if (!currentUser?.uid) return;
-    return subscribeToUserNotifications(currentUser.uid, (notifs) => {
-      setUnread(notifs.filter(n =>
-        (n.type === "nudge" || n.type === "feedback_reminder") && n.status === "unread"
-      ).length);
-    });
-  }, [currentUser?.uid]);
+  const notifications = useUserNotifications(currentUser?.uid);
+  const unread = notifications.filter(n =>
+    (n.type === "nudge" || n.type === "feedback_reminder") && n.status === "unread"
+  ).length;
 
   useEffect(() => {
     if (!currentUser?.uid || !userProfile?.email) return;

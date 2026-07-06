@@ -3,7 +3,7 @@ import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
-import { createNotification } from "./notifications";
+import { parseInterviewStart } from "../utils/dates";
 import type { Interview } from "../types";
 
 export const DEFAULT_ROUNDS = [
@@ -87,64 +87,6 @@ export async function markCandidateAttendance(
     update.nextNudgeAt = null;
   }
   await updateDoc(doc(db, "interviews", interviewId), update);
-}
-
-function parseInterviewStart(scheduledDate: string, scheduledTime: string): Date | null {
-  if (!scheduledDate || !scheduledTime) return null;
-  try {
-    const match = scheduledTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-    if (!match) return null;
-    let h = parseInt(match[1]);
-    const min = parseInt(match[2]);
-    const ampm = match[3]?.toUpperCase();
-    if (ampm === "PM" && h < 12) h += 12;
-    if (ampm === "AM" && h === 12) h = 0;
-    return new Date(`${scheduledDate}T${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}:00`);
-  } catch { return null; }
-}
-
-export async function checkAndSendFeedbackNudges(
-  interviewerId: string,
-  interviewerEmail: string
-): Promise<void> {
-  const now  = new Date();
-  const hour = now.getHours();
-  if (hour < 9 || hour >= 21) return;
-
-  const snap = await getDocs(
-    query(collection(db, "interviews"), where("interviewerEmail", "==", interviewerEmail))
-  );
-  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
-
-  for (const iv of rows) {
-    if (iv.status !== "scheduled") continue;
-    if (iv.candidateJoined === false) continue;
-    if (iv.feedback?.submittedAt)     continue;
-
-    const start = parseInterviewStart(iv.scheduledDate, iv.scheduledTime);
-    if (!start || start > now) continue;
-
-    const cutoff = new Date(start.getTime() + 48 * 60 * 60 * 1000);
-    if (now > cutoff) continue;
-
-    if (iv.nextNudgeAt && new Date(iv.nextNudgeAt) > now) continue;
-
-    await createNotification({
-      type:           "feedback_reminder",
-      recipientId:    interviewerId,
-      recipientEmail: interviewerEmail,
-      interviewId:    iv.id,
-      candidateName:  iv.candidateName || "",
-      message:        `Please submit your feedback for the interview with ${iv.candidateName || "the candidate"}.`,
-      status:         "unread",
-    });
-
-    await updateDoc(doc(db, "interviews", iv.id), {
-      nextNudgeAt: new Date(now.getTime() + 60 * 60 * 1000).toISOString(),
-      nudgeCount:  (iv.nudgeCount || 0) + 1,
-      updatedAt:   now.toISOString(),
-    });
-  }
 }
 
 export async function saveFeedbackDraft(id: string, feedback: Record<string, unknown>): Promise<void> {

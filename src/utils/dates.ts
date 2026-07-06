@@ -33,3 +33,17 @@ export function toInterviewDateTime(scheduledDate: string, hour: number, minute:
 export function isPast(dateOrIso: string | Date): boolean {
   return new Date(dateOrIso) < new Date();
 }
+
+export function parseInterviewStart(scheduledDate: string, scheduledTime: string): Date | null {
+  if (!scheduledDate || !scheduledTime) return null;
+  try {
+    const match = scheduledTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+    if (!match) return null;
+    let h = parseInt(match[1]);
+    const min = parseInt(match[2]);
+    const ampm = match[3]?.toUpperCase();
+    if (ampm === "PM" && h < 12) h += 12;
+    if (ampm === "AM" && h === 12) h = 0;
+    return toInterviewDateTime(scheduledDate, h, min);
+  } catch { return null; }
+}
