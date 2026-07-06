@@ -49,10 +49,7 @@ export default function InterviewerNudgeTab({
   const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
 
   const matchedInterviewers = nudgeTemplateId
-    ? activeInterviewers.filter(u => {
-        const req = nudgeTemplate?.skills || [];
-        return req.length === 0 || skillOverlap(req, u.skills || []).length > 0;
-      })
+    ? activeInterviewers.filter(u => (u.templateIds || []).includes(nudgeTemplateId))
     : activeInterviewers;
 
   const manualInterviewers = activeInterviewers.filter(u =>
