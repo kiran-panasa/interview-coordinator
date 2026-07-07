@@ -5,7 +5,7 @@ import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } f
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
 import {
-  updateUser, deleteUser,
+  updateUser,
   createInvite, deleteInvite,
   subscribeToUsers, subscribeToInvites,
   subscribeToSkills, createSkill, updateSkill, deleteSkill,
@@ -140,9 +140,9 @@ export default function SettingsPage() {
   };
 
   const reject = async (u) => {
-    if (!confirm(`Delete ${u.email}'s account?`)) return;
-    await deleteUser(u.id);
-    setToast({ message: "Account deleted." });
+    if (!confirm(`Reject and archive ${u.email}'s account?\n\nThey will lose access but their record is preserved.`)) return;
+    await updateUser(u.id, { status: "archived", archivedAt: new Date().toISOString() });
+    setToast({ message: "Account rejected and archived." });
   };
 
   const changeRole = async (u, newRole) => {

@@ -117,7 +117,7 @@ export default function InterviewersPage() {
     const name = u.displayName || u.email;
     if (!confirm(`Archive interviewer "${name}"?\n\nThey will be hidden from the platform and lose access. All their data (past interviews, availability, profile) is preserved and can be restored anytime.`)) return;
     try {
-      await updateUser(u.id, { status: "archived" });
+      await updateUser(u.id, { status: "archived", archivedAt: new Date().toISOString() });
       queryClient.invalidateQueries({ queryKey: QK.users });
       setToast({ message: `${name} archived.` });
     } catch (e) {
@@ -128,9 +128,20 @@ export default function InterviewersPage() {
   const handleRestore = async (u) => {
     const name = u.displayName || u.email;
     try {
-      await updateUser(u.id, { status: "active" });
+      await updateUser(u.id, { status: "active", archivedAt: null });
       queryClient.invalidateQueries({ queryKey: QK.users });
       setToast({ message: `${name} restored.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
+  const handleBulkRestore = async () => {
+    try {
+      await Promise.all([...selectedIds].map(id => updateUser(id, { status: "active", archivedAt: null })));
+      queryClient.invalidateQueries({ queryKey: QK.users });
+      setToast({ message: `${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""} restored.` });
+      setSelectedIds(new Set());
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -304,18 +315,28 @@ export default function InterviewersPage() {
       </div>
 
       {/* Bulk action bar */}
-      {selectedIds.size > 0 && !showArchived && (
+      {selectedIds.size > 0 && (
         <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-indigo-50 border border-indigo-200 rounded-xl">
           <span className="text-sm font-semibold text-indigo-700">
             {selectedIds.size} interviewer{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
-          <button onClick={openBulkModal}
-            className="flex items-center gap-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
-            </svg>
-            Update Templates
-          </button>
+          {showArchived ? (
+            <button onClick={handleBulkRestore}
+              className="flex items-center gap-1.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+              </svg>
+              Restore Selected
+            </button>
+          ) : (
+            <button onClick={openBulkModal}
+              className="flex items-center gap-1.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 px-3 py-1.5 rounded-lg transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+              </svg>
+              Update Templates
+            </button>
+          )}
           <button onClick={() => setSelectedIds(new Set())}
             className="text-sm text-indigo-500 hover:text-indigo-700 transition-colors">
             Clear selection
@@ -410,6 +431,11 @@ export default function InterviewersPage() {
                           <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded-full">
                             Interviewer
                           </span>
+                        )}
+                        {showArchived && u.archivedAt && (
+                          <p className="text-[10px] text-amber-600 mt-0.5">
+                            Archived {new Date(u.archivedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                          </p>
                         )}
                       </div>
                     </div>
