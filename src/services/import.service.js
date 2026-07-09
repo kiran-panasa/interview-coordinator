@@ -32,7 +32,7 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
             const raw = domainData[`${pfx}_${slugify(f.label)}_rating`]
                      ?? domainData[`${pfx}_${f.id}_rating`];
             card[f.id] = raw !== "" && raw != null ? parseFloat(raw) : null;
-          } else if (f.type === "plain_dropdown") {
+          } else if (f.type === "dropdown") {
             const raw = domainData[`${pfx}_${slugify(f.label)}`]
                      ?? domainData[`${pfx}_${f.id}`];
             card[f.id] = raw || null;

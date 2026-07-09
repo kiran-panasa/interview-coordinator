@@ -139,10 +139,10 @@ export function downloadImportTemplate(template) {
             if (f.type === "scored_dropdown") {
               domainHeaders.push(`${pfx}_${slugify(f.label)}_rating`);
               domainExample.push("3");
-            } else if (f.type === "plain_dropdown") {
+            } else if (f.type === "dropdown") {
               domainHeaders.push(`${pfx}_${slugify(f.label)}`);
               const firstOpt = Array.isArray(f.options) && f.options[0];
-              domainExample.push(firstOpt ? (firstOpt.label ?? firstOpt.value ?? String(firstOpt)) : "");
+              domainExample.push(firstOpt ? (typeof firstOpt === "string" ? firstOpt : (firstOpt.label ?? firstOpt.value ?? "")) : "");
             } else if (f.type === "text") {
               domainHeaders.push(`${pfx}_${slugify(f.label)}`);
               domainExample.push("");
