@@ -6,6 +6,7 @@ import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from ".
 import Toast from "../../components/Toast";
 import InterviewerNudgeTab from "../../features/nudge/InterviewerNudgeTab";
 import CandidateSchedulingTab from "../../features/nudge/CandidateSchedulingTab";
+import SlotOverviewTab from "../../features/nudge/SlotOverviewTab";
 
 export default function NudgePage() {
   const { currentUser, userProfile } = useAuth();
@@ -63,6 +64,7 @@ export default function NudgePage() {
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-8">
         <Tab id="interviewers" label="Interviewers" badge={unreadResponses} />
         <Tab id="candidates"   label="Candidates"   badge={pendingBookings} />
+        <Tab id="slots"        label="Slot Overview" />
       </div>
 
       {activeTab === "interviewers" && (
@@ -72,6 +74,13 @@ export default function NudgePage() {
           responses={responses}
           ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
           setToast={setToast}
+        />
+      )}
+
+      {activeTab === "slots" && (
+        <SlotOverviewTab
+          templates={templates} activeInterviewers={activeInterviewers}
+          ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
         />
       )}
 

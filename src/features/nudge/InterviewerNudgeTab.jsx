@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { formatDate, formatDateShort, formatDateTime } from "../../utils/dates";
 import { createNotification, updateNotification } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
@@ -44,9 +44,25 @@ export default function InterviewerNudgeTab({
   const [addSearch,       setAddSearch]       = useState("");
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
+  const [showPreview,     setShowPreview]     = useState(false);
   const addPickerRef = useRef(null);
 
   const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
+
+  const defaultMessage = useMemo(() => {
+    const portal = `${window.location.origin}/interviewer/notifications`;
+    const templateName = nudgeTemplate?.name || "Interview";
+    const timeRange = nudgeTimeStart && nudgeTimeEnd
+      ? ` (${formatTime(nudgeTimeStart)} – ${formatTime(nudgeTimeEnd)})`
+      : "";
+    return (
+      `Hi {{name}},\n\nWe need interviewers for "${templateName}" sessions between ` +
+      `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}${timeRange}.\n\n` +
+      `Please add your available time slots for this period so we can schedule candidates.\n\n` +
+      `Click here to respond and add your slots:\n${portal}\n\n` +
+      `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`
+    );
+  }, [nudgeTemplate, nudgeDateStart, nudgeDateEnd, nudgeTimeStart, nudgeTimeEnd, userProfile]);
 
   const matchedInterviewers = nudgeTemplateId
     ? activeInterviewers.filter(u => (u.templateIds || []).includes(nudgeTemplateId))
@@ -117,21 +133,20 @@ export default function InterviewerNudgeTab({
   const openNudge = () => {
     const toSend = displayedInterviewers.filter(u => selectedIvrs.has(u.id));
     if (!toSend.length) return;
-    const portal = `${window.location.origin}/interviewer/notifications`;
-    const templateName = nudgeTemplate?.name || "Interview";
-    const timeRange = nudgeTimeStart && nudgeTimeEnd
-      ? ` (${formatTime(nudgeTimeStart)} – ${formatTime(nudgeTimeEnd)})`
-      : "";
-    const msg =
-      `Hi {{name}},\n\nWe need interviewers for "${templateName}" sessions between ` +
-      `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}${timeRange}.\n\n` +
-      `Please add your available time slots for this period so we can schedule candidates.\n\n` +
-      `Click here to respond and add your slots:\n${portal}\n\n` +
-      `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`;
     setNudgeTarget({ template: nudgeTemplate, interviewers: toSend });
     setSelectedIvrs(new Set(toSend.map(u => u.id)));
-    setMessage(msg);
+    setMessage(defaultMessage);
   };
+
+  const messageIssues = useMemo(() => {
+    if (!nudgeTarget) return [];
+    const issues = [];
+    if (!message.includes("{{name}}"))
+      issues.push('Missing {{name}} — recipients won\'t be addressed by name.');
+    if (!/https?:\/\//.test(message))
+      issues.push('No link found — interviewers won\'t know where to respond.');
+    return issues;
+  }, [message, nudgeTarget]);
 
   const sendNudge = async () => {
     if (!nudgeTarget || selectedIvrs.size === 0) return;
@@ -222,6 +237,35 @@ export default function InterviewerNudgeTab({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Message Preview */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <button onClick={() => setShowPreview(p => !p)}
+          className="w-full flex items-center justify-between px-6 py-3.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            Preview Message
+          </span>
+          <svg className={`w-4 h-4 text-gray-400 transition-transform ${showPreview ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {showPreview && (
+          <div className="border-t border-gray-100 px-6 py-4">
+            {displayedInterviewers.length > 0 && (
+              <p className="text-xs text-gray-400 mb-3">
+                Showing as it will appear for <span className="font-medium text-gray-600">{displayedInterviewers[0].displayName || displayedInterviewers[0].email}</span>
+              </p>
+            )}
+            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed bg-gray-50 rounded-xl px-4 py-3">
+              {defaultMessage.replace(/\{\{name\}\}/g, displayedInterviewers[0]?.displayName || displayedInterviewers[0]?.email || "{{name}}")}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Interviewers table */}
@@ -444,6 +488,18 @@ export default function InterviewerNudgeTab({
             </div>
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Message</p>
+              {messageIssues.length > 0 && (
+                <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex gap-2.5">
+                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                  </svg>
+                  <div className="space-y-0.5">
+                    {messageIssues.map((issue, i) => (
+                      <p key={i} className="text-xs text-amber-700">{issue}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
               <textarea rows={8} value={message} onChange={e => setMessage(e.target.value)}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono" />
             </div>
