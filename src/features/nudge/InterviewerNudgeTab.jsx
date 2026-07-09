@@ -50,7 +50,7 @@ export default function InterviewerNudgeTab({
   const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
 
   const defaultMessage = useMemo(() => {
-    const portal = `${window.location.origin}/interviewer/notifications`;
+    const portal = `${window.location.origin}/interviewer/availability`;
     const templateName = nudgeTemplate?.name || "Interview";
     const timeRange = nudgeTimeStart && nudgeTimeEnd
       ? ` (${formatTime(nudgeTimeStart)} – ${formatTime(nudgeTimeEnd)})`
