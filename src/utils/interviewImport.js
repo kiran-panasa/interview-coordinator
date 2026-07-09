@@ -81,9 +81,10 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
 
       const verdict = raw.verdict ? (VERDICT_MAP[raw.verdict.toLowerCase()] || raw.verdict) : "";
 
+      const BASE_COLS = new Set(["candidateemail","intervieweremail","templatename","date","time","round","verdict","notes"]);
       const domainData = {};
       headers.forEach((h, j) => {
-        if (h.endsWith("_rating") || h.endsWith("_notes")) domainData[h] = (f[j] || "").trim();
+        if (!BASE_COLS.has(h)) domainData[h] = (f[j] || "").trim();
       });
 
       Object.entries(domainData).forEach(([k, v]) => {
@@ -138,6 +139,13 @@ export function downloadImportTemplate(template) {
             if (f.type === "scored_dropdown") {
               domainHeaders.push(`${pfx}_${slugify(f.label)}_rating`);
               domainExample.push("3");
+            } else if (f.type === "plain_dropdown") {
+              domainHeaders.push(`${pfx}_${slugify(f.label)}`);
+              const firstOpt = Array.isArray(f.options) && f.options[0];
+              domainExample.push(firstOpt ? (firstOpt.label ?? firstOpt.value ?? String(firstOpt)) : "");
+            } else if (f.type === "text") {
+              domainHeaders.push(`${pfx}_${slugify(f.label)}`);
+              domainExample.push("");
             }
           }
         }
