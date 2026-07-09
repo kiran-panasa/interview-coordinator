@@ -74,40 +74,45 @@ export default function NotificationsPage() {
 
   const openDecline = (n) => { setReasonModal(n); setReason(""); };
 
-  const handleUnavailable = () => {
+  const handleUnavailable = async () => {
     if (!reasonModal) return;
     const n = reasonModal;
     const savedReason = reason;
 
-    // Close modal immediately — don't block on Firestore
+    // Close modal immediately so UI isn't frozen
     setReasonModal(null);
     setReason("");
-    setToast({ message: "Response sent to admin." });
 
-    // Background: persist + notify
     const responderName = userProfile?.displayName || userProfile?.email || "Interviewer";
     const dateRange = n.dateRangeStart
       ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})`
       : n.date ? ` on ${formatDate(n.date)}` : "";
-    updateNotification(n.id, { status: "unavailable", reason: savedReason, respondedAt: new Date().toISOString() }).catch(() => {});
-    createNotification({
-      type:         "response",
-      recipientId:  n.senderId,
-      senderId:     currentUser.uid,
-      senderName:   responderName,
-      templateName: n.templateName,
-      date:         n.date,
-      message:      `${responderName} is NOT available for "${n.templateName || "interview"}"${dateRange}${savedReason ? ` — "${savedReason}"` : "."}`,
-      status:       "unread",
-      originalNotificationId: n.id,
-    }).catch(() => {});
-    if (APPS_SCRIPT_URL && n.senderEmail) {
-      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action: "sendEmail",
-        subject: `Slot Response — ${responderName} is NOT Available`,
-        body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is NOT available${savedReason ? `: "${savedReason}"` : "."}.`,
-        recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
-      }).catch(() => {});
+
+    try {
+      await updateNotification(n.id, { status: "unavailable", reason: savedReason, respondedAt: new Date().toISOString() });
+      await createNotification({
+        type:         "response",
+        recipientId:  n.senderId,
+        senderId:     currentUser.uid,
+        senderName:   responderName,
+        templateName: n.templateName,
+        date:         n.date,
+        message:      `${responderName} is NOT available for "${n.templateName || "interview"}"${dateRange}${savedReason ? ` — "${savedReason}"` : "."}`,
+        status:       "unread",
+        originalNotificationId: n.id,
+      });
+      setToast({ message: "Response sent to admin." });
+      // Best-effort email
+      if (APPS_SCRIPT_URL && n.senderEmail) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action: "sendEmail",
+          subject: `Slot Response — ${responderName} is NOT Available`,
+          body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is NOT available${savedReason ? `: "${savedReason}"` : "."}.`,
+          recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
+        }).catch(() => {});
+      }
+    } catch {
+      setToast({ message: "Failed to send response. Please try again.", type: "error" });
     }
   };
 
