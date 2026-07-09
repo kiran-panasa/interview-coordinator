@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "../../AuthContext";
-import { getSlotsForInterviewers } from "../../api/firestore";
+import { getSlotsForInterviewers, subscribeToSlotsForInterviewers } from "../../api/firestore";
 import { useUserNotifications, useScheduleInvites } from "../../hooks/subscriptions";
 import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Toast from "../../components/Toast";
@@ -28,6 +28,7 @@ export default function NudgePage() {
   const [ivrSlots,     setIvrSlots]     = useState({});
   const [slotsLoading, setSlotsLoading] = useState(false);
 
+  // Manual refresh still available for the button in each tab
   const fetchSlots = async (ids) => {
     if (!ids.length) return;
     setSlotsLoading(true);
@@ -35,10 +36,15 @@ export default function NudgePage() {
     finally { setSlotsLoading(false); }
   };
 
+  // Real-time subscription — auto-updates when any interviewer adds/removes a slot
   const ivrIdsKey = activeInterviewers.map(u => u.id).join(",");
   useEffect(() => {
     if (!activeInterviewers.length) return;
-    fetchSlots(activeInterviewers.map(u => u.id));
+    setSlotsLoading(true);
+    return subscribeToSlotsForInterviewers(
+      activeInterviewers.map(u => u.id),
+      (slots) => { setIvrSlots(slots); setSlotsLoading(false); }
+    );
   }, [ivrIdsKey]); // eslint-disable-line
 
   const unreadResponses  = responses.filter(n => n.type === "response" && n.status === "unread").length;

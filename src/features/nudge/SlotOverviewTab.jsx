@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
+import Pagination from "../../components/Pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 function today() { return new Date().toISOString().slice(0, 10); }
 function inDays(n) {
@@ -46,6 +48,10 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
 
   const totalFreeSlots      = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.length, 0), 0), [byDate]);
   const interviewersWithSlots = useMemo(() => { const s = new Set(); byDate.forEach(d => d.entries.forEach(e => s.add(e.ivrId))); return s.size; }, [byDate]);
+
+  const datePagination = usePagination(byDate);
+  // Reset to page 1 when filters change
+  useEffect(() => { datePagination.setPage(1); }, [selectedTemplateId, fromDate, toDate]); // eslint-disable-line
 
   // interviewer-level summary: total free slots in range per interviewer
   const ivrSummary = useMemo(() => {
@@ -139,8 +145,9 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
           <p className="text-xs text-gray-300">Expand the date range or ask interviewers to add slots.</p>
         </div>
       ) : (
+        <>
         <div className="space-y-3">
-          {byDate.map(({ date, entries }) => {
+          {datePagination.paged.map(({ date, entries }) => {
             const totalOnDate = entries.reduce((a, e) => a + e.slots.length, 0);
             const dateLabel = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
               weekday: "long", day: "numeric", month: "long", year: "numeric",
@@ -173,6 +180,14 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
             );
           })}
         </div>
+        <Pagination
+          page={datePagination.page}
+          totalPages={datePagination.totalPages}
+          total={datePagination.total}
+          pageSize={datePagination.pageSize}
+          onPageChange={datePagination.setPage}
+        />
+        </>
       )}
     </div>
   );
