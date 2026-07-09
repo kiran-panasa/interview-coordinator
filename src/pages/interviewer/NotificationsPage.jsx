@@ -3,8 +3,22 @@ import { formatDate, formatDateTime } from "../../utils/dates";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { updateNotification, createNotification } from "../../api/firestore";
+import { callAppsScript } from "../../lib/appsScript";
 import { useUserNotifications } from "../../hooks/subscriptions";
 import Toast from "../../components/Toast";
+
+const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
+const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
+
+function linkify(text) {
+  if (!text) return null;
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline break-all">{part}</a>
+      : part
+  );
+}
 
 
 export default function NotificationsPage() {
@@ -25,19 +39,37 @@ export default function NotificationsPage() {
   const handleAvailable = async (n) => {
     setResponding(s => ({ ...s, [n.id]: true }));
     await updateNotification(n.id, { status: "available", respondedAt: new Date().toISOString() });
+    const responderName = userProfile?.displayName || userProfile?.email || "Interviewer";
+    const dateRange = n.dateRangeStart
+      ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})`
+      : n.date ? ` on ${formatDate(n.date)}` : "";
     await createNotification({
       type:         "response",
       recipientId:  n.senderId,
       senderId:     currentUser.uid,
-      senderName:   userProfile?.displayName || userProfile?.email || "Interviewer",
+      senderName:   responderName,
       templateName: n.templateName,
       date:         n.date,
-      message:      `${userProfile?.displayName || userProfile?.email} is available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})` : n.date ? ` on ${formatDate(n.date)}` : ""}.`,
+      message:      `${responderName} is available for "${n.templateName || "interview"}"${dateRange}. They will add their slots shortly.`,
       status:       "unread",
       originalNotificationId: n.id,
     });
+    // Best-effort email to admin
+    if (APPS_SCRIPT_URL && n.senderEmail) {
+      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail",
+        subject: `Slot Response — ${responderName} is Available`,
+        body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is AVAILABLE. They are adding their slots now.`,
+        recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
+      }).catch(() => {});
+    }
     setResponding(s => ({ ...s, [n.id]: false }));
-    navigate("/interviewer/availability");
+    const params = new URLSearchParams();
+    if (n.dateRangeStart) params.set("from", n.dateRangeStart);
+    if (n.dateRangeEnd)   params.set("to",   n.dateRangeEnd);
+    if (n.templateName)   params.set("template", n.templateName);
+    params.set("notifId", n.id);
+    navigate(`/interviewer/availability?${params.toString()}`);
   };
 
   const openDecline = (n) => { setReasonModal(n); setReason(""); };
@@ -47,17 +79,30 @@ export default function NotificationsPage() {
     const n = reasonModal;
     setResponding(s => ({ ...s, [n.id]: true }));
     await updateNotification(n.id, { status: "unavailable", reason, respondedAt: new Date().toISOString() });
+    const responderName = userProfile?.displayName || userProfile?.email || "Interviewer";
+    const dateRange = n.dateRangeStart
+      ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})`
+      : n.date ? ` on ${formatDate(n.date)}` : "";
     await createNotification({
       type:         "response",
       recipientId:  n.senderId,
       senderId:     currentUser.uid,
-      senderName:   userProfile?.displayName || userProfile?.email || "Interviewer",
+      senderName:   responderName,
       templateName: n.templateName,
       date:         n.date,
-      message:      `${userProfile?.displayName || userProfile?.email} is NOT available for "${n.templateName || "interview"}"${n.dateRangeStart ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})` : n.date ? ` on ${formatDate(n.date)}` : ""}${reason ? ` — "${reason}"` : "."}`,
+      message:      `${responderName} is NOT available for "${n.templateName || "interview"}"${dateRange}${reason ? ` — "${reason}"` : "."}`,
       status:       "unread",
       originalNotificationId: n.id,
     });
+    // Best-effort email to admin
+    if (APPS_SCRIPT_URL && n.senderEmail) {
+      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail",
+        subject: `Slot Response — ${responderName} is NOT Available`,
+        body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is NOT available${reason ? `: "${reason}"` : "."}.`,
+        recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
+      }).catch(() => {});
+    }
     setReasonModal(null);
     setResponding(s => ({ ...s, [n.id]: false }));
     setToast({ message: "Response sent to admin." });
@@ -133,7 +178,7 @@ export default function NotificationsPage() {
 
                 {/* Message */}
                 <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-line leading-relaxed mb-4">
-                  {n.message}
+                  {linkify(n.message)}
                 </p>
 
                 {/* Actions — feedback reminder */}
@@ -196,8 +241,9 @@ export default function NotificationsPage() {
             />
             <div className="flex gap-3">
               <button onClick={handleUnavailable}
-                className="flex-1 bg-red-500 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-red-600 transition-colors">
-                Send Response
+                disabled={responding[reasonModal?.id]}
+                className="flex-1 bg-red-500 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-red-600 disabled:opacity-60 transition-colors">
+                {responding[reasonModal?.id] ? "Sending…" : "Send Response"}
               </button>
               <button onClick={() => setReasonModal(null)}
                 className="px-4 bg-gray-100 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-200">

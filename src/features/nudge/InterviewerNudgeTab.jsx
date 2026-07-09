@@ -142,6 +142,7 @@ export default function InterviewerNudgeTab({
         await createNotification({
           type: "nudge", recipientId: r.id, recipientEmail: r.email,
           senderId: currentUser.uid, senderName: userProfile?.displayName || userProfile?.email,
+          senderEmail: currentUser.email || userProfile?.email || "",
           templateId: nudgeTarget.template?.id || "", templateName: nudgeTarget.template?.name || "General",
           dateRangeStart: nudgeDateStart, dateRangeEnd: nudgeDateEnd,
           timeRangeStart: nudgeTimeStart, timeRangeEnd: nudgeTimeEnd,
@@ -149,16 +150,17 @@ export default function InterviewerNudgeTab({
           status: "unread",
         });
       }
+      setToast({ message: `Nudge sent to ${recipients.length} interviewer(s).` });
+      setNudgeTarget(null);
+      // Email is best-effort — notification already created above
       if (APPS_SCRIPT_URL) {
-        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
           action: "sendEmail",
           subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
           body: message,
           recipients: recipients.map(r => ({ email: r.email, name: r.displayName || r.email })),
-        });
+        }).catch(() => {});
       }
-      setToast({ message: `Nudge sent to ${recipients.length} interviewer(s).` });
-      setNudgeTarget(null);
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setSending(false);
   };

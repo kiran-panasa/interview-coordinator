@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
-import { formatDateLong } from "../../utils/dates";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { formatDateLong, formatDate } from "../../utils/dates";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import {
   subscribeToInterviewerAvailability,
@@ -45,6 +46,14 @@ function InlineConfirm({ message, onConfirm, onCancel }) {
 
 export default function AvailabilityPage() {
   const { currentUser, userProfile } = useAuth();
+  const [searchParams] = useSearchParams();
+  const nudgeFrom      = searchParams.get("from");
+  const nudgeTo        = searchParams.get("to");
+  const nudgeTemplate  = searchParams.get("template");
+  const nudgeNotifId   = searchParams.get("notifId");
+  const isNudgeContext = !!(nudgeFrom || nudgeTo);
+  const nudgeNotifiedRef = useRef(false);
+
   const [slots, setSlots] = useState([]);
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -100,6 +109,25 @@ export default function AvailabilityPage() {
     try {
       await addAvailabilitySlot(currentUser.uid, selectedDate, time);
       setToast({ message: `${time} added.` });
+      // Notify admins once when the first slot is added in a nudge context
+      if (isNudgeContext && !nudgeNotifiedRef.current) {
+        nudgeNotifiedRef.current = true;
+        const interviewerName = userProfile?.displayName || currentUser.email;
+        getAllUsers().then(allUsers => {
+          const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
+          const dateRange = nudgeFrom && nudgeTo ? ` (${formatDate(nudgeFrom)} – ${formatDate(nudgeTo)})` : "";
+          return Promise.all(admins.map(admin =>
+            createNotification({
+              type:        "slot_added",
+              recipientId: admin.id,
+              status:      "unread",
+              message:     `${interviewerName} has started adding slots${nudgeTemplate ? ` for "${nudgeTemplate}"` : ""}${dateRange}.`,
+              interviewerId: currentUser.uid,
+              ...(nudgeNotifId ? { originalNotificationId: nudgeNotifId } : {}),
+            })
+          ));
+        }).catch(() => {});
+      }
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -262,6 +290,24 @@ export default function AvailabilityPage() {
     <div className="p-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">My Availability</h1>
       <p className="text-sm text-gray-500 mb-6">Click a date to add or manage time slots</p>
+
+      {isNudgeContext && (
+        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <svg className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <p className="text-sm font-semibold text-indigo-900">
+              Adding slots for{nudgeTemplate ? `: ${nudgeTemplate}` : " an interview session"}
+            </p>
+            {nudgeFrom && nudgeTo && (
+              <p className="text-xs text-indigo-600 mt-0.5">
+                Please add your available time slots between {formatDate(nudgeFrom)} and {formatDate(nudgeTo)}.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-6 items-start">
         {/* ── Calendar ── */}
