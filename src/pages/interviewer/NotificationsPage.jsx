@@ -74,38 +74,41 @@ export default function NotificationsPage() {
 
   const openDecline = (n) => { setReasonModal(n); setReason(""); };
 
-  const handleUnavailable = async () => {
+  const handleUnavailable = () => {
     if (!reasonModal) return;
     const n = reasonModal;
-    setResponding(s => ({ ...s, [n.id]: true }));
-    await updateNotification(n.id, { status: "unavailable", reason, respondedAt: new Date().toISOString() });
+    const savedReason = reason;
+
+    // Close modal immediately — don't block on Firestore
+    setReasonModal(null);
+    setReason("");
+    setToast({ message: "Response sent to admin." });
+
+    // Background: persist + notify
     const responderName = userProfile?.displayName || userProfile?.email || "Interviewer";
     const dateRange = n.dateRangeStart
       ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})`
       : n.date ? ` on ${formatDate(n.date)}` : "";
-    await createNotification({
+    updateNotification(n.id, { status: "unavailable", reason: savedReason, respondedAt: new Date().toISOString() }).catch(() => {});
+    createNotification({
       type:         "response",
       recipientId:  n.senderId,
       senderId:     currentUser.uid,
       senderName:   responderName,
       templateName: n.templateName,
       date:         n.date,
-      message:      `${responderName} is NOT available for "${n.templateName || "interview"}"${dateRange}${reason ? ` — "${reason}"` : "."}`,
+      message:      `${responderName} is NOT available for "${n.templateName || "interview"}"${dateRange}${savedReason ? ` — "${savedReason}"` : "."}`,
       status:       "unread",
       originalNotificationId: n.id,
-    });
-    // Best-effort email to admin
+    }).catch(() => {});
     if (APPS_SCRIPT_URL && n.senderEmail) {
       callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action: "sendEmail",
         subject: `Slot Response — ${responderName} is NOT Available`,
-        body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is NOT available${reason ? `: "${reason}"` : "."}.`,
+        body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is NOT available${savedReason ? `: "${savedReason}"` : "."}.`,
         recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
       }).catch(() => {});
     }
-    setReasonModal(null);
-    setResponding(s => ({ ...s, [n.id]: false }));
-    setToast({ message: "Response sent to admin." });
   };
 
   const statusBadge = (status) => {
