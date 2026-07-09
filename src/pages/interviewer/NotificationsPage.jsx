@@ -36,14 +36,22 @@ export default function NotificationsPage() {
   const nudges   = notifications;
   const unread   = nudges.filter(n => n.status === "unread").length;
 
-  const handleAvailable = async (n) => {
-    setResponding(s => ({ ...s, [n.id]: true }));
-    await updateNotification(n.id, { status: "available", respondedAt: new Date().toISOString() });
+  const handleAvailable = (n) => {
+    // Navigate immediately — don't make the interviewer wait for Firestore
+    const params = new URLSearchParams();
+    if (n.dateRangeStart) params.set("from", n.dateRangeStart);
+    if (n.dateRangeEnd)   params.set("to",   n.dateRangeEnd);
+    if (n.templateName)   params.set("template", n.templateName);
+    params.set("notifId", n.id);
+    navigate(`/interviewer/availability?${params.toString()}`);
+
+    // Background: mark notification + notify admin
     const responderName = userProfile?.displayName || userProfile?.email || "Interviewer";
     const dateRange = n.dateRangeStart
       ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})`
       : n.date ? ` on ${formatDate(n.date)}` : "";
-    await createNotification({
+    updateNotification(n.id, { status: "available", respondedAt: new Date().toISOString() }).catch(() => {});
+    createNotification({
       type:         "response",
       recipientId:  n.senderId,
       senderId:     currentUser.uid,
@@ -53,8 +61,7 @@ export default function NotificationsPage() {
       message:      `${responderName} is available for "${n.templateName || "interview"}"${dateRange}. They will add their slots shortly.`,
       status:       "unread",
       originalNotificationId: n.id,
-    });
-    // Best-effort email to admin
+    }).catch(() => {});
     if (APPS_SCRIPT_URL && n.senderEmail) {
       callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action: "sendEmail",
@@ -63,13 +70,6 @@ export default function NotificationsPage() {
         recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
       }).catch(() => {});
     }
-    setResponding(s => ({ ...s, [n.id]: false }));
-    const params = new URLSearchParams();
-    if (n.dateRangeStart) params.set("from", n.dateRangeStart);
-    if (n.dateRangeEnd)   params.set("to",   n.dateRangeEnd);
-    if (n.templateName)   params.set("template", n.templateName);
-    params.set("notifId", n.id);
-    navigate(`/interviewer/availability?${params.toString()}`);
   };
 
   const openDecline = (n) => { setReasonModal(n); setReason(""); };
