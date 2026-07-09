@@ -2,16 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
 
-function today() { return new Date().toISOString().slice(0, 10); }
-function inDays(n) {
-  const d = new Date(); d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-}
 
 export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots }) {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [fromDate, setFromDate] = useState(today());
-  const [toDate,   setToDate]   = useState(inDays(14));
+  const [fromDate, setFromDate] = useState("");
+  const [toDate,   setToDate]   = useState("");
 
   useEffect(() => {
     if (!selectedTemplateId && templates.length > 0)
@@ -24,8 +19,11 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
       : activeInterviewers,
   [activeInterviewers, selectedTemplateId]);
 
+  const datesSelected = !!(fromDate && toDate);
+
   // date → [{ ivrId, ivrName, slots[] }]
   const byDate = useMemo(() => {
+    if (!datesSelected) return [];
     const map = {};
     for (const ivr of templateInterviewers) {
       const slots = (ivrSlots[ivr.id] || []).filter(s =>
@@ -55,13 +53,14 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
 
   // interviewer-level summary: total free slots in range per interviewer
   const ivrSummary = useMemo(() => {
+    if (!datesSelected) return [];
     const map = {};
     for (const ivr of templateInterviewers) {
       const count = (ivrSlots[ivr.id] || []).filter(s => !s.isBooked && s.date >= fromDate && s.date <= toDate).length;
       map[ivr.id] = { name: ivr.displayName || ivr.email, count };
     }
     return Object.values(map).sort((a, b) => b.count - a.count);
-  }, [templateInterviewers, ivrSlots, fromDate, toDate]);
+  }, [templateInterviewers, ivrSlots, fromDate, toDate, datesSelected]);
 
   return (
     <div className="space-y-6">
@@ -89,7 +88,7 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-8 mt-5 pt-4 border-t border-gray-100">
+        <div className={`flex flex-wrap items-center gap-8 mt-5 pt-4 border-t border-gray-100 ${!datesSelected ? "opacity-30 pointer-events-none select-none" : ""}`}>
           <div>
             <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Free Slots</p>
             <p className="text-2xl font-bold text-gray-900 mt-0.5">{totalFreeSlots}</p>
@@ -141,8 +140,16 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
           <svg className="w-8 h-8 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
-          <p className="text-sm text-gray-400">No free slots in this range.</p>
-          <p className="text-xs text-gray-300">Expand the date range or ask interviewers to add slots.</p>
+          {!datesSelected ? (
+            <>
+              <p className="text-sm text-gray-400">Select a date range to view available slots.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-400">No free slots in this range.</p>
+              <p className="text-xs text-gray-300">Expand the date range or ask interviewers to add slots.</p>
+            </>
+          )}
         </div>
       ) : (
         <>
