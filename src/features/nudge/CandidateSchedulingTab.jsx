@@ -2,7 +2,7 @@ import { useState } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
-  markSlotFree, createInterview, getTemplate, updateInterview,
+  markSlotFree, createInterview, getTemplate,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
@@ -137,7 +137,23 @@ export default function CandidateSchedulingTab({
     try {
       const tmpl = inv.templateId ? await getTemplate(inv.templateId) : null;
       const ivr  = users.find(u => u.id === inv.bookedInterviewerId);
-      const id   = await createInterview({
+      if (!ivr?.email || !inv.candidateEmail) {
+        throw new Error("Missing interviewer or candidate email — cannot schedule.");
+      }
+      // Must succeed before we create the interview record or mark the invite
+      // confirmed — otherwise the admin sees "confirmed" with no Meet link sent.
+      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:           "schedule",
+        candidateEmail:   inv.candidateEmail,
+        interviewerEmail: ivr.email,
+        candidateName:    inv.candidateName,
+        interviewerName:  ivr?.displayName || ivr?.email || "",
+        round:            tmpl?.name || "Interview",
+        date:             inv.bookedDate,
+        startTime:        inv.bookedTime,
+        durationMinutes:  60,
+      });
+      const id = await createInterview({
         candidateId:      inv.candidateId,
         candidateName:    inv.candidateName,
         candidateEmail:   inv.candidateEmail,
@@ -150,24 +166,10 @@ export default function CandidateSchedulingTab({
         round:            tmpl?.name || "Interview",
         templateId:       inv.templateId || "",
         templateName:     inv.templateName || "",
+        meetLink:         result?.meetLink || "",
+        eventId:          result?.eventId || "",
         createdBy:        currentUser.uid,
       });
-      if (ivr?.email && inv.candidateEmail) {
-        const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action:           "schedule",
-          candidateEmail:   inv.candidateEmail,
-          interviewerEmail: ivr.email,
-          candidateName:    inv.candidateName,
-          interviewerName:  ivr?.displayName || ivr?.email || "",
-          round:            tmpl?.name || "Interview",
-          date:             inv.bookedDate,
-          startTime:        inv.bookedTime,
-          durationMinutes:  60,
-        }).catch(() => null);
-        if (result?.meetLink) {
-          await updateInterview(id, { meetLink: result.meetLink, eventId: result.eventId });
-        }
-      }
       await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
       setToast({ message: `Booking confirmed for ${inv.candidateName}.` });
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
