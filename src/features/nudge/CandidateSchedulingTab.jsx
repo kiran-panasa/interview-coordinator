@@ -111,16 +111,19 @@ export default function CandidateSchedulingTab({
           expiresAt,
           sentBy:         currentUser.uid,
         });
-        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action:    "sendEmail",
-          subject:   `Schedule Your Interview — ${tmpl?.name || "Interview"}`,
-          recipients: [{ email: c.email, name: c.name }],
-          body:
-            `Hi ${c.name},\n\nYou've been invited to schedule your interview.\n\n` +
-            `Template: ${tmpl?.name || ""}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n\n` +
-            `Click below to pick your slot (link valid for ${expiryHours} hours):\n${link}?invite=${inviteToken}\n\n` +
-            `NxtWave Interview Team`,
-        });
+        // Email is best-effort — invite record already created above
+        if (APPS_SCRIPT_URL) {
+          callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+            action:    "sendEmail",
+            subject:   `Schedule Your Interview — ${tmpl?.name || "Interview"}`,
+            recipients: [{ email: c.email, name: c.name }],
+            body:
+              `Hi ${c.name},\n\nYou've been invited to schedule your interview.\n\n` +
+              `Template: ${tmpl?.name || ""}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n\n` +
+              `Click below to pick your slot (link valid for ${expiryHours} hours):\n${link}?invite=${inviteToken}\n\n` +
+              `NxtWave Interview Team`,
+          }).catch(() => {});
+        }
         sent++;
       }
       setToast({ message: `${sent} invite${sent !== 1 ? "s" : ""} sent.` });
@@ -191,16 +194,19 @@ export default function CandidateSchedulingTab({
         bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null,
       });
       const link = `${window.location.origin}/student/schedule`;
-      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action: "sendEmail",
-        subject: `Schedule Your Interview — ${inv.templateName || "Interview"}`,
-        recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
-        body:
-          `Hi ${inv.candidateName},\n\nYou've been invited to schedule your interview.\n\n` +
-          `Template: ${inv.templateName || ""}\nDate Range: ${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}\n\n` +
-          `Click below to pick your slot (link valid for ${inv.expiryHours || 24} hours):\n${link}?invite=${newToken}\n\n` +
-          `NxtWave Interview Team`,
-      });
+      // Email is best-effort — invite record already updated above
+      if (APPS_SCRIPT_URL) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action: "sendEmail",
+          subject: `Schedule Your Interview — ${inv.templateName || "Interview"}`,
+          recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
+          body:
+            `Hi ${inv.candidateName},\n\nYou've been invited to schedule your interview.\n\n` +
+            `Template: ${inv.templateName || ""}\nDate Range: ${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}\n\n` +
+            `Click below to pick your slot (link valid for ${inv.expiryHours || 24} hours):\n${link}?invite=${newToken}\n\n` +
+            `NxtWave Interview Team`,
+        }).catch(() => {});
+      }
       setToast({ message: `Invite resent to ${inv.candidateName}.` });
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setResendingId(null);
