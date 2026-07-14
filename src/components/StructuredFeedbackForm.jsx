@@ -2,7 +2,10 @@ import { useState } from "react";
 import {
   CODING_PS_LABELS, CODING_CI_LABELS, THEORY_LABELS,
   PROJECT_LABELS, RESUME_LABELS,
+  saveFeedbackAutoDraft,
 } from "../api/firestore";
+import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
+import AutosaveIndicator from "./AutosaveIndicator";
 
 // ── Collapsible section wrapper ───────────────────────────────────────────────
 
@@ -243,7 +246,14 @@ export function StructuredFeedbackDisplay({ interview, template, feedback }) {
 
 export function StructuredFeedbackForm({ interview, template, onSubmit, saving, previewMode = false }) {
   const numProblems = template.codingProblems || 2;
-  const [fb, setFb] = useState(() => initFeedback(numProblems, null));
+  const [fb, setFb] = useState(() => initFeedback(numProblems, interview?.feedbackDraft || null));
+
+  const autosaveEnabled = !previewMode && !!interview?.id && !interview?.feedback?.submittedAt;
+  const { status: draftStatus, lastSavedAt: draftSavedAt } = useAutosaveDraft(
+    fb,
+    (data) => saveFeedbackAutoDraft(interview.id, data),
+    { enabled: autosaveEnabled }
+  );
 
   const setCodingField = (i, key, val) =>
     setFb(f => ({ ...f, coding: f.coding.map((p, idx) => idx === i ? { ...p, [key]: val } : p) }));
@@ -412,6 +422,12 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
           value={fb.interviewerFeedback}
           onChange={e => setFb(f => ({ ...f, interviewerFeedback: e.target.value }))} />
       </Section>
+
+      {autosaveEnabled && (
+        <div className="flex justify-end">
+          <AutosaveIndicator status={draftStatus} lastSavedAt={draftSavedAt} />
+        </div>
+      )}
 
       <button onClick={handleSubmit} disabled={saving || previewMode}
         className={`w-full rounded-lg py-2.5 text-sm font-semibold transition-colors ${

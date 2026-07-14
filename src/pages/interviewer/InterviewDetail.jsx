@@ -1,13 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { formatDate, formatDateShort, toInterviewDateTime } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import {
   getInterview, updateInterview, saveFeedbackDraft,
+  saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
 } from "../../api/firestore";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
+import AutosaveIndicator from "../../components/AutosaveIndicator";
+import { useAutosaveDraft } from "../../hooks/useAutosaveDraft";
 import {
   RatingInput, RatingDisplay,
   StructuredFeedbackForm, StructuredFeedbackDisplay,
@@ -52,9 +55,10 @@ export default function InterviewDetail() {
         const tmpl = await getTemplate(iv.templateId);
         setTemplate(tmpl);
       }
-      if (iv?.feedback) {
-        setAnswers(iv.feedback.answers || {});
-        setComments(iv.feedback.comments || "");
+      const legacySource = iv?.feedbackDraft || iv?.feedback;
+      if (legacySource) {
+        setAnswers(legacySource.answers || {});
+        setComments(legacySource.comments || "");
       }
       setLoading(false);
     });
@@ -127,8 +131,9 @@ export default function InterviewDetail() {
     setSaving(true);
     try {
       await saveFeedbackDraft(id, feedbackData);
+      await clearFeedbackAutoDraft(id).catch(() => {});
       const saved = { ...feedbackData, submittedAt: new Date().toISOString() };
-      setInterview(iv => ({ ...iv, feedback: saved }));
+      setInterview(iv => ({ ...iv, feedback: saved, feedbackDraft: null }));
       setToast({ message: "Evaluation saved. Mark as Completed when the interview is done." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -147,6 +152,15 @@ export default function InterviewDetail() {
     const overallRecommendation = recQuestion ? (answers[recQuestion.id] || "") : "";
     await handleSaveFeedback({ answers, overallRecommendation, comments }, null);
   };
+
+  // Legacy form (no template) autosave — Dynamic/Structured forms manage their own.
+  const legacyAutosaveEnabled = !!interview?.id && !template && !loading && !interview?.feedback?.submittedAt;
+  const legacyDraftData = useMemo(() => ({ answers, comments }), [answers, comments]);
+  const { status: legacyDraftStatus, lastSavedAt: legacyDraftSavedAt } = useAutosaveDraft(
+    legacyDraftData,
+    (data) => saveFeedbackAutoDraft(interview.id, data),
+    { enabled: legacyAutosaveEnabled }
+  );
 
   if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
   if (!interview) return <div className="p-8 text-gray-400 text-sm">Interview not found.</div>;
@@ -367,6 +381,11 @@ export default function InterviewDetail() {
                 <textarea rows={3} value={comments} onChange={e => setComments(e.target.value)}
                   placeholder="Any additional observations…" className={`${inputCls} resize-none`} />
               </div>
+              {legacyAutosaveEnabled && (
+                <div className="flex justify-end">
+                  <AutosaveIndicator status={legacyDraftStatus} lastSavedAt={legacyDraftSavedAt} />
+                </div>
+              )}
               <button onClick={handleLegacySubmit} disabled={saving}
                 className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
                 {saving ? "Saving…" : hasFeedback ? "Update Evaluation" : "Save Evaluation"}

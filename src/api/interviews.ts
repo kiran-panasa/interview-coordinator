@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
+  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, deleteField,
   query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
 import { parseInterviewStart } from "../utils/dates";
@@ -94,6 +94,20 @@ export async function saveFeedbackDraft(id: string, feedback: Record<string, unk
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
     updatedAt: new Date().toISOString(),
+  });
+}
+
+// Autosaved, unvalidated in-progress evaluation input — distinct from `feedback`,
+// which only ever holds a validated, explicitly-submitted evaluation.
+export async function saveFeedbackAutoDraft(id: string, draftData: Record<string, unknown>): Promise<void> {
+  await updateDoc(doc(db, "interviews", id), {
+    feedbackDraft: { ...draftData, savedAt: new Date().toISOString() },
+  });
+}
+
+export async function clearFeedbackAutoDraft(id: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", id), {
+    feedbackDraft: deleteField(),
   });
 }
 

@@ -6,6 +6,8 @@ import {
   incrementQuestionUsage, createAdhocQuestion,
 } from "../../api/firestore";
 import Toast from "../../components/Toast";
+import AutosaveIndicator from "../../components/AutosaveIndicator";
+import { useAutosaveDraft } from "../../hooks/useAutosaveDraft";
 
 const DIFF_BADGE = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
 
@@ -138,6 +140,19 @@ export default function InterviewQuestions() {
     }
     setQSaving(false);
   };
+
+  // Autosave directly to the real fields (no separate draft) — the explicit
+  // "Save Questions" click still owns incrementing each question's usage count.
+  const questionsDraftData = useMemo(() => ({
+    questionsAsked: [...askedQIds],
+    questionRemarks: qRemarks,
+  }), [askedQIds, qRemarks]);
+  const questionsAutosaveEnabled = !!interview?.id && !loading && interview?.status !== "completed";
+  const { status: qDraftStatus, lastSavedAt: qDraftSavedAt } = useAutosaveDraft(
+    questionsDraftData,
+    (data) => updateInterview(id, data),
+    { enabled: questionsAutosaveEnabled }
+  );
 
   if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
   if (!interview) return <div className="p-8 text-gray-400 text-sm">Interview not found.</div>;
@@ -294,7 +309,8 @@ export default function InterviewQuestions() {
           )}
 
           {!isCompleted && (
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex items-center justify-end gap-3">
+              <AutosaveIndicator status={qDraftStatus} lastSavedAt={qDraftSavedAt} />
               <button onClick={handleSaveQuestions} disabled={qSaving}
                 className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60">
                 {qSaving ? "Saving…" : "Save Questions"}

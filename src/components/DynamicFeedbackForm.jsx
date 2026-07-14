@@ -6,6 +6,9 @@ import {
   computeFinalVerdict,
   materializeFeedback,
 } from "../utils/templateEngine";
+import { saveFeedbackAutoDraft } from "../api/firestore";
+import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
+import AutosaveIndicator from "./AutosaveIndicator";
 
 function cls(...parts) {
   return parts.filter(Boolean).join(" ");
@@ -369,7 +372,14 @@ function VerdictBanner({ value }) {
 
 export default function DynamicFeedbackForm({ template, interview, onSubmit, saving, previewMode = false }) {
   const [feedbackData, setFeedbackData] = useState(
-    () => initFeedbackState(template, interview?.feedback)
+    () => initFeedbackState(template, interview?.feedbackDraft || interview?.feedback)
+  );
+
+  const autosaveEnabled = !previewMode && !!interview?.id && !interview?.feedback?.submittedAt;
+  const { status: draftStatus, lastSavedAt: draftSavedAt } = useAutosaveDraft(
+    feedbackData,
+    (data) => saveFeedbackAutoDraft(interview.id, data),
+    { enabled: autosaveEnabled }
   );
 
   const updateDomain = useCallback((domainId, data) => {
@@ -400,6 +410,12 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {autosaveEnabled && (
+        <div className="flex justify-end -mb-1">
+          <AutosaveIndicator status={draftStatus} lastSavedAt={draftSavedAt} />
+        </div>
+      )}
+
       {enabledDomains.map(domain => (
         <DomainSection
           key={domain.id}

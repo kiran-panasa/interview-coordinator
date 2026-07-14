@@ -185,6 +185,7 @@ export interface Interview {
   questionsAsked?: (string | { questionId: string })[];
   questionRemarks?: Record<string, string>;
   feedback?: Feedback;
+  feedbackDraft?: (Record<string, unknown> & { savedAt: string }) | null;
   nextNudgeAt?: string | null;
   nudgeCount?: number;
   importedFromSheet?: boolean;
