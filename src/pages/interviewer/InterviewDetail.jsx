@@ -18,6 +18,12 @@ import DynamicFeedbackForm, { DynamicFeedbackDisplay } from "../../components/Dy
 
 const DIFF_BADGE = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
 
+// Questions may carry domains as the modern `domainTypes` array or the legacy
+// singular `domainType` string — normalize to an array everywhere we read it.
+function questionDomains(q) {
+  return Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
+}
+
 function isPastInterviewTime(scheduledDate, scheduledTime) {
   if (!scheduledDate || !scheduledTime) return false;
   try {
@@ -51,6 +57,9 @@ export default function InterviewDetail() {
   const [priorAskedSet,  setPriorAskedSet]  = useState(new Set());
   const [adhocText,      setAdhocText]      = useState("");
   const [qSaving,        setQSaving]        = useState(false);
+  const [filterDomain,   setFilterDomain]   = useState("");
+  const [filterTopic,    setFilterTopic]    = useState("");
+  const [expandedAnswers, setExpandedAnswers] = useState(new Set());
 
   // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
   useEffect(() => {
@@ -83,14 +92,39 @@ export default function InterviewDetail() {
     });
   }, [id]);
 
-  const byDomain = useMemo(() => templateQs.reduce((acc, q) => {
-    const key = q.domainType || "other";
+  const domainOptions = useMemo(() => {
+    const set = new Set();
+    templateQs.forEach(q => questionDomains(q).forEach(d => set.add(d)));
+    return [...set].sort();
+  }, [templateQs]);
+
+  const topicOptions = useMemo(() => {
+    const set = new Set();
+    templateQs.forEach(q => { if (q.topic) set.add(q.topic); });
+    return [...set].sort();
+  }, [templateQs]);
+
+  const filteredQs = useMemo(() => templateQs.filter(q => {
+    if (filterDomain && !questionDomains(q).includes(filterDomain)) return false;
+    if (filterTopic && q.topic !== filterTopic) return false;
+    return true;
+  }), [templateQs, filterDomain, filterTopic]);
+
+  const byDomain = useMemo(() => filteredQs.reduce((acc, q) => {
+    const key = questionDomains(q)[0] || "other";
     if (!acc[key]) acc[key] = [];
     acc[key].push(q);
     return acc;
-  }, {}), [templateQs]);
+  }, {}), [filteredQs]);
 
   const setAnswer = (qid, val) => setAnswers(a => ({ ...a, [qid]: val }));
+
+  const toggleAnswerVisible = (qid) => setExpandedAnswers(prev => {
+    const next = new Set(prev);
+    if (next.has(qid)) next.delete(qid);
+    else next.add(qid);
+    return next;
+  });
 
   const handleAccept = async () => {
     setSaving(true);
@@ -354,6 +388,31 @@ export default function InterviewDetail() {
               <span className="text-xs text-gray-400">{askedQIds.size} / {templateQs.length} marked</span>
             </div>
 
+            {(domainOptions.length > 0 || topicOptions.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">All Domains</option>
+                  {domainOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
+                </select>
+                <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
+                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">All Topics</option>
+                  {topicOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                {(filterDomain || filterTopic) && (
+                  <button type="button" onClick={() => { setFilterDomain(""); setFilterTopic(""); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline">
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            )}
+
+            {filteredQs.length === 0 && (
+              <p className="text-sm text-gray-400 py-6 text-center">No questions match the selected domain/topic.</p>
+            )}
+
             <div className="space-y-5">
               {Object.entries(byDomain).map(([domain, qs]) => (
                 <div key={domain}>
@@ -397,6 +456,17 @@ export default function InterviewDetail() {
                                   </span>
                                 )}
                               </div>
+                              {q.suggestedAnswer && (
+                                <button type="button" onClick={() => toggleAnswerVisible(q.id)}
+                                  className="mt-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                  {expandedAnswers.has(q.id) ? "Hide Answer ▲" : "Show Answer ▼"}
+                                </button>
+                              )}
+                              {expandedAnswers.has(q.id) && q.suggestedAnswer && (
+                                <div className="mt-1.5 text-sm text-gray-700 bg-indigo-50/60 border border-indigo-100 rounded-lg px-3 py-2 whitespace-pre-wrap">
+                                  {q.suggestedAnswer}
+                                </div>
+                              )}
                               {isAsked && !isCompleted && (
                                 <textarea
                                   rows={2}
