@@ -174,6 +174,12 @@ export default function InterviewDetail() {
   // Saves feedback WITHOUT marking completed — called from all form types while scheduled
   const handleSaveFeedback = async (feedbackData, errorMsg) => {
     if (errorMsg) return setToast({ message: errorMsg, type: "error" });
+    if (templateQs.length > 0 && savedAskedQIds.size === 0) {
+      return setToast({
+        message: "Select the question(s) you asked and click \"Save Questions\" before submitting the evaluation.",
+        type: "error",
+      });
+    }
     setSaving(true);
     try {
       await saveFeedbackDraft(id, feedbackData);
@@ -260,7 +266,8 @@ export default function InterviewDetail() {
   const showAttendanceGate = isScheduled && pastTime && attended === null;
   const isNoShow          = attended === false;
   const showEvaluation    = isCompleted || (isScheduled && !showAttendanceGate && !isNoShow);
-  const canComplete       = hasFeedback && pastTime && attended === true;
+  const questionsSatisfied = templateQs.length === 0 || savedAskedQIds.size > 0;
+  const canComplete       = hasFeedback && pastTime && attended === true && questionsSatisfied;
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
@@ -447,6 +454,9 @@ export default function InterviewDetail() {
                                 {q.topic && (
                                   <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{q.topic}</span>
                                 )}
+                                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                                  Used {q.usageCount || 0}×
+                                </span>
                                 {isRepeat && (
                                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -512,9 +522,12 @@ export default function InterviewDetail() {
 
             {/* Save button */}
             {!isCompleted && (
-              <div className="mt-4 flex justify-end">
-                <button onClick={handleSaveQuestions} disabled={qSaving}
-                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60">
+              <div className="mt-4 flex items-center justify-between gap-3">
+                <p className="text-xs text-gray-400">
+                  Select at least one question you asked, then save — required before the evaluation can be submitted.
+                </p>
+                <button onClick={handleSaveQuestions} disabled={qSaving || askedQIds.size === 0}
+                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">
                   {qSaving ? "Saving…" : "Save Questions"}
                 </button>
               </div>
@@ -536,6 +549,12 @@ export default function InterviewDetail() {
               </span>
             )}
           </div>
+
+          {!hasFeedback && !questionsSatisfied && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700">
+              Select and save at least one question you asked (above) before you can submit this evaluation.
+            </div>
+          )}
 
           {/* Feedback form — dynamic v2, editable while scheduled */}
           {isScheduled && isDynamic && (
@@ -630,7 +649,8 @@ export default function InterviewDetail() {
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Mark as Completed</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {!hasFeedback && "Submit the evaluation above first."}
+                    {!hasFeedback && !questionsSatisfied && "Select and save the question(s) you asked, then submit the evaluation."}
+                    {!hasFeedback && questionsSatisfied && "Submit the evaluation above first."}
                     {hasFeedback && !pastTime && `Available after interview start time (${interview.scheduledTime}).`}
                     {canComplete && "Ready — interview time has passed and evaluation is submitted."}
                   </p>
