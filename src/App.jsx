@@ -20,6 +20,7 @@ const InterviewerLayout    = lazy(() => import("./components/InterviewerLayout")
 const InterviewerDashboard = lazy(() => import("./pages/interviewer/Dashboard"));
 const MyInterviewsPage     = lazy(() => import("./pages/interviewer/MyInterviewsPage"));
 const InterviewDetail      = lazy(() => import("./pages/interviewer/InterviewDetail"));
+const InterviewQuestions   = lazy(() => import("./pages/interviewer/InterviewQuestions"));
 const AvailabilityPage     = lazy(() => import("./pages/interviewer/AvailabilityPage"));
 const ProfilePage          = lazy(() => import("./pages/interviewer/ProfilePage"));
 const NotificationsPage    = lazy(() => import("./pages/interviewer/NotificationsPage"));
@@ -91,6 +92,7 @@ function AppRoutes() {
           <Route path="dashboard"    element={<InterviewerDashboard />} />
           <Route path="interviews"   element={<MyInterviewsPage />} />
           <Route path="interviews/:id" element={<InterviewDetail />} />
+          <Route path="interviews/:id/questions" element={<InterviewQuestions />} />
           <Route path="availability" element={<AvailabilityPage />} />
           <Route path="profile"        element={<ProfilePage />} />
           <Route path="notifications"  element={<NotificationsPage />} />

@@ -289,7 +289,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
                 </div>
               )}
               <div>
-                <label className={labelCls}>Problem Solving *</label>
+                <label className={labelCls}>Problem Solving <span className="text-red-500">*</span></label>
                 <DescriptiveRating value={problem.problemSolvingRating}
                   onChange={v => setCodingField(i, "problemSolvingRating", v)} labels={CODING_PS_LABELS} />
               </div>
@@ -301,7 +301,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
                   onChange={e => setCodingField(i, "problemSolvingRemarks", e.target.value)} />
               </div>
               <div>
-                <label className={labelCls}>Code Implementation *</label>
+                <label className={labelCls}>Code Implementation <span className="text-red-500">*</span></label>
                 <DescriptiveRating value={problem.codeImplementationRating}
                   onChange={v => setCodingField(i, "codeImplementationRating", v)} labels={CODING_CI_LABELS} />
               </div>
@@ -327,7 +327,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
             </div>
           )}
           <div>
-            <label className={labelCls}>Rating *</label>
+            <label className={labelCls}>Rating <span className="text-red-500">*</span></label>
             <DescriptiveRating value={fb.theory.rating} onChange={v => setTheory("rating", v)} labels={THEORY_LABELS} />
           </div>
           <div>
@@ -367,7 +367,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
             </div>
           </div>
           <div>
-            <label className={labelCls}>Project Rating *</label>
+            <label className={labelCls}>Project Rating <span className="text-red-500">*</span></label>
             <DescriptiveRating value={fb.project.rating} onChange={v => setProject("rating", v)} labels={PROJECT_LABELS} />
           </div>
           <div>
@@ -388,7 +388,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
       {template.hasResume && (
         <Section title="Resume" defaultOpen={!previewMode}>
           <div>
-            <label className={labelCls}>Resume Rating *</label>
+            <label className={labelCls}>Resume Rating <span className="text-red-500">*</span></label>
             <DescriptiveRating value={fb.resume.rating} onChange={v => setResume("rating", v)} labels={RESUME_LABELS} />
           </div>
           <div>

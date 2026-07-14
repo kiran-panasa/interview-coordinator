@@ -11,6 +11,33 @@ function cls(...parts) {
   return parts.filter(Boolean).join(" ");
 }
 
+// Every scored_dropdown field (card-level or domain-level) is a mandatory rating.
+// Returns a human-readable error for the first one missing a value, or null if complete.
+function validateRatingsComplete(template, feedbackData) {
+  const domains = (template?.domains || []).filter(d => d.enabled !== false);
+  for (const domain of domains) {
+    const domainData = feedbackData.domains?.[domain.id] || { cards: [] };
+    const cardScoredFields = (domain.cardFields || []).filter(f => f.type === "scored_dropdown");
+    const cards = domainData.cards || [];
+    for (let i = 0; i < cards.length; i++) {
+      for (const field of cardScoredFields) {
+        const val = cards[i]?.[field.id];
+        if (val === null || val === undefined || val === "") {
+          return `${domain.label} — Card ${i + 1}: "${field.label}" rating is required.`;
+        }
+      }
+    }
+    const domainScoredFields = (domain.domainFields || []).filter(f => f.type === "scored_dropdown");
+    for (const field of domainScoredFields) {
+      const val = domainData[field.id];
+      if (val === null || val === undefined || val === "") {
+        return `${domain.label}: "${field.label}" rating is required.`;
+      }
+    }
+  }
+  return null;
+}
+
 // ── Primitive field components ────────────────────────────────────────────────
 
 function TextField({ field, value, onChange, disabled }) {
@@ -72,7 +99,7 @@ function ScoredDropdownField({ field, value, onChange, disabled }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-        {field.label}
+        {field.label} {!disabled && <span className="text-red-500">*</span>}
       </label>
       <div className="space-y-2">
         {options.map(opt => {
@@ -215,6 +242,12 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
     onChange({ ...domainData, cards });
   }, [domainData, onChange]);
 
+  const addCard = useCallback(() => {
+    const emptyCard = {};
+    for (const f of domain.cardFields || []) emptyCard[f.id] = f.type === "text" ? "" : null;
+    onChange({ ...domainData, cards: [...(domainData.cards || []), emptyCard] });
+  }, [domain, domainData, onChange]);
+
   const deleteCard = useCallback((i) => {
     onChange({ ...domainData, cards: (domainData.cards || []).filter((_, idx) => idx !== i) });
   }, [domainData, onChange]);
@@ -276,6 +309,19 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
                   />
                 ))}
               </div>
+
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={addCard}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 text-sm font-medium hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add {cardNoun}
+                </button>
+              )}
 
               {domainRating != null && (
                 <ComputedValue label="Domain Rating" value={domainRating} />
@@ -347,6 +393,8 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
   const handleSubmit = (e) => {
     e.preventDefault();
     if (previewMode) return;
+    const ratingError = validateRatingsComplete(template, feedbackData);
+    if (ratingError) return onSubmit(null, ratingError);
     onSubmit(materializeFeedback(template, feedbackData));
   };
 

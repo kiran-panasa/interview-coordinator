@@ -1,12 +1,10 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { formatDate, formatDateShort, toInterviewDateTime } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import {
   getInterview, updateInterview, saveFeedbackDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
-  getQuestionsByIds, getCandidateAskedQuestions,
-  incrementQuestionUsage, createAdhocQuestion,
 } from "../../api/firestore";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -15,14 +13,6 @@ import {
   StructuredFeedbackForm, StructuredFeedbackDisplay,
 } from "../../components/StructuredFeedbackForm";
 import DynamicFeedbackForm, { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
-
-const DIFF_BADGE = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
-
-// Questions may carry domains as the modern `domainTypes` array or the legacy
-// singular `domainType` string — normalize to an array everywhere we read it.
-function questionDomains(q) {
-  return Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
-}
 
 function isPastInterviewTime(scheduledDate, scheduledTime) {
   if (!scheduledDate || !scheduledTime) return false;
@@ -49,18 +39,6 @@ export default function InterviewDetail() {
   const [comments,       setComments]       = useState("");
   const [now,            setNow]            = useState(new Date());
 
-  // Questions Asked state
-  const [templateQs,     setTemplateQs]     = useState([]);
-  const [askedQIds,      setAskedQIds]      = useState(new Set());
-  const [savedAskedQIds, setSavedAskedQIds] = useState(new Set());
-  const [qRemarks,       setQRemarks]       = useState({});
-  const [priorAskedSet,  setPriorAskedSet]  = useState(new Set());
-  const [adhocText,      setAdhocText]      = useState("");
-  const [qSaving,        setQSaving]        = useState(false);
-  const [filterDomain,   setFilterDomain]   = useState("");
-  const [filterTopic,    setFilterTopic]    = useState("");
-  const [expandedAnswers, setExpandedAnswers] = useState(new Set());
-
   // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60000);
@@ -73,58 +51,30 @@ export default function InterviewDetail() {
       if (iv?.templateId) {
         const tmpl = await getTemplate(iv.templateId);
         setTemplate(tmpl);
-        if (tmpl?.questionIds?.length) {
-          getQuestionsByIds(tmpl.questionIds).then(setTemplateQs);
-        }
       }
       if (iv?.feedback) {
         setAnswers(iv.feedback.answers || {});
         setComments(iv.feedback.comments || "");
       }
-      const savedAsked = new Set(iv?.questionsAsked || []);
-      setAskedQIds(savedAsked);
-      setSavedAskedQIds(savedAsked);
-      setQRemarks(iv?.questionRemarks || {});
-      if (iv?.candidateId) {
-        getCandidateAskedQuestions(iv.candidateId, id).then(setPriorAskedSet);
-      }
       setLoading(false);
     });
   }, [id]);
 
-  const domainOptions = useMemo(() => {
-    const set = new Set();
-    templateQs.forEach(q => questionDomains(q).forEach(d => set.add(d)));
-    return [...set].sort();
-  }, [templateQs]);
-
-  const topicOptions = useMemo(() => {
-    const set = new Set();
-    templateQs.forEach(q => { if (q.topic) set.add(q.topic); });
-    return [...set].sort();
-  }, [templateQs]);
-
-  const filteredQs = useMemo(() => templateQs.filter(q => {
-    if (filterDomain && !questionDomains(q).includes(filterDomain)) return false;
-    if (filterTopic && q.topic !== filterTopic) return false;
-    return true;
-  }), [templateQs, filterDomain, filterTopic]);
-
-  const byDomain = useMemo(() => filteredQs.reduce((acc, q) => {
-    const key = questionDomains(q)[0] || "other";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(q);
-    return acc;
-  }, {}), [filteredQs]);
+  // Refresh just the questions-asked count when the tab regains focus (e.g. after
+  // the panelist selects questions in the separate Questions tab) — without
+  // touching in-progress evaluation form state.
+  useEffect(() => {
+    const onFocus = () => {
+      getInterview(id).then(iv => {
+        if (!iv) return;
+        setInterview(prev => prev ? { ...prev, questionsAsked: iv.questionsAsked, questionRemarks: iv.questionRemarks } : prev);
+      });
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [id]);
 
   const setAnswer = (qid, val) => setAnswers(a => ({ ...a, [qid]: val }));
-
-  const toggleAnswerVisible = (qid) => setExpandedAnswers(prev => {
-    const next = new Set(prev);
-    if (next.has(qid)) next.delete(qid);
-    else next.add(qid);
-    return next;
-  });
 
   const handleAccept = async () => {
     setSaving(true);
@@ -174,12 +124,6 @@ export default function InterviewDetail() {
   // Saves feedback WITHOUT marking completed — called from all form types while scheduled
   const handleSaveFeedback = async (feedbackData, errorMsg) => {
     if (errorMsg) return setToast({ message: errorMsg, type: "error" });
-    if (templateQs.length > 0 && savedAskedQIds.size === 0) {
-      return setToast({
-        message: "Please select the questions asked during the interview before submitting the evaluation.",
-        type: "error",
-      });
-    }
     setSaving(true);
     try {
       await saveFeedbackDraft(id, feedbackData);
@@ -204,53 +148,6 @@ export default function InterviewDetail() {
     await handleSaveFeedback({ answers, overallRecommendation, comments }, null);
   };
 
-  const toggleAsked = (qid) => {
-    setAskedQIds(prev => {
-      const next = new Set(prev);
-      if (next.has(qid)) next.delete(qid);
-      else next.add(qid);
-      return next;
-    });
-  };
-
-  const handleSaveQuestions = async () => {
-    setQSaving(true);
-    try {
-      const newlyAsked = [...askedQIds].filter(qid => !savedAskedQIds.has(qid));
-      await updateInterview(id, {
-        questionsAsked: [...askedQIds],
-        questionRemarks: qRemarks,
-      });
-      if (newlyAsked.length > 0) await incrementQuestionUsage(newlyAsked);
-      setSavedAskedQIds(new Set(askedQIds));
-      setInterview(iv => ({ ...iv, questionsAsked: [...askedQIds], questionRemarks: qRemarks }));
-      setToast({ message: "Questions saved." });
-    } catch (e) {
-      setToast({ message: e.message, type: "error" });
-    }
-    setQSaving(false);
-  };
-
-  const handleAddAdhoc = async () => {
-    const text = adhocText.trim();
-    if (!text) return;
-    setQSaving(true);
-    try {
-      await createAdhocQuestion({
-        text,
-        interviewId: id,
-        candidateId: interview.candidateId,
-        interviewerId: interview.interviewerId,
-        templateId: interview.templateId || null,
-      });
-      setAdhocText("");
-      setToast({ message: "Question submitted for review — content team will be notified." });
-    } catch (e) {
-      setToast({ message: e.message, type: "error" });
-    }
-    setQSaving(false);
-  };
-
   if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
   if (!interview) return <div className="p-8 text-gray-400 text-sm">Interview not found.</div>;
 
@@ -266,8 +163,10 @@ export default function InterviewDetail() {
   const showAttendanceGate = isScheduled && pastTime && attended === null;
   const isNoShow          = attended === false;
   const showEvaluation    = isCompleted || (isScheduled && !showAttendanceGate && !isNoShow);
-  const questionsSatisfied = templateQs.length === 0 || savedAskedQIds.size > 0;
-  const canComplete       = hasFeedback && pastTime && attended === true && questionsSatisfied;
+  const canComplete       = hasFeedback && pastTime && attended === true;
+
+  const totalQuestions = template?.questionIds?.length || 0;
+  const askedCount      = interview.questionsAsked?.length || 0;
 
   const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
@@ -387,152 +286,25 @@ export default function InterviewDetail() {
         </div>
       )}
 
-      {/* ── Questions Asked ── */}
-      {showEvaluation && templateQs.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-gray-900">Questions Asked</h2>
-              <span className="text-xs text-gray-400">{askedQIds.size} / {templateQs.length} marked</span>
-            </div>
-
-            {(domainOptions.length > 0 || topicOptions.length > 0) && (
-              <div className="flex flex-wrap items-center gap-2 mb-4">
-                <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">All Domains</option>
-                  {domainOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
-                </select>
-                <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
-                  className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                  <option value="">All Topics</option>
-                  {topicOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                {(filterDomain || filterTopic) && (
-                  <button type="button" onClick={() => { setFilterDomain(""); setFilterTopic(""); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 underline">
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            )}
-
-            {filteredQs.length === 0 && (
-              <p className="text-sm text-gray-400 py-6 text-center">No questions match the selected domain/topic.</p>
-            )}
-
-            <div className="space-y-5">
-              {Object.entries(byDomain).map(([domain, qs]) => (
-                <div key={domain}>
-                  <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{domain.replace(/_/g, " ")}</p>
-                  <div className="space-y-2">
-                    {qs.map(q => {
-                      const isAsked  = askedQIds.has(q.id);
-                      const isRepeat = priorAskedSet.has(q.id);
-                      return (
-                        <div key={q.id} className={`rounded-lg border p-3 transition-colors ${isAsked ? "border-indigo-200 bg-indigo-50/40" : "border-gray-100 bg-gray-50"}`}>
-                          <div className="flex items-start gap-2.5">
-                            {isCompleted ? (
-                              <div className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded ${isAsked ? "bg-indigo-600" : "bg-gray-200"}`}>
-                                {isAsked && (
-                                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                )}
-                              </div>
-                            ) : (
-                              <input type="checkbox" checked={isAsked} onChange={() => toggleAsked(q.id)}
-                                className="mt-0.5 w-4 h-4 flex-shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
-                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                                {q.difficulty && (
-                                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded capitalize ${DIFF_BADGE[q.difficulty] || "bg-gray-100 text-gray-600"}`}>
-                                    {q.difficulty}
-                                  </span>
-                                )}
-                                {q.topic && (
-                                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{q.topic}</span>
-                                )}
-                                <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
-                                  Used {q.usageCount || 0}×
-                                </span>
-                                {isRepeat && (
-                                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Asked before
-                                  </span>
-                                )}
-                              </div>
-                              {q.suggestedAnswer && (
-                                <button type="button" onClick={() => toggleAnswerVisible(q.id)}
-                                  className="mt-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                                  {expandedAnswers.has(q.id) ? "Hide Answer ▲" : "Show Answer ▼"}
-                                </button>
-                              )}
-                              {expandedAnswers.has(q.id) && q.suggestedAnswer && (
-                                <div className="mt-1.5 text-sm text-gray-700 bg-indigo-50/60 border border-indigo-100 rounded-lg px-3 py-2 whitespace-pre-wrap">
-                                  {q.suggestedAnswer}
-                                </div>
-                              )}
-                              {isAsked && !isCompleted && (
-                                <textarea
-                                  rows={2}
-                                  value={qRemarks[q.id] || ""}
-                                  onChange={e => setQRemarks(r => ({ ...r, [q.id]: e.target.value }))}
-                                  placeholder="Add remarks for this question…"
-                                  className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none bg-white"
-                                />
-                              )}
-                              {isAsked && isCompleted && qRemarks[q.id] && (
-                                <p className="mt-1.5 text-xs text-gray-600 italic">{qRemarks[q.id]}</p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Add your own question */}
-            {!isCompleted && (
-              <div className="mt-5 pt-5 border-t border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 mb-2">Add your own question</p>
-                <p className="text-xs text-gray-400 mb-2">Questions you submit here go to the content team for review.</p>
-                <div className="flex gap-2">
-                  <textarea
-                    rows={2}
-                    value={adhocText}
-                    onChange={e => setAdhocText(e.target.value)}
-                    placeholder="Type a question you asked that isn't listed above…"
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                  />
-                  <button onClick={handleAddAdhoc} disabled={qSaving || !adhocText.trim()}
-                    className="self-end px-4 py-2 bg-gray-800 text-white text-sm font-semibold rounded-lg hover:bg-gray-700 disabled:opacity-40 whitespace-nowrap">
-                    Submit
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Save button */}
-            {!isCompleted && (
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <p className="text-xs text-gray-400">
-                  Select at least one question you asked, then save — required before the evaluation can be submitted.
-                </p>
-                <button onClick={handleSaveQuestions} disabled={qSaving || askedQIds.size === 0}
-                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60 whitespace-nowrap">
-                  {qSaving ? "Saving…" : "Save Questions"}
-                </button>
-              </div>
-            )}
+      {/* ── Questions Asked — opens in a separate tab so the evaluation form isn't lost ── */}
+      {showEvaluation && totalQuestions > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Questions Asked</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{askedCount} / {totalQuestions} marked</p>
           </div>
+          <Link
+            to={`/interviewer/interviews/${id}/questions`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
+          >
+            View/Select Questions to be Asked
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </Link>
+        </div>
       )}
 
       {/* ── Evaluation section (scheduled or completed) ── */}
@@ -549,12 +321,6 @@ export default function InterviewDetail() {
               </span>
             )}
           </div>
-
-          {!hasFeedback && !questionsSatisfied && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700">
-              Please select the questions asked during the interview before submitting the evaluation.
-            </div>
-          )}
 
           {/* Feedback form — dynamic v2, editable while scheduled */}
           {isScheduled && isDynamic && (
@@ -579,7 +345,7 @@ export default function InterviewDetail() {
             <div className="space-y-5">
               {DEFAULT_FEEDBACK_QUESTIONS.map(q => (
                 <div key={q.id}>
-                  <label className={labelCls}>{q.label}{q.type === "rating" ? " *" : ""}</label>
+                  <label className={labelCls}>{q.label}{q.type === "rating" && <span className="text-red-500"> *</span>}</label>
                   {q.type === "rating" && (
                     <RatingInput value={answers[q.id] || 0} onChange={v => setAnswer(q.id, v)} />
                   )}
@@ -649,8 +415,7 @@ export default function InterviewDetail() {
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Mark as Completed</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {!hasFeedback && !questionsSatisfied && "Select and save the question(s) you asked, then submit the evaluation."}
-                    {!hasFeedback && questionsSatisfied && "Submit the evaluation above first."}
+                    {!hasFeedback && "Submit the evaluation above first."}
                     {hasFeedback && !pastTime && `Available after interview start time (${interview.scheduledTime}).`}
                     {canComplete && "Ready — interview time has passed and evaluation is submitted."}
                   </p>
