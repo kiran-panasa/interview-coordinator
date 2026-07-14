@@ -176,7 +176,7 @@ export default function InterviewDetail() {
     if (errorMsg) return setToast({ message: errorMsg, type: "error" });
     if (templateQs.length > 0 && savedAskedQIds.size === 0) {
       return setToast({
-        message: "Select the question(s) you asked and click \"Save Questions\" before submitting the evaluation.",
+        message: "Please select the questions asked during the interview before submitting the evaluation.",
         type: "error",
       });
     }
@@ -552,7 +552,7 @@ export default function InterviewDetail() {
 
           {!hasFeedback && !questionsSatisfied && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5 text-xs text-amber-700">
-              Select and save at least one question you asked (above) before you can submit this evaluation.
+              Please select the questions asked during the interview before submitting the evaluation.
             </div>
           )}
 

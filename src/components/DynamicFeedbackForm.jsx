@@ -215,12 +215,6 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
     onChange({ ...domainData, cards });
   }, [domainData, onChange]);
 
-  const addCard = useCallback(() => {
-    const emptyCard = {};
-    for (const f of domain.cardFields || []) emptyCard[f.id] = f.type === "text" ? "" : null;
-    onChange({ ...domainData, cards: [...(domainData.cards || []), emptyCard] });
-  }, [domain, domainData, onChange]);
-
   const deleteCard = useCallback((i) => {
     onChange({ ...domainData, cards: (domainData.cards || []).filter((_, idx) => idx !== i) });
   }, [domainData, onChange]);
@@ -282,19 +276,6 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
                   />
                 ))}
               </div>
-
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={addCard}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 text-sm font-medium hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add {cardNoun}
-                </button>
-              )}
 
               {domainRating != null && (
                 <ComputedValue label="Domain Rating" value={domainRating} />
