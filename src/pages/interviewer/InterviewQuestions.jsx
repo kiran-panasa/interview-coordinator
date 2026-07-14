@@ -59,9 +59,18 @@ export default function InterviewQuestions() {
 
   const topicOptions = useMemo(() => {
     const set = new Set();
-    templateQs.forEach(q => { if (q.topic) set.add(q.topic); });
+    templateQs.forEach(q => {
+      if (!q.topic) return;
+      if (filterDomain && !questionDomains(q).includes(filterDomain)) return;
+      set.add(q.topic);
+    });
     return [...set].sort();
-  }, [templateQs]);
+  }, [templateQs, filterDomain]);
+
+  // Selected domain changed and the current topic no longer applies to it — clear it.
+  useEffect(() => {
+    if (filterTopic && !topicOptions.includes(filterTopic)) setFilterTopic("");
+  }, [filterDomain]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredQs = useMemo(() => templateQs.filter(q => {
     if (filterDomain && !questionDomains(q).includes(filterDomain)) return false;
