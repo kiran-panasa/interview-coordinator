@@ -53,7 +53,11 @@ export default function NudgePage() {
   const Tab = ({ id, label, badge }) => (
     <button onClick={() => setActiveTab(id)}
       className={`px-5 py-2.5 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${
-        activeTab === id ? "bg-white text-indigo-700 shadow-sm border border-gray-200" : "text-gray-500 hover:text-gray-800"
+        activeTab === id
+          ? "bg-white text-indigo-700 shadow-sm border border-gray-200"
+          : badge > 0
+            ? "bg-red-50 text-red-700 hover:bg-red-100"
+            : "text-gray-500 hover:text-gray-800"
       }`}>
       {label}
       {badge > 0 && <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full">{badge}</span>}

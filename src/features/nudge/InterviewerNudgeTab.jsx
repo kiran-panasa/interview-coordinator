@@ -44,7 +44,6 @@ export default function InterviewerNudgeTab({
   const [addSearch,       setAddSearch]       = useState("");
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
-  const [showPreview,     setShowPreview]     = useState(false);
   const addPickerRef = useRef(null);
 
   const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
@@ -237,35 +236,6 @@ export default function InterviewerNudgeTab({
             )}
           </div>
         </div>
-      </div>
-
-      {/* Message Preview */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <button onClick={() => setShowPreview(p => !p)}
-          className="w-full flex items-center justify-between px-6 py-3.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors">
-          <span className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            Preview Message
-          </span>
-          <svg className={`w-4 h-4 text-gray-400 transition-transform ${showPreview ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-        {showPreview && (
-          <div className="border-t border-gray-100 px-6 py-4">
-            {displayedInterviewers.length > 0 && (
-              <p className="text-xs text-gray-400 mb-3">
-                Showing as it will appear for <span className="font-medium text-gray-600">{displayedInterviewers[0].displayName || displayedInterviewers[0].email}</span>
-              </p>
-            )}
-            <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed bg-gray-50 rounded-xl px-4 py-3">
-              {defaultMessage.replace(/\{\{name\}\}/g, displayedInterviewers[0]?.displayName || displayedInterviewers[0]?.email || "{{name}}")}
-            </pre>
-          </div>
-        )}
       </div>
 
       {/* Interviewers table */}

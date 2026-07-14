@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useMemo } from "react";
-import { useUserNotifications, useAdhocQuestions } from "../hooks/subscriptions";
+import { useUserNotifications, useAdhocQuestions, useScheduleInvites } from "../hooks/subscriptions";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 
@@ -27,8 +27,11 @@ export default function AdminLayout() {
 
   const notifications = useUserNotifications(currentUser?.uid);
   const adhocQs       = useAdhocQuestions();
-  const unread        = notifications.filter(n => n.type === "response" && n.status === "unread").length;
-  const pendingAdhoc  = adhocQs.filter(q => q.status === "pending").length;
+  const invites       = useScheduleInvites();
+  const unreadResponses  = notifications.filter(n => n.type === "response" && n.status === "unread").length;
+  const pendingBookings  = invites.filter(i => i.status === "pending_confirmation").length;
+  const pendingAdhoc     = adhocQs.filter(q => q.status === "pending").length;
+  const nudgeBadge       = unreadResponses + pendingBookings;
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -49,31 +52,36 @@ export default function AdminLayout() {
 
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || role}</p>
-          {nav.map(item => (
-            <NavLink key={item.to} to={item.to}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-indigo-50 text-indigo-700 border-l-2 border-indigo-600 pl-2.5"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                }`
-              }>
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={item.icon} />
-              </svg>
-              <span className="flex-1">{item.label}</span>
-              {item.to === "/admin/nudge" && unread > 0 && (
-                <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {unread}
-                </span>
-              )}
-              {item.to === "/admin/questions" && pendingAdhoc > 0 && (
-                <span className="text-[10px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {pendingAdhoc}
-                </span>
-              )}
-            </NavLink>
-          ))}
+          {nav.map(item => {
+            const needsAttention = item.to === "/admin/nudge" && nudgeBadge > 0;
+            return (
+              <NavLink key={item.to} to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    isActive
+                      ? "bg-indigo-50 text-indigo-700 border-l-2 border-indigo-600 pl-2.5 font-medium"
+                      : needsAttention
+                        ? "bg-red-50 text-red-700 font-bold hover:bg-red-100"
+                        : "text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-900"
+                  }`
+                }>
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={item.icon} />
+                </svg>
+                <span className="flex-1">{item.label}</span>
+                {item.to === "/admin/nudge" && nudgeBadge > 0 && (
+                  <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {nudgeBadge}
+                  </span>
+                )}
+                {item.to === "/admin/questions" && pendingAdhoc > 0 && (
+                  <span className="text-[10px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {pendingAdhoc}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-100">
