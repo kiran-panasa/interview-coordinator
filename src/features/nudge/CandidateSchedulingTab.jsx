@@ -189,6 +189,10 @@ export default function CandidateSchedulingTab({
         meetLink:         result?.meetLink || "",
         eventId:          result?.eventId || "",
         createdBy:        currentUser.uid,
+        // Candidate slots come from the panelist's own published availability
+        // and the Meet link is already generated — skip the interviewer's
+        // separate manual accept/decline step for this flow.
+        status:           "scheduled",
       });
       await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
       setToast({ message: `Booking confirmed for ${inv.candidateName}.` });

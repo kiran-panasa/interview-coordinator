@@ -4,7 +4,7 @@ import {
   query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
 import { parseInterviewStart } from "../utils/dates";
-import type { Interview } from "../types";
+import type { Interview, InterviewStatus } from "../types";
 
 export const DEFAULT_ROUNDS = [
   "HR Round", "Technical Round 1", "Technical Round 2", "Final Round",
@@ -50,11 +50,12 @@ export async function getInterview(id: string): Promise<Interview | null> {
 }
 
 export async function createInterview(
-  data: Omit<Interview, "id" | "status" | "createdAt">
+  data: Omit<Interview, "id" | "status" | "createdAt"> & { status?: InterviewStatus }
 ): Promise<string> {
+  const { status, ...rest } = data;
   const ref = await addDoc(collection(db, "interviews"), {
-    ...data,
-    status: "pending_acceptance",
+    ...rest,
+    status: status || "pending_acceptance",
     createdAt: new Date().toISOString(),
   });
   return ref.id;
