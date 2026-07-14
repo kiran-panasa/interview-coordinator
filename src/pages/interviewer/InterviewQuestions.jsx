@@ -28,8 +28,8 @@ export default function InterviewQuestions() {
   const [priorAskedSet,  setPriorAskedSet]  = useState(new Set());
   const [adhocText,      setAdhocText]      = useState("");
   const [qSaving,        setQSaving]        = useState(false);
-  const [filterDomain,   setFilterDomain]   = useState("");
-  const [filterTopic,    setFilterTopic]    = useState("");
+  const [filterDomains,  setFilterDomains]  = useState(new Set());
+  const [filterTopics,   setFilterTopics]   = useState(new Set());
   const [expandedAnswers, setExpandedAnswers] = useState(new Set());
 
   useEffect(() => {
@@ -61,22 +61,39 @@ export default function InterviewQuestions() {
     const set = new Set();
     templateQs.forEach(q => {
       if (!q.topic) return;
-      if (filterDomain && !questionDomains(q).includes(filterDomain)) return;
+      if (filterDomains.size > 0 && !questionDomains(q).some(d => filterDomains.has(d))) return;
       set.add(q.topic);
     });
     return [...set].sort();
-  }, [templateQs, filterDomain]);
+  }, [templateQs, filterDomains]);
 
-  // Selected domain changed and the current topic no longer applies to it — clear it.
+  // Domain selection changed — drop any selected topics that no longer apply.
   useEffect(() => {
-    if (filterTopic && !topicOptions.includes(filterTopic)) setFilterTopic("");
-  }, [filterDomain]); // eslint-disable-line react-hooks/exhaustive-deps
+    setFilterTopics(prev => {
+      const next = new Set([...prev].filter(t => topicOptions.includes(t)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [topicOptions]);
+
+  const toggleFilterDomain = (d) => setFilterDomains(prev => {
+    const next = new Set(prev);
+    if (next.has(d)) next.delete(d);
+    else next.add(d);
+    return next;
+  });
+
+  const toggleFilterTopic = (t) => setFilterTopics(prev => {
+    const next = new Set(prev);
+    if (next.has(t)) next.delete(t);
+    else next.add(t);
+    return next;
+  });
 
   const filteredQs = useMemo(() => templateQs.filter(q => {
-    if (filterDomain && !questionDomains(q).includes(filterDomain)) return false;
-    if (filterTopic && q.topic !== filterTopic) return false;
+    if (filterDomains.size > 0 && !questionDomains(q).some(d => filterDomains.has(d))) return false;
+    if (filterTopics.size > 0 && !filterTopics.has(q.topic)) return false;
     return true;
-  }), [templateQs, filterDomain, filterTopic]);
+  }), [templateQs, filterDomains, filterTopics]);
 
   const byDomain = useMemo(() => filteredQs.reduce((acc, q) => {
     const key = questionDomains(q)[0] || "other";
@@ -170,19 +187,47 @@ export default function InterviewQuestions() {
           </div>
 
           {(domainOptions.length > 0 || topicOptions.length > 0) && (
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="">All Domains</option>
-                {domainOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
-              </select>
-              <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="">All Topics</option>
-                {topicOptions.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-              {(filterDomain || filterTopic) && (
-                <button type="button" onClick={() => { setFilterDomain(""); setFilterTopic(""); }}
+            <div className="mb-4 space-y-3">
+              {domainOptions.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                    Domains {filterDomains.size > 0 && `(${filterDomains.size} selected)`}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 border border-gray-200 rounded-xl p-2.5 max-h-28 overflow-y-auto">
+                    {domainOptions.map(d => (
+                      <button key={d} type="button" onClick={() => toggleFilterDomain(d)}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                          filterDomains.has(d)
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                        }`}>
+                        {d.replace(/_/g, " ")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {topicOptions.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">
+                    Topics {filterTopics.size > 0 && `(${filterTopics.size} selected)`}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5 border border-gray-200 rounded-xl p-2.5 max-h-28 overflow-y-auto">
+                    {topicOptions.map(t => (
+                      <button key={t} type="button" onClick={() => toggleFilterTopic(t)}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                          filterTopics.has(t)
+                            ? "bg-indigo-600 text-white border-indigo-600"
+                            : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                        }`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(filterDomains.size > 0 || filterTopics.size > 0) && (
+                <button type="button" onClick={() => { setFilterDomains(new Set()); setFilterTopics(new Set()); }}
                   className="text-xs text-gray-400 hover:text-gray-600 underline">
                   Clear filters
                 </button>
@@ -191,7 +236,7 @@ export default function InterviewQuestions() {
           )}
 
           {filteredQs.length === 0 && (
-            <p className="text-sm text-gray-400 py-6 text-center">No questions match the selected domain/topic.</p>
+            <p className="text-sm text-gray-400 py-6 text-center">No questions match the selected domain(s)/topic(s).</p>
           )}
 
           <div className="space-y-5">
