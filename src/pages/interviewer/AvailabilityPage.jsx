@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { formatDateLong, formatDate } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
@@ -11,8 +11,11 @@ import {
   getAllUsers,
   createNotification,
 } from "../../api/firestore";
+import { useInterviewerInterviews } from "../../hooks/subscriptions";
+import { usePagination } from "../../hooks/usePagination";
 import Toast from "../../components/Toast";
 import Modal from "../../components/Modal";
+import Pagination from "../../components/Pagination";
 
 const DAY_LABELS  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -26,6 +29,13 @@ const PRESET_TIMES = [
 const DURATION_OPTIONS = [15, 30, 45, 60];
 const BUFFER_OPTIONS   = [0, 5, 10, 15];
 const WEEKDAY_SET      = new Set([1, 2, 3, 4, 5]);
+const STATUS_ORDER = { free: 0, booked: 1, completed: 2 };
+const STATUS_LABEL = { free: "Free", booked: "Booked", completed: "Completed" };
+const STATUS_BADGE_CLS = {
+  free:      "bg-emerald-50 text-emerald-700 border-emerald-200",
+  booked:    "bg-orange-50 text-orange-600 border-orange-200",
+  completed: "bg-indigo-50 text-indigo-700 border-indigo-200",
+};
 
 // ── Time helpers ────────────────────────────────────────────────────────────────
 
@@ -292,7 +302,7 @@ export default function AvailabilityPage() {
       const skippedNote = plannedCreations.skipped > 0
         ? ` (${plannedCreations.skipped} already existed and were skipped)`
         : "";
-      setToast({ message: `${plannedCreations.toCreate.length} slot(s) saved across ${effectiveDates.length} date(s)${skippedNote}.` });
+      setToast({ message: `Availability updated successfully — ${plannedCreations.toCreate.length} slot(s) saved across ${effectiveDates.length} date(s)${skippedNote}.` });
       notifyAdminsSlotsAdded();
       // Reset the builder for a clean slate
       setPendingTimes(new Set());
@@ -330,7 +340,7 @@ export default function AvailabilityPage() {
     const freeSlots = daySlots.filter(s => !s.isBooked);
     try {
       await removeAvailabilitySlots(currentUser.uid, freeSlots.map(s => s.id));
-      setToast({ message: `${freeSlots.length} slot${freeSlots.length !== 1 ? "s" : ""} removed.` });
+      setToast({ message: `${freeSlots.length} slot${freeSlots.length !== 1 ? "s" : ""} deleted successfully.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -439,36 +449,146 @@ export default function AvailabilityPage() {
     );
   };
 
-  // ── Upcoming slots (all future) ───────────────────────────────────────────────
-  const upcoming = useMemo(() =>
-    slots
-      .filter(s => s.date >= todayStr)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time)),
-  [slots, todayStr]);
-
-  const grouped = useMemo(() => upcoming.reduce((acc, s) => {
-    if (!acc[s.date]) acc[s.date] = [];
-    acc[s.date].push(s);
-    return acc;
-  }, {}), [upcoming]);
-
-  const freeUpcoming = useMemo(() => upcoming.filter(s => !s.isBooked), [upcoming]);
-  const allFreeSelected = freeUpcoming.length > 0 && freeUpcoming.every(s => selectedSlotIds.has(s.id));
-  const toggleSelectAllFree = () => {
-    setSelectedSlotIds(allFreeSelected ? new Set() : new Set(freeUpcoming.map(s => s.id)));
+  // ── Interview status lookup — lets a booked slot report as "Completed" ───────
+  const myInterviews = useInterviewerInterviews(userProfile?.email);
+  const interviewStatusById = useMemo(() => {
+    const map = {};
+    myInterviews.forEach(iv => { map[iv.id] = iv.status; });
+    return map;
+  }, [myInterviews]);
+  const slotStatus = (s) => {
+    if (!s.isBooked) return "free";
+    if (s.interviewId && interviewStatusById[s.interviewId] === "completed") return "completed";
+    return "booked";
   };
-  const toggleSlotRowSelect = (id) => setSelectedSlotIds(prev => {
+
+  // ── Upcoming slots table: filters, search, sort, grouping, pagination ────────
+  const [tableDateFrom, setTableDateFrom] = useState(todayStr);
+  const [tableDateTo,   setTableDateTo]   = useState("");
+  const [tableStatus,   setTableStatus]   = useState("");
+  const [tableTimeFrom, setTableTimeFrom] = useState("");
+  const [tableTimeTo,   setTableTimeTo]   = useState("");
+  const [tableSearch,   setTableSearch]   = useState("");
+  const [tableSortBy,   setTableSortBy]   = useState("date");
+  const [tableSortDir,  setTableSortDir]  = useState("asc");
+  const [collapsedDates, setCollapsedDates] = useState(new Set());
+
+  const toggleDateCollapse = (date) => setCollapsedDates(prev => {
     const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
+    if (next.has(date)) next.delete(date); else next.add(date);
     return next;
   });
 
+  const toggleSort = (col) => {
+    if (tableSortBy === col) setTableSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setTableSortBy(col); setTableSortDir("asc"); }
+  };
+
+  const clearTableFilters = () => {
+    setTableDateFrom(todayStr); setTableDateTo(""); setTableStatus("");
+    setTableTimeFrom(""); setTableTimeTo(""); setTableSearch("");
+  };
+  const tableFiltersActive = tableDateFrom !== todayStr || tableDateTo || tableStatus || tableTimeFrom || tableTimeTo || tableSearch;
+
+  const filteredSlots = useMemo(() => {
+    const fromM = tableTimeFrom ? parseTimeToMinutes(tableTimeFrom) : null;
+    const toM   = tableTimeTo   ? parseTimeToMinutes(tableTimeTo)   : null;
+    return slots.filter(s => {
+      if (tableDateFrom && s.date < tableDateFrom) return false;
+      if (tableDateTo   && s.date > tableDateTo)   return false;
+      if (tableStatus && slotStatus(s) !== tableStatus) return false;
+      if (fromM != null || toM != null) {
+        const mins = timeSortKey(s.time);
+        if (fromM != null && mins < fromM) return false;
+        if (toM   != null && mins > toM)   return false;
+      }
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slots, tableDateFrom, tableDateTo, tableStatus, tableTimeFrom, tableTimeTo, interviewStatusById]);
+
+  const groupedEntries = useMemo(() => {
+    const map = {};
+    filteredSlots.forEach(s => {
+      if (!map[s.date]) map[s.date] = [];
+      map[s.date].push(s);
+    });
+    let entries = Object.entries(map);
+
+    if (tableSearch.trim()) {
+      const q = tableSearch.trim().toLowerCase();
+      entries = entries.filter(([date]) => {
+        const label = new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+        return label.toLowerCase().includes(q) || date.includes(q);
+      });
+    }
+
+    entries.forEach(([, rows]) => {
+      if (tableSortBy === "status") {
+        rows.sort((a, b) => (tableSortDir === "asc" ? 1 : -1) * (STATUS_ORDER[slotStatus(a)] - STATUS_ORDER[slotStatus(b)]));
+      } else if (tableSortBy === "time") {
+        rows.sort((a, b) => (tableSortDir === "asc" ? 1 : -1) * (timeSortKey(a.time) - timeSortKey(b.time)));
+      } else {
+        rows.sort((a, b) => timeSortKey(a.time) - timeSortKey(b.time));
+      }
+    });
+
+    entries.sort((a, b) => {
+      const cmp = a[0].localeCompare(b[0]);
+      return tableSortBy === "date" && tableSortDir === "desc" ? -cmp : cmp;
+    });
+
+    return entries;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSlots, tableSearch, tableSortBy, tableSortDir, interviewStatusById]);
+
+  const tablePagination = usePagination(groupedEntries, 8);
+
+  const visibleFree = useMemo(
+    () => tablePagination.paged.flatMap(([, rows]) => rows).filter(s => !s.isBooked),
+    [tablePagination.paged]
+  );
+  const allVisibleFreeSelected = visibleFree.length > 0 && visibleFree.every(s => selectedSlotIds.has(s.id));
+  const toggleSelectAllVisible = () => setSelectedSlotIds(prev => {
+    const next = new Set(prev);
+    if (allVisibleFreeSelected) visibleFree.forEach(s => next.delete(s.id));
+    else visibleFree.forEach(s => next.add(s.id));
+    return next;
+  });
+  const toggleSelectAllInGroup = (rows) => {
+    const free = rows.filter(s => !s.isBooked);
+    const allSelected = free.length > 0 && free.every(s => selectedSlotIds.has(s.id));
+    setSelectedSlotIds(prev => {
+      const next = new Set(prev);
+      free.forEach(s => allSelected ? next.delete(s.id) : next.add(s.id));
+      return next;
+    });
+  };
+  const toggleSlotRowSelect = (s) => {
+    if (s.isBooked) return setToast({ message: "Booked slots cannot be deleted.", type: "error" });
+    setSelectedSlotIds(prev => {
+      const next = new Set(prev);
+      if (next.has(s.id)) next.delete(s.id); else next.add(s.id);
+      return next;
+    });
+  };
+
+  const selectedBookedCount = useMemo(
+    () => [...selectedSlotIds].filter(id => slots.find(s => s.id === id)?.isBooked).length,
+    [selectedSlotIds, slots]
+  );
+
   const handleConfirmBulkDelete = async () => {
     setShowBulkDeleteConfirm(false);
+    const idsToDelete = [...selectedSlotIds].filter(id => !slots.find(s => s.id === id)?.isBooked);
+    if (idsToDelete.length === 0) {
+      setToast({ message: "Booked slots cannot be deleted.", type: "error" });
+      return;
+    }
     setBusy(true);
     try {
-      await removeAvailabilitySlots(currentUser.uid, [...selectedSlotIds]);
-      setToast({ message: `${selectedSlotIds.size} slot(s) deleted.` });
+      await removeAvailabilitySlots(currentUser.uid, idsToDelete);
+      setToast({ message: `${idsToDelete.length} slot${idsToDelete.length !== 1 ? "s" : ""} deleted successfully.` });
       setSelectedSlotIds(new Set());
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -810,102 +930,201 @@ export default function AvailabilityPage() {
       </div>
 
       {/* ── My Upcoming Slots table ── */}
-      {upcoming.length > 0 && (
+      {slots.length > 0 && (
         <div className="mt-8">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h2 className="text-base font-bold text-gray-900">My Upcoming Slots</h2>
             {selectedSlotIds.size > 0 && (
               <button onClick={() => setShowBulkDeleteConfirm(true)} disabled={busy}
                 className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors">
-                Delete Selected ({selectedSlotIds.size})
+                Mark as Unavailable ({selectedSlotIds.size})
               </button>
             )}
           </div>
+
+          {/* ── Filters ── */}
+          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-[10px] text-gray-400 mb-1">From</label>
+              <input type="date" value={tableDateFrom} onChange={e => setTableDateFrom(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 mb-1">To</label>
+              <input type="date" value={tableDateTo} onChange={e => setTableDateTo(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 mb-1">Status</label>
+              <select value={tableStatus} onChange={e => setTableStatus(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="">All</option>
+                <option value="free">Free</option>
+                <option value="booked">Booked</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 mb-1">Time from</label>
+              <input type="time" value={tableTimeFrom} onChange={e => setTableTimeFrom(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div>
+              <label className="block text-[10px] text-gray-400 mb-1">Time to</label>
+              <input type="time" value={tableTimeTo} onChange={e => setTableTimeTo(e.target.value)}
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="flex-1 min-w-[160px]">
+              <label className="block text-[10px] text-gray-400 mb-1">Search by date</label>
+              <input type="text" value={tableSearch} onChange={e => setTableSearch(e.target.value)}
+                placeholder="e.g. 15 Jul, Wed, 2026-07-15…"
+                className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            {tableFiltersActive && (
+              <button onClick={clearTableFilters} className="text-xs text-gray-400 hover:text-gray-600 underline pb-1.5">
+                Clear filters
+              </button>
+            )}
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-            <table className="w-full text-sm min-w-[560px]">
+            <table className="w-full text-sm min-w-[620px]">
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="px-4 py-3 w-8">
-                    {freeUpcoming.length > 0 && (
-                      <input type="checkbox" checked={allFreeSelected} onChange={toggleSelectAllFree}
+                    {visibleFree.length > 0 && (
+                      <input type="checkbox" checked={allVisibleFreeSelected} onChange={toggleSelectAllVisible}
+                        title="Select all free slots on this page"
                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                     )}
                   </th>
-                  {["Date", "Time", "Status", ""].map((h, i) => (
-                    <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
+                  {[
+                    { key: "date",   label: "Date" },
+                    { key: "time",   label: "Time" },
+                    { key: "status", label: "Status" },
+                  ].map(col => (
+                    <th key={col.key} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">
+                      <button onClick={() => toggleSort(col.key)} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
+                        {col.label}
+                        {tableSortBy === col.key && (
+                          <span className="text-indigo-500">{tableSortDir === "asc" ? "▲" : "▼"}</span>
+                        )}
+                      </button>
+                    </th>
                   ))}
+                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {Object.entries(grouped).map(([date, daySlotList]) =>
-                  daySlotList.map((s, i) => {
-                    const isConfirmingRow = confirming?.slotId === s.id;
-                    const isFlaggingRow   = flagging === s.id;
-                    return (
-                      <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : selectedSlotIds.has(s.id) ? "bg-indigo-50/40" : ""}`}>
-                        <td className="px-4 py-3">
-                          {!s.isBooked && (
-                            <input type="checkbox" checked={selectedSlotIds.has(s.id)} onChange={() => toggleSlotRowSelect(s.id)}
+                {tablePagination.paged.length === 0 && (
+                  <tr><td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-400">No slots match these filters.</td></tr>
+                )}
+                {tablePagination.paged.map(([date, rows]) => {
+                  const isCollapsed = collapsedDates.has(date);
+                  const freeInGroup = rows.filter(s => !s.isBooked);
+                  const groupAllSelected = freeInGroup.length > 0 && freeInGroup.every(s => selectedSlotIds.has(s.id));
+                  const counts = rows.reduce((acc, s) => { acc[slotStatus(s)] = (acc[slotStatus(s)] || 0) + 1; return acc; }, {});
+                  return (
+                    <Fragment key={date}>
+                      <tr className="bg-gray-50/70 hover:bg-gray-50">
+                        <td className="px-4 py-2.5">
+                          {freeInGroup.length > 0 && (
+                            <input type="checkbox" checked={groupAllSelected} onChange={() => toggleSelectAllInGroup(rows)}
+                              title="Select all free slots on this date"
                               className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
                           )}
                         </td>
-                        <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
-                          {i === 0
-                            ? new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
-                            : ""}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">{s.time}</td>
-                        <td className="px-4 py-3">
-                          {s.isBooked ? (
-                            <span className="text-[11px] font-semibold bg-orange-50 text-orange-600 border border-orange-200 px-2 py-0.5 rounded-full">Booked</span>
-                          ) : (
-                            <span className="text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">Free</span>
-                          )}
-                          {s.flagged && (
-                            <span className="ml-1.5 text-[11px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">⚑ Flagged</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          {s.isBooked ? (
-                            s.flagged ? (
-                              <button onClick={() => handleUnflagSlot(s.id)} disabled={busy}
-                                className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors disabled:opacity-40">
-                                Unflag
-                              </button>
-                            ) : isFlaggingRow ? (
-                              <InlineConfirm
-                                message="Flag conflict?"
-                                onConfirm={() => handleFlagSlot(s.id)}
-                                onCancel={() => setFlagging(null)}
-                              />
-                            ) : (
-                              <button onClick={() => confirmFlagSlot(s)} disabled={busy}
-                                title="Flag that you can no longer honour this slot"
-                                className="text-xs text-orange-500 hover:text-red-600 font-semibold transition-colors disabled:opacity-40">
-                                ⚑ Flag conflict
-                              </button>
-                            )
-                          ) : (
-                            isConfirmingRow ? (
-                              <InlineConfirm
-                                message="Remove?"
-                                onConfirm={() => handleRemoveSlot(s.id)}
-                                onCancel={() => setConfirming(null)}
-                              />
-                            ) : (
-                              <button onClick={() => confirmRemoveSlot(s)} disabled={busy}
-                                className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors disabled:opacity-40">
-                                Remove
-                              </button>
-                            )
-                          )}
+                        <td colSpan={4} className="px-4 py-2.5">
+                          <button onClick={() => toggleDateCollapse(date)} className="flex items-center gap-2 w-full text-left">
+                            <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform flex-shrink-0 ${isCollapsed ? "-rotate-90" : ""}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            </svg>
+                            <span className="font-semibold text-gray-900 text-sm">
+                              {new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+                            </span>
+                            <span className="text-xs text-gray-400">{rows.length} slot{rows.length !== 1 ? "s" : ""}</span>
+                            <span className="flex items-center gap-1 ml-auto">
+                              {Object.entries(counts).map(([st, n]) => (
+                                <span key={st} className={`text-[10px] font-semibold border px-1.5 py-0.5 rounded-full ${STATUS_BADGE_CLS[st]}`}>
+                                  {n} {STATUS_LABEL[st]}
+                                </span>
+                              ))}
+                            </span>
+                          </button>
                         </td>
                       </tr>
-                    );
-                  })
-                )}
+
+                      {!isCollapsed && rows.map(s => {
+                        const isConfirmingRow = confirming?.slotId === s.id;
+                        const isFlaggingRow   = flagging === s.id;
+                        const status = slotStatus(s);
+                        return (
+                          <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : selectedSlotIds.has(s.id) ? "bg-indigo-50/40" : ""}`}>
+                            <td className="px-4 py-3">
+                              <input type="checkbox" checked={selectedSlotIds.has(s.id)} disabled={s.isBooked}
+                                onChange={() => toggleSlotRowSelect(s)}
+                                title={s.isBooked ? "Booked slots cannot be deleted." : undefined}
+                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30" />
+                            </td>
+                            <td className="px-4 py-3 text-gray-400 text-xs pl-9" />
+                            <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">{s.time}</td>
+                            <td className="px-4 py-3">
+                              <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_BADGE_CLS[status]}`}>
+                                {STATUS_LABEL[status]}
+                              </span>
+                              {s.flagged && (
+                                <span className="ml-1.5 text-[11px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">⚑ Flagged</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
+                              {s.isBooked ? (
+                                s.flagged ? (
+                                  <button onClick={() => handleUnflagSlot(s.id)} disabled={busy}
+                                    className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors disabled:opacity-40">
+                                    Unflag
+                                  </button>
+                                ) : isFlaggingRow ? (
+                                  <InlineConfirm
+                                    message="Flag conflict?"
+                                    onConfirm={() => handleFlagSlot(s.id)}
+                                    onCancel={() => setFlagging(null)}
+                                  />
+                                ) : (
+                                  <button onClick={() => confirmFlagSlot(s)} disabled={busy}
+                                    title="Flag that you can no longer honour this slot"
+                                    className="text-xs text-orange-500 hover:text-red-600 font-semibold transition-colors disabled:opacity-40">
+                                    ⚑ Flag conflict
+                                  </button>
+                                )
+                              ) : (
+                                isConfirmingRow ? (
+                                  <InlineConfirm
+                                    message="Remove?"
+                                    onConfirm={() => handleRemoveSlot(s.id)}
+                                    onCancel={() => setConfirming(null)}
+                                  />
+                                ) : (
+                                  <button onClick={() => confirmRemoveSlot(s)} disabled={busy}
+                                    className="text-xs text-red-400 hover:text-red-600 font-semibold transition-colors disabled:opacity-40">
+                                    Remove
+                                  </button>
+                                )
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
+            <Pagination
+              page={tablePagination.page} totalPages={tablePagination.totalPages}
+              total={tablePagination.total} pageSize={tablePagination.pageSize}
+              onPageChange={tablePagination.setPage}
+            />
           </div>
         </div>
       )}
@@ -937,16 +1156,21 @@ export default function AvailabilityPage() {
         </div>
       </Modal>
 
-      {/* ── Bulk delete confirmation ── */}
-      <Modal open={showBulkDeleteConfirm} onClose={() => setShowBulkDeleteConfirm(false)} title="Delete Availability">
+      {/* ── Bulk "mark as unavailable" confirmation ── */}
+      <Modal open={showBulkDeleteConfirm} onClose={() => setShowBulkDeleteConfirm(false)} title="Mark as Unavailable">
         <div className="space-y-4">
           <p className="text-sm text-gray-700">
-            Are you sure you want to delete {selectedSlotIds.size} selected availability slot{selectedSlotIds.size !== 1 ? "s" : ""}? This cannot be undone.
+            Are you sure you want to mark {selectedSlotIds.size - selectedBookedCount} selected slot{(selectedSlotIds.size - selectedBookedCount) !== 1 ? "s" : ""} as unavailable? This removes them from your availability and cannot be undone.
           </p>
+          {selectedBookedCount > 0 && (
+            <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              Booked slots cannot be deleted. {selectedBookedCount} booked slot{selectedBookedCount !== 1 ? "s" : ""} in your selection will be skipped.
+            </p>
+          )}
           <div className="flex gap-3 pt-1">
             <button onClick={handleConfirmBulkDelete} disabled={busy}
               className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-60">
-              {busy ? "Deleting…" : "Delete"}
+              {busy ? "Saving…" : "Mark as Unavailable"}
             </button>
             <button onClick={() => setShowBulkDeleteConfirm(false)}
               className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
