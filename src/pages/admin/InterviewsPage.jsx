@@ -386,6 +386,11 @@ export default function InterviewsPage() {
     () => [...new Set(programWorkingSet.map(i => i.interviewerEmail))].filter(Boolean).sort(),
     [programWorkingSet]
   );
+  const ivrNameByEmail = useMemo(() => {
+    const map = {};
+    usersAll.forEach(u => { if (u.email) map[u.email] = u.displayName || u.email; });
+    return map;
+  }, [usersAll]);
 
   const uniqueTemplates = useMemo(
     () => [...new Set(programWorkingSet.map(i => i.templateName))].filter(Boolean).sort(),
@@ -533,7 +538,7 @@ export default function InterviewsPage() {
         <select value={filterIvr} onChange={e => { setFilterIvr(e.target.value); setIvrPage(1); }}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
           <option value="All">All Interviewers</option>
-          {uniqueIvrs.map(e => <option key={e} value={e}>{e}</option>)}
+          {uniqueIvrs.map(e => <option key={e} value={e}>{ivrNameByEmail[e] || e}</option>)}
         </select>
         {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All") && (
           <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setIvrPage(1); }}
