@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
 import { formatDate } from "../../utils/dates";
+
+const OTHER_VALUE = "__other__";
 
 const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
 const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
@@ -11,6 +14,14 @@ export default function ScheduleInterviewModal({
   availDates, availTimes,
   DEFAULT_ROUNDS, DURATIONS,
 }) {
+  const [customRound, setCustomRound] = useState(() => !!form.round && !DEFAULT_ROUNDS.includes(form.round));
+
+  // Re-derive whenever the modal is (re)opened, e.g. for a different edit target
+  useEffect(() => {
+    if (open) setCustomRound(!!form.round && !DEFAULT_ROUNDS.includes(form.round));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editTarget]);
+
   return (
     <Modal open={open} onClose={onClose}
       title={editTarget ? "Edit Interview" : "Schedule Interview"} wide>
@@ -69,10 +80,33 @@ export default function ScheduleInterviewModal({
 
         <div>
           <label className={labelCls}>Round *</label>
-          <select value={form.round} onChange={e => setField("round", e.target.value)} className={inputCls}>
+          <select
+            value={customRound ? OTHER_VALUE : form.round}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === OTHER_VALUE) {
+                setCustomRound(true);
+                setField("round", "");
+              } else {
+                setCustomRound(false);
+                setField("round", v);
+              }
+            }}
+            className={inputCls}>
             <option value="">— Select round —</option>
             {DEFAULT_ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}
+            <option value={OTHER_VALUE}>Other…</option>
           </select>
+          {customRound && (
+            <input
+              type="text"
+              value={form.round}
+              onChange={e => setField("round", e.target.value)}
+              placeholder="Enter custom round name — e.g. Managerial Round, Technical Discussion…"
+              autoFocus
+              className={`${inputCls} mt-2`}
+            />
+          )}
         </div>
 
         <div>
