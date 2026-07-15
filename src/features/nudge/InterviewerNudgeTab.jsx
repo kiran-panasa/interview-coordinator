@@ -164,16 +164,31 @@ export default function InterviewerNudgeTab({
           status: "unread",
         });
       }
-      setToast({ message: `Nudge sent to ${recipients.length} interviewer(s).` });
       setNudgeTarget(null);
-      // Email is best-effort — notification already created above
+      // In-app notification already created above — email failure shouldn't
+      // undo that, but it should be visible instead of silently disappearing.
+      let emailError = null;
       if (APPS_SCRIPT_URL) {
-        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action: "sendEmail",
-          subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
-          body: message,
-          recipients: recipients.map(r => ({ email: r.email, name: r.displayName || r.email })),
-        }).catch(() => {});
+        try {
+          await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+            action: "sendEmail",
+            subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
+            body: message,
+            recipients: recipients.map(r => ({ email: r.email, name: r.displayName || r.email })),
+          });
+        } catch (e) {
+          emailError = e.message;
+        }
+      } else {
+        emailError = "VITE_APPS_SCRIPT_URL is not configured";
+      }
+      if (emailError) {
+        setToast({
+          message: `Nudge sent to ${recipients.length} interviewer(s) in-app, but the email failed — ${emailError}`,
+          type: "error",
+        });
+      } else {
+        setToast({ message: `Nudge sent to ${recipients.length} interviewer(s).` });
       }
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setSending(false);

@@ -31,7 +31,9 @@ export default function NotificationsPage() {
   const [toast,       setToast]       = useState(null);
 
   const allNotifications = useUserNotifications(currentUser.uid);
-  const notifications    = allNotifications.filter(n => n.type === "nudge" || n.type === "feedback_reminder");
+  const notifications    = allNotifications.filter(n =>
+    n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval"
+  );
 
   const nudges   = notifications;
   const unread   = nudges.filter(n => n.status === "unread").length;
@@ -160,6 +162,11 @@ export default function NotificationsPage() {
                           <p className="text-sm font-bold text-gray-900">Feedback Reminder — {n.candidateName || "Interview"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
                         </>
+                      ) : n.type === "interview_approval" ? (
+                        <>
+                          <p className="text-sm font-bold text-gray-900">New Interview — {n.candidateName || "Candidate"}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
+                        </>
                       ) : (
                         <>
                           <p className="text-sm font-bold text-gray-900">
@@ -179,7 +186,7 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                   {n.type === "nudge" && responded && statusBadge(n.status)}
-                  {n.type === "feedback_reminder" && !isNew && (
+                  {(n.type === "feedback_reminder" || n.type === "interview_approval") && !isNew && (
                     <span className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">Seen</span>
                   )}
                 </div>
@@ -189,14 +196,14 @@ export default function NotificationsPage() {
                   {linkify(n.message)}
                 </p>
 
-                {/* Actions — feedback reminder */}
-                {n.type === "feedback_reminder" && isNew && n.interviewId && (
+                {/* Actions — feedback reminder / interview approval */}
+                {(n.type === "feedback_reminder" || n.type === "interview_approval") && isNew && n.interviewId && (
                   <Link
                     to={`/interviewer/interviews/${n.interviewId}`}
                     onClick={() => updateNotification(n.id, { status: "read" })}
                     className="flex items-center justify-center gap-2 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition-colors"
                   >
-                    Go to Interview →
+                    {n.type === "interview_approval" ? "Review & Respond →" : "Go to Interview →"}
                   </Link>
                 )}
 

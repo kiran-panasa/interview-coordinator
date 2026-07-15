@@ -8,6 +8,7 @@ import {
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
+  createNotification,
 } from "../../api/firestore";
 import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
@@ -149,6 +150,33 @@ export default function InterviewsPage() {
         const id = await createInterview({ ...data, createdBy: currentUser.uid });
         const slotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
         await markSlotBooked(form.interviewerId, slotId, id).catch(() => {});
+
+        // New interview needs the interviewer's Accept/Decline — notify them
+        if (form.interviewerId) {
+          createNotification({
+            type:           "interview_approval",
+            recipientId:    form.interviewerId,
+            recipientEmail: data.interviewerEmail,
+            interviewId:    id,
+            candidateName:  data.candidateName,
+            message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`,
+            status:         "unread",
+          }).catch(() => {});
+          if (APPS_SCRIPT_URL && data.interviewerEmail) {
+            callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+              action:  "sendEmail",
+              subject: `Action Required — New Interview with ${data.candidateName || "a candidate"}`,
+              body:
+                `Hi ${data.interviewerName || "there"},\n\nYou have a new interview scheduled:\n\n` +
+                `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
+                `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n` +
+                `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${id}\n\n` +
+                `Thank you.`,
+              recipients: [{ email: data.interviewerEmail, name: data.interviewerName || data.interviewerEmail }],
+            }).catch(() => {});
+          }
+        }
+
         setToast({ message: "Interview scheduled." });
       }
       setShowModal(false);

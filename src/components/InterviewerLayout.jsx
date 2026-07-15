@@ -27,7 +27,7 @@ export default function InterviewerLayout() {
 
   const notifications = useUserNotifications(currentUser?.uid);
   const unread = notifications.filter(n =>
-    (n.type === "nudge" || n.type === "feedback_reminder") && n.status === "unread"
+    (n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval") && n.status === "unread"
   ).length;
 
   useEffect(() => {
