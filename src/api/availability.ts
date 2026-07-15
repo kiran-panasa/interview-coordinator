@@ -1,9 +1,32 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDocs, setDoc, updateDoc, deleteDoc,
+  collection, doc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
   query, where, onSnapshot,
 } from "firebase/firestore";
 import type { AvailabilitySlot, AvailableSlot } from "../types";
+
+export function slotIdFor(date: string, time: string): string {
+  return `${date}_${time.replace(/[: ]/g, "")}`;
+}
+
+// Firestore batches cap at 500 writes — chunk defensively even though real
+// usage (a handful of dates × a handful of slots) never gets close.
+async function runBatched(
+  interviewerId: string,
+  items: { slotId: string; data?: Record<string, unknown> }[],
+  mode: "set" | "delete"
+): Promise<void> {
+  const CHUNK = 450;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const batch = writeBatch(db);
+    for (const item of items.slice(i, i + CHUNK)) {
+      const ref = doc(db, "availability", interviewerId, "slots", item.slotId);
+      if (mode === "set") batch.set(ref, item.data);
+      else batch.delete(ref);
+    }
+    await batch.commit();
+  }
+}
 
 export async function getInterviewerAvailability(interviewerId: string): Promise<AvailabilitySlot[]> {
   const snap = await getDocs(collection(db, "availability", interviewerId, "slots"));
@@ -40,7 +63,7 @@ export async function addAvailabilitySlot(
   date: string,
   time: string
 ): Promise<void> {
-  const slotId = `${date}_${time.replace(/[: ]/g, "")}`;
+  const slotId = slotIdFor(date, time);
   await setDoc(doc(db, "availability", interviewerId, "slots", slotId), {
     date, time, isBooked: false, interviewId: null,
   });
@@ -51,6 +74,30 @@ export async function removeAvailabilitySlot(
   slotId: string
 ): Promise<void> {
   await deleteDoc(doc(db, "availability", interviewerId, "slots", slotId));
+}
+
+// Bulk create — used by multi-date / recurring / range-generated slot creation.
+export async function addAvailabilitySlots(
+  interviewerId: string,
+  entries: { date: string; time: string }[]
+): Promise<void> {
+  await runBatched(
+    interviewerId,
+    entries.map(({ date, time }) => ({
+      slotId: slotIdFor(date, time),
+      data: { date, time, isBooked: false, interviewId: null },
+    })),
+    "set"
+  );
+}
+
+// Bulk delete — used for multi-select removal. Only ever called with free
+// (non-booked) slot ids; callers are responsible for filtering those out.
+export async function removeAvailabilitySlots(
+  interviewerId: string,
+  slotIds: string[]
+): Promise<void> {
+  await runBatched(interviewerId, slotIds.map(slotId => ({ slotId })), "delete");
 }
 
 export async function markSlotBooked(

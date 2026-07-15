@@ -4,13 +4,15 @@ import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import {
   subscribeToInterviewerAvailability,
-  addAvailabilitySlot,
+  addAvailabilitySlots,
   removeAvailabilitySlot,
+  removeAvailabilitySlots,
   flagAvailabilitySlot,
   getAllUsers,
   createNotification,
 } from "../../api/firestore";
 import Toast from "../../components/Toast";
+import Modal from "../../components/Modal";
 
 const DAY_LABELS  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -21,15 +23,74 @@ const PRESET_TIMES = [
   "09:00 AM","10:00 AM","11:00 AM","12:00 PM",
   "01:00 PM","02:00 PM","03:00 PM","04:00 PM","05:00 PM","06:00 PM",
 ];
+const DURATION_OPTIONS = [15, 30, 45, 60];
+const BUFFER_OPTIONS   = [0, 5, 10, 15];
+const WEEKDAY_SET      = new Set([1, 2, 3, 4, 5]);
 
-function toAmPm(hhmm) {
-  const [hh, mm] = hhmm.split(":");
-  const h = parseInt(hh, 10);
-  const ampm = h >= 12 ? "PM" : "AM";
-  const h12  = h % 12 || 12;
-  return `${String(h12).padStart(2, "0")}:${mm} ${ampm}`;
+// ── Time helpers ────────────────────────────────────────────────────────────────
+
+function parseTimeToMinutes(hhmm) {
+  if (!hhmm) return NaN;
+  const [h, m] = hhmm.split(":").map(Number);
+  return h * 60 + m;
+}
+function minutesToAmPm(mins) {
+  const h24 = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 || 12;
+  return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+// Sort key so AM/PM chip labels order chronologically, not alphabetically
+function timeSortKey(label) {
+  const m = label.match(/^(\d{2}):(\d{2})\s*(AM|PM)$/);
+  if (!m) return 0;
+  let h = parseInt(m[1], 10) % 12;
+  if (m[3] === "PM") h += 12;
+  return h * 60 + parseInt(m[2], 10);
+}
+function generateRangeSlots(startHHMM, endHHMM, durationMin, bufferMin) {
+  const startM = parseTimeToMinutes(startHHMM);
+  const endM   = parseTimeToMinutes(endHHMM);
+  if (isNaN(startM) || isNaN(endM) || endM <= startM) return [];
+  const step = durationMin + bufferMin;
+  const out = [];
+  let cur = startM;
+  while (cur + durationMin <= endM) {
+    out.push(minutesToAmPm(cur));
+    cur += step;
+  }
+  return out;
 }
 
+// ── Date helpers ─────────────────────────────────────────────────────────────────
+
+function isoToDow(iso) {
+  return new Date(iso + "T12:00:00").getDay();
+}
+function addDaysIso(iso, n) {
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function shortDateLabel(iso) {
+  return new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+function expandRecurrence(anchorDates, days, untilIso) {
+  if (!days.size || !untilIso) return [];
+  const sorted = [...anchorDates].sort();
+  const start  = sorted[0];
+  if (!start || untilIso < start) return [];
+  const out = [];
+  let cursor = start;
+  let guard  = 0;
+  while (cursor <= untilIso && guard < 730) {
+    if (days.has(isoToDow(cursor))) out.push(cursor);
+    cursor = addDaysIso(cursor, 1);
+    guard++;
+  }
+  return out;
+}
 
 // Inline confirm component — avoids window.confirm and keeps the UI in-page
 function InlineConfirm({ message, onConfirm, onCancel }) {
@@ -61,15 +122,32 @@ export default function AvailabilityPage() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDates, setSelectedDates] = useState(new Set());
   const [busy, setBusy] = useState(false);
-  const [customTime, setCustomTime] = useState("");
   const [toast, setToast] = useState(null);
 
-  // Inline confirm state: { slotId, context } where context = "chip" | "table" | "clearAll"
+  // Slot builder (pending — not yet saved)
+  const [pendingTimes, setPendingTimes] = useState(new Set());
+  const [rangeStart, setRangeStart] = useState("");
+  const [rangeEnd,   setRangeEnd]   = useState("");
+  const [duration,   setDuration]   = useState(30);
+  const [buffer,     setBuffer]     = useState(0);
+  const [rangeError, setRangeError] = useState("");
+
+  // Recurrence
+  const [recurDays,  setRecurDays]  = useState(new Set());
+  const [recurUntil, setRecurUntil] = useState("");
+  const [showCustomDays, setShowCustomDays] = useState(false);
+
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+  // Single-slot inline confirm state: { slotId, context }
   const [confirming, setConfirming] = useState(null);
-  // Flag confirm: slotId being flagged or null
-  const [flagging, setFlagging] = useState(null);
+  const [flagging,   setFlagging]   = useState(null);
+
+  // Bulk delete (Upcoming table)
+  const [selectedSlotIds, setSelectedSlotIds] = useState(new Set());
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
     return subscribeToInterviewerAvailability(currentUser.uid, setSlots);
@@ -92,50 +170,145 @@ export default function AvailabilityPage() {
   const isoDate = (d) =>
     `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 
+  const singleDate = selectedDates.size === 1 ? [...selectedDates][0] : null;
   const daySlots = useMemo(() =>
-    selectedDate
-      ? (slotsByDate[selectedDate] || []).slice().sort((a, b) => a.time.localeCompare(b.time))
+    singleDate
+      ? (slotsByDate[singleDate] || []).slice().sort((a, b) => a.time.localeCompare(b.time))
       : [],
-  [slotsByDate, selectedDate]);
-
+  [slotsByDate, singleDate]);
   const freeCount = useMemo(() => daySlots.filter(s => !s.isBooked).length, [daySlots]);
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
+  // ── Effective dates the pending slots will be applied to ─────────────────────
+  const recurrenceDates = useMemo(
+    () => expandRecurrence(selectedDates, recurDays, recurUntil),
+    [selectedDates, recurDays, recurUntil]
+  );
+  const effectiveDates = useMemo(() => {
+    const set = new Set(selectedDates);
+    recurrenceDates.forEach(d => set.add(d));
+    return [...set].filter(d => d >= todayStr).sort();
+  }, [selectedDates, recurrenceDates, todayStr]);
 
-  const handleAddSlot = async (time) => {
-    if (daySlots.find(s => s.time === time))
-      return setToast({ message: "That slot already exists.", type: "error" });
+  const sortedPendingTimes = useMemo(
+    () => [...pendingTimes].sort((a, b) => timeSortKey(a) - timeSortKey(b)),
+    [pendingTimes]
+  );
+
+  const plannedCreations = useMemo(() => {
+    const toCreate = [];
+    let skipped = 0;
+    for (const date of effectiveDates) {
+      const existingTimes = new Set((slotsByDate[date] || []).map(s => s.time));
+      for (const time of pendingTimes) {
+        if (existingTimes.has(time)) { skipped++; continue; }
+        toCreate.push({ date, time });
+      }
+    }
+    return { toCreate, skipped };
+  }, [effectiveDates, pendingTimes, slotsByDate]);
+
+  // ── Calendar / date selection ─────────────────────────────────────────────────
+
+  const toggleDateSelect = (ds) => {
+    setSelectedDates(prev => {
+      const next = new Set(prev);
+      if (next.has(ds)) next.delete(ds); else next.add(ds);
+      return next;
+    });
+  };
+  const clearSelectedDates = () => setSelectedDates(new Set());
+
+  // ── Slot builder handlers ─────────────────────────────────────────────────────
+
+  const togglePendingTime = (time) => {
+    setPendingTimes(prev => {
+      const next = new Set(prev);
+      if (next.has(time)) next.delete(time); else next.add(time);
+      return next;
+    });
+  };
+
+  const handleGenerateRange = () => {
+    setRangeError("");
+    if (!rangeStart || !rangeEnd) return setRangeError("Pick both a start and end time.");
+    const startM = parseTimeToMinutes(rangeStart);
+    const endM   = parseTimeToMinutes(rangeEnd);
+    if (endM <= startM) return setRangeError("End time must be after the start time.");
+    const generated = generateRangeSlots(rangeStart, rangeEnd, duration, buffer);
+    if (generated.length === 0) return setRangeError("That range is too short for the selected duration.");
+    setPendingTimes(prev => new Set([...prev, ...generated]));
+    setToast({ message: `${generated.length} slot${generated.length !== 1 ? "s" : ""} added to your selection — review below.` });
+  };
+
+  const toggleWeekdays  = () => setRecurDays(prev => {
+    const allSet = [...WEEKDAY_SET].every(d => prev.has(d));
+    const next = new Set(prev);
+    WEEKDAY_SET.forEach(d => allSet ? next.delete(d) : next.add(d));
+    return next;
+  });
+  const toggleRecurDay = (d) => setRecurDays(prev => {
+    const next = new Set(prev);
+    if (next.has(d)) next.delete(d); else next.add(d);
+    return next;
+  });
+
+  const handleOpenSaveConfirm = () => {
+    if (pendingTimes.size === 0)
+      return setToast({ message: "Select at least one time slot to add.", type: "error" });
+    if (effectiveDates.length === 0)
+      return setToast({ message: "Select at least one date (or set up a recurrence).", type: "error" });
+    if (recurDays.size > 0 && !recurUntil)
+      return setToast({ message: "Pick a \"Repeat until\" date for the recurring days you selected.", type: "error" });
+    if (plannedCreations.toCreate.length === 0)
+      return setToast({ message: "All selected slots already exist on the chosen date(s).", type: "error" });
+    setShowSaveConfirm(true);
+  };
+
+  const notifyAdminsSlotsAdded = () => {
+    if (!isNudgeContext || nudgeNotifiedRef.current) return;
+    nudgeNotifiedRef.current = true;
+    const interviewerName = userProfile?.displayName || currentUser.email;
+    getAllUsers().then(allUsers => {
+      const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
+      const dateRange = nudgeFrom && nudgeTo ? ` (${formatDate(nudgeFrom)} – ${formatDate(nudgeTo)})` : "";
+      return Promise.all(admins.map(admin =>
+        createNotification({
+          type:        "slot_added",
+          recipientId: admin.id,
+          status:      "unread",
+          message:     `${interviewerName} has started adding slots${nudgeTemplate ? ` for "${nudgeTemplate}"` : ""}${dateRange}.`,
+          interviewerId: currentUser.uid,
+          ...(nudgeNotifId ? { originalNotificationId: nudgeNotifId } : {}),
+        })
+      ));
+    }).catch(() => {});
+  };
+
+  const handleConfirmSave = async () => {
+    setShowSaveConfirm(false);
     setBusy(true);
     try {
-      await addAvailabilitySlot(currentUser.uid, selectedDate, time);
-      setToast({ message: `${time} added.` });
-      // Notify admins once when the first slot is added in a nudge context
-      if (isNudgeContext && !nudgeNotifiedRef.current) {
-        nudgeNotifiedRef.current = true;
-        const interviewerName = userProfile?.displayName || currentUser.email;
-        getAllUsers().then(allUsers => {
-          const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
-          const dateRange = nudgeFrom && nudgeTo ? ` (${formatDate(nudgeFrom)} – ${formatDate(nudgeTo)})` : "";
-          return Promise.all(admins.map(admin =>
-            createNotification({
-              type:        "slot_added",
-              recipientId: admin.id,
-              status:      "unread",
-              message:     `${interviewerName} has started adding slots${nudgeTemplate ? ` for "${nudgeTemplate}"` : ""}${dateRange}.`,
-              interviewerId: currentUser.uid,
-              ...(nudgeNotifId ? { originalNotificationId: nudgeNotifId } : {}),
-            })
-          ));
-        }).catch(() => {});
-      }
+      await addAvailabilitySlots(currentUser.uid, plannedCreations.toCreate);
+      const skippedNote = plannedCreations.skipped > 0
+        ? ` (${plannedCreations.skipped} already existed and were skipped)`
+        : "";
+      setToast({ message: `${plannedCreations.toCreate.length} slot(s) saved across ${effectiveDates.length} date(s)${skippedNote}.` });
+      notifyAdminsSlotsAdded();
+      // Reset the builder for a clean slate
+      setPendingTimes(new Set());
+      setRangeStart(""); setRangeEnd(""); setRangeError("");
+      setRecurDays(new Set()); setRecurUntil(""); setShowCustomDays(false);
+      setSelectedDates(new Set());
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
     setBusy(false);
   };
 
+  // ── Single-slot handlers (existing behaviour, kept for the one-date view) ────
+
   const confirmRemoveSlot = (slot) => {
-    if (slot.isBooked) return; // safety — should never be called on booked slots
+    if (slot.isBooked) return;
     setConfirming({ slotId: slot.id });
   };
 
@@ -156,7 +329,7 @@ export default function AvailabilityPage() {
     setBusy(true);
     const freeSlots = daySlots.filter(s => !s.isBooked);
     try {
-      await Promise.all(freeSlots.map(s => removeAvailabilitySlot(currentUser.uid, s.id)));
+      await removeAvailabilitySlots(currentUser.uid, freeSlots.map(s => s.id));
       setToast({ message: `${freeSlots.length} slot${freeSlots.length !== 1 ? "s" : ""} removed.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -173,7 +346,6 @@ export default function AvailabilityPage() {
       const slot = slots.find(s => s.id === slotId);
       await flagAvailabilitySlot(currentUser.uid, slotId, true);
 
-      // Notify all admins
       const allUsers = await getAllUsers();
       const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
       const interviewerName = userProfile?.displayName || currentUser.email;
@@ -205,16 +377,10 @@ export default function AvailabilityPage() {
     setBusy(false);
   };
 
-  const handleCustomAdd = async () => {
-    if (!customTime) return;
-    await handleAddSlot(toAmPm(customTime));
-    setCustomTime("");
-  };
-
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1));
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1));
 
-  // ── Slot chip renderer ────────────────────────────────────────────────────────
+  // ── Slot chip renderer (single-date view) ─────────────────────────────────────
   const renderSlotChip = (s) => {
     const isConfirming = confirming?.slotId === s.id;
     const isFlagging   = flagging === s.id;
@@ -286,10 +452,34 @@ export default function AvailabilityPage() {
     return acc;
   }, {}), [upcoming]);
 
+  const freeUpcoming = useMemo(() => upcoming.filter(s => !s.isBooked), [upcoming]);
+  const allFreeSelected = freeUpcoming.length > 0 && freeUpcoming.every(s => selectedSlotIds.has(s.id));
+  const toggleSelectAllFree = () => {
+    setSelectedSlotIds(allFreeSelected ? new Set() : new Set(freeUpcoming.map(s => s.id)));
+  };
+  const toggleSlotRowSelect = (id) => setSelectedSlotIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const handleConfirmBulkDelete = async () => {
+    setShowBulkDeleteConfirm(false);
+    setBusy(true);
+    try {
+      await removeAvailabilitySlots(currentUser.uid, [...selectedSlotIds]);
+      setToast({ message: `${selectedSlotIds.size} slot(s) deleted.` });
+      setSelectedSlotIds(new Set());
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setBusy(false);
+  };
+
   return (
     <div className="p-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-1">My Availability</h1>
-      <p className="text-sm text-gray-500 mb-6">Click a date to add or manage time slots</p>
+      <p className="text-sm text-gray-500 mb-6">Select one or more dates, build your slots, then save.</p>
 
       {isNudgeContext && (
         <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
@@ -309,9 +499,9 @@ export default function AvailabilityPage() {
         </div>
       )}
 
-      <div className="flex gap-6 items-start">
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* ── Calendar ── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 w-80 flex-shrink-0">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 w-full lg:w-80 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <button onClick={prevMonth}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
@@ -344,19 +534,24 @@ export default function AvailabilityPage() {
               const hasFree    = daySlotArr.some(s => !s.isBooked);
               const hasFlagged = daySlotArr.some(s => s.flagged);
               const isToday    = ds === todayStr;
-              const isSelected = ds === selectedDate;
+              const isSelected = selectedDates.has(ds);
+              const isRecurPreview = !isSelected && recurrenceDates.includes(ds);
               const isPast     = ds < todayStr;
 
               return (
-                <button key={d} onClick={() => setSelectedDate(ds)}
+                <button key={d} onClick={() => toggleDateSelect(ds)}
                   className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors
                     ${isSelected
-                      ? "bg-indigo-600 text-white"
-                      : isToday
-                        ? "bg-indigo-50 text-indigo-700 font-bold"
-                        : isPast
-                          ? "text-gray-300 cursor-default"
-                          : "text-gray-700 hover:bg-gray-50"
+                      ? isPast
+                        ? "bg-gray-400 text-white ring-2 ring-gray-200 ring-offset-1"
+                        : "bg-indigo-600 text-white ring-2 ring-indigo-300 ring-offset-1"
+                      : isRecurPreview
+                        ? "bg-indigo-100 text-indigo-700 font-semibold"
+                        : isToday
+                          ? "bg-indigo-50 text-indigo-700 font-bold"
+                          : isPast
+                            ? "text-gray-300 hover:bg-gray-50"
+                            : "text-gray-700 hover:bg-gray-50"
                     }`}>
                   <span>{d}</span>
                   {daySlotArr.length > 0 && (
@@ -381,19 +576,36 @@ export default function AvailabilityPage() {
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />Flagged
             </span>
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block" />Selected
+            </span>
           </div>
         </div>
 
         {/* ── Slot manager ── */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 p-5 min-h-64">
-          {!selectedDate ? (
-            <p className="text-sm text-gray-400 text-center mt-12">Select a date to manage time slots</p>
+        <div className="flex-1 w-full bg-white rounded-xl border border-gray-200 p-5 min-h-64">
+          {selectedDates.size === 0 ? (
+            <p className="text-sm text-gray-400 text-center mt-12">Select one or more dates on the calendar to add or manage time slots.</p>
           ) : (
             <>
-              <div className="flex items-start justify-between mb-1">
-                <h2 className="text-base font-bold text-gray-900">{formatDateLong(selectedDate)}</h2>
-                {/* Clear all free slots */}
-                {freeCount > 0 && selectedDate >= todayStr && (
+              {/* Selected-dates header */}
+              <div className="flex items-start justify-between gap-3 mb-1">
+                {singleDate ? (
+                  <h2 className="text-base font-bold text-gray-900">{formatDateLong(singleDate)}</h2>
+                ) : (
+                  <div>
+                    <h2 className="text-base font-bold text-gray-900">{selectedDates.size} dates selected</h2>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {[...selectedDates].sort().map(ds => (
+                        <span key={ds} className="inline-flex items-center gap-1 text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                          {shortDateLabel(ds)}
+                          <button onClick={() => toggleDateSelect(ds)} className="hover:text-red-500" aria-label={`Remove ${ds}`}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {singleDate && freeCount > 0 && (
                   confirming?.slotId === "clearAll" ? (
                     <InlineConfirm
                       message={`Remove all ${freeCount} free slot${freeCount !== 1 ? "s" : ""}?`}
@@ -404,46 +616,56 @@ export default function AvailabilityPage() {
                     <button
                       onClick={() => setConfirming({ slotId: "clearAll" })}
                       disabled={busy}
-                      className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors disabled:opacity-40">
+                      className="text-xs text-red-500 hover:text-red-700 font-semibold transition-colors disabled:opacity-40 whitespace-nowrap">
                       Clear all free
                     </button>
                   )
                 )}
+                {selectedDates.size > 1 && (
+                  <button onClick={clearSelectedDates} className="text-xs text-gray-400 hover:text-gray-600 underline whitespace-nowrap">
+                    Clear selection
+                  </button>
+                )}
               </div>
-              <p className="text-xs text-gray-400 mb-5">
-                {daySlots.length} slot{daySlots.length !== 1 ? "s" : ""} set
-              </p>
 
-              {/* Current slots as chips */}
-              {daySlots.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {daySlots.map(s => renderSlotChip(s))}
-                </div>
-              )}
-
-              {/* Booked slot notice */}
-              {daySlots.some(s => s.isBooked) && (
-                <p className="text-xs text-gray-400 mb-4 flex items-center gap-1.5">
-                  <svg className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Booked slots have an interview scheduled. Use ⚑ to flag a conflict and notify admin.
-                </p>
-              )}
-
-              {/* Add time slots */}
-              {selectedDate >= todayStr ? (
+              {/* Existing slots — only shown for a single selected date to keep the view readable */}
+              {singleDate && (
                 <>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Add Time Slot</p>
-                  <div className="flex flex-wrap gap-2 mb-5">
+                  <p className="text-xs text-gray-400 mb-5">
+                    {daySlots.length} slot{daySlots.length !== 1 ? "s" : ""} set
+                  </p>
+                  {daySlots.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {daySlots.map(s => renderSlotChip(s))}
+                    </div>
+                  )}
+                  {daySlots.some(s => s.isBooked) && (
+                    <p className="text-xs text-gray-400 mb-4 flex items-center gap-1.5">
+                      <svg className="w-3.5 h-3.5 text-orange-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Booked slots have an interview scheduled. Use ⚑ to flag a conflict and notify admin.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {/* ── Slot builder — hidden for a single past date, matching the read-only chip view ── */}
+              {singleDate && singleDate < todayStr ? (
+                <p className="text-xs text-gray-400 italic border-t border-gray-100 pt-5 mt-1">Past date — slots are read-only.</p>
+              ) : (
+              <div className="border-t border-gray-100 pt-5 mt-1 space-y-5">
+                {/* 1. Multi-select preset times */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Pick Time Slots</p>
+                  <div className="flex flex-wrap gap-2">
                     {PRESET_TIMES.map(t => {
-                      const exists = !!daySlots.find(s => s.time === t);
+                      const isPending = pendingTimes.has(t);
                       return (
-                        <button key={t} onClick={() => handleAddSlot(t)}
-                          disabled={exists || busy}
+                        <button key={t} type="button" onClick={() => togglePendingTime(t)} disabled={busy}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                            exists
-                              ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
+                            isPending
+                              ? "bg-indigo-600 text-white border-indigo-600"
                               : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400 hover:text-indigo-600"
                           }`}>
                           {t}
@@ -451,18 +673,136 @@ export default function AvailabilityPage() {
                       );
                     })}
                   </div>
-                  <div className="flex gap-2 items-center">
-                    <input type="time" value={customTime}
-                      onChange={e => setCustomTime(e.target.value)}
-                      className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                    <button onClick={handleCustomAdd} disabled={!customTime || busy}
-                      className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-                      Add Custom
+                </div>
+
+                {/* 2. Custom time range */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Or Add a Custom Range</p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1">Start</label>
+                      <input type="time" value={rangeStart} onChange={e => setRangeStart(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1">End</label>
+                      <input type="time" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1">Duration</label>
+                      <select value={duration} onChange={e => setDuration(Number(e.target.value))}
+                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        {DURATION_OPTIONS.map(m => <option key={m} value={m}>{m} min</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1">Buffer</label>
+                      <select value={buffer} onChange={e => setBuffer(Number(e.target.value))}
+                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        {BUFFER_OPTIONS.map(m => <option key={m} value={m}>{m} min</option>)}
+                      </select>
+                    </div>
+                    <button onClick={handleGenerateRange} disabled={busy}
+                      className="px-4 py-1.5 bg-gray-800 text-white rounded-lg text-sm font-semibold hover:bg-gray-700 disabled:opacity-60">
+                      Generate
                     </button>
                   </div>
-                </>
-              ) : (
-                <p className="text-xs text-gray-400 italic">Past date — slots are read-only.</p>
+                  {rangeError && <p className="text-xs text-red-500 mt-1.5">{rangeError}</p>}
+                  <p className="text-[11px] text-gray-400 mt-1.5">
+                    e.g. 10:30 AM – 1:30 PM at 30 min slots generates 09:30, 10:00, 10:30… up to the end time.
+                  </p>
+                </div>
+
+                {/* Pending selection review */}
+                {pendingTimes.size > 0 && (
+                  <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl px-4 py-3">
+                    <p className="text-xs font-semibold text-indigo-800 mb-2">
+                      {pendingTimes.size} slot{pendingTimes.size !== 1 ? "s" : ""} selected
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sortedPendingTimes.map(t => (
+                        <span key={t} className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+                          {t}
+                          <button onClick={() => togglePendingTime(t)} className="hover:text-red-500" aria-label={`Remove ${t}`}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. Recurrence */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Repeat (optional)</p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <button type="button" onClick={toggleWeekdays}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        [...WEEKDAY_SET].every(d => recurDays.has(d))
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400"
+                      }`}>
+                      Weekdays (Mon–Fri)
+                    </button>
+                    <button type="button" onClick={() => toggleRecurDay(6)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        recurDays.has(6) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400"
+                      }`}>
+                      Saturdays
+                    </button>
+                    <button type="button" onClick={() => toggleRecurDay(0)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        recurDays.has(0) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400"
+                      }`}>
+                      Sundays
+                    </button>
+                    <button type="button" onClick={() => setShowCustomDays(v => !v)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+                      {showCustomDays ? "Hide custom days" : "Custom days…"}
+                    </button>
+                  </div>
+
+                  {showCustomDays && (
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {DAY_LABELS.map((label, d) => (
+                        <button key={d} type="button" onClick={() => toggleRecurDay(d)}
+                          title={label}
+                          className={`w-9 h-9 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            recurDays.has(d) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-400"
+                          }`}>
+                          {label.slice(0, 2)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {recurDays.size > 0 && (
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs text-gray-500">Repeat until</label>
+                      <input type="date" value={recurUntil} min={todayStr} onChange={e => setRecurUntil(e.target.value)}
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Effective dates + save */}
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-xs text-gray-500 mb-3">
+                    {pendingTimes.size > 0 && effectiveDates.length > 0 ? (
+                      <>
+                        Will create up to <span className="font-semibold text-gray-700">{plannedCreations.toCreate.length}</span> slot(s)
+                        {" "}across <span className="font-semibold text-gray-700">{effectiveDates.length}</span> date(s)
+                        {plannedCreations.skipped > 0 && <> — {plannedCreations.skipped} already exist and will be skipped</>}.
+                      </>
+                    ) : (
+                      "Pick time slots and at least one date to continue."
+                    )}
+                  </p>
+                  <button onClick={handleOpenSaveConfirm} disabled={busy}
+                    className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60">
+                    Save Availability
+                  </button>
+                </div>
+              </div>
               )}
             </>
           )}
@@ -472,11 +812,25 @@ export default function AvailabilityPage() {
       {/* ── My Upcoming Slots table ── */}
       {upcoming.length > 0 && (
         <div className="mt-8">
-          <h2 className="text-base font-bold text-gray-900 mb-3">My Upcoming Slots</h2>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h2 className="text-base font-bold text-gray-900">My Upcoming Slots</h2>
+            {selectedSlotIds.size > 0 && (
+              <button onClick={() => setShowBulkDeleteConfirm(true)} disabled={busy}
+                className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors">
+                Delete Selected ({selectedSlotIds.size})
+              </button>
+            )}
+          </div>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+            <table className="w-full text-sm min-w-[560px]">
               <thead>
                 <tr className="border-b border-gray-100">
+                  <th className="px-4 py-3 w-8">
+                    {freeUpcoming.length > 0 && (
+                      <input type="checkbox" checked={allFreeSelected} onChange={toggleSelectAllFree}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                    )}
+                  </th>
                   {["Date", "Time", "Status", ""].map((h, i) => (
                     <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                   ))}
@@ -488,13 +842,19 @@ export default function AvailabilityPage() {
                     const isConfirmingRow = confirming?.slotId === s.id;
                     const isFlaggingRow   = flagging === s.id;
                     return (
-                      <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : ""}`}>
-                        <td className="px-4 py-3 font-medium text-gray-900">
+                      <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : selectedSlotIds.has(s.id) ? "bg-indigo-50/40" : ""}`}>
+                        <td className="px-4 py-3">
+                          {!s.isBooked && (
+                            <input type="checkbox" checked={selectedSlotIds.has(s.id)} onChange={() => toggleSlotRowSelect(s.id)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                          )}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                           {i === 0
                             ? new Date(date + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
                             : ""}
                         </td>
-                        <td className="px-4 py-3 text-gray-700 font-mono text-xs">{s.time}</td>
+                        <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">{s.time}</td>
                         <td className="px-4 py-3">
                           {s.isBooked ? (
                             <span className="text-[11px] font-semibold bg-orange-50 text-orange-600 border border-orange-200 px-2 py-0.5 rounded-full">Booked</span>
@@ -505,7 +865,7 @@ export default function AvailabilityPage() {
                             <span className="ml-1.5 text-[11px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">⚑ Flagged</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
                           {s.isBooked ? (
                             s.flagged ? (
                               <button onClick={() => handleUnflagSlot(s.id)} disabled={busy}
@@ -549,6 +909,52 @@ export default function AvailabilityPage() {
           </div>
         </div>
       )}
+
+      {/* ── Save confirmation ── */}
+      <Modal open={showSaveConfirm} onClose={() => setShowSaveConfirm(false)} title="Save Availability">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            You're about to save <span className="font-semibold">{plannedCreations.toCreate.length} slot{plannedCreations.toCreate.length !== 1 ? "s" : ""}</span> for{" "}
+            <span className="font-semibold">
+              {effectiveDates.slice(0, 3).map(shortDateLabel).join(", ")}
+              {effectiveDates.length > 3 ? ` and ${effectiveDates.length - 3} more` : ""}
+            </span>.
+            {plannedCreations.skipped > 0 && (
+              <> {plannedCreations.skipped} slot{plannedCreations.skipped !== 1 ? "s" : ""} already exist and will be skipped.</>
+            )}
+          </p>
+          <p className="text-sm text-gray-500">Do you want to save these changes?</p>
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleConfirmSave} disabled={busy}
+              className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              {busy ? "Saving…" : "Save"}
+            </button>
+            <button onClick={() => setShowSaveConfirm(false)}
+              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Bulk delete confirmation ── */}
+      <Modal open={showBulkDeleteConfirm} onClose={() => setShowBulkDeleteConfirm(false)} title="Delete Availability">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Are you sure you want to delete {selectedSlotIds.size} selected availability slot{selectedSlotIds.size !== 1 ? "s" : ""}? This cannot be undone.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <button onClick={handleConfirmBulkDelete} disabled={busy}
+              className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-60">
+              {busy ? "Deleting…" : "Delete"}
+            </button>
+            <button onClick={() => setShowBulkDeleteConfirm(false)}
+              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>
