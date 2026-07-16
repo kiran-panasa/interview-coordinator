@@ -168,6 +168,29 @@ export type InterviewStatus =
   | "no_show"
   | "cancelled";
 
+export interface AiReportCompetency {
+  name: string;
+  assessment: string;
+  observations: string;
+}
+
+export interface AiReportNextStep {
+  title: string;
+  description: string;
+}
+
+export interface AiCandidateReport {
+  decision: "retake_tests" | "retake_interview" | "move_forward";
+  decisionLabel: string;
+  summary: string;
+  competencies: AiReportCompetency[];
+  reasons: string[];
+  positiveObservations: string[];
+  recommendation: string;
+  nextSteps: AiReportNextStep[];
+  generatedAt: string;
+}
+
 export interface Interview {
   id: string;
   candidateId: string;
@@ -187,6 +210,10 @@ export interface Interview {
   questionRemarks?: Record<string, string>;
   feedback?: Feedback;
   feedbackDraft?: (Record<string, unknown> & { savedAt: string }) | null;
+  meetLink?: string;
+  eventId?: string;
+  transcriptUrl?: string;
+  aiReport?: AiCandidateReport;
   nextNudgeAt?: string | null;
   nudgeCount?: number;
   importedFromSheet?: boolean;

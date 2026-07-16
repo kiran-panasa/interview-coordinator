@@ -21,6 +21,7 @@ import ScheduleInterviewModal from "../../features/interviews/ScheduleInterviewM
 import FeedbackViewModal from "../../features/interviews/FeedbackViewModal";
 import ImportModal from "../../features/interviews/ImportModal";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
+import AiReportModal from "../../features/interviews/AiReportModal";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -79,6 +80,9 @@ export default function InterviewsPage() {
   const [importing,       setImporting]       = useState(false);
   const [dlTemplateId,    setDlTemplateId]    = useState("");
   const [showArchived,    setShowArchived]    = useState(false);
+  const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
+  const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
+  const [aiReportLoading,   setAiReportLoading]   = useState(false);
 
   useEffect(() => {
     if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }
@@ -210,6 +214,67 @@ export default function InterviewsPage() {
       setToast({ message: "Failed to send invite: " + e.message, type: "error" });
     }
     setInviting(s => ({ ...s, [iv.id]: false }));
+  };
+
+  // ── Transcript ───────────────────────────────────────────────────────────────
+
+  const handleViewTranscript = async (iv) => {
+    if (iv.transcriptUrl) { window.open(iv.transcriptUrl, "_blank", "noopener"); return; }
+    if (!iv.eventId && !iv.meetLink) {
+      setToast({ message: "No Meet link/event on this interview — nothing to look up.", type: "error" });
+      return;
+    }
+    setTranscriptLoading(s => ({ ...s, [iv.id]: true }));
+    try {
+      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:   "getTranscript",
+        eventId:  iv.eventId || "",
+        meetLink: iv.meetLink || "",
+      });
+      if (!result?.transcriptUrl) throw new Error("Transcript not available yet — it can take a few minutes after the call ends.");
+      await updateInterview(iv.id, { transcriptUrl: result.transcriptUrl });
+      window.open(result.transcriptUrl, "_blank", "noopener");
+    } catch (e) {
+      setToast({ message: "Couldn't open transcript: " + e.message, type: "error" });
+    }
+    setTranscriptLoading(s => ({ ...s, [iv.id]: false }));
+  };
+
+  // ── AI Report ────────────────────────────────────────────────────────────────
+
+  const handleViewAiReport = async (iv) => {
+    setAiReportTarget(iv);
+    if (iv.aiReport) return; // already cached — modal renders it directly
+    if (!iv.eventId && !iv.meetLink) {
+      setToast({ message: "No Meet link/event on this interview — can't fetch a transcript to analyze.", type: "error" });
+      setAiReportTarget(null);
+      return;
+    }
+    setAiReportLoading(true);
+    try {
+      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:         "generateAiReport",
+        eventId:        iv.eventId || "",
+        meetLink:       iv.meetLink || "",
+        candidateName:  iv.candidateName,
+        round:          iv.round || iv.templateName || "Interview",
+        templateName:   iv.templateName || "",
+      });
+      if (!result?.report) throw new Error(result?.error || "No report returned.");
+      const aiReport = { ...result.report, generatedAt: new Date().toISOString() };
+      await updateInterview(iv.id, { aiReport });
+      setAiReportTarget({ ...iv, aiReport });
+    } catch (e) {
+      setToast({ message: "Couldn't generate AI report: " + e.message, type: "error" });
+      setAiReportTarget(null);
+    }
+    setAiReportLoading(false);
+  };
+
+  const handleRegenerateAiReport = async () => {
+    if (!aiReportTarget) return;
+    const iv = { ...aiReportTarget, aiReport: undefined };
+    await handleViewAiReport(iv);
   };
 
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
@@ -636,6 +701,17 @@ export default function InterviewsPage() {
                       show: iv.status !== "cancelled" && iv.status !== "no_show",
                     },
                     {
+                      label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",
+                      onClick: () => { if (!transcriptLoading[iv.id]) handleViewTranscript(iv); },
+                      show: iv.status === "completed",
+                    },
+                    {
+                      label: "AI Report",
+                      onClick: () => handleViewAiReport(iv),
+                      show: iv.status === "completed",
+                      highlight: true,
+                    },
+                    {
                       label: "Archive",
                       onClick: () => handleArchive(iv),
                       show: iv.archived !== true && (iv.status === "completed" || iv.status === "cancelled" || iv.status === "no_show"),
@@ -692,6 +768,13 @@ export default function InterviewsPage() {
         setFeedbackEditForm={setFeedbackEditForm}
         handleSaveFeedbackEdit={handleSaveFeedbackEdit}
         feedbackEditSaving={feedbackEditSaving}
+      />
+
+      <AiReportModal
+        interview={aiReportTarget}
+        loading={aiReportLoading}
+        onClose={() => setAiReportTarget(null)}
+        onRegenerate={handleRegenerateAiReport}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
