@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
@@ -66,6 +66,18 @@ export default function CandidateSchedulingTab({
     }, 0);
     return { tmpl, matched: matched.length, freeSlots: total };
   }).filter(s => s.matched > 0);
+
+  // Templates explicitly assigned to the selected program, plus any template
+  // that hasn't been assigned to a program yet (so nothing vanishes silently).
+  const templateOptions = useMemo(
+    () => templates.filter(t => !filterProgram || !t.program || t.program === filterProgram),
+    [templates, filterProgram]
+  );
+
+  // Program changed and the selected template no longer applies — clear it.
+  useEffect(() => {
+    if (filterTemplate && !templateOptions.some(t => t.id === filterTemplate)) setFilterTemplate("");
+  }, [filterProgram]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredCandidates = candidates.filter(c => {
     if (filterProgram  && c.program !== filterProgram) return false;
@@ -331,7 +343,7 @@ export default function CandidateSchedulingTab({
             <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">— Select template —</option>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
         </div>

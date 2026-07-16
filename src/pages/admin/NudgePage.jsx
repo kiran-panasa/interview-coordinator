@@ -81,6 +81,7 @@ export default function NudgePage() {
         <InterviewerNudgeTab
           currentUser={currentUser} userProfile={userProfile}
           templates={templates} skills={skills} users={usersAll} activeInterviewers={activeInterviewers}
+          programs={programs}
           responses={responses}
           ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
           setToast={setToast}

@@ -28,10 +28,12 @@ function skillOverlap(templateSkills = [], userSkills = []) {
 export default function InterviewerNudgeTab({
   currentUser, userProfile,
   templates, skills, users, activeInterviewers,
+  programs,
   responses,
   ivrSlots, slotsLoading, fetchSlots,
   setToast,
 }) {
+  const [nudgeProgram,    setNudgeProgram]    = useState("");
   const [nudgeTemplateId, setNudgeTemplateId] = useState("");
   const [nudgeDateStart,  setNudgeDateStart]  = useState(today());
   const [nudgeDateEnd,    setNudgeDateEnd]    = useState(inDays(7));
@@ -47,6 +49,18 @@ export default function InterviewerNudgeTab({
   const addPickerRef = useRef(null);
 
   const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
+
+  // Templates explicitly assigned to the selected program, plus any template
+  // that hasn't been assigned to a program yet (so nothing vanishes silently).
+  const templateOptions = useMemo(
+    () => templates.filter(t => !nudgeProgram || !t.program || t.program === nudgeProgram),
+    [templates, nudgeProgram]
+  );
+
+  // Program changed and the selected template no longer applies — clear it.
+  useEffect(() => {
+    if (nudgeTemplateId && !templateOptions.some(t => t.id === nudgeTemplateId)) setNudgeTemplateId("");
+  }, [nudgeProgram]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const defaultMessage = useMemo(() => {
     const portal = `${window.location.origin}/interviewer/availability`;
@@ -209,13 +223,21 @@ export default function InterviewerNudgeTab({
       {/* Config */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Request Campaign</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
+            <select value={nudgeProgram} onChange={e => setNudgeProgram(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Programs</option>
+              {(programs || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template</label>
             <select value={nudgeTemplateId} onChange={e => setNudgeTemplateId(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">All Templates</option>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div>

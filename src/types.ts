@@ -99,6 +99,7 @@ export interface Template {
   domains: Domain[];
   questionBank?: QuestionBank;
   questionIds?: string[];
+  program?: string;
   createdAt: string;
   updatedAt?: string;
 }
