@@ -210,7 +210,7 @@ export default function CandidatePortal() {
                     <div key={inv.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <p className="font-bold text-gray-900">{inv.templateName || "Interview"}</p>
+                          <p className="font-bold text-gray-900">{inv.round || inv.templateName || "Interview"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
                             {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
                           </p>
@@ -244,7 +244,7 @@ export default function CandidatePortal() {
                     <div key={inv.id} className="bg-white rounded-2xl border border-gray-100 p-5 opacity-70">
                       <div className="flex items-center justify-between gap-3">
                         <div>
-                          <p className="font-semibold text-gray-700 text-sm">{inv.templateName || "Interview"}</p>
+                          <p className="font-semibold text-gray-700 text-sm">{inv.round || inv.templateName || "Interview"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">
                             {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
                           </p>

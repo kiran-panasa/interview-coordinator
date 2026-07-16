@@ -134,7 +134,7 @@ export default function SchedulePage() {
         name:      invite.candidateName || "Candidate",
         otp:       code,
         link,
-        template:  invite.templateName || "Interview",
+        template:  invite.round || invite.templateName || "Interview",
         dateStart: formatDate(invite.dateRangeStart),
         dateEnd:   formatDate(invite.dateRangeEnd),
       });
@@ -308,7 +308,13 @@ export default function SchedulePage() {
           <div className="space-y-5">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Schedule Your Interview</h2>
-              <p className="text-sm text-gray-500 mt-1">{invite?.templateName} · {formatDate(invite?.dateRangeStart)} – {formatDate(invite?.dateRangeEnd)}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {[
+                  invite?.programName,
+                  invite?.round || invite?.templateName,
+                  `${formatDate(invite?.dateRangeStart)} – ${formatDate(invite?.dateRangeEnd)}`,
+                ].filter(Boolean).join(" · ")}
+              </p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">Your registered email</label>
@@ -369,7 +375,9 @@ export default function SchedulePage() {
           <div className="space-y-5">
             <div className="text-center mb-2">
               <h2 className="text-xl font-bold text-gray-900">Pick a Slot</h2>
-              <p className="text-sm text-gray-500 mt-1">{invite?.templateName}</p>
+              <p className="text-sm text-gray-500 mt-1">
+                {[invite?.programName, invite?.round || invite?.templateName].filter(Boolean).join(" · ")}
+              </p>
             </div>
 
             {slots.length === 0 ? (

@@ -246,6 +246,8 @@ export interface ScheduleInvite {
   candidateEmail: string;
   candidateName?: string;
   templateId?: string;
+  round?: string;
+  programName?: string;
   inviteToken: string;
   status: ScheduleInviteStatus;
   bookedSlotId?: string;

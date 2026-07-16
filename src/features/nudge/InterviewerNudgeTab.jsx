@@ -5,6 +5,7 @@ import { callAppsScript } from "../../lib/appsScript";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
+import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -35,6 +36,8 @@ export default function InterviewerNudgeTab({
 }) {
   const [nudgeProgram,    setNudgeProgram]    = useState("");
   const [nudgeTemplateId, setNudgeTemplateId] = useState("");
+  const [nudgeRound,      setNudgeRound]      = useState("");
+  const [roundCustomMode, setRoundCustomMode] = useState(false);
   const [nudgeDateStart,  setNudgeDateStart]  = useState(today());
   const [nudgeDateEnd,    setNudgeDateEnd]    = useState(inDays(7));
   const [nudgeTimeStart,  setNudgeTimeStart]  = useState("09:00");
@@ -62,20 +65,25 @@ export default function InterviewerNudgeTab({
     if (nudgeTemplateId && !templateOptions.some(t => t.id === nudgeTemplateId)) setNudgeTemplateId("");
   }, [nudgeProgram]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const nudgeProgramName = programs?.find(p => p.id === nudgeProgram)?.name || "";
+  // Round (if the admin picked one) is the human-facing session label; falls
+  // back to the raw template name — interviewer matching is unaffected either way.
+  const sessionLabel = nudgeRound || nudgeTemplate?.name || "Interview";
+
   const defaultMessage = useMemo(() => {
     const portal = `${window.location.origin}/interviewer/availability`;
-    const templateName = nudgeTemplate?.name || "Interview";
     const timeRange = nudgeTimeStart && nudgeTimeEnd
       ? ` (${formatTime(nudgeTimeStart)} – ${formatTime(nudgeTimeEnd)})`
       : "";
+    const programLine = nudgeProgramName ? ` for the ${nudgeProgramName} program` : "";
     return (
-      `Hi {{name}},\n\nWe need interviewers for "${templateName}" sessions between ` +
+      `Hi {{name}},\n\nWe need interviewers${programLine} for "${sessionLabel}" sessions between ` +
       `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}${timeRange}.\n\n` +
       `Please add your available time slots for this period so we can schedule candidates.\n\n` +
       `Click here to respond and add your slots:\n${portal}\n\n` +
       `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`
     );
-  }, [nudgeTemplate, nudgeDateStart, nudgeDateEnd, nudgeTimeStart, nudgeTimeEnd, userProfile]);
+  }, [sessionLabel, nudgeProgramName, nudgeDateStart, nudgeDateEnd, nudgeTimeStart, nudgeTimeEnd, userProfile]);
 
   const matchedInterviewers = nudgeTemplateId
     ? activeInterviewers.filter(u => (u.templateIds || []).includes(nudgeTemplateId))
@@ -172,6 +180,7 @@ export default function InterviewerNudgeTab({
           senderId: currentUser.uid, senderName: userProfile?.displayName || userProfile?.email,
           senderEmail: currentUser.email || userProfile?.email || "",
           templateId: nudgeTarget.template?.id || "", templateName: nudgeTarget.template?.name || "General",
+          round: nudgeRound || "", program: nudgeProgramName || "",
           dateRangeStart: nudgeDateStart, dateRangeEnd: nudgeDateEnd,
           timeRangeStart: nudgeTimeStart, timeRangeEnd: nudgeTimeEnd,
           message: message.replace(/\{\{name\}\}/g, r.displayName || r.email),
@@ -186,7 +195,7 @@ export default function InterviewerNudgeTab({
         try {
           await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
             action: "sendEmail",
-            subject: `Slot Request — ${nudgeTemplate?.name || "Interview"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
+            subject: `Slot Request — ${sessionLabel} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`,
             body: message,
             recipients: recipients.map(r => ({ email: r.email, name: r.displayName || r.email })),
           });
@@ -223,7 +232,7 @@ export default function InterviewerNudgeTab({
       {/* Config */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Request Campaign</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
             <select value={nudgeProgram} onChange={e => setNudgeProgram(e.target.value)}
@@ -239,6 +248,26 @@ export default function InterviewerNudgeTab({
               <option value="">All Templates</option>
               {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Round (optional)</label>
+            <select
+              value={roundCustomMode ? NUDGE_ROUND_OTHER : nudgeRound}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === NUDGE_ROUND_OTHER) { setRoundCustomMode(true); setNudgeRound(""); }
+                else { setRoundCustomMode(false); setNudgeRound(v); }
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">— Use template name —</option>
+              {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              <option value={NUDGE_ROUND_OTHER}>Other…</option>
+            </select>
+            {roundCustomMode && (
+              <input type="text" value={nudgeRound} onChange={e => setNudgeRound(e.target.value)}
+                placeholder="Enter custom round name…" autoFocus
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From Date</label>
@@ -458,7 +487,7 @@ export default function InterviewerNudgeTab({
 
       {/* Nudge Modal */}
       <Modal open={!!nudgeTarget} onClose={() => setNudgeTarget(null)}
-        title={`Nudge Interviewers — ${nudgeTarget?.template?.name || "All Templates"} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`} wide>
+        title={`Nudge Interviewers — ${sessionLabel} · ${formatDate(nudgeDateStart)} – ${formatDate(nudgeDateEnd)}`} wide>
         {nudgeTarget && (
           <div className="space-y-5">
             <div>

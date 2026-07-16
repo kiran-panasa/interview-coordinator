@@ -8,6 +8,7 @@ import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
+import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -47,6 +48,8 @@ export default function CandidateSchedulingTab({
   const [expiryHours,    setExpiryHours]    = useState(24);
   const [filterProgram,  setFilterProgram]  = useState("");
   const [filterTemplate, setFilterTemplate] = useState("");
+  const [round,          setRound]          = useState("");
+  const [roundCustomMode, setRoundCustomMode] = useState(false);
   const [selCandidates,  setSelCandidates]  = useState(new Set());
   const [sendingInvites, setSendingInvites] = useState(false);
   const [confirmingId,   setConfirmingId]   = useState(null);
@@ -98,6 +101,9 @@ export default function CandidateSchedulingTab({
     if (!filterTemplate) {
       setToast({ message: "Please select a template filter before sending invites.", type: "error" }); return;
     }
+    if (!round) {
+      setToast({ message: "Please select a round before sending invites.", type: "error" }); return;
+    }
     const tmpl = templates.find(t => t.id === filterTemplate);
     setSendingInvites(true);
     try {
@@ -108,13 +114,16 @@ export default function CandidateSchedulingTab({
       const emailFailures = [];
       for (const c of chosen) {
         const inviteToken = crypto.randomUUID();
+        const candidateProgramLabel = programs.find(p => p.id === c.program)?.name || "";
         await createScheduleInvite({
           candidateId:    c.id,
           candidateName:  c.name,
           candidateEmail: c.email,
           templateId:     filterTemplate,
           templateName:   tmpl?.name || "",
+          round,
           program:        c.program || "",
+          programName:    candidateProgramLabel,
           dateRangeStart: dateStart,
           dateRangeEnd:   dateEnd,
           inviteToken,
@@ -138,11 +147,11 @@ export default function CandidateSchedulingTab({
         try {
           await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
             action:    "sendEmail",
-            subject:   `Schedule Your Interview — ${tmpl?.name || "Interview"}`,
+            subject:   `Schedule Your Interview — ${round}`,
             recipients: [{ email: c.email, name: c.name }],
             body:
               `Hi ${c.name},\n\nYou've been invited to schedule your interview.\n\n` +
-              `Template: ${tmpl?.name || ""}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n\n` +
+              `${candidateProgramLabel ? `Program: ${candidateProgramLabel}\n` : ""}Round: ${round}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n\n` +
               `Click below to pick your slot (link valid for ${expiryHours} hours):\n${link}?invite=${inviteToken}\n\n` +
               `NxtWave Interview Team`,
           });
@@ -169,6 +178,7 @@ export default function CandidateSchedulingTab({
     try {
       const tmpl = inv.templateId ? await getTemplate(inv.templateId) : null;
       const ivr  = users.find(u => u.id === inv.bookedInterviewerId);
+      const roundLabel = inv.round || tmpl?.name || "Interview";
       if (!ivr?.email || !inv.candidateEmail) {
         throw new Error("Missing interviewer or candidate email — cannot schedule.");
       }
@@ -180,7 +190,7 @@ export default function CandidateSchedulingTab({
         interviewerEmail: ivr.email,
         candidateName:    inv.candidateName,
         interviewerName:  ivr?.displayName || ivr?.email || "",
-        round:            tmpl?.name || "Interview",
+        round:            roundLabel,
         date:             inv.bookedDate,
         startTime:        inv.bookedTime,
         durationMinutes:  60,
@@ -195,7 +205,7 @@ export default function CandidateSchedulingTab({
         scheduledDate:    inv.bookedDate,
         scheduledTime:    inv.bookedTime,
         duration:         60,
-        round:            tmpl?.name || "Interview",
+        round:            roundLabel,
         templateId:       inv.templateId || "",
         templateName:     inv.templateName || "",
         meetLink:         result?.meetLink || "",
@@ -232,14 +242,16 @@ export default function CandidateSchedulingTab({
         bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null,
       });
       const link = `${window.location.origin}/student/schedule`;
+      const invProgramLabel = programs.find(p => p.id === inv.program)?.name || "";
+      const invRound = inv.round || inv.templateName || "Interview";
       if (!APPS_SCRIPT_URL) throw new Error("VITE_APPS_SCRIPT_URL is not configured");
       await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action: "sendEmail",
-        subject: `Schedule Your Interview — ${inv.templateName || "Interview"}`,
+        subject: `Schedule Your Interview — ${invRound}`,
         recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
         body:
           `Hi ${inv.candidateName},\n\nYou've been invited to schedule your interview.\n\n` +
-          `Template: ${inv.templateName || ""}\nDate Range: ${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}\n\n` +
+          `${invProgramLabel ? `Program: ${invProgramLabel}\n` : ""}Round: ${invRound}\nDate Range: ${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}\n\n` +
           `Click below to pick your slot (link valid for ${inv.expiryHours || 24} hours):\n${link}?invite=${newToken}\n\n` +
           `NxtWave Interview Team`,
       });
@@ -256,13 +268,13 @@ export default function CandidateSchedulingTab({
   };
 
   const handleExportLinks = () => {
-    const rows = [["Candidate Name", "Email", "Template", "Date Range", "Status", "Scheduling Link"]];
+    const rows = [["Candidate Name", "Email", "Template", "Round", "Date Range", "Status", "Scheduling Link"]];
     invites.forEach(inv => {
       const link = inv.inviteToken
         ? `${window.location.origin}/student/schedule?invite=${inv.inviteToken}`
         : "—";
       rows.push([
-        inv.candidateName, inv.candidateEmail, inv.templateName || "",
+        inv.candidateName, inv.candidateEmail, inv.templateName || "", inv.round || "",
         `${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}`,
         STATUS_LABEL[inv.status] || inv.status, link,
       ]);
@@ -347,16 +359,36 @@ export default function CandidateSchedulingTab({
             </select>
           </div>
         </div>
-        <div className="mt-4 flex items-center gap-3">
-          <div className="flex-1">
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[180px]">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Filter by Program</label>
             <select value={filterProgram} onChange={e => setFilterProgram(e.target.value)}
-              className="w-full max-w-xs border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
               <option value="">All Programs</option>
               {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          <div className="pt-5">
+          <div className="flex-1 min-w-[220px]">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Round (required)</label>
+            <select
+              value={roundCustomMode ? NUDGE_ROUND_OTHER : round}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === NUDGE_ROUND_OTHER) { setRoundCustomMode(true); setRound(""); }
+                else { setRoundCustomMode(false); setRound(v); }
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">— Select round —</option>
+              {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              <option value={NUDGE_ROUND_OTHER}>Other…</option>
+            </select>
+            {roundCustomMode && (
+              <input type="text" value={round} onChange={e => setRound(e.target.value)}
+                placeholder="Enter custom round name…" autoFocus
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            )}
+          </div>
+          <div>
             <button
               onClick={handleSendInvites}
               disabled={sendingInvites || selCandidates.size === 0}
@@ -444,7 +476,7 @@ export default function CandidateSchedulingTab({
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Candidate", "Template", "Date Range", "Status", "Sent At", ""].map((h, i) => (
+                  {["Candidate", "Template", "Round", "Date Range", "Status", "Sent At", ""].map((h, i) => (
                     <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -457,6 +489,7 @@ export default function CandidateSchedulingTab({
                       <p className="text-xs text-gray-400">{inv.candidateEmail}</p>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-600">{inv.templateName || "—"}</td>
+                    <td className="px-4 py-3 text-xs text-gray-600">{inv.round || "—"}</td>
                     <td className="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">
                       {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
                     </td>
