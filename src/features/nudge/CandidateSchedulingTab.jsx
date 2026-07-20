@@ -217,7 +217,12 @@ export default function CandidateSchedulingTab({
         status:           "scheduled",
       });
       await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
-      setToast({ message: `Booking confirmed for ${inv.candidateName}.` });
+      if (result?.hostManagementWarning) {
+        console.error("Host management warning:", result.hostManagementWarning);
+        setToast({ message: "Booking confirmed, but couldn't enable panelist recording access — see browser console for details.", type: "info" });
+      } else {
+        setToast({ message: `Booking confirmed for ${inv.candidateName}.` });
+      }
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setConfirmingId(null);
   };

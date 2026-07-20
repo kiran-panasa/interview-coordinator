@@ -210,7 +210,12 @@ export default function InterviewsPage() {
         eventId:  result.eventId,
         inviteSentAt: new Date().toISOString(),
       });
-      setToast({ message: "Calendar invite sent! Meet link saved." });
+      if (result.hostManagementWarning) {
+        console.error("Host management warning:", result.hostManagementWarning);
+        setToast({ message: "Invite sent, but couldn't enable panelist recording access — see browser console for details.", type: "info" });
+      } else {
+        setToast({ message: "Calendar invite sent! Meet link saved." });
+      }
     } catch (e) {
       setToast({ message: "Failed to send invite: " + e.message, type: "error" });
     }
