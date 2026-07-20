@@ -15,6 +15,7 @@ export default function ScheduleInterviewModal({
   DEFAULT_ROUNDS, DURATIONS,
 }) {
   const [customRound, setCustomRound] = useState(() => !!form.round && !DEFAULT_ROUNDS.includes(form.round));
+  const todayStr = new Date().toISOString().slice(0, 10);
 
   // Re-derive whenever the modal is (re)opened, e.g. for a different edit target
   useEffect(() => {
@@ -52,7 +53,7 @@ export default function ScheduleInterviewModal({
               </select>
             ) : (
               <div>
-                <input type="date" value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
+                <input type="date" min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
                 {form.interviewerId && availDates.length === 0 &&
                   <p className="text-xs text-amber-600 mt-1">⚠ No availability set</p>
                 }

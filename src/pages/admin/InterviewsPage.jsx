@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { formatDate } from "../../utils/dates";
+import { formatDate, parseInterviewStart } from "../../utils/dates";
 import { parseImportCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
@@ -89,7 +89,10 @@ export default function InterviewsPage() {
   useEffect(() => {
     if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }
     getInterviewerAvailability(form.interviewerId).then(s => {
-      const free = s.filter(x => !x.isBooked);
+      const todayStr = new Date().toISOString().slice(0, 10);
+      // Only future slots are ever schedulable — a slot dated before today
+      // can never be booked, regardless of time.
+      const free = s.filter(x => !x.isBooked && x.date >= todayStr);
       setSlots(s);
       setAvailDates([...new Set(free.map(x => x.date))].sort());
       setAvailTimes([]);
@@ -98,7 +101,13 @@ export default function InterviewsPage() {
 
   useEffect(() => {
     if (!form.scheduledDate || !form.interviewerId) { setAvailTimes([]); return; }
-    const free = slots.filter(s => s.date === form.scheduledDate && !s.isBooked);
+    const now = new Date();
+    const free = slots.filter(s => {
+      if (s.date !== form.scheduledDate || s.isBooked) return false;
+      const start = parseInterviewStart(s.date, s.time);
+      // For today, only show times still ahead of the current time.
+      return !start || start > now;
+    });
     setAvailTimes(free.map(s => s.time).sort());
     setForm(f => ({ ...f, scheduledTime: "" }));
   }, [form.scheduledDate]);
@@ -123,6 +132,9 @@ export default function InterviewsPage() {
   const handleSave = async () => {
     if (!form.candidateId || !form.interviewerId || !form.scheduledDate || !form.scheduledTime || !form.round)
       return setToast({ message: "Fill in all required fields.", type: "error" });
+    const chosenStart = parseInterviewStart(form.scheduledDate, form.scheduledTime);
+    if (chosenStart && chosenStart < new Date())
+      return setToast({ message: "Cannot schedule an interview in the past — please pick a future date and time.", type: "error" });
     setSaving(true);
     try {
       const candidate   = candidates.find(c => c.id === form.candidateId);

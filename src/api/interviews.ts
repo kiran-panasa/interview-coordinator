@@ -53,6 +53,13 @@ export async function createInterview(
   data: Omit<Interview, "id" | "status" | "createdAt"> & { status?: InterviewStatus }
 ): Promise<string> {
   const { status, ...rest } = data;
+  // Enforced here too (not just in the UI) since this is the function every
+  // scheduling path funnels through — direct admin scheduling and the
+  // candidate-confirm-booking flow.
+  const start = parseInterviewStart(rest.scheduledDate, rest.scheduledTime);
+  if (start && start < new Date()) {
+    throw new Error("Cannot schedule an interview in the past — please pick a future date and time.");
+  }
   const ref = await addDoc(collection(db, "interviews"), {
     ...rest,
     status: status || "pending_acceptance",
