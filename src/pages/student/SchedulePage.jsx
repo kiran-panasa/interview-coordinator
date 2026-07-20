@@ -7,10 +7,12 @@ import {
   getScheduleInviteByToken, updateScheduleInvite,
   createOtpVerification, getLatestOtpByToken, markOtpUsed,
   getAvailableSlotsForTemplate, bookSlotForCandidate,
+  getAllUsers,
 } from "../../api/firestore";
 import StudentLayout from "../../components/StudentLayout";
 import { callAppsScript } from "../../lib/appsScript";
 import { maskEmail } from "../../utils/strings";
+import { ROLE } from "../../constants/roles";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -163,6 +165,33 @@ export default function SchedulePage() {
     setBusy(false);
   };
 
+  const notifyAdminsBookingPending = async () => {
+    try {
+      const allUsers = await getAllUsers();
+      const admins = allUsers.filter(u => u.role === ROLE.ADMIN && u.status === "active");
+      if (!admins.length || !APPS_SCRIPT_URL) return;
+      const round = invite.round || invite.templateName || "Interview";
+      const subject = `Action needed: ${invite.candidateName} selected a slot for ${round}`;
+      const body =
+        "Hi {{name}},\n\n" +
+        `${invite.candidateName} has selected an interview slot and it's waiting for your approval:\n\n` +
+        `• Round:       ${round}\n` +
+        `• Interviewer: ${selected.interviewerName || "-"}\n` +
+        `• Date:        ${formatDate(selected.date)}\n` +
+        `• Time:        ${selected.time}\n\n` +
+        `Please review and confirm it from the Nudge → Candidates tab:\n${window.location.origin}/admin/nudge\n\n` +
+        "— NxtWave Interview Coordinator";
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail",
+        subject,
+        body,
+        recipients: admins.map(a => ({ email: a.email, name: a.displayName || "" })),
+      });
+    } catch (e) {
+      console.error("Failed to notify admins of pending booking:", e);
+    }
+  };
+
   const handleBook = async () => {
     if (!selected) return;
     setBusy(true);
@@ -176,6 +205,7 @@ export default function SchedulePage() {
       );
       setBookedInfo({ date: selected.date, time: selected.time });
       setStep("booked");
+      notifyAdminsBookingPending();
     } catch (e) {
       if (e.message.includes("taken")) {
         // Refresh slots
