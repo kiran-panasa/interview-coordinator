@@ -183,12 +183,13 @@ export default function InterviewsPage() {
           if (APPS_SCRIPT_URL && data.interviewerEmail) {
             callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
               action:  "sendEmail",
-              subject: `Action Required — New Interview with ${data.candidateName || "a candidate"}`,
+              subject: "Action Required: Interview Assigned",
               body:
                 `Hi ${data.interviewerName || "there"},\n\nYou have a new interview scheduled:\n\n` +
                 `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
-                `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n` +
-                `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${id}\n\n` +
+                `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n` +
+                (data.meetLink ? `Meeting Link: ${data.meetLink}\n` : "") +
+                `\nPlease log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${id}\n\n` +
                 `Thank you.`,
               recipients: [{ email: data.interviewerEmail, name: data.interviewerName || data.interviewerEmail }],
             }).catch(() => {});
@@ -224,6 +225,19 @@ export default function InterviewsPage() {
         recallBotId: result.recallBotId || "",
         inviteSentAt: new Date().toISOString(),
       });
+      if (result.meetLink && iv.interviewerEmail) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject: "Action Required: Interview Assigned",
+          body:
+            `Hi ${iv.interviewerName || "there"},\n\nYour interview meeting link is ready:\n\n` +
+            `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+            `Meeting Link: ${result.meetLink}\n\n` +
+            `Thank you.`,
+          recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || iv.interviewerEmail }],
+        }).catch(() => {});
+      }
       if (result.hostManagementWarning) {
         console.error("Host management warning:", result.hostManagementWarning);
         setToast({ message: "Invite sent, but couldn't enable panelist recording access — see browser console for details.", type: "info" });

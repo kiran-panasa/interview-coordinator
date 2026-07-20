@@ -6,7 +6,13 @@ import {
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
+  getAllUsers,
 } from "../../api/firestore";
+import { callAppsScript } from "../../lib/appsScript";
+import { ROLE } from "../../constants/roles";
+
+const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
+const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import AutosaveIndicator from "../../components/AutosaveIndicator";
@@ -80,11 +86,37 @@ export default function InterviewDetail() {
 
   const setAnswer = (qid, val) => setAnswers(a => ({ ...a, [qid]: val }));
 
+  const notifyAdminsInterviewAccepted = async (iv) => {
+    try {
+      const allUsers = await getAllUsers();
+      const admins = allUsers.filter(u => u.role === ROLE.ADMIN && u.status === "active");
+      if (!admins.length || !APPS_SCRIPT_URL) return;
+      const round = iv.round || iv.templateName || "Interview";
+      const subject = `${iv.interviewerName || "Interviewer"} accepted the interview with ${iv.candidateName}`;
+      const body =
+        "Hi {{name}},\n\n" +
+        `${iv.interviewerName || "The interviewer"} has accepted the interview with ${iv.candidateName} — it's now confirmed on their end:\n\n` +
+        `• Candidate:   ${iv.candidateName}\n` +
+        `• Round:       ${round}\n` +
+        `• Date:        ${formatDate(iv.scheduledDate)}\n` +
+        `• Time:        ${iv.scheduledTime}\n\n` +
+        `Please send the interview invitation to the candidate now, if you haven't already:\n${window.location.origin}/admin/interviews\n\n` +
+        "— NxtWave Interview Coordinator";
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail", subject, body,
+        recipients: admins.map(a => ({ email: a.email, name: a.displayName || "" })),
+      });
+    } catch (e) {
+      console.error("Failed to notify admins of interview acceptance:", e);
+    }
+  };
+
   const handleAccept = async () => {
     setSaving(true);
     await updateInterview(id, { status: "scheduled" });
     setInterview(iv => ({ ...iv, status: "scheduled" }));
     setToast({ message: "Interview accepted. It's now scheduled." });
+    notifyAdminsInterviewAccepted(interview);
     setSaving(false);
   };
 

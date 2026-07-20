@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
-  markSlotFree, createInterview, getTemplate,
+  markSlotFree, createInterview, getTemplate, createNotification,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
@@ -218,6 +218,34 @@ export default function CandidateSchedulingTab({
         status:           "scheduled",
       });
       await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
+
+      // Interviewer isn't asked to Accept/Decline on this path (the slot was
+      // already theirs to begin with) — but they still need to be told.
+      if (ivr?.id) {
+        createNotification({
+          type:           "interview_approval",
+          recipientId:    ivr.id,
+          recipientEmail: ivr.email,
+          interviewId:    id,
+          candidateName:  inv.candidateName,
+          message:        `You have a new interview with ${inv.candidateName} on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`,
+          status:         "unread",
+        }).catch(() => {});
+      }
+      if (APPS_SCRIPT_URL && ivr?.email) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject: "Action Required: Interview Assigned",
+          body:
+            `Hi ${ivr.displayName || ivr.email},\n\nYou have a new interview scheduled:\n\n` +
+            `Candidate: ${inv.candidateName || "—"}\nRound: ${roundLabel}\n` +
+            `Date: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\n` +
+            (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
+            `\nThank you.`,
+          recipients: [{ email: ivr.email, name: ivr.displayName || ivr.email }],
+        }).catch(() => {});
+      }
+
       if (result?.hostManagementWarning) {
         console.error("Host management warning:", result.hostManagementWarning);
         setToast({ message: "Booking confirmed, but couldn't enable panelist recording access — see browser console for details.", type: "info" });
