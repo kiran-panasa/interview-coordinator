@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { formatDate, formatDateLong } from "../../utils/dates";
+import { formatDate, formatDateLong, parseInterviewStart } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -207,12 +207,14 @@ export default function SchedulePage() {
       setStep("booked");
       notifyAdminsBookingPending();
     } catch (e) {
-      if (e.message.includes("taken")) {
-        // Refresh slots
+      if (e.message.includes("taken") || e.message.includes("already passed")) {
+        // Refresh slots so the stale/past one disappears from the list
         const fresh = await getAvailableSlotsForTemplate(invite.templateId, invite.dateRangeStart, invite.dateRangeEnd);
         setSlots(fresh);
         setSelected(null);
-        alert("That slot was just taken by someone else. Please choose another.");
+        alert(e.message.includes("taken")
+          ? "That slot was just taken by someone else. Please choose another."
+          : "That slot has already passed. Please choose another.");
       } else {
         alert("Booking failed: " + e.message);
       }
@@ -423,13 +425,19 @@ export default function SchedulePage() {
                     <div className="flex flex-wrap gap-2">
                       {daySlots.map(s => {
                         const isSelected = selected?.slotId === s.slotId && selected?.interviewerId === s.interviewerId;
+                        const slotStart  = parseInterviewStart(s.date, s.time);
+                        const isPastSlot = slotStart ? slotStart < new Date() : false;
                         return (
                           <button key={`${s.interviewerId}-${s.slotId}`}
-                            onClick={() => setSelected(s)}
+                            onClick={() => { if (!isPastSlot) setSelected(s); }}
+                            disabled={isPastSlot}
+                            title={isPastSlot ? "This slot has already passed" : undefined}
                             className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
-                              isSelected
-                                ? "bg-indigo-600 text-white border-indigo-600"
-                                : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50"
+                              isPastSlot
+                                ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
+                                : isSelected
+                                  ? "bg-indigo-600 text-white border-indigo-600"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50"
                             }`}>
                             {s.time}
                           </button>

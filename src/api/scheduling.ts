@@ -4,6 +4,7 @@ import {
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
 import type { ScheduleInvite, OtpVerification } from "../types";
+import { parseInterviewStart } from "../utils/dates";
 
 // ── Schedule Invites ──────────────────────────────────────────────────────────
 
@@ -101,6 +102,14 @@ export async function bookSlotForCandidate(
   bookedDate: string,
   bookedTime: string
 ): Promise<void> {
+  // Validated here too (not just in the UI) since this is the single
+  // function every booking path — student portal, resend flows, etc. —
+  // funnels through, regardless of what the client-side UI allowed.
+  const slotStart = parseInterviewStart(bookedDate, bookedTime);
+  if (slotStart && slotStart < new Date()) {
+    throw new Error("This slot has already passed — please choose a future time.");
+  }
+
   const slotRef   = doc(db, "availability", interviewerId, "slots", slotId);
   const inviteRef = doc(db, "scheduleInvites", inviteId);
 
