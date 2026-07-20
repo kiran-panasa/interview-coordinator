@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { MoreVertical } from "lucide-react";
 
 function KebabMenu({ actions }) {
   const [open, setOpen] = useState(false);
@@ -50,36 +52,40 @@ function KebabMenu({ actions }) {
         className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
         title="More actions"
       >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-          <circle cx="12" cy="5"  r="1.5"/>
-          <circle cx="12" cy="12" r="1.5"/>
-          <circle cx="12" cy="19" r="1.5"/>
-        </svg>
+        <MoreVertical className="w-4 h-4" />
       </button>
 
-      {open && createPortal(
-        <div
-          ref={dropdownRef}
-          style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
-          className="bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px]"
-        >
-          {visible.map((a, i) => (
-            <button
-              key={i}
-              disabled={a.disabled}
-              onClick={() => { if (!a.disabled) { setOpen(false); a.onClick(); } }}
-              className={`w-full text-left px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                a.danger
-                  ? "text-red-500 hover:bg-red-50 disabled:hover:bg-transparent"
-                  : a.highlight
-                    ? "text-emerald-700 hover:bg-emerald-50 disabled:hover:bg-transparent"
-                    : "text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
-              }`}
+      {createPortal(
+        <AnimatePresence>
+          {open && (
+            <motion.div
+              ref={dropdownRef}
+              initial={{ opacity: 0, scale: 0.96, y: pos.flipUp ? 4 : -4 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97 }}
+              transition={{ duration: 0.12 }}
+              style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
+              className="bg-white border border-gray-100 rounded-xl shadow-popover py-1.5 min-w-[170px]"
             >
-              {a.label}
-            </button>
-          ))}
-        </div>,
+              {visible.map((a, i) => (
+                <button
+                  key={i}
+                  disabled={a.disabled}
+                  onClick={() => { if (!a.disabled) { setOpen(false); a.onClick(); } }}
+                  className={`w-full text-left px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                    a.danger
+                      ? "text-red-500 hover:bg-red-50 disabled:hover:bg-transparent"
+                      : a.highlight
+                        ? "text-emerald-700 hover:bg-emerald-50 disabled:hover:bg-transparent"
+                        : "text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
+                  }`}
+                >
+                  {a.label}
+                </button>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>,
         document.body
       )}
     </div>

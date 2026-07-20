@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
   if (totalPages <= 1) return null;
@@ -23,9 +24,9 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
-          className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-30 transition-colors"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
         >
-          ‹ Prev
+          <ChevronLeft className="w-3.5 h-3.5" /> Prev
         </button>
         {pages.map((p, i) =>
           p === "…" ? (
@@ -36,7 +37,7 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
               onClick={() => onPageChange(p)}
               className={`w-7 h-7 text-xs font-semibold rounded-lg transition-colors ${
                 p === page
-                  ? "bg-indigo-600 text-white"
+                  ? "bg-brand-600 text-white shadow-soft"
                   : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"
               }`}
             >
@@ -47,9 +48,9 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
-          className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-30 transition-colors"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
         >
-          Next ›
+          Next <ChevronRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
