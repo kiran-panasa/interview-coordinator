@@ -83,6 +83,7 @@ export default function InterviewsPage() {
   const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
+  const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
 
   useEffect(() => {
     if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }
@@ -231,9 +232,17 @@ export default function InterviewsPage() {
         eventId:  iv.eventId || "",
         meetLink: iv.meetLink || "",
       });
-      if (!result?.transcriptUrl) throw new Error("Transcript not available yet — it can take a few minutes after the call ends.");
-      await updateInterview(iv.id, { transcriptUrl: result.transcriptUrl });
-      window.open(result.transcriptUrl, "_blank", "noopener");
+      if (result?.status === "ready" && result.transcriptUrl) {
+        await updateInterview(iv.id, { transcriptUrl: result.transcriptUrl });
+        window.open(result.transcriptUrl, "_blank", "noopener");
+      } else if (result?.status === "processing") {
+        console.log("Recording not yet available.");
+        console.log("Waiting for recording processing to complete.");
+        console.log("Transcript generation queued.");
+        setToast({ message: result.message || "Recording is still being processed — check back in a few minutes.", type: "info" });
+      } else {
+        throw new Error(result?.message || result?.error || "Transcript not available for this interview.");
+      }
     } catch (e) {
       setToast({ message: "Couldn't open transcript: " + e.message, type: "error" });
     }
@@ -244,6 +253,7 @@ export default function InterviewsPage() {
 
   const handleViewAiReport = async (iv) => {
     setAiReportTarget(iv);
+    setAiReportStatus(null);
     if (iv.aiReport) return; // already cached — modal renders it directly
     if (!iv.eventId && !iv.meetLink) {
       setToast({ message: "No Meet link/event on this interview — can't fetch a transcript to analyze.", type: "error" });
@@ -260,10 +270,18 @@ export default function InterviewsPage() {
         round:          iv.round || iv.templateName || "Interview",
         templateName:   iv.templateName || "",
       });
-      if (!result?.report) throw new Error(result?.error || "No report returned.");
-      const aiReport = { ...result.report, generatedAt: new Date().toISOString() };
-      await updateInterview(iv.id, { aiReport });
-      setAiReportTarget({ ...iv, aiReport });
+      if (result?.status === "ready" && result.report) {
+        const aiReport = { ...result.report, generatedAt: new Date().toISOString() };
+        await updateInterview(iv.id, { aiReport });
+        setAiReportTarget({ ...iv, aiReport });
+      } else if (result?.status === "processing" || result?.status === "not_found") {
+        console.log(result.status === "processing" ? "Waiting for recording processing to complete." : "Recording not yet available.");
+        console.log("Transcript generation queued.");
+        console.log("AI report generation queued.");
+        setAiReportStatus({ status: result.status, message: result.message });
+      } else {
+        throw new Error(result?.message || result?.error || "No report returned.");
+      }
     } catch (e) {
       setToast({ message: "Couldn't generate AI report: " + e.message, type: "error" });
       setAiReportTarget(null);
@@ -275,6 +293,10 @@ export default function InterviewsPage() {
     if (!aiReportTarget) return;
     const iv = { ...aiReportTarget, aiReport: undefined };
     await handleViewAiReport(iv);
+  };
+
+  const handleRetryAiReport = () => {
+    if (aiReportTarget) handleViewAiReport(aiReportTarget);
   };
 
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
@@ -773,8 +795,10 @@ export default function InterviewsPage() {
       <AiReportModal
         interview={aiReportTarget}
         loading={aiReportLoading}
+        status={aiReportStatus}
         onClose={() => setAiReportTarget(null)}
         onRegenerate={handleRegenerateAiReport}
+        onRetry={handleRetryAiReport}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

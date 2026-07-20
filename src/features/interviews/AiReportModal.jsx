@@ -18,7 +18,20 @@ function assessmentColor(label) {
   return ASSESSMENT_CLS[label] || "text-gray-700";
 }
 
-export default function AiReportModal({ interview, loading, onClose, onRegenerate }) {
+const STATUS_COPY = {
+  processing: {
+    icon: "⏳",
+    title: "Recording is still being processed",
+    body: "Transcript generation is pending because the recording isn't available yet. The AI report will be generated automatically once the transcript is ready — check back in a few minutes.",
+  },
+  not_found: {
+    icon: "🔍",
+    title: "Recording not found yet",
+    body: "We couldn't find a Meet recording/transcript for this interview yet. This can happen right after a call ends — try again shortly.",
+  },
+};
+
+export default function AiReportModal({ interview, loading, status, onClose, onRegenerate, onRetry }) {
   const report = interview?.aiReport;
   const decisionMeta = report ? (DECISION_META[report.decision] || { label: report.decisionLabel, cls: "bg-gray-50 text-gray-700 border-gray-200" }) : null;
 
@@ -33,6 +46,18 @@ export default function AiReportModal({ interview, loading, onClose, onRegenerat
           </svg>
           <p className="text-sm text-gray-500">Analyzing the interview transcript…</p>
           <p className="text-xs text-gray-400">This can take up to a minute.</p>
+        </div>
+      )}
+
+      {!loading && !report && status && (
+        <div className="flex flex-col items-center text-center py-14 gap-3 px-6">
+          <span className="text-3xl">{STATUS_COPY[status.status]?.icon || "⏳"}</span>
+          <p className="text-sm font-bold text-gray-900">{STATUS_COPY[status.status]?.title || "Not ready yet"}</p>
+          <p className="text-xs text-gray-500 max-w-sm">{status.message || STATUS_COPY[status.status]?.body}</p>
+          <button onClick={onRetry}
+            className="mt-2 px-5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700">
+            Check Again
+          </button>
         </div>
       )}
 

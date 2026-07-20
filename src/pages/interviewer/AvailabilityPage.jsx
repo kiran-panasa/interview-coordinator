@@ -138,6 +138,7 @@ export default function AvailabilityPage() {
 
   // Slot builder (pending — not yet saved)
   const [pendingTimes, setPendingTimes] = useState(new Set());
+  const [customTime, setCustomTime] = useState("");
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd,   setRangeEnd]   = useState("");
   const [duration,   setDuration]   = useState(30);
@@ -236,6 +237,13 @@ export default function AvailabilityPage() {
       if (next.has(time)) next.delete(time); else next.add(time);
       return next;
     });
+  };
+
+  const handleAddCustomTime = () => {
+    if (!customTime) return;
+    const label = minutesToAmPm(parseTimeToMinutes(customTime));
+    setPendingTimes(prev => new Set(prev).add(label));
+    setCustomTime("");
   };
 
   const handleGenerateRange = () => {
@@ -792,6 +800,19 @@ export default function AvailabilityPage() {
                         </button>
                       );
                     })}
+                  </div>
+                  <div className="flex items-end gap-2 mt-2.5">
+                    <div>
+                      <label className="block text-[10px] text-gray-400 mb-1">Custom time</label>
+                      <input type="time" value={customTime} onChange={e => setCustomTime(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && handleAddCustomTime()}
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <button type="button" onClick={handleAddCustomTime} disabled={busy || !customTime}
+                      className="px-3 py-1.5 bg-white text-indigo-600 border border-indigo-300 rounded-lg text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 transition-colors">
+                      + Add Time
+                    </button>
+                    <p className="text-[11px] text-gray-400 pb-1.5">Pick any exact time — e.g. 9:30 AM, 2:45 PM — not just the presets above.</p>
                   </div>
                 </div>
 
