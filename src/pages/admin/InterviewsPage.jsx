@@ -305,7 +305,7 @@ export default function InterviewsPage() {
     if (!confirm(`Cancel interview with ${iv.candidateName}? This will also delete the calendar event and notify attendees.`)) return;
     try {
       if (iv.eventId) {
-        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId, interviewerEmail: iv.interviewerEmail }).catch(() => {});
+        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
       }
       await updateInterview(iv.id, { status: "cancelled", eventId: null, meetLink: "" });
       const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
@@ -321,7 +321,7 @@ export default function InterviewsPage() {
     if (!confirm(`Permanently delete interview:\n"${label}"?\n\nThis cannot be undone.`)) return;
     try {
       if (iv.eventId) {
-        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId, interviewerEmail: iv.interviewerEmail }).catch(() => {});
+        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
       }
       const slotId = `${iv.scheduledDate}_${(iv.scheduledTime || "").replace(/[: ]/g, "")}`;
       await markSlotFree(iv.interviewerId, slotId).catch(() => {});
