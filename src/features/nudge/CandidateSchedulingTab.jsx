@@ -210,6 +210,7 @@ export default function CandidateSchedulingTab({
         templateName:     inv.templateName || "",
         meetLink:         result?.meetLink || "",
         eventId:          result?.eventId || "",
+        recallBotId:      result?.recallBotId || "",
         createdBy:        currentUser.uid,
         // Candidate slots come from the panelist's own published availability
         // and the Meet link is already generated — skip the interviewer's

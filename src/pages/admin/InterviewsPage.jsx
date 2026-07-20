@@ -209,6 +209,7 @@ export default function InterviewsPage() {
       await updateInterview(iv.id, {
         meetLink: result.meetLink,
         eventId:  result.eventId,
+        recallBotId: result.recallBotId || "",
         inviteSentAt: new Date().toISOString(),
       });
       if (result.hostManagementWarning) {
@@ -234,9 +235,11 @@ export default function InterviewsPage() {
     setTranscriptLoading(s => ({ ...s, [iv.id]: true }));
     try {
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:   "getTranscript",
-        eventId:  iv.eventId || "",
-        meetLink: iv.meetLink || "",
+        action:       "getTranscript",
+        eventId:      iv.eventId || "",
+        meetLink:     iv.meetLink || "",
+        recallBotId:  iv.recallBotId || "",
+        candidateName: iv.candidateName,
       });
       if (result?.status === "ready" && result.transcriptUrl) {
         await updateInterview(iv.id, { transcriptUrl: result.transcriptUrl });
@@ -266,9 +269,10 @@ export default function InterviewsPage() {
     setRecordingLoading(s => ({ ...s, [iv.id]: true }));
     try {
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:   "getRecording",
-        eventId:  iv.eventId || "",
-        meetLink: iv.meetLink || "",
+        action:      "getRecording",
+        eventId:     iv.eventId || "",
+        meetLink:    iv.meetLink || "",
+        recallBotId: iv.recallBotId || "",
       });
       if (result?.status === "ready" && result.recordingUrl) {
         await updateInterview(iv.id, { meetingRecordingUrl: result.recordingUrl });
@@ -302,6 +306,7 @@ export default function InterviewsPage() {
         action:         "generateAiReport",
         eventId:        iv.eventId || "",
         meetLink:       iv.meetLink || "",
+        recallBotId:    iv.recallBotId || "",
         candidateName:  iv.candidateName,
         round:          iv.round || iv.templateName || "Interview",
         templateName:   iv.templateName || "",
