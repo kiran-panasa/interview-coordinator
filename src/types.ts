@@ -214,6 +214,8 @@ export interface Interview {
   eventId?: string;
   transcriptUrl?: string;
   aiReport?: AiCandidateReport;
+  reminder24hSentAt?: string;
+  reminder1hSentAt?: string;
   nextNudgeAt?: string | null;
   nudgeCount?: number;
   importedFromSheet?: boolean;
