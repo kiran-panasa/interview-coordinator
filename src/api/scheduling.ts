@@ -116,7 +116,7 @@ export async function bookSlotForCandidate(
   await runTransaction(db, async (txn) => {
     const slotDoc = await txn.get(slotRef);
     if (!slotDoc.exists()) throw new Error("Slot no longer exists.");
-    if (slotDoc.data().isBooked) throw new Error("This slot was just taken — please choose another.");
+    if (slotDoc.data().isBooked) throw new Error("This slot is already booked. Please choose another available slot.");
 
     txn.update(slotRef,   { isBooked: true, inviteId, bookedAt: new Date().toISOString() });
     txn.update(inviteRef, {

@@ -207,14 +207,13 @@ export default function SchedulePage() {
       setStep("booked");
       notifyAdminsBookingPending();
     } catch (e) {
-      if (e.message.includes("taken") || e.message.includes("already passed")) {
-        // Refresh slots so the stale/past one disappears from the list
-        const fresh = await getAvailableSlotsForTemplate(invite.templateId, invite.dateRangeStart, invite.dateRangeEnd);
+      if (e.message.includes("already booked") || e.message.includes("already passed")) {
+        // Refresh slots (bypassing the cache) so the now-stale one shows as
+        // booked/disabled instead of silently failing again on retry.
+        const fresh = await getAvailableSlotsForTemplate(invite.templateId, invite.dateRangeStart, invite.dateRangeEnd, true);
         setSlots(fresh);
         setSelected(null);
-        alert(e.message.includes("taken")
-          ? "That slot was just taken by someone else. Please choose another."
-          : "That slot has already passed. Please choose another.");
+        alert(e.message);
       } else {
         alert("Booking failed: " + e.message);
       }
@@ -427,13 +426,20 @@ export default function SchedulePage() {
                         const isSelected = selected?.slotId === s.slotId && selected?.interviewerId === s.interviewerId;
                         const slotStart  = parseInterviewStart(s.date, s.time);
                         const isPastSlot = slotStart ? slotStart < new Date() : false;
+                        const isDisabled = s.isBooked || isPastSlot;
+                        const handleClick = () => {
+                          if (s.isBooked) {
+                            alert("This slot is already booked. Please choose another available slot.");
+                            return;
+                          }
+                          if (!isPastSlot) setSelected(s);
+                        };
                         return (
                           <button key={`${s.interviewerId}-${s.slotId}`}
-                            onClick={() => { if (!isPastSlot) setSelected(s); }}
-                            disabled={isPastSlot}
-                            title={isPastSlot ? "This slot has already passed" : undefined}
+                            onClick={handleClick}
+                            title={s.isBooked ? "This slot is already booked. Please choose another available slot." : isPastSlot ? "This slot has already passed" : undefined}
                             className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-colors ${
-                              isPastSlot
+                              isDisabled
                                 ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                                 : isSelected
                                   ? "bg-indigo-600 text-white border-indigo-600"

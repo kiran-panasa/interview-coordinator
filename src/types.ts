@@ -261,6 +261,7 @@ export interface AvailableSlot {
   interviewerEmail: string;
   date: string;
   time: string;
+  isBooked: boolean;
 }
 
 // ── Scheduling ────────────────────────────────────────────────────────────────

@@ -138,16 +138,19 @@ export async function getSlotsForInterviewers(
 export async function getAvailableSlotsForTemplate(
   templateId: string,
   dateStart: string,
-  dateEnd: string
+  dateEnd: string,
+  forceRefresh = false
 ): Promise<AvailableSlot[]> {
   const cacheKey = `avail_${templateId}_${dateStart}_${dateEnd}`;
-  try {
-    const cached = sessionStorage.getItem(cacheKey);
-    if (cached) {
-      const { data, ts } = JSON.parse(cached) as { data: AvailableSlot[]; ts: number };
-      if (Date.now() - ts < 5 * 60 * 1000) return data;
-    }
-  } catch { /* sessionStorage unavailable */ }
+  if (!forceRefresh) {
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, ts } = JSON.parse(cached) as { data: AvailableSlot[]; ts: number };
+        if (Date.now() - ts < 5 * 60 * 1000) return data;
+      }
+    } catch { /* sessionStorage unavailable */ }
+  }
 
   const usersSnap = await getDocs(collection(db, "users"));
   const interviewers = usersSnap.docs
@@ -168,16 +171,15 @@ export async function getAvailableSlotsForTemplate(
     ));
     slotsSnap.docs.forEach(d => {
       const slot = d.data();
-      if (!slot.isBooked) {
-        result.push({
-          slotId:           d.id,
-          interviewerId:    ivr.id,
-          interviewerName:  ivr.displayName || ivr.email,
-          interviewerEmail: ivr.email,
-          date:             slot.date as string,
-          time:             slot.time as string,
-        });
-      }
+      result.push({
+        slotId:           d.id,
+        interviewerId:    ivr.id,
+        interviewerName:  ivr.displayName || ivr.email,
+        interviewerEmail: ivr.email,
+        date:             slot.date as string,
+        time:             slot.time as string,
+        isBooked:         !!slot.isBooked,
+      });
     });
   }));
   result.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
