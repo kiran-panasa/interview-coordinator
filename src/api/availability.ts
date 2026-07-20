@@ -4,6 +4,7 @@ import {
   query, where, onSnapshot,
 } from "firebase/firestore";
 import type { AvailabilitySlot, AvailableSlot } from "../types";
+import { compareTimeLabels } from "../utils/dates";
 
 export function slotIdFor(date: string, time: string): string {
   return `${date}_${time.replace(/[: ]/g, "")}`;
@@ -182,7 +183,7 @@ export async function getAvailableSlotsForTemplate(
       });
     });
   }));
-  result.sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  result.sort((a, b) => a.date.localeCompare(b.date) || compareTimeLabels(a.time, b.time));
 
   try { sessionStorage.setItem(cacheKey, JSON.stringify({ data: result, ts: Date.now() })); }
   catch { /* sessionStorage full or unavailable */ }

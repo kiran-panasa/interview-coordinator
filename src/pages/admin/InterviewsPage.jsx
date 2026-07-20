@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { formatDate, parseInterviewStart } from "../../utils/dates";
+import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { parseImportCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
@@ -108,7 +108,7 @@ export default function InterviewsPage() {
       // For today, only show times still ahead of the current time.
       return !start || start > now;
     });
-    setAvailTimes(free.map(s => s.time).sort());
+    setAvailTimes(free.map(s => s.time).sort(compareTimeLabels));
     setForm(f => ({ ...f, scheduledTime: "" }));
   }, [form.scheduledDate]);
 

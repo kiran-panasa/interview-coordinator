@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Pagination from "../../components/Pagination";
 import { usePagination } from "../../hooks/usePagination";
+import { compareTimeLabels } from "../../utils/dates";
 
 
 export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots }) {
@@ -173,7 +174,7 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
                       <p className="w-44 flex-shrink-0 text-sm font-semibold text-gray-800 truncate">{entry.ivrName}</p>
                       <div className="flex flex-wrap gap-1.5">
                         {entry.slots
-                          .slice().sort((a, b) => a.time.localeCompare(b.time))
+                          .slice().sort((a, b) => compareTimeLabels(a.time, b.time))
                           .map(s => (
                             <span key={s.id} className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">
                               {s.time}

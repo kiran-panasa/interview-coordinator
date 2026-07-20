@@ -184,7 +184,7 @@ export default function AvailabilityPage() {
   const singleDate = selectedDates.size === 1 ? [...selectedDates][0] : null;
   const daySlots = useMemo(() =>
     singleDate
-      ? (slotsByDate[singleDate] || []).slice().sort((a, b) => a.time.localeCompare(b.time))
+      ? (slotsByDate[singleDate] || []).slice().sort((a, b) => timeSortKey(a.time) - timeSortKey(b.time))
       : [],
   [slotsByDate, singleDate]);
   const freeCount = useMemo(() => daySlots.filter(s => !s.isBooked).length, [daySlots]);

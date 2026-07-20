@@ -34,6 +34,22 @@ export function isPast(dateOrIso: string | Date): boolean {
   return new Date(dateOrIso) < new Date();
 }
 
+// Converts a "9:00 AM" / "09:00 PM" style label to minutes-since-midnight so
+// 12-hour time labels sort chronologically instead of alphabetically (plain
+// string sort puts "10:00 AM" before "9:00 AM" and "1:00 PM" before "12:00 PM").
+export function timeToMinutes(label: string | null | undefined): number {
+  if (!label) return 0;
+  const m = label.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!m) return 0;
+  let h = parseInt(m[1], 10) % 12;
+  if (m[3].toUpperCase() === "PM") h += 12;
+  return h * 60 + parseInt(m[2], 10);
+}
+
+export function compareTimeLabels(a: string, b: string): number {
+  return timeToMinutes(a) - timeToMinutes(b);
+}
+
 export function parseInterviewStart(scheduledDate: string, scheduledTime: string): Date | null {
   if (!scheduledDate || !scheduledTime) return null;
   try {

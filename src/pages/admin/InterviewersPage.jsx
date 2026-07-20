@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { getInterviewerAvailability, updateUser } from "../../api/firestore";
+import { compareTimeLabels } from "../../utils/dates";
 import { useSkills, useTemplates, useUsers, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
@@ -653,7 +654,7 @@ export default function InterviewersPage() {
         {viewAvail && (() => {
           const upcoming = viewAvail.slots
             .filter(s => s.date >= today)
-            .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+            .sort((a, b) => a.date.localeCompare(b.date) || compareTimeLabels(a.time, b.time));
           const flaggedSlots = upcoming.filter(s => s.flagged);
           const byDate = {};
           upcoming.forEach(s => { if (!byDate[s.date]) byDate[s.date] = []; byDate[s.date].push(s); });
