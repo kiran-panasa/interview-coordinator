@@ -81,6 +81,7 @@ export default function InterviewsPage() {
   const [dlTemplateId,    setDlTemplateId]    = useState("");
   const [showArchived,    setShowArchived]    = useState(false);
   const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
+  const [recordingLoading,  setRecordingLoading]  = useState({}); // { [interviewId]: true }
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
@@ -252,6 +253,36 @@ export default function InterviewsPage() {
       setToast({ message: "Couldn't open transcript: " + e.message, type: "error" });
     }
     setTranscriptLoading(s => ({ ...s, [iv.id]: false }));
+  };
+
+  // ── Meet Recording ───────────────────────────────────────────────────────────
+
+  const handleViewRecording = async (iv) => {
+    if (iv.meetingRecordingUrl) { window.open(iv.meetingRecordingUrl, "_blank", "noopener"); return; }
+    if (!iv.eventId && !iv.meetLink) {
+      setToast({ message: "No Meet link/event on this interview — nothing to look up.", type: "error" });
+      return;
+    }
+    setRecordingLoading(s => ({ ...s, [iv.id]: true }));
+    try {
+      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:   "getRecording",
+        eventId:  iv.eventId || "",
+        meetLink: iv.meetLink || "",
+      });
+      if (result?.status === "ready" && result.recordingUrl) {
+        await updateInterview(iv.id, { meetingRecordingUrl: result.recordingUrl });
+        window.open(result.recordingUrl, "_blank", "noopener");
+      } else if (result?.status === "processing") {
+        console.log("Recording processing in progress");
+        setToast({ message: result.message || "Recording is still being processed — check back in a few minutes.", type: "info" });
+      } else {
+        throw new Error(result?.message || result?.error || "Recording not available for this interview.");
+      }
+    } catch (e) {
+      setToast({ message: "Couldn't open recording: " + e.message, type: "error" });
+    }
+    setRecordingLoading(s => ({ ...s, [iv.id]: false }));
   };
 
   // ── AI Report ────────────────────────────────────────────────────────────────
@@ -726,6 +757,11 @@ export default function InterviewsPage() {
                       label: iv.feedback?.overallRecommendation ? "Edit Feedback" : "Add Feedback",
                       onClick: () => openFeedbackEdit(iv),
                       show: iv.status !== "cancelled" && iv.status !== "no_show",
+                    },
+                    {
+                      label: recordingLoading[iv.id] ? "Opening Recording…" : "Meet Recording",
+                      onClick: () => { if (!recordingLoading[iv.id]) handleViewRecording(iv); },
+                      show: iv.status === "completed",
                     },
                     {
                       label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",

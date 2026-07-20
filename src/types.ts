@@ -213,6 +213,8 @@ export interface Interview {
   meetLink?: string;
   eventId?: string;
   transcriptUrl?: string;
+  meetingRecordingUrl?: string;
+  recallBotId?: string;
   aiReport?: AiCandidateReport;
   reminder24hSentAt?: string;
   reminder1hSentAt?: string;
