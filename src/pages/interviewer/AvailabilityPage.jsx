@@ -47,7 +47,7 @@ const STATUS_LABEL = { free: "Free", booked: "Booked", completed: "Completed" };
 const STATUS_BADGE_CLS = {
   free:      "bg-emerald-50 text-emerald-700 border-emerald-200",
   booked:    "bg-orange-50 text-orange-600 border-orange-200",
-  completed: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  completed: "bg-violet-50 text-violet-700 border-violet-200",
 };
 
 // ── Time helpers ────────────────────────────────────────────────────────────────
@@ -621,22 +621,35 @@ export default function AvailabilityPage() {
     setBusy(false);
   };
 
+  if (!loaded) {
+    return (
+      <div className="p-8 space-y-6">
+        <div className="space-y-2"><Skeleton className="h-7 w-48" /><Skeleton className="h-4 w-72" /></div>
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
+          <Skeleton className="w-full lg:w-80 h-96 rounded-2xl flex-shrink-0" />
+          <Skeleton className="flex-1 w-full h-96 rounded-2xl" />
+        </div>
+        <SkeletonRows count={4} />
+      </div>
+    );
+  }
+
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">My Availability</h1>
+    <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="p-8">
+      <h1 className="text-2xl font-bold text-gray-900 tracking-tight mb-1">My Availability</h1>
       <p className="text-sm text-gray-500 mb-6">Select one or more dates, build your slots, then save.</p>
 
       {isNudgeContext && (
-        <div className="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex items-start gap-3">
-          <svg className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-start gap-3">
+          <svg className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <div>
-            <p className="text-sm font-semibold text-indigo-900">
+            <p className="text-sm font-semibold text-emerald-900">
               Adding slots for{nudgeTemplate ? `: ${nudgeTemplate}` : " an interview session"}
             </p>
             {nudgeFrom && nudgeTo && (
-              <p className="text-xs text-indigo-600 mt-0.5">
+              <p className="text-xs text-emerald-600 mt-0.5">
                 Please add your available time slots between {formatDate(nudgeFrom)} and {formatDate(nudgeTo)}.
               </p>
             )}
@@ -646,7 +659,7 @@ export default function AvailabilityPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* ── Calendar ── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 w-full lg:w-80 flex-shrink-0">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 w-full lg:w-80 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <button onClick={prevMonth}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
@@ -689,11 +702,11 @@ export default function AvailabilityPage() {
                     ${isSelected
                       ? isPast
                         ? "bg-gray-400 text-white ring-2 ring-gray-200 ring-offset-1"
-                        : "bg-indigo-600 text-white ring-2 ring-indigo-300 ring-offset-1"
+                        : "bg-emerald-600 text-white ring-2 ring-emerald-300 ring-offset-1"
                       : isRecurPreview
-                        ? "bg-indigo-100 text-indigo-700 font-semibold"
+                        ? "bg-emerald-100 text-emerald-700 font-semibold"
                         : isToday
-                          ? "bg-indigo-50 text-indigo-700 font-bold"
+                          ? "bg-emerald-50 text-emerald-700 font-bold"
                           : isPast
                             ? "text-gray-300 hover:bg-gray-50"
                             : "text-gray-700 hover:bg-gray-50"
@@ -722,13 +735,13 @@ export default function AvailabilityPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />Flagged
             </span>
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block" />Selected
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />Selected
             </span>
           </div>
         </div>
 
         {/* ── Slot manager ── */}
-        <div className="flex-1 w-full bg-white rounded-xl border border-gray-200 p-5 min-h-64">
+        <div className="flex-1 w-full bg-white rounded-2xl border border-gray-100 shadow-soft p-5 min-h-64">
           {selectedDates.size === 0 ? (
             <p className="text-sm text-gray-400 text-center mt-12">Select one or more dates on the calendar to add or manage time slots.</p>
           ) : (
@@ -742,7 +755,7 @@ export default function AvailabilityPage() {
                     <h2 className="text-base font-bold text-gray-900">{selectedDates.size} dates selected</h2>
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {[...selectedDates].sort().map(ds => (
-                        <span key={ds} className="inline-flex items-center gap-1 text-[11px] font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                        <span key={ds} className="inline-flex items-center gap-1 text-[11px] font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
                           {shortDateLabel(ds)}
                           <button onClick={() => toggleDateSelect(ds)} className="hover:text-red-500" aria-label={`Remove ${ds}`}>×</button>
                         </span>
@@ -810,8 +823,8 @@ export default function AvailabilityPage() {
                         <button key={t} type="button" onClick={() => togglePendingTime(t)} disabled={busy}
                           className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                             isPending
-                              ? "bg-indigo-600 text-white border-indigo-600"
-                              : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400 hover:text-indigo-600"
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-white text-gray-700 border-gray-200 hover:border-emerald-400 hover:text-emerald-600"
                           }`}>
                           {t}
                         </button>
@@ -823,10 +836,10 @@ export default function AvailabilityPage() {
                       <label className="block text-[10px] text-gray-400 mb-1">Custom time</label>
                       <input type="time" value={customTime} onChange={e => setCustomTime(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && handleAddCustomTime()}
-                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
                     <button type="button" onClick={handleAddCustomTime} disabled={busy || !customTime}
-                      className="px-3 py-1.5 bg-white text-indigo-600 border border-indigo-300 rounded-lg text-xs font-semibold hover:bg-indigo-50 disabled:opacity-40 transition-colors">
+                      className="px-3 py-1.5 bg-white text-emerald-600 border border-emerald-300 rounded-lg text-xs font-semibold hover:bg-emerald-50 disabled:opacity-40 transition-colors">
                       + Add Time
                     </button>
                     <p className="text-[11px] text-gray-400 pb-1.5">Pick any exact time — e.g. 9:30 AM, 2:45 PM — not just the presets above.</p>
@@ -840,24 +853,24 @@ export default function AvailabilityPage() {
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-1">Start</label>
                       <input type="time" value={rangeStart} onChange={e => setRangeStart(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-1">End</label>
                       <input type="time" value={rangeEnd} onChange={e => setRangeEnd(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-1">Duration</label>
                       <select value={duration} onChange={e => setDuration(Number(e.target.value))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                         {DURATION_OPTIONS.map(m => <option key={m} value={m}>{m} min</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-1">Buffer</label>
                       <select value={buffer} onChange={e => setBuffer(Number(e.target.value))}
-                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                         {BUFFER_OPTIONS.map(m => <option key={m} value={m}>{m} min</option>)}
                       </select>
                     </div>
@@ -874,13 +887,13 @@ export default function AvailabilityPage() {
 
                 {/* Pending selection review */}
                 {pendingTimes.size > 0 && (
-                  <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl px-4 py-3">
-                    <p className="text-xs font-semibold text-indigo-800 mb-2">
+                  <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl px-4 py-3">
+                    <p className="text-xs font-semibold text-emerald-800 mb-2">
                       {pendingTimes.size} slot{pendingTimes.size !== 1 ? "s" : ""} selected
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {sortedPendingTimes.map(t => (
-                        <span key={t} className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">
+                        <span key={t} className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full">
                           {t}
                           <button onClick={() => togglePendingTime(t)} className="hover:text-red-500" aria-label={`Remove ${t}`}>×</button>
                         </span>
@@ -896,25 +909,25 @@ export default function AvailabilityPage() {
                     <button type="button" onClick={toggleWeekdays}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
                         [...WEEKDAY_SET].every(d => recurDays.has(d))
-                          ? "bg-indigo-600 text-white border-indigo-600"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400"
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-emerald-400"
                       }`}>
                       Weekdays (Mon–Fri)
                     </button>
                     <button type="button" onClick={() => toggleRecurDay(6)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                        recurDays.has(6) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400"
+                        recurDays.has(6) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-700 border-gray-200 hover:border-emerald-400"
                       }`}>
                       Saturdays
                     </button>
                     <button type="button" onClick={() => toggleRecurDay(0)}
                       className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                        recurDays.has(0) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-200 hover:border-indigo-400"
+                        recurDays.has(0) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-700 border-gray-200 hover:border-emerald-400"
                       }`}>
                       Sundays
                     </button>
                     <button type="button" onClick={() => setShowCustomDays(v => !v)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors">
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
                       {showCustomDays ? "Hide custom days" : "Custom days…"}
                     </button>
                   </div>
@@ -925,7 +938,7 @@ export default function AvailabilityPage() {
                         <button key={d} type="button" onClick={() => toggleRecurDay(d)}
                           title={label}
                           className={`w-9 h-9 rounded-lg text-[11px] font-semibold border transition-colors ${
-                            recurDays.has(d) ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-600 border-gray-200 hover:border-indigo-400"
+                            recurDays.has(d) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-gray-600 border-gray-200 hover:border-emerald-400"
                           }`}>
                           {label.slice(0, 2)}
                         </button>
@@ -937,7 +950,7 @@ export default function AvailabilityPage() {
                     <div className="flex items-center gap-2">
                       <label className="text-xs text-gray-500">Repeat until</label>
                       <input type="date" value={recurUntil} min={todayStr} onChange={e => setRecurUntil(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
                   )}
                 </div>
@@ -956,7 +969,7 @@ export default function AvailabilityPage() {
                     )}
                   </p>
                   <button onClick={handleOpenSaveConfirm} disabled={busy}
-                    className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60">
+                    className="px-5 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-60">
                     Save Availability
                   </button>
                 </div>
@@ -981,21 +994,21 @@ export default function AvailabilityPage() {
           </div>
 
           {/* ── Filters ── */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-3 flex flex-wrap items-end gap-3">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 mb-3 flex flex-wrap items-end gap-3">
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">From</label>
               <input type="date" value={tableDateFrom} onChange={e => setTableDateFrom(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">To</label>
               <input type="date" value={tableDateTo} onChange={e => setTableDateTo(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">Status</label>
               <select value={tableStatus} onChange={e => setTableStatus(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="">All</option>
                 <option value="free">Free</option>
                 <option value="booked">Booked</option>
@@ -1005,18 +1018,18 @@ export default function AvailabilityPage() {
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">Time from</label>
               <input type="time" value={tableTimeFrom} onChange={e => setTableTimeFrom(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">Time to</label>
               <input type="time" value={tableTimeTo} onChange={e => setTableTimeTo(e.target.value)}
-                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div className="flex-1 min-w-[160px]">
               <label className="block text-[10px] text-gray-400 mb-1">Search by date</label>
               <input type="text" value={tableSearch} onChange={e => setTableSearch(e.target.value)}
                 placeholder="e.g. 15 Jul, Wed, 2026-07-15…"
-                className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             {tableFiltersActive && (
               <button onClick={clearTableFilters} className="text-xs text-gray-400 hover:text-gray-600 underline pb-1.5">
@@ -1025,7 +1038,7 @@ export default function AvailabilityPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-x-auto">
             <table className="w-full text-sm min-w-[620px]">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -1033,7 +1046,7 @@ export default function AvailabilityPage() {
                     {visibleFree.length > 0 && (
                       <input type="checkbox" checked={allVisibleFreeSelected} onChange={toggleSelectAllVisible}
                         title="Select all free slots on this page"
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                     )}
                   </th>
                   {[
@@ -1045,7 +1058,7 @@ export default function AvailabilityPage() {
                       <button onClick={() => toggleSort(col.key)} className="flex items-center gap-1 hover:text-gray-600 transition-colors">
                         {col.label}
                         {tableSortBy === col.key && (
-                          <span className="text-indigo-500">{tableSortDir === "asc" ? "▲" : "▼"}</span>
+                          <span className="text-emerald-500">{tableSortDir === "asc" ? "▲" : "▼"}</span>
                         )}
                       </button>
                     </th>
@@ -1069,7 +1082,7 @@ export default function AvailabilityPage() {
                           {freeInGroup.length > 0 && (
                             <input type="checkbox" checked={groupAllSelected} onChange={() => toggleSelectAllInGroup(rows)}
                               title="Select all free slots on this date"
-                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                           )}
                         </td>
                         <td colSpan={4} className="px-4 py-2.5">
@@ -1098,12 +1111,12 @@ export default function AvailabilityPage() {
                         const isFlaggingRow   = flagging === s.id;
                         const status = slotStatus(s);
                         return (
-                          <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : selectedSlotIds.has(s.id) ? "bg-indigo-50/40" : ""}`}>
+                          <tr key={s.id} className={`hover:bg-gray-50 ${s.flagged ? "bg-red-50" : selectedSlotIds.has(s.id) ? "bg-emerald-50/40" : ""}`}>
                             <td className="px-4 py-3">
                               <input type="checkbox" checked={selectedSlotIds.has(s.id)} disabled={s.isBooked}
                                 onChange={() => toggleSlotRowSelect(s)}
                                 title={s.isBooked ? "Booked slots cannot be deleted." : undefined}
-                                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30" />
+                                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30" />
                             </td>
                             <td className="px-4 py-3 text-gray-400 text-xs pl-9" />
                             <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">{s.time}</td>
@@ -1183,7 +1196,7 @@ export default function AvailabilityPage() {
           <p className="text-sm text-gray-500">Do you want to save these changes?</p>
           <div className="flex gap-3 pt-1">
             <button onClick={handleConfirmSave} disabled={busy}
-              className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60">
               {busy ? "Saving…" : "Save"}
             </button>
             <button onClick={() => setShowSaveConfirm(false)}
@@ -1219,6 +1232,6 @@ export default function AvailabilityPage() {
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
-    </div>
+    </motion.div>
   );
 }

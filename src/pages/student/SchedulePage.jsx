@@ -33,7 +33,7 @@ function generateOtp() {
 
 function Card({ children }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-8">
       {children}
     </div>
   );
@@ -47,12 +47,12 @@ function StepDots({ step }) {
       {steps.map((label, i) => (
         <div key={i} className="flex items-center gap-2">
           <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-            i < idx ? "bg-indigo-600 text-white" :
-            i === idx ? "bg-indigo-600 text-white ring-4 ring-indigo-100" :
+            i < idx ? "bg-brand-600 text-white" :
+            i === idx ? "bg-brand-600 text-white ring-4 ring-brand-100" :
             "bg-gray-100 text-gray-400"
           }`}>{i < idx ? "✓" : i + 1}</div>
-          <span className={`text-xs font-medium ${i === idx ? "text-indigo-700" : "text-gray-400"}`}>{label}</span>
-          {i < steps.length - 1 && <div className={`w-8 h-0.5 ${i < idx ? "bg-indigo-400" : "bg-gray-200"}`} />}
+          <span className={`text-xs font-medium ${i === idx ? "text-brand-700" : "text-gray-400"}`}>{label}</span>
+          {i < steps.length - 1 && <div className={`w-8 h-0.5 ${i < idx ? "bg-brand-400" : "bg-gray-200"}`} />}
         </div>
       ))}
     </div>
@@ -241,10 +241,7 @@ export default function SchedulePage() {
       <StudentLayout>
         <Card>
           <div className="flex flex-col items-center py-8 gap-3">
-            <svg className="w-8 h-8 text-indigo-400 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-            </svg>
+            <Loader2 className="w-8 h-8 text-brand-400 animate-spin" strokeWidth={2} />
             <p className="text-sm text-gray-500">{step === "loading_slots" ? "Loading available slots…" : "Verifying your invite…"}</p>
           </div>
         </Card>
@@ -258,9 +255,7 @@ export default function SchedulePage() {
         <Card>
           <div className="text-center py-8">
             <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-              </svg>
+              <XCircle className="w-6 h-6 text-red-500" strokeWidth={2} />
             </div>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Invalid Link</h2>
             <p className="text-sm text-gray-500">This scheduling link is invalid or has already been used.</p>
@@ -276,9 +271,7 @@ export default function SchedulePage() {
         <Card>
           <div className="text-center py-8">
             <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
+              <AlertTriangle className="w-6 h-6 text-amber-500" strokeWidth={2} />
             </div>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Link Expired</h2>
             <p className="text-sm text-gray-500">This scheduling link has expired. Please contact the team for a new one.</p>
@@ -294,14 +287,12 @@ export default function SchedulePage() {
         <Card>
           <div className="text-center py-8">
             <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
-              </svg>
+              <CheckCircle2 className="w-6 h-6 text-emerald-600" strokeWidth={2.5} />
             </div>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Already Scheduled</h2>
             <p className="text-sm text-gray-500">Your interview has been confirmed. Check your email for the calendar invite.</p>
             {invite?.bookedDate && (
-              <p className="mt-3 text-sm font-semibold text-indigo-700">{formatDateLong(invite.bookedDate)} · {invite.bookedTime}</p>
+              <p className="mt-3 text-sm font-semibold text-brand-700">{formatDateLong(invite.bookedDate)} · {invite.bookedTime}</p>
             )}
           </div>
         </Card>
@@ -314,14 +305,12 @@ export default function SchedulePage() {
       <StudentLayout>
         <Card>
           <div className="text-center py-8">
-            <div className="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-              </svg>
+            <div className="w-12 h-12 rounded-full bg-brand-100 flex items-center justify-center mx-auto mb-4">
+              <CalendarCheck2 className="w-6 h-6 text-brand-600" strokeWidth={2} />
             </div>
             <h2 className="text-lg font-bold text-gray-900 mb-2">Slot Reserved!</h2>
             {bookedInfo && (
-              <p className="text-base font-semibold text-indigo-700 mb-3">
+              <p className="text-base font-semibold text-brand-700 mb-3">
                 {formatDateLong(bookedInfo.date)} · {bookedInfo.time}
               </p>
             )}
@@ -339,10 +328,11 @@ export default function SchedulePage() {
     <StudentLayout>
       <Card>
         <StepDots step={step} />
+        <AnimatePresence mode="wait">
 
         {/* ── Step 1: Email ── */}
         {step === "email" && (
-          <div className="space-y-5">
+          <motion.div key="email" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.25 }} className="space-y-5">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Schedule Your Interview</h2>
               <p className="text-sm text-gray-500 mt-1">
@@ -360,21 +350,20 @@ export default function SchedulePage() {
                 value={email}
                 onChange={e => { setEmail(e.target.value); setEmailError(""); }}
                 placeholder="Enter your email address"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                 onKeyDown={e => e.key === "Enter" && handleSendOtp()}
               />
               {emailError && <p className="text-xs text-red-500 mt-1.5">{emailError}</p>}
             </div>
-            <button onClick={handleSendOtp} disabled={busy}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+            <Button variant="primary" size="lg" onClick={handleSendOtp} disabled={busy} className="w-full">
               {busy ? "Sending OTP…" : "Send One-Time Code →"}
-            </button>
-          </div>
+            </Button>
+          </motion.div>
         )}
 
         {/* ── Step 2: OTP ── */}
         {step === "otp" && (
-          <div className="space-y-5">
+          <motion.div key="otp" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.25 }} className="space-y-5">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-gray-900">Enter Verification Code</h2>
               <p className="text-sm text-gray-500 mt-1">
@@ -390,26 +379,25 @@ export default function SchedulePage() {
                 value={otp}
                 onChange={e => { setOtp(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
                 placeholder="000000"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-brand-500"
                 onKeyDown={e => e.key === "Enter" && handleVerifyOtp()}
                 autoFocus
               />
               {otpError && <p className="text-xs text-red-500 mt-1.5 text-center">{otpError}</p>}
             </div>
-            <button onClick={handleVerifyOtp} disabled={busy || otp.length !== 6}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+            <Button variant="primary" size="lg" onClick={handleVerifyOtp} disabled={busy || otp.length !== 6} className="w-full">
               {busy ? "Verifying…" : "Verify Code →"}
-            </button>
+            </Button>
             <button onClick={() => { setStep("email"); setOtp(""); setOtpError(""); }}
-              className="w-full text-sm text-gray-400 hover:text-indigo-600 transition-colors">
+              className="w-full text-sm text-gray-400 hover:text-brand-600 transition-colors">
               Didn't receive it? Go back to resend
             </button>
-          </div>
+          </motion.div>
         )}
 
         {/* ── Step 3: Slots ── */}
         {step === "slots" && (
-          <div className="space-y-5">
+          <motion.div key="slots" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.25 }} className="space-y-5">
             <div className="text-center mb-2">
               <h2 className="text-xl font-bold text-gray-900">Pick a Slot</h2>
               <p className="text-sm text-gray-500 mt-1">
@@ -448,8 +436,8 @@ export default function SchedulePage() {
                               isDisabled
                                 ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                                 : isSelected
-                                  ? "bg-indigo-600 text-white border-indigo-600"
-                                  : "bg-white text-gray-700 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50"
+                                  ? "bg-brand-600 text-white border-brand-600"
+                                  : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
                             }`}>
                             {s.time}
                           </button>
@@ -462,17 +450,17 @@ export default function SchedulePage() {
             )}
 
             {selected && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 text-sm text-indigo-800 font-medium">
+              <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 text-sm text-brand-800 font-medium">
                 Selected: {formatDateLong(selected.date)} · {selected.time}
               </div>
             )}
 
-            <button onClick={handleBook} disabled={!selected || busy}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+            <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy} className="w-full">
               {busy ? "Booking…" : "Confirm This Slot →"}
-            </button>
-          </div>
+            </Button>
+          </motion.div>
         )}
+        </AnimatePresence>
       </Card>
     </StudentLayout>
   );

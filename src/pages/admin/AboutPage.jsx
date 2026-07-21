@@ -1,5 +1,8 @@
 import { useEffect } from "react";
+import { motion } from "framer-motion";
+import { Printer, FileText, Users2 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
+import Button from "../../components/Button";
 
 // ── Print helpers ──────────────────────────────────────────────────────────────
 
@@ -267,7 +270,7 @@ ${buildStepRow(3,"#10b981","Review the Review Queue","Interviewers submit ad-hoc
 function Section({ title, sub, children }) {
   return (
     <div className="mb-8">
-      <h2 className="text-lg font-bold text-gray-900 mb-0.5">{title}</h2>
+      <h2 className="text-lg font-bold text-gray-900 mb-0.5 tracking-tight">{title}</h2>
       {sub && <p className="text-sm text-gray-400 mb-4">{sub}</p>}
       {children}
     </div>
@@ -276,10 +279,10 @@ function Section({ title, sub, children }) {
 
 function PageCard({ title, path, children, note }) {
   return (
-    <div className="print-avoid bg-white rounded-xl border border-gray-200 p-5 mb-4">
+    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-4">
       <div className="flex items-baseline gap-2 mb-3">
         <h3 className="text-sm font-bold text-gray-900">{title}</h3>
-        <code className="text-[10px] font-mono text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">{path}</code>
+        <code className="text-[10px] font-mono text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">{path}</code>
       </div>
       <div className="text-sm text-gray-600 space-y-1.5">{children}</div>
       {note && (
@@ -294,7 +297,7 @@ function PageCard({ title, path, children, note }) {
 function Bullet({ children }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0 mt-1.5" />
+      <span className="w-1.5 h-1.5 rounded-full bg-brand-400 flex-shrink-0 mt-1.5" />
       <span className="text-sm text-gray-600">{children}</span>
     </div>
   );
@@ -302,7 +305,7 @@ function Bullet({ children }) {
 
 function ConceptCard({ title, children }) {
   return (
-    <div className="print-avoid bg-white rounded-xl border border-gray-200 p-4">
+    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
       <h3 className="text-sm font-bold text-gray-800 mb-1">{title}</h3>
       <p className="text-xs text-gray-500 leading-relaxed">{children}</p>
     </div>
@@ -310,10 +313,10 @@ function ConceptCard({ title, children }) {
 }
 
 function HowStep({ num, color, title, desc }) {
-  const colors = { indigo: "bg-indigo-600", emerald: "bg-emerald-500", violet: "bg-violet-600", amber: "bg-amber-500", blue: "bg-blue-600", teal: "bg-teal-600" };
+  const colors = { indigo: "bg-brand-600", emerald: "bg-emerald-500", violet: "bg-violet-600", amber: "bg-amber-500", blue: "bg-blue-600", teal: "bg-teal-600" };
   return (
     <div className="flex gap-4">
-      <div className={`w-8 h-8 rounded-full ${colors[color] || colors.indigo} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>
+      <div className={`w-8 h-8 rounded-full ${colors[color] || colors.indigo} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5 shadow-soft`}>
         {num}
       </div>
       <div className="flex-1 pb-5 border-l-2 border-gray-100 pl-4 -ml-6 ml-0">
@@ -340,47 +343,36 @@ export default function AboutPage() {
     <div className="p-8 max-w-4xl">
 
       {/* ── Header ── */}
-      <div className="flex items-start justify-between mb-8">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
             {isContent ? "Content Team Guide" : "Interview Coordinator — Admin Guide"}
           </h1>
           <p className="text-sm text-gray-400 mt-0.5">NxtWave Internal Tool</p>
         </div>
         <div className="flex gap-2 print-hide">
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
+          <Button variant="primary" size="sm" icon={Printer} onClick={() => window.print()}>
             Print / PDF
-          </button>
+          </Button>
           {!isContent && (
             <>
-              <button
-                onClick={() => openPrintWindow("Interviewer Guide — Interview Coordinator", getInterviewerHTML())}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
+              <Button variant="secondary" size="sm" icon={Users2}
+                onClick={() => openPrintWindow("Interviewer Guide — Interview Coordinator", getInterviewerHTML())}>
                 Interviewer Guide
-              </button>
-              <button
-                onClick={() => openPrintWindow("Content Team Guide — Interview Coordinator", getContentTeamHTML())}
-                className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
+              </Button>
+              <Button variant="secondary" size="sm" icon={FileText}
+                onClick={() => openPrintWindow("Content Team Guide — Interview Coordinator", getContentTeamHTML())}>
                 Content Team Guide
-              </button>
+              </Button>
             </>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* ── What is this? ── */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-8 text-sm text-gray-600 leading-relaxed">
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
+        className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-8 text-sm text-gray-600 leading-relaxed">
         <p>
           <strong className="text-gray-900">Interview Coordinator</strong> is NxtWave's internal operations tool for managing the full interview lifecycle —
           from configuring structured evaluation templates and building a central question bank, to sending scheduling invites to candidates,
@@ -390,7 +382,7 @@ export default function AboutPage() {
           Access is role-gated. An admin must approve each new user and assign them a role that controls which pages they can see.
           The app is built on React + Firebase and deployed on Vercel.
         </p>
-      </div>
+      </motion.div>
 
       {/* ── How it works (admin only) ── */}
       {!isContent && (
@@ -520,7 +512,7 @@ export default function AboutPage() {
       {/* ── Role overview ── */}
       {!isContent && (
         <Section title="Roles & Access" sub="What each role can see and do.">
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden print-avoid">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden print-avoid">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
