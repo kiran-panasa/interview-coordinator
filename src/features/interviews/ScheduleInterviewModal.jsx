@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
+import { CalendarDays, AlertTriangle } from "lucide-react";
 import Modal from "../../components/Modal";
+import Button from "../../components/Button";
 import { formatDate } from "../../utils/dates";
 
 const OTHER_VALUE = "__other__";
 
-const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";
 const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
 
 export default function ScheduleInterviewModal({
@@ -55,7 +57,9 @@ export default function ScheduleInterviewModal({
               <div>
                 <input type="date" min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
                 {form.interviewerId && availDates.length === 0 &&
-                  <p className="text-xs text-amber-600 mt-1">⚠ No availability set</p>
+                  <p className="flex items-center gap-1 text-xs text-amber-600 mt-1">
+                    <AlertTriangle className="w-3 h-3 flex-shrink-0" /> No availability set
+                  </p>
                 }
               </div>
             )}
@@ -126,14 +130,12 @@ export default function ScheduleInterviewModal({
         </div>
 
         <div className="flex gap-3 pt-2">
-          <button onClick={handleSave} disabled={saving}
-            className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+          <Button variant="primary" size="lg" icon={CalendarDays} onClick={handleSave} disabled={saving} className="flex-1">
             {saving ? "Saving…" : editTarget ? "Update Interview" : "Schedule Interview"}
-          </button>
-          <button onClick={onClose}
-            className="px-5 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200">
+          </Button>
+          <Button variant="secondary" size="lg" onClick={onClose} className="px-5">
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     </Modal>

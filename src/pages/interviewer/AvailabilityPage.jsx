@@ -2,6 +2,12 @@ import { useState, useEffect, useMemo, useRef, Fragment } from "react";
 import { formatDateLong, formatDate } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Clock3, CalendarDays,
+  Plus, Wand2, Repeat, Flag, Trash2, X, Info, AlertTriangle, Search,
+  ListChecks, CheckCircle2, Save,
+} from "lucide-react";
 import {
   subscribeToInterviewerAvailability,
   addAvailabilitySlots,
@@ -16,6 +22,13 @@ import { usePagination } from "../../hooks/usePagination";
 import Toast from "../../components/Toast";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
+import Button from "../../components/Button";
+import { Skeleton, SkeletonRows } from "../../components/Skeleton";
+
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
+};
 
 const DAY_LABELS  = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = [
@@ -126,6 +139,7 @@ export default function AvailabilityPage() {
   const nudgeNotifiedRef = useRef(false);
 
   const [slots, setSlots] = useState([]);
+  const [loaded, setLoaded] = useState(false);
   const todayStr = new Date().toISOString().slice(0, 10);
 
   const [viewDate, setViewDate] = useState(() => {
@@ -161,7 +175,10 @@ export default function AvailabilityPage() {
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
   useEffect(() => {
-    return subscribeToInterviewerAvailability(currentUser.uid, setSlots);
+    return subscribeToInterviewerAvailability(currentUser.uid, (data) => {
+      setSlots(data);
+      setLoaded(true);
+    });
   }, [currentUser.uid]);
 
   const year  = viewDate.getFullYear();

@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { motion } from "framer-motion";
+import {
+  Plus, Upload, Download, X, Video, Archive, ArchiveRestore, Inbox,
+} from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { parseImportCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
@@ -16,6 +20,7 @@ import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
+import Button from "../../components/Button";
 import { usePagination } from "../../hooks/usePagination";
 import ScheduleInterviewModal from "../../features/interviews/ScheduleInterviewModal";
 import FeedbackViewModal from "../../features/interviews/FeedbackViewModal";
@@ -623,30 +628,26 @@ export default function InterviewsPage() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="flex items-center justify-between mb-6"
+      >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Interviews</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviews</h1>
+          <p className="text-sm text-gray-500 mt-1">
             {interviews.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => { setShowImport(true); setCsvText(""); setParsedRows(null); }}
-            className="flex items-center gap-2 border border-gray-300 bg-white text-gray-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M8 12l4-4m0 0l4 4m-4-4v12" />
-            </svg>
+          <Button variant="secondary" icon={Upload}
+            onClick={() => { setShowImport(true); setCsvText(""); setParsedRows(null); }}>
             Import from Sheet
-          </button>
-          <button onClick={openNew}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+          </Button>
+          <Button variant="primary" icon={Plus} onClick={openNew}>
             Schedule Interview
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Program Tabs ── */}
       {programs.length > 0 && (
@@ -659,12 +660,12 @@ export default function InterviewsPage() {
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setFilterTemplate("All"); setIvrPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
                 activeProgram === tab.id
-                  ? "border-indigo-600 text-indigo-600"
+                  ? "border-brand-600 text-brand-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}>
               {tab.label}
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                activeProgram === tab.id ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-500"
+                activeProgram === tab.id ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
               }`}>{tab.count}</span>
             </button>
           ))}
@@ -674,34 +675,37 @@ export default function InterviewsPage() {
       {/* Filters */}
       <div className="flex gap-3 mb-5 flex-wrap items-center">
         <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setIvrPage(1); }}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
         </select>
         <div className="flex items-center gap-1.5">
           <input type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
           <span className="text-gray-400 text-sm">–</span>
           <input type="date" value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
         <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <option value="All">All Templates</option>
           {uniqueTemplates.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
         <select value={filterIvr} onChange={e => { setFilterIvr(e.target.value); setIvrPage(1); }}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <option value="All">All Interviewers</option>
           {uniqueIvrs.map(e => <option key={e} value={e}>{ivrNameByEmail[e] || e}</option>)}
         </select>
         {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All") && (
           <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setIvrPage(1); }}
-            className="text-sm text-gray-500 hover:text-gray-800 px-2">Clear</button>
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
+            <X className="w-3.5 h-3.5" /> Clear
+          </button>
         )}
         <div className="ml-auto flex items-center gap-2">
           <button onClick={exportToCSV}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
-            ↓ Export{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
+            <Download className="w-3.5 h-3.5" />
+            Export{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
           </button>
           <button
             onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
@@ -710,16 +714,21 @@ export default function InterviewsPage() {
                 ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
                 : "text-gray-500 border-gray-200 hover:bg-gray-50"
             }`}>
-            {showArchived ? "← Active" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+            {showArchived
+              ? <><ArchiveRestore className="w-3.5 h-3.5" /> Active</>
+              : <><Archive className="w-3.5 h-3.5" /> Archived{archivedCount > 0 ? ` (${archivedCount})` : ""}</>}
           </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
+        className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
+      >
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-100">
+            <tr className="border-b border-gray-100 bg-gray-50/60">
               {["Candidate", "Interviewer", "Template", "Round", "Date & Time", "Meet", "Status", ""].map(h => (
                 <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
               ))}
@@ -727,9 +736,18 @@ export default function InterviewsPage() {
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="text-center text-gray-400 py-12">No interviews found</td></tr>
-            ) : pagedInterviews.map(iv => (
-              <tr key={iv.id} className="hover:bg-gray-50">
+              <tr><td colSpan={8} className="py-16">
+                <div className="flex flex-col items-center gap-2 text-gray-400">
+                  <Inbox className="w-8 h-8 text-gray-300" />
+                  <p className="text-sm">No interviews found</p>
+                </div>
+              </td></tr>
+            ) : pagedInterviews.map((iv, idx) => (
+              <motion.tr
+                key={iv.id}
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, delay: idx * 0.02 }}
+                className="hover:bg-gray-50/70 transition-colors"
+              >
                 <td className="px-4 py-3">
                   <p className="font-semibold text-gray-900">{resolvedName(iv)}</p>
                   <p className="text-xs text-gray-400">{iv.candidateEmail}</p>
@@ -749,9 +767,7 @@ export default function InterviewsPage() {
                   {iv.meetLink ? (
                     <a href={iv.meetLink} target="_blank" rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100 transition-colors">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.9L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/>
-                      </svg>
+                      <Video className="w-3 h-3" />
                       Join Meet
                     </a>
                   ) : (
@@ -824,12 +840,12 @@ export default function InterviewsPage() {
                     { label: "Delete", onClick: () => handleDelete(iv), danger: true },
                   ]} />
                 </td>
-              </tr>
+              </motion.tr>
             ))}
           </tbody>
         </table>
         <Pagination page={ivrPage} totalPages={ivrTotalPages} total={ivrTotal} pageSize={ivrPageSize} onPageChange={setIvrPage} />
-      </div>
+      </motion.div>
 
       <ScheduleInterviewModal
         open={showModal} onClose={() => setShowModal(false)}

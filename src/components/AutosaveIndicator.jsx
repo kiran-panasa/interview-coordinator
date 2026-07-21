@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Loader2, CheckCircle2, AlertTriangle } from "lucide-react";
 
 function timeAgo(ts) {
   const secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
@@ -10,6 +12,13 @@ function timeAgo(ts) {
   return `${hrs}h ago`;
 }
 
+const fadeProps = {
+  initial: { opacity: 0, y: 2 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -2 },
+  transition: { duration: 0.15 },
+};
+
 export default function AutosaveIndicator({ status, lastSavedAt }) {
   const [, forceTick] = useState(0);
 
@@ -20,29 +29,30 @@ export default function AutosaveIndicator({ status, lastSavedAt }) {
     return () => clearInterval(t);
   }, [lastSavedAt]);
 
+  let content = null;
+
   if (status === "saving" || status === "pending") {
-    return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
-        <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
+    content = (
+      <motion.span key="saving" {...fadeProps} className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600">
+        <Loader2 className="w-3.5 h-3.5 animate-spin" />
         Saving draft…
-      </span>
+      </motion.span>
     );
-  }
-  if (status === "error") {
-    return <span className="text-xs text-red-500">Draft save failed — will retry</span>;
-  }
-  if (status === "saved" && lastSavedAt) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
-        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-        </svg>
+  } else if (status === "error") {
+    content = (
+      <motion.span key="error" {...fadeProps} className="inline-flex items-center gap-1.5 text-xs font-medium text-red-500">
+        <AlertTriangle className="w-3.5 h-3.5" />
+        Draft save failed — will retry
+      </motion.span>
+    );
+  } else if (status === "saved" && lastSavedAt) {
+    content = (
+      <motion.span key="saved" {...fadeProps} className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+        <CheckCircle2 className="w-3.5 h-3.5" />
         Draft saved · {timeAgo(lastSavedAt)}
-      </span>
+      </motion.span>
     );
   }
-  return null;
+
+  return <AnimatePresence mode="wait">{content}</AnimatePresence>;
 }

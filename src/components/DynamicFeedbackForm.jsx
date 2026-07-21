@@ -1,4 +1,8 @@
 import { useState, useCallback, useMemo, memo } from "react";
+import { motion } from "framer-motion";
+import {
+  ChevronDown, Plus, Check, Trash2, Award, Sparkles,
+} from "lucide-react";
 import {
   initFeedbackState,
   computeCardRating,
@@ -9,6 +13,7 @@ import {
 import { saveFeedbackAutoDraft } from "../api/firestore";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
 import AutosaveIndicator from "./AutosaveIndicator";
+import Button from "./Button";
 
 function cls(...parts) {
   return parts.filter(Boolean).join(" ");
@@ -55,7 +60,7 @@ function TextField({ field, value, onChange, disabled }) {
         onChange={e => onChange(e.target.value)}
         placeholder={disabled ? "" : (field.placeholder || "")}
         rows={2}
-        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none disabled:bg-gray-50 disabled:text-gray-600"
+        className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-none disabled:bg-gray-50 disabled:text-gray-600"
       />
     </div>
   );
@@ -82,7 +87,7 @@ function DropdownField({ field, value, onChange, disabled, questionBank }) {
         <select
           value={value || ""}
           onChange={e => onChange(e.target.value)}
-          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white"
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors bg-white"
         >
           <option value="">Select {field.label}…</option>
           {options.map(opt => (
@@ -114,23 +119,24 @@ function ScoredDropdownField({ field, value, onChange, disabled }) {
               disabled={disabled}
               onClick={() => !disabled && onChange(isSelected ? null : String(opt.score))}
               className={cls(
-                "w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex items-start gap-3",
+                "w-full text-left px-4 py-3 rounded-xl border text-sm transition-all flex items-center gap-3",
                 isSelected
-                  ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                  ? "bg-brand-600 border-brand-600 text-white shadow-soft"
                   : disabled
                     ? "bg-gray-50 border-gray-200 text-gray-500 cursor-not-allowed"
-                    : "bg-white border-gray-200 text-gray-700 hover:border-indigo-400 hover:bg-indigo-50 cursor-pointer"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-brand-400 hover:bg-brand-50 cursor-pointer"
               )}
             >
               <span className={cls(
                 "flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold",
-                isSelected ? "bg-white/20 text-white" : "bg-indigo-100 text-indigo-700"
+                isSelected ? "bg-white/20 text-white" : "bg-brand-100 text-brand-700"
               )}>
                 {opt.score}
               </span>
-              <span className={cls("flex-1", isSelected ? "text-indigo-100" : "text-gray-700")}>
+              <span className={cls("flex-1", isSelected ? "text-white" : "text-gray-700")}>
                 {opt.label}
               </span>
+              {isSelected && <Check className="w-4 h-4 text-white flex-shrink-0" />}
             </button>
           );
         })}
@@ -145,7 +151,10 @@ function ScoredDropdownField({ field, value, onChange, disabled }) {
 function ComputedValue({ label, value }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl">
-      <span className="text-sm font-semibold text-amber-800">{label}</span>
+      <span className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+        <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+        {label}
+      </span>
       <span className={cls("text-2xl font-bold", value != null ? "text-amber-700" : "text-gray-300")}>
         {value != null ? value : "—"}
       </span>
@@ -175,26 +184,25 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
     <div className="border border-gray-200 rounded-2xl overflow-hidden">
       <div
         className={cls(
-          "flex items-center justify-between px-4 py-3 cursor-pointer select-none",
+          "flex items-center justify-between px-4 py-3 cursor-pointer select-none transition-colors",
           complete ? "bg-emerald-50" : "bg-gray-50"
         )}
         onClick={() => setOpen(o => !o)}
       >
         <div className="flex items-center gap-2">
-          <svg className={cls("w-4 h-4 text-gray-400 transition-transform flex-shrink-0", open ? "rotate-180" : "")}
-            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          <ChevronDown className={cls("w-4 h-4 text-gray-400 transition-transform flex-shrink-0", open ? "rotate-180" : "")} />
           <span className={cls("text-sm font-semibold", complete ? "text-emerald-800" : "text-gray-700")}>
             {cardLabel}
           </span>
           {complete && (
-            <span className="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-md font-medium">Complete</span>
+            <span className="text-xs px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-md font-medium flex items-center gap-1">
+              <Check className="w-3 h-3" /> Complete
+            </span>
           )}
         </div>
         <div className="flex items-center gap-3">
           {cardRating != null && (
-            <span className="text-sm font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg">
+            <span className="text-sm font-bold text-brand-700 bg-brand-50 px-2.5 py-1 rounded-lg">
               {cardRating}
             </span>
           )}
@@ -202,16 +210,16 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
             <button
               type="button"
               onClick={e => { e.stopPropagation(); onDelete(index); }}
-              className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50 transition-colors"
+              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors"
             >
-              Remove
+              <Trash2 className="w-3.5 h-3.5" /> Remove
             </button>
           )}
         </div>
       </div>
 
       {open && (
-        <div className="p-4 space-y-4 border-t border-gray-100">
+        <div className="p-4 space-y-4 border-t border-gray-100 animate-fade-in">
           {(domain.cardFields || []).map(field => {
             if (field.type === "text") {
               return <TextField key={field.id} field={field} value={cardData[field.id]} onChange={v => update(field.id, v)} disabled={disabled} />;
@@ -266,19 +274,16 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
   const cards = domainData?.cards || [];
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
       <div
-        className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-50 to-white border-b border-gray-100 cursor-pointer select-none"
+        className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-brand-50 to-white border-b border-gray-100 cursor-pointer select-none"
         onClick={() => setOpen(o => !o)}
       >
         <div className="flex items-center gap-3">
-          <svg className={cls("w-4 h-4 text-indigo-400 transition-transform flex-shrink-0", open ? "rotate-180" : "")}
-            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-          <span className="text-base font-bold text-gray-900">{domain.label}</span>
+          <ChevronDown className={cls("w-4 h-4 text-brand-400 transition-transform flex-shrink-0", open ? "rotate-180" : "")} />
+          <span className="text-sm font-bold text-gray-900">{domain.label}</span>
           {hasCards && (
-            <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full font-medium">
+            <span className="text-xs px-2 py-0.5 bg-brand-100 text-brand-700 rounded-full font-medium">
               {cards.length} {cardNoun.toLowerCase()}{cards.length !== 1 ? "s" : ""}
             </span>
           )}
@@ -286,7 +291,7 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
         {domainRating != null && (
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className="text-xs text-gray-400 hidden sm:inline">Domain Rating</span>
-            <span className="text-lg font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg min-w-[3rem] text-center">
+            <span className="text-lg font-bold text-brand-700 bg-brand-50 px-3 py-1 rounded-lg min-w-[3rem] text-center">
               {domainRating}
             </span>
           </div>
@@ -294,7 +299,7 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
       </div>
 
       {open && (
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-4 animate-fade-in">
           {hasCards && (
             <>
               <div className="space-y-3">
@@ -317,11 +322,9 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
                 <button
                   type="button"
                   onClick={addCard}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 text-sm font-medium hover:border-indigo-400 hover:bg-indigo-50 transition-colors"
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-dashed border-brand-200 rounded-xl text-brand-600 text-sm font-medium hover:border-brand-400 hover:bg-brand-50 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
+                  <Plus className="w-4 h-4" />
                   Add {cardNoun}
                 </button>
               )}
@@ -356,17 +359,29 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
 function VerdictBanner({ value }) {
   if (value == null) return null;
   return (
-    <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-5 text-white shadow-lg">
+    <div className="bg-gradient-to-r from-brand-600 to-violet-600 rounded-2xl p-5 text-white shadow-popover">
       <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold opacity-90">Final Interview Verdict</div>
-          <div className="text-xs opacity-60 mt-0.5">Weighted average of all domain ratings</div>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+            <Award className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-sm font-semibold opacity-90">Final Interview Verdict</div>
+            <div className="text-xs opacity-60 mt-0.5">Weighted average of all domain ratings</div>
+          </div>
         </div>
         <div className="text-5xl font-bold">{value}</div>
       </div>
     </div>
   );
 }
+
+// ── Section reveal wrapper (subtle stagger as domains render) ─────────────────
+
+const domainVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: Math.min(i * 0.04, 0.3), duration: 0.25, ease: "easeOut" } }),
+};
 
 // ── Main form (interviewer fills this) ────────────────────────────────────────
 
@@ -416,29 +431,32 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
         </div>
       )}
 
-      {enabledDomains.map(domain => (
-        <DomainSection
+      {enabledDomains.map((domain, i) => (
+        <motion.div
           key={domain.id}
-          domain={domain}
-          domainData={feedbackData.domains?.[domain.id] || { cards: [] }}
-          onChange={data => updateDomain(domain.id, data)}
-          disabled={false}
-          questionBank={template?.questionBank}
-          defaultOpen={!previewMode}
-        />
+          custom={i}
+          initial="hidden"
+          animate="visible"
+          variants={domainVariants}
+        >
+          <DomainSection
+            domain={domain}
+            domainData={feedbackData.domains?.[domain.id] || { cards: [] }}
+            onChange={data => updateDomain(domain.id, data)}
+            disabled={false}
+            questionBank={template?.questionBank}
+            defaultOpen={!previewMode}
+          />
+        </motion.div>
       ))}
 
       <VerdictBanner value={finalVerdict} />
 
       {!previewMode && (
         <div className="flex justify-end pt-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
+          <Button type="submit" variant="primary" size="lg" disabled={saving} icon={saving ? undefined : Check}>
             {saving ? "Saving…" : "Submit Evaluation"}
-          </button>
+          </Button>
         </div>
       )}
     </form>
@@ -477,15 +495,15 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
         />
       ))}
       {feedbackData.comments && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Overall Notes</p>
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedbackData.comments}</p>
         </div>
       )}
       {feedbackData.overallRecommendation && (
-        <div className="bg-indigo-50 rounded-2xl border border-indigo-100 px-5 py-4 flex items-center gap-3">
+        <div className="bg-brand-50 rounded-2xl border border-brand-100 px-5 py-4 flex items-center gap-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Overall Recommendation</p>
-          <span className="text-sm font-bold text-indigo-700">{feedbackData.overallRecommendation}</span>
+          <span className="text-sm font-bold text-brand-700">{feedbackData.overallRecommendation}</span>
         </div>
       )}
       <VerdictBanner value={finalVerdict} />

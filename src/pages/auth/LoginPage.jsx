@@ -1,5 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  Mail, Lock, Eye, EyeOff, LogIn, UserPlus, AlertCircle, Loader2,
+  Smartphone, ArrowLeft, CheckCircle2, MailCheck, User, ShieldCheck,
+  RefreshCw, CalendarCheck2,
+} from "lucide-react";
 import { auth } from "../../firebase";
 import {
   signInWithEmailAndPassword,
@@ -11,6 +17,7 @@ import {
 import { getUserByPhone } from "../../api/firestore";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 import { maskEmail } from "../../utils/strings";
+import Button from "../../components/Button";
 
 const FIREBASE_ERRORS = {
   "auth/user-not-found":              "No account with this email.",
@@ -39,6 +46,27 @@ function toE164(raw = "") {
 function maskPhone(raw = "") {
   const d = raw.replace(/\D/g, "");
   return d.length >= 4 ? `×× ×× ×× ${d.slice(-4)}` : "your registered number";
+}
+
+// Small helper so the Button component's fixed icon slot can render a spinner.
+function SpinIcon({ className = "" }) {
+  return <Loader2 className={`${className} animate-spin`} />;
+}
+
+const inputClass =
+  "w-full pl-10 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 " +
+  "focus:outline-none focus:ring-4 focus:ring-brand-500/10 focus:border-brand-400 transition-colors";
+
+const labelClass = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5";
+
+function ErrorBox({ children }) {
+  if (!children) return null;
+  return (
+    <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 animate-fade-in">
+      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+      <p>{children}</p>
+    </div>
+  );
 }
 
 export default function LoginPage() {
@@ -203,68 +231,77 @@ export default function LoginPage() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-white flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gradient-to-b from-brand-50/40 to-gray-50 flex flex-col items-center justify-center px-4 py-12">
       {/* invisible reCAPTCHA anchor — must be in the DOM when OTP is requested */}
       <div ref={recaptchaRef} />
 
       <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-600 rounded-xl mb-4 shadow-lg">
-            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
+        {/* Brand */}
+        <motion.div
+          initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+          className="flex items-center gap-2.5 mb-8 justify-center"
+        >
+          <div className="w-9 h-9 bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-soft">
+            <CalendarCheck2 className="w-4.5 h-4.5 text-white" strokeWidth={2.2} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Interview Coordinator</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {resetMode ? "Reset your password" : mode === "login" ? "Sign in to continue" : "Create your account"}
-          </p>
-        </div>
+          <div className="text-left">
+            <p className="text-sm font-bold text-gray-900 leading-tight tracking-tight">Interview</p>
+            <p className="text-xs text-brand-600 font-semibold leading-tight">Coordinator</p>
+          </div>
+        </motion.div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+        <motion.div
+          initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
+          className="text-center mb-6"
+        >
+          <h1 className="text-xl font-bold text-gray-900 tracking-tight">
+            {resetMode ? "Reset your password" : mode === "login" ? "Sign in to continue" : "Create your account"}
+          </h1>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.35, delay: 0.1 }}
+          className="bg-white rounded-2xl shadow-card border border-gray-100 p-8"
+        >
 
           {/* ── Reset flow ── */}
           {resetMode ? (
             <>
               {/* Method picker */}
               {!resetMethod && (
-                <div className="space-y-4">
+                <div className="space-y-4 animate-fade-in">
                   <p className="text-sm text-gray-600 mb-5">Choose how you'd like to reset your password.</p>
 
                   {/* Email option */}
-                  <button type="button" onClick={() => { setResetMethod("email"); setError(""); }}
-                    className="w-full flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-colors text-left group">
-                    <div className="flex-shrink-0 w-10 h-10 bg-indigo-100 group-hover:bg-indigo-200 rounded-xl flex items-center justify-center transition-colors">
-                      <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} type="button"
+                    onClick={() => { setResetMethod("email"); setError(""); }}
+                    className="w-full flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-brand-400 hover:bg-brand-50 transition-colors text-left group">
+                    <div className="flex-shrink-0 w-10 h-10 bg-brand-100 group-hover:bg-brand-200 rounded-xl flex items-center justify-center transition-colors">
+                      <Mail className="w-5 h-5 text-brand-600" />
                     </div>
                     <div>
                       <p className="text-sm font-bold text-gray-900">Send reset email</p>
                       <p className="text-xs text-gray-500 mt-0.5">We'll email you a link to reset your password</p>
                     </div>
-                  </button>
+                  </motion.button>
 
                   {/* Phone OTP option */}
-                  <button type="button" onClick={() => { setResetMethod("otp"); setError(""); }}
+                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} type="button"
+                    onClick={() => { setResetMethod("otp"); setError(""); }}
                     className="w-full flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-emerald-400 hover:bg-emerald-50 transition-colors text-left group">
                     <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl flex items-center justify-center transition-colors">
-                      <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                      </svg>
+                      <Smartphone className="w-5 h-5 text-emerald-600" />
                     </div>
                     <div>
                       <p className="text-sm font-bold text-gray-900">Verify via phone OTP</p>
                       <p className="text-xs text-gray-500 mt-0.5">Get a one-time code on your registered phone number</p>
                     </div>
-                  </button>
+                  </motion.button>
 
                   <button type="button" onClick={backFromReset}
-                    className="w-full text-center text-sm text-gray-500 hover:text-gray-700 pt-1">
-                    ← Back to sign in
+                    className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 pt-1 transition-colors">
+                    <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
                   </button>
                 </div>
               )}
@@ -272,32 +309,37 @@ export default function LoginPage() {
               {/* Email reset */}
               {resetMethod === "email" && (
                 resetSent ? (
-                  <div className="text-center">
-                    <p className="text-4xl mb-3">📬</p>
+                  <div className="text-center animate-fade-in">
+                    <div className="inline-flex items-center justify-center w-14 h-14 bg-brand-100 rounded-full mb-4">
+                      <MailCheck className="w-7 h-7 text-brand-600" />
+                    </div>
                     <p className="font-semibold text-gray-900 mb-1">Check your inbox</p>
                     <p className="text-sm text-gray-500 mb-6">Reset link sent to <strong>{email}</strong></p>
                     <button onClick={() => { setResetMode(false); setResetSent(false); setResetMethod(""); }}
-                      className="text-indigo-600 text-sm font-medium hover:underline">
+                      className="text-brand-600 text-sm font-medium hover:underline">
                       Back to sign in
                     </button>
                   </div>
                 ) : (
-                  <form onSubmit={handleEmailReset} className="space-y-4">
+                  <form onSubmit={handleEmailReset} className="space-y-4 animate-fade-in">
                     <div>
                       <p className="font-semibold text-gray-900 mb-1">Reset via email</p>
                       <p className="text-sm text-gray-500 mb-4">Enter your email and we'll send a reset link.</p>
-                      <input type="email" placeholder="you@example.com" value={email}
-                        onChange={e => setEmail(e.target.value)} required
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input type="email" placeholder="you@example.com" value={email}
+                          onChange={e => setEmail(e.target.value)} required
+                          className={inputClass} />
+                      </div>
                     </div>
-                    {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-                    <button type="submit" disabled={loading}
-                      className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                    <ErrorBox>{error}</ErrorBox>
+                    <Button type="submit" disabled={loading} variant="primary" size="lg"
+                      icon={loading ? SpinIcon : Mail} className="w-full">
                       {loading ? "Sending…" : "Send reset link"}
-                    </button>
+                    </Button>
                     <button type="button" onClick={backFromReset}
-                      className="w-full text-center text-sm text-gray-500 hover:text-gray-700">
-                      ← Back
+                      className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+                      <ArrowLeft className="w-3.5 h-3.5" /> Back
                     </button>
                   </form>
                 )
@@ -308,40 +350,38 @@ export default function LoginPage() {
                 <>
                   {/* Step 1 — find account */}
                   {otpStep === 1 && (
-                    <form onSubmit={handleFindAccount} className="space-y-4">
+                    <form onSubmit={handleFindAccount} className="space-y-4 animate-fade-in">
                       <div>
                         <p className="font-semibold text-gray-900 mb-1">Verify via phone OTP</p>
                         <p className="text-sm text-gray-500 mb-4">
                           Enter your registered phone number. We'll send a one-time code to verify it's you.
                         </p>
-                        <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                          Phone Number
-                        </label>
-                        <input type="tel" placeholder="+91 98765 43210" value={otpPhone}
-                          onChange={e => setOtpPhone(e.target.value)} required
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                        <label className={labelClass}>Phone Number</label>
+                        <div className="relative">
+                          <Smartphone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input type="tel" placeholder="+91 98765 43210" value={otpPhone}
+                            onChange={e => setOtpPhone(e.target.value)} required
+                            className={inputClass.replace("focus:ring-brand-500/10 focus:border-brand-400", "focus:ring-emerald-500/10 focus:border-emerald-400")} />
+                        </div>
                       </div>
-                      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-                      <button type="submit" disabled={loading}
-                        className="w-full bg-emerald-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60">
+                      <ErrorBox>{error}</ErrorBox>
+                      <Button type="submit" disabled={loading} size="lg"
+                        icon={loading ? SpinIcon : Smartphone} className="w-full bg-emerald-600 shadow-soft hover:bg-emerald-700 disabled:bg-emerald-300 text-white">
                         {loading ? "Looking up…" : "Send OTP"}
-                      </button>
+                      </Button>
                       <button type="button" onClick={backFromReset}
-                        className="w-full text-center text-sm text-gray-500 hover:text-gray-700">
-                        ← Back
+                        className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back
                       </button>
                     </form>
                   )}
 
                   {/* Step 2 — enter OTP */}
                   {otpStep === 2 && (
-                    <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <form onSubmit={handleVerifyOtp} className="space-y-4 animate-fade-in">
                       <div className="text-center mb-2">
                         <div className="inline-flex items-center justify-center w-12 h-12 bg-emerald-100 rounded-full mb-3">
-                          <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                          </svg>
+                          <Smartphone className="w-6 h-6 text-emerald-600" />
                         </div>
                         <p className="font-semibold text-gray-900">Enter the 6-digit code</p>
                         <p className="text-sm text-gray-500 mt-1">
@@ -355,21 +395,21 @@ export default function LoginPage() {
                         maxLength={6}
                         value={otpCode}
                         onChange={e => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-3 text-center text-xl font-mono tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-3 text-center text-xl font-mono tracking-[0.5em] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-colors"
                       />
-                      {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-                      <button type="submit" disabled={loading || otpCode.length < 6}
-                        className="w-full bg-emerald-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60">
+                      <ErrorBox>{error}</ErrorBox>
+                      <Button type="submit" disabled={loading || otpCode.length < 6} size="lg"
+                        icon={loading ? SpinIcon : ShieldCheck} className="w-full bg-emerald-600 shadow-soft hover:bg-emerald-700 disabled:bg-emerald-300 text-white">
                         {loading ? "Verifying…" : "Verify & send reset link"}
-                      </button>
+                      </Button>
                       <div className="flex items-center justify-between text-sm">
                         <button type="button" onClick={() => { setOtpStep(1); setOtpCode(""); setError(""); }}
-                          className="text-gray-500 hover:text-gray-700">
-                          ← Change number
+                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 transition-colors">
+                          <ArrowLeft className="w-3.5 h-3.5" /> Change number
                         </button>
                         <button type="button" onClick={handleResendOtp} disabled={loading}
-                          className="text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50">
-                          Resend code
+                          className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50 transition-colors">
+                          <RefreshCw className="w-3.5 h-3.5" /> Resend code
                         </button>
                       </div>
                     </form>
@@ -377,22 +417,20 @@ export default function LoginPage() {
 
                   {/* Step 3 — success */}
                   {otpStep === 3 && (
-                    <div className="text-center">
+                    <div className="text-center animate-fade-in">
                       <div className="inline-flex items-center justify-center w-14 h-14 bg-emerald-100 rounded-full mb-4">
-                        <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
+                        <CheckCircle2 className="w-7 h-7 text-emerald-600" strokeWidth={2.2} />
                       </div>
                       <p className="font-semibold text-gray-900 mb-1">Phone verified!</p>
                       <p className="text-sm text-gray-500 mb-2">
                         A password reset link has been sent to
                       </p>
-                      <p className="text-sm font-semibold text-indigo-700 mb-6">{maskedEmail}</p>
+                      <p className="text-sm font-semibold text-brand-700 mb-6">{maskedEmail}</p>
                       <p className="text-xs text-gray-400 mb-6">
                         Can't find the email? Check your spam folder or ask your admin to resend it.
                       </p>
                       <button onClick={() => { setResetMode(false); setResetMethod(""); setOtpStep(1); }}
-                        className="text-indigo-600 text-sm font-medium hover:underline">
+                        className="text-brand-600 text-sm font-medium hover:underline">
                         Back to sign in
                       </button>
                     </div>
@@ -402,52 +440,48 @@ export default function LoginPage() {
             </>
           ) : (
             /* ── Login / signup form ── */
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4 animate-fade-in">
               {mode === "signup" && (
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Full Name</label>
-                  <input type="text" placeholder="Your name" value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                  <label className={labelClass}>Full Name</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input type="text" placeholder="Your name" value={name}
+                      onChange={e => setName(e.target.value)}
+                      className={inputClass} />
+                  </div>
                 </div>
               )}
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Email</label>
-                <input type="email" placeholder="you@example.com" value={email}
-                  onChange={e => setEmail(e.target.value)} required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                <label className={labelClass}>Email</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input type="email" placeholder="you@example.com" value={email}
+                    onChange={e => setEmail(e.target.value)} required
+                    className={inputClass} />
+                </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Password</label>
+                <label className={labelClass}>Password</label>
                 <div className="relative">
+                  <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input type={showPassword ? "text" : "password"} placeholder="••••••••" value={password}
                     onChange={e => setPassword(e.target.value)} required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    className={`${inputClass} pr-10`} />
                   <button type="button" onClick={() => setShowPassword(v => !v)}
-                    className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600">
-                    {showPassword ? (
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" />
-                      </svg>
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    )}
+                    className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
-              {error && <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
-              <button type="submit" disabled={loading}
-                className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              <ErrorBox>{error}</ErrorBox>
+              <Button type="submit" disabled={loading} variant="primary" size="lg"
+                icon={loading ? SpinIcon : mode === "login" ? LogIn : UserPlus} className="w-full">
                 {loading ? "Please wait…" : mode === "login" ? "Sign In" : "Create Account"}
-              </button>
+              </Button>
               {mode === "login" && (
                 <button type="button" onClick={openReset}
-                  className="w-full text-center text-xs text-gray-400 hover:text-gray-600">
+                  className="w-full text-center text-xs text-gray-400 hover:text-gray-600 transition-colors">
                   Forgot password?
                 </button>
               )}
@@ -455,13 +489,13 @@ export default function LoginPage() {
                 {mode === "login" ? "No account? " : "Already have one? "}
                 <button type="button"
                   onClick={() => { setMode(m => m === "login" ? "signup" : "login"); setError(""); setPassword(""); setName(""); }}
-                  className="text-indigo-600 font-semibold hover:underline">
+                  className="text-brand-600 font-semibold hover:underline">
                   {mode === "login" ? "Sign up" : "Sign in"}
                 </button>
               </p>
             </form>
           )}
-        </div>
+        </motion.div>
 
         <p className="text-center text-xs text-gray-400 mt-6">NxtWave Internal Tool · Restricted Access</p>
       </div>

@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { formatDate, formatDateShort, toInterviewDateTime } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  ArrowLeft, Calendar, Video, FileText, CheckCircle2, XCircle,
+  AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2,
+} from "lucide-react";
 import {
   getInterview, updateInterview, saveFeedbackDraft,
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
@@ -16,12 +21,18 @@ const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import AutosaveIndicator from "../../components/AutosaveIndicator";
+import { Skeleton } from "../../components/Skeleton";
 import { useAutosaveDraft } from "../../hooks/useAutosaveDraft";
 import {
   RatingInput, RatingDisplay,
   StructuredFeedbackForm, StructuredFeedbackDisplay,
 } from "../../components/StructuredFeedbackForm";
 import DynamicFeedbackForm, { DynamicFeedbackDisplay } from "../../components/DynamicFeedbackForm";
+
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.3, ease: "easeOut" } }),
+};
 
 function isPastInterviewTime(scheduledDate, scheduledTime) {
   if (!scheduledDate || !scheduledTime) return false;
@@ -194,8 +205,37 @@ export default function InterviewDetail() {
     { enabled: legacyAutosaveEnabled }
   );
 
-  if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
-  if (!interview) return <div className="p-8 text-gray-400 text-sm">Interview not found.</div>;
+  if (loading) return (
+    <div className="p-8 max-w-3xl">
+      <Skeleton className="h-4 w-40 mb-6" />
+      <div className="flex items-start justify-between mb-6">
+        <div className="space-y-2.5">
+          <Skeleton className="h-7 w-56" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+        <Skeleton className="h-6 w-24 rounded-full" />
+      </div>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-4">
+        <Skeleton className="h-3 w-32" />
+        <div className="grid grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-4 w-28" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+  if (!interview) return (
+    <div className="p-8 max-w-3xl">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-10 text-center">
+        <AlertTriangle className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+        <p className="text-sm text-gray-400">Interview not found.</p>
+      </div>
+    </div>
+  );
 
   const isPending    = interview.status === "pending_acceptance";
   const isScheduled  = interview.status === "scheduled";
@@ -214,33 +254,37 @@ export default function InterviewDetail() {
   const totalQuestions = template?.questionIds?.length || 0;
   const askedCount      = interview.questionsAsked?.length || 0;
 
-  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+  const inputCls = "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors bg-white";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
 
   return (
     <div className="p-8 max-w-3xl">
       <Link to="/interviewer/interviews"
-        className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">
-        ← Back to My Interviews
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-600 transition-colors mb-6">
+        <ArrowLeft className="w-3.5 h-3.5" /> Back to My Interviews
       </Link>
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <motion.div initial="hidden" animate="visible" custom={0} variants={fadeUp}
+        className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{interview.candidateName}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">{interview.roleAppliedFor}</p>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">{interview.candidateName}</h1>
+          <p className="text-sm text-gray-500 mt-1">{interview.roleAppliedFor}</p>
           {template && (
-            <span className="inline-block mt-1.5 text-xs bg-indigo-50 text-indigo-700 font-semibold px-2 py-0.5 rounded-full">
+            <span className="inline-block mt-2 text-xs bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full">
               {template.name}
             </span>
           )}
         </div>
         <Badge value={interview.status} />
-      </div>
+      </motion.div>
 
       {/* Details card */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
-        <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-4">Interview Details</h2>
+      <motion.div initial="hidden" animate="visible" custom={1} variants={fadeUp}
+        className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
+        <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-4">
+          <Calendar className="w-4 h-4 text-gray-400" /> Interview Details
+        </h2>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Date</p>
@@ -262,8 +306,8 @@ export default function InterviewDetail() {
             <div className="col-span-2">
               <p className="text-xs text-gray-400 mb-0.5">Meet Link</p>
               <a href={interview.meetLink} target="_blank" rel="noreferrer"
-                className="text-sm text-indigo-600 font-medium hover:underline break-all">
-                {interview.meetLink} ↗
+                className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline break-all">
+                <Video className="w-3.5 h-3.5 flex-shrink-0" /> {interview.meetLink} <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
               </a>
             </div>
           )}
@@ -271,98 +315,101 @@ export default function InterviewDetail() {
             <div className="col-span-2">
               <p className="text-xs text-gray-400 mb-0.5">Resume</p>
               <a href={interview.resumeLink} target="_blank" rel="noreferrer"
-                className="text-sm text-indigo-600 font-medium hover:underline">
-                View Resume ↗
+                className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline">
+                <FileText className="w-3.5 h-3.5 flex-shrink-0" /> View Resume <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
               </a>
             </div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Accept / Decline */}
       {isPending && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5">
           <p className="text-sm font-semibold text-amber-800 mb-1">Awaiting your response</p>
           <p className="text-xs text-amber-600 mb-4">
             {formatDate(interview.scheduledDate)} at {interview.scheduledTime} · {interview.round}
           </p>
           <div className="flex gap-3">
             <button onClick={handleAccept} disabled={saving}
-              className="bg-emerald-500 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60">
-              Accept
+              className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+              <CheckCircle2 className="w-4 h-4" /> Accept
             </button>
             <button onClick={handleDecline} disabled={saving}
-              className="bg-white border border-red-300 text-red-600 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-60">
-              Decline
+              className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
+              <XCircle className="w-4 h-4" /> Decline
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ── Attendance gate — appears once interview time has passed ── */}
       {showAttendanceGate && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-5">
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5">
           <p className="text-sm font-bold text-amber-800 mb-1">Did the candidate join?</p>
           <p className="text-xs text-amber-600 mb-4">
             Scheduled for {interview.scheduledTime} · {formatDate(interview.scheduledDate)}
           </p>
           <div className="flex gap-3">
             <button onClick={handleCandidateJoined} disabled={saving}
-              className="bg-emerald-500 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60 transition-colors">
-              ✓ Candidate Joined
+              className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+              <CheckCircle2 className="w-4 h-4" /> Candidate Joined
             </button>
             <button onClick={handleCandidateNoShow} disabled={saving}
-              className="bg-white border border-red-300 text-red-600 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
-              ✗ Candidate Didn't Join
+              className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
+              <XCircle className="w-4 h-4" /> Candidate Didn't Join
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ── No-show confirmation ── */}
       {isNoShow && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-5 flex items-center gap-3">
-          <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-          </svg>
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-5 flex items-center gap-3">
+          <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-red-700">Candidate did not join</p>
             <p className="text-xs text-red-400 mt-0.5">Marked as no-show. No feedback required.</p>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* ── Questions Asked — opens in a separate tab so the evaluation form isn't lost ── */}
       {showEvaluation && totalQuestions > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5 flex items-center justify-between gap-3">
+        <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}
+          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Questions Asked</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{askedCount} / {totalQuestions} marked</p>
+            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <HelpCircle className="w-4 h-4 text-gray-400" /> Questions Asked
+            </h2>
+            <p className="text-xs text-gray-400 mt-1">{askedCount} / {totalQuestions} marked</p>
           </div>
           <Link
             to={`/interviewer/interviews/${id}/questions`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
           >
             View/Select Questions to be Asked
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
+            <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
-        </div>
+        </motion.div>
       )}
 
       {/* ── Evaluation section (scheduled or completed) ── */}
       {showEvaluation && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <motion.div initial="hidden" animate="visible" custom={4} variants={fadeUp}
+          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-base font-bold text-gray-900">Evaluation</h2>
+            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <ClipboardList className="w-4 h-4 text-gray-400" /> Evaluation
+            </h2>
             {hasFeedback && (
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                </svg>
+                <CheckCircle2 className="w-3.5 h-3.5" />
                 Submitted {formatDateShort(interview.feedback.submittedAt)}
               </span>
             )}
@@ -419,7 +466,8 @@ export default function InterviewDetail() {
                 </div>
               )}
               <button onClick={handleLegacySubmit} disabled={saving}
-                className="w-full bg-indigo-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+                className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 {saving ? "Saving…" : hasFeedback ? "Update Evaluation" : "Save Evaluation"}
               </button>
             </div>
@@ -462,7 +510,7 @@ export default function InterviewDetail() {
           {/* Mark as Completed — only when scheduled */}
           {isScheduled && (
             <div className="mt-6 pt-5 border-t border-gray-100">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-semibold text-gray-700">Mark as Completed</p>
                   <p className="text-xs text-gray-400 mt-0.5">
@@ -474,18 +522,19 @@ export default function InterviewDetail() {
                 <button
                   onClick={handleMarkCompleted}
                   disabled={!canComplete || saving}
-                  className={`px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                  className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
                     canComplete
-                      ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                      ? "bg-emerald-600 text-white shadow-soft hover:bg-emerald-700"
                       : "bg-gray-100 text-gray-400 cursor-not-allowed"
                   }`}
                 >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                   {saving ? "Saving…" : "Mark as Completed"}
                 </button>
               </div>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

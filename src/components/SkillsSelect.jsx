@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { ChevronDown, X, Plus, Search } from "lucide-react";
 
 export default function SkillsSelect({
   skills = [],
@@ -54,10 +55,10 @@ export default function SkillsSelect({
         ) : (
           <>
             {selected.map(s => (
-              <span key={s.id} className="text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full">{s.name}</span>
+              <span key={s.id} className="text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-2.5 py-1 rounded-full">{s.name}</span>
             ))}
             {customSkills.map(name => (
-              <span key={name} className="text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full">{name}</span>
+              <span key={name} className="text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">{name}</span>
             ))}
           </>
         )}
@@ -70,34 +71,43 @@ export default function SkillsSelect({
       {/* Chip trigger */}
       <div
         onClick={() => setOpen(o => !o)}
-        className="min-h-[38px] w-full border border-gray-300 rounded-lg px-3 py-2 flex flex-wrap gap-1.5 cursor-pointer bg-white hover:border-gray-400 transition-colors"
+        className={`min-h-[38px] w-full border rounded-xl px-3 py-2 flex flex-wrap gap-1.5 cursor-pointer bg-white transition-colors ${
+          open ? "border-brand-400 shadow-soft" : "border-gray-200 hover:border-gray-300"
+        }`}
       >
         {totalSelected === 0 && (
           <span className="text-sm text-gray-400 self-center">{placeholder}</span>
         )}
         {selected.map(s => (
-          <span key={s.id} className="flex items-center gap-1 text-xs font-semibold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+          <span key={s.id} className="flex items-center gap-1 text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-2.5 py-1 rounded-full">
             {s.name}
             <button type="button" onClick={e => { e.stopPropagation(); toggle(s.id); }}
-              className="text-indigo-400 hover:text-indigo-700 leading-none font-bold">×</button>
+              className="text-brand-400 hover:text-brand-700 leading-none">
+              <X className="w-3 h-3" strokeWidth={2.5} />
+            </button>
           </span>
         ))}
         {customSkills.map(name => (
-          <span key={name} className="flex items-center gap-1 text-xs font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+          <span key={name} className="flex items-center gap-1 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full">
             {name}
             {onRemoveCustom && (
               <button type="button" onClick={e => { e.stopPropagation(); onRemoveCustom(name); }}
-                className="text-amber-400 hover:text-amber-700 leading-none font-bold">×</button>
+                className="text-amber-400 hover:text-amber-700 leading-none">
+                <X className="w-3 h-3" strokeWidth={2.5} />
+              </button>
             )}
           </span>
         ))}
-        <span className="ml-auto self-center text-gray-400 text-xs flex-shrink-0">▾</span>
+        <span className="ml-auto self-center text-gray-400 flex-shrink-0">
+          <ChevronDown className={`w-4 h-4 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        </span>
       </div>
 
       {open && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+        <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white border border-gray-100 rounded-xl shadow-popover overflow-hidden animate-scale-in origin-top">
           {/* Search input */}
-          <div className="p-2 border-b border-gray-100">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+            <Search className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
             <input
               autoFocus
               type="text"
@@ -105,7 +115,7 @@ export default function SkillsSelect({
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && canAddCustom) handleAddCustom(); }}
               placeholder={onAddCustom ? "Search or type to add a custom skill…" : "Search skills…"}
-              className="w-full text-sm px-2 py-1 focus:outline-none"
+              className="w-full text-sm py-0.5 focus:outline-none placeholder:text-gray-400"
             />
           </div>
 
@@ -118,9 +128,9 @@ export default function SkillsSelect({
             ) : (
               <>
                 {filtered.map(s => (
-                  <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                  <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors">
                     <input type="checkbox" checked={value.includes(s.id)} onChange={() => toggle(s.id)}
-                      className="accent-indigo-600 flex-shrink-0" />
+                      className="accent-brand-600 flex-shrink-0" />
                     <span className="text-sm text-gray-700">{s.name}</span>
                   </label>
                 ))}
@@ -131,9 +141,7 @@ export default function SkillsSelect({
                     type="button"
                     onClick={handleAddCustom}
                     className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-amber-50 text-sm text-amber-700 font-semibold border-t border-gray-100 transition-colors text-left">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-                    </svg>
+                    <Plus className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.5} />
                     Add "{searchTrimmed}" as custom skill
                   </button>
                 )}

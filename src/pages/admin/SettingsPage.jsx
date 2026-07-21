@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { motion } from "framer-motion";
+import {
+  Users, SlidersHorizontal, Shield, BookOpen, Sparkles, User as UserIcon,
+  CheckCircle2, Copy, Check, FileSpreadsheet, FileText, UploadCloud,
+} from "lucide-react";
 import UserManagementTab from "../../features/settings/UserManagementTab";
 import GeneralTab from "../../features/settings/GeneralTab";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
@@ -15,6 +20,7 @@ import {
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import Button from "../../components/Button";
 import { usePagination } from "../../hooks/usePagination";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
@@ -34,7 +40,10 @@ const ALL_ROLES = [
 ];
 
 
-const SECTIONS = ["User Management", "General"];
+const SECTIONS = [
+  { value: "User Management", icon: Users },
+  { value: "General",         icon: SlidersHorizontal },
+];
 
 const ROLE_GROUPS = [
   { value: "admin",               label: "Admin",                 dot: "bg-purple-400",  badge: "text-purple-700 bg-purple-50 border-purple-200" },
@@ -313,27 +322,25 @@ export default function SettingsPage() {
   const roleBadge = (role) => {
     if (role === "admin") return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
-        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-6-3a2 2 0 11-4 0 2 2 0 014 0zm-2 4a5 5 0 00-4.546 2.916A5.986 5.986 0 0010 16a5.986 5.986 0 004.546-2.084A5 5 0 0010 11z" clipRule="evenodd" />
-        </svg>
+        <Shield className="w-2.5 h-2.5" />
         Admin
       </span>
     );
     if (role === "content_team") return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+        <BookOpen className="w-2.5 h-2.5" />
         Content Team
       </span>
     );
     if (role === "interviewer_content") return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
+        <Sparkles className="w-2.5 h-2.5" />
         Interviewer + Content
       </span>
     );
     return (
       <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
-          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-        </svg>
+        <UserIcon className="w-2.5 h-2.5" />
         Interviewer
       </span>
     );
@@ -342,21 +349,22 @@ export default function SettingsPage() {
   return (
     <div className="p-8 max-w-5xl">
       {/* ── Page header ── */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Manage users, roles, invitations, and programs</p>
-      </div>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Settings</h1>
+        <p className="text-sm text-gray-500 mt-1">Manage users, roles, invitations, and programs</p>
+      </motion.div>
 
       {/* ── Section tabs ── */}
-      <div className="flex border-b border-gray-200 mb-8 gap-1">
+      <div className="inline-flex items-center gap-1 bg-gray-100 p-1 rounded-xl mb-8">
         {SECTIONS.map(s => (
-          <button key={s} onClick={() => setActiveSection(s)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
-              activeSection === s
-                ? "border-indigo-600 text-indigo-600"
-                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          <button key={s.value} onClick={() => setActiveSection(s.value)}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+              activeSection === s.value
+                ? "bg-white text-brand-600 shadow-soft"
+                : "text-gray-500 hover:text-gray-700"
             }`}>
-            {s}
+            <s.icon className="w-4 h-4" />
+            {s.value}
           </button>
         ))}
       </div>
@@ -407,9 +415,7 @@ export default function SettingsPage() {
           <div className="space-y-5">
             <div className="flex flex-col items-center gap-2 py-4">
               <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
+                <CheckCircle2 className="w-6 h-6 text-emerald-600" />
               </div>
               <p className="font-semibold text-gray-900">Invite saved!</p>
               <p className="text-sm text-gray-500 text-center">
@@ -422,20 +428,19 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2 p-3 bg-gray-50 border border-gray-200 rounded-xl">
                 <p className="flex-1 text-xs font-mono text-gray-700 break-all">{signupLink(savedInvite.email)}</p>
                 <button onClick={() => copyLink(savedInvite.id, savedInvite.email)}
-                  className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${copiedId === savedInvite.id ? "bg-emerald-100 text-emerald-700" : "bg-indigo-600 text-white hover:bg-indigo-700"}`}>
+                  className={`flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${copiedId === savedInvite.id ? "bg-emerald-100 text-emerald-700" : "bg-brand-600 text-white hover:bg-brand-700"}`}>
+                  {copiedId === savedInvite.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                   {copiedId === savedInvite.id ? "Copied!" : "Copy"}
                 </button>
               </div>
             </div>
             <div className="flex gap-3 pt-2">
-              <button onClick={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); }}
-                className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+              <Button variant="secondary" className="flex-1" onClick={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); }}>
                 Invite another
-              </button>
-              <button onClick={() => { setShowInviteModal(false); setSavedInvite(null); }}
-                className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition-colors">
+              </Button>
+              <Button variant="primary" className="flex-1" onClick={() => { setShowInviteModal(false); setSavedInvite(null); }}>
                 Done
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -444,29 +449,29 @@ export default function SettingsPage() {
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Full Name <span className="text-red-400">*</span></label>
               <input type="text" value={inviteForm.name} placeholder="e.g. Rahul Sharma"
                 onChange={e => setInviteForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Phone Number</label>
               <input type="tel" value={inviteForm.phone} placeholder="e.g. +91 98765 43210"
                 onChange={e => setInviteForm(f => ({ ...f, phone: e.target.value }))}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Email <span className="text-red-400">*</span></label>
               <input type="email" value={inviteForm.email} placeholder="interviewer@example.com"
                 onChange={e => setInviteForm(f => ({ ...f, email: e.target.value }))}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Role <span className="text-red-400">*</span></label>
               <div className="space-y-2">
                 {ROLE_OPTIONS.map(opt => (
                   <label key={opt.value}
-                    className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${inviteForm.role === opt.value ? "border-indigo-400 bg-indigo-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
+                    className={`flex items-start gap-3 p-3 border rounded-xl cursor-pointer transition-colors ${inviteForm.role === opt.value ? "border-brand-400 bg-brand-50" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}>
                     <input type="radio" name="invite-role" value={opt.value} checked={inviteForm.role === opt.value}
                       onChange={() => setInviteForm(f => ({ ...f, role: opt.value }))}
-                      className="mt-0.5 accent-indigo-600 flex-shrink-0" />
+                      className="mt-0.5 accent-brand-600 flex-shrink-0" />
                     <div>
                       <p className="text-sm font-semibold text-gray-800">{opt.label}</p>
                       <p className="text-xs text-gray-400">{opt.desc}</p>
@@ -478,14 +483,12 @@ export default function SettingsPage() {
             {inviteError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{inviteError}</p>}
             <p className="text-xs text-gray-400">After saving, you'll get a signup link to share with the interviewer.</p>
             <div className="flex gap-3 pt-1">
-              <button type="button" onClick={() => setShowInviteModal(false)}
-                className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+              <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowInviteModal(false)}>
                 Cancel
-              </button>
-              <button type="submit" disabled={inviteSaving}
-                className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+              </Button>
+              <Button type="submit" variant="primary" className="flex-1" disabled={inviteSaving}>
                 {inviteSaving ? "Saving…" : "Save & Get Link"}
-              </button>
+              </Button>
             </div>
           </form>
         )}
@@ -501,16 +504,12 @@ export default function SettingsPage() {
             <div className="flex gap-2">
               <button onClick={downloadInviteSampleExcel}
                 className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-3 py-1.5 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
+                <FileSpreadsheet className="w-3.5 h-3.5" />
                 Download Excel (.xlsx)
               </button>
               <button onClick={downloadInviteSampleCSV}
-                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
+                className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 px-3 py-1.5 border border-brand-200 rounded-lg hover:bg-brand-50 transition-colors">
+                <FileText className="w-3.5 h-3.5" />
                 Download CSV
               </button>
             </div>
@@ -518,10 +517,8 @@ export default function SettingsPage() {
 
           <div
             onClick={() => fileRef.current?.click()}
-            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-            <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-colors">
+            <UploadCloud className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
             <p className="text-sm font-semibold text-gray-600">Click to choose a CSV file</p>
             <p className="text-xs text-gray-400">.csv files only</p>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
@@ -548,7 +545,7 @@ export default function SettingsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {csvPreview.map((r, i) => (
-                      <tr key={i} className="hover:bg-gray-50">
+                      <tr key={i} className="hover:bg-gray-50/70 transition-colors">
                         <td className="px-3 py-2 font-semibold text-gray-800">{r.name || "—"}</td>
                         <td className="px-3 py-2 font-mono text-gray-600">{r.email}</td>
                         <td className="px-3 py-2 text-gray-600">{r.phone || "—"}</td>
@@ -562,14 +559,12 @@ export default function SettingsPage() {
           )}
 
           <div className="flex gap-3 pt-1">
-            <button onClick={closeCSV}
-              className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+            <Button variant="secondary" className="flex-1" onClick={closeCSV}>
               Cancel
-            </button>
-            <button onClick={handleCSVImport} disabled={csvImporting || csvPreview.length === 0}
-              className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+            </Button>
+            <Button variant="primary" className="flex-1" onClick={handleCSVImport} disabled={csvImporting || csvPreview.length === 0}>
               {csvImporting ? "Sending…" : `Send ${csvPreview.length || ""} Invites`}
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>
@@ -592,21 +587,19 @@ export default function SettingsPage() {
                 value={phoneInput}
                 onChange={e => setPhoneInput(e.target.value)}
                 placeholder="+91 98765 43210"
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
               <p className="text-xs text-gray-400 mt-1.5">
                 Include country code, e.g. +91 for India. Leave blank to remove the phone number.
               </p>
             </div>
             <div className="flex gap-3 pt-1">
-              <button type="submit" disabled={phoneSaving}
-                className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+              <Button type="submit" variant="primary" className="flex-1" disabled={phoneSaving}>
                 {phoneSaving ? "Saving…" : "Save"}
-              </button>
-              <button type="button" onClick={() => setPhoneModal(null)}
-                className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setPhoneModal(null)}>
                 Cancel
-              </button>
+              </Button>
             </div>
           </form>
         )}

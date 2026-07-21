@@ -72,7 +72,7 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template</label>
             <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">All Templates</option>
               {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
@@ -80,12 +80,12 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From</label>
             <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">To</label>
             <input type="date" value={toDate} min={fromDate} onChange={e => setToDate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
         </div>
 

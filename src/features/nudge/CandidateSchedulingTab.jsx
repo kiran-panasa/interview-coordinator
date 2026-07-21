@@ -1,4 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
+import {
+  CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck,
+} from "lucide-react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
@@ -7,8 +11,14 @@ import {
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
+import Button from "../../components/Button";
 import { usePagination } from "../../hooks/usePagination";
 import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
+
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
+};
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -341,15 +351,19 @@ export default function CandidateSchedulingTab({
     <div className="space-y-8">
       {/* Slot availability summary */}
       {slotSummary.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+        <motion.div
+          initial="hidden" animate="visible" custom={0} variants={fadeUp}
+          className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
+        >
+          <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <CalendarRange className="w-3.5 h-3.5 text-gray-400" />
               Available Slots · {formatDate(dateStart)} – {formatDate(dateEnd)}
             </p>
           </div>
           <div className="divide-y divide-gray-50">
             {slotSummary.map(({ tmpl, matched, freeSlots }) => (
-              <div key={tmpl.id} className="px-5 py-3 flex items-center justify-between">
+              <div key={tmpl.id} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/70 transition-colors">
                 <div>
                   <p className="text-sm font-semibold text-gray-900">{tmpl.name}</p>
                   <p className="text-xs text-gray-400">{matched} matched interviewer{matched !== 1 ? "s" : ""}</p>
@@ -362,32 +376,37 @@ export default function CandidateSchedulingTab({
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Campaign config */}
-      <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Scheduling Campaign</p>
+      <motion.div
+        initial="hidden" animate="visible" custom={1} variants={fadeUp}
+        className="bg-white rounded-2xl border border-gray-100 shadow-soft px-6 py-5"
+      >
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
+          <CalendarRange className="w-3.5 h-3.5 text-gray-400" /> Scheduling Campaign
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
             <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
             <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Invite Expiry (hours)</label>
             <input type="number" min={1} max={168} value={expiryHours} onChange={e => setExpiryHours(Number(e.target.value))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template (required)</label>
             <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— Select template —</option>
               {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
@@ -397,7 +416,7 @@ export default function CandidateSchedulingTab({
           <div className="flex-1 min-w-[180px]">
             <label className="block text-xs font-semibold text-gray-600 mb-1">Filter by Program</label>
             <select value={filterProgram} onChange={e => setFilterProgram(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">All Programs</option>
               {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -411,7 +430,7 @@ export default function CandidateSchedulingTab({
                 if (v === NUDGE_ROUND_OTHER) { setRoundCustomMode(true); setRound(""); }
                 else { setRoundCustomMode(false); setRound(v); }
               }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— Select round —</option>
               {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
               <option value={NUDGE_ROUND_OTHER}>Other…</option>
@@ -419,28 +438,33 @@ export default function CandidateSchedulingTab({
             {roundCustomMode && (
               <input type="text" value={round} onChange={e => setRound(e.target.value)}
                 placeholder="Enter custom round name…" autoFocus
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
             )}
           </div>
           <div>
-            <button
+            <Button
+              variant="primary" size="md" icon={Send}
               onClick={handleSendInvites}
               disabled={sendingInvites || selCandidates.size === 0}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            >
               {sendingInvites ? "Sending…" : `Send Invites (${selCandidates.size})`}
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Candidate list */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+      <motion.div
+        initial="hidden" animate="visible" custom={2} variants={fadeUp}
+        className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
+      >
+        <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-gray-400" />
             Candidates {filterProgram || filterTemplate ? `(filtered: ${filteredCandidates.length})` : `(${candidates.length} total)`}
           </p>
           {filteredCandidates.length > 0 && (
-            <button onClick={toggleAllCands} className="text-xs text-indigo-600 hover:underline font-medium">
+            <button onClick={toggleAllCands} className="text-xs text-brand-600 hover:underline font-medium">
               {selCandidates.size === filteredCandidates.length ? "Deselect all" : "Select all"}
             </button>
           )}
@@ -460,10 +484,10 @@ export default function CandidateSchedulingTab({
                 {candidates.length === 0 ? "No candidates yet." : "No candidates match the selected filters."}
               </td></tr>
             ) : candPagination.paged.map(c => (
-              <tr key={c.id} className={`hover:bg-gray-50 ${selCandidates.has(c.id) ? "bg-indigo-50" : ""}`}>
+              <tr key={c.id} className={`hover:bg-gray-50/70 transition-colors ${selCandidates.has(c.id) ? "bg-brand-50" : ""}`}>
                 <td className="px-4 py-3">
                   <input type="checkbox" checked={selCandidates.has(c.id)} onChange={() => toggleCand(c.id)}
-                    className="accent-indigo-600 w-4 h-4 cursor-pointer" />
+                    className="accent-brand-600 w-4 h-4 cursor-pointer" />
                 </td>
                 <td className="px-4 py-3 font-semibold text-gray-900">{c.name}</td>
                 <td className="px-4 py-3 text-xs text-gray-500 font-mono">{c.email || "—"}</td>
@@ -477,7 +501,7 @@ export default function CandidateSchedulingTab({
                     {(c.templateIds || []).map(tid => {
                       const t = templates.find(x => x.id === tid);
                       return t ? (
-                        <span key={tid} className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
+                        <span key={tid} className="text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
                       ) : null;
                     })}
                     {!(c.templateIds || []).length && <span className="text-xs text-gray-300">—</span>}
@@ -488,25 +512,27 @@ export default function CandidateSchedulingTab({
           </tbody>
         </table>
         <Pagination page={candPagination.page} totalPages={candPagination.totalPages} total={candPagination.total} pageSize={candPagination.pageSize} onPageChange={candPagination.setPage} />
-      </div>
+      </motion.div>
 
       {/* Invites log */}
-      <div>
+      <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-gray-700">Sent Invites</h2>
+          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <Send className="w-4 h-4 text-gray-400" /> Sent Invites
+          </h2>
           {invites.length > 0 && (
             <button onClick={handleExportLinks}
               className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors">
-              Export Links CSV
+              <Download className="w-3.5 h-3.5" /> Export Links CSV
             </button>
           )}
         </div>
         {invites.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-10">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
             <p className="text-sm text-gray-400">No invites sent yet.</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -517,7 +543,7 @@ export default function CandidateSchedulingTab({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {invPagination.paged.map(inv => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
+                  <tr key={inv.id} className="hover:bg-gray-50/70 transition-colors">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-gray-900">{inv.candidateName}</p>
                       <p className="text-xs text-gray-400">{inv.candidateEmail}</p>
@@ -584,7 +610,7 @@ export default function CandidateSchedulingTab({
             <Pagination page={invPagination.page} totalPages={invPagination.totalPages} total={invPagination.total} pageSize={invPagination.pageSize} onPageChange={invPagination.setPage} />
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Pending bookings */}
       {pendingBookings.length > 0 && (
@@ -600,7 +626,7 @@ export default function CandidateSchedulingTab({
                   <p className="text-sm font-bold text-gray-900">{inv.candidateName}</p>
                   <p className="text-xs text-gray-400">{inv.candidateEmail}</p>
                   <div className="flex gap-4 mt-1.5">
-                    <span className="text-xs font-semibold text-indigo-700">{inv.templateName}</span>
+                    <span className="text-xs font-semibold text-brand-700">{inv.templateName}</span>
                     <span className="text-xs text-gray-600">{formatDate(inv.bookedDate)} · {inv.bookedTime}</span>
                     <span className="text-xs text-gray-400">{users.find(u => u.id === inv.bookedInterviewerId)?.displayName || "Interviewer"}</span>
                   </div>

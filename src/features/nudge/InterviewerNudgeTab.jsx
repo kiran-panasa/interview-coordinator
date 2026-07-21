@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { motion } from "framer-motion";
+import {
+  RefreshCw, Send, Plus, Search, AlertTriangle, Users, MessageSquare, Megaphone,
+} from "lucide-react";
 import { formatDate, formatDateShort, formatDateTime } from "../../utils/dates";
 import { createNotification, updateNotification } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
+import Button from "../../components/Button";
 import { usePagination } from "../../hooks/usePagination";
 import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
+
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
+};
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -230,13 +240,18 @@ export default function InterviewerNudgeTab({
   return (
     <div className="space-y-8">
       {/* Config */}
-      <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Request Campaign</p>
+      <motion.div
+        initial="hidden" animate="visible" custom={0} variants={fadeUp}
+        className="bg-white rounded-2xl border border-gray-100 shadow-soft px-6 py-5"
+      >
+        <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
+          <Megaphone className="w-3.5 h-3.5 text-gray-400" /> Slot Request Campaign
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
             <select value={nudgeProgram} onChange={e => setNudgeProgram(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">All Programs</option>
               {(programs || []).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -244,7 +259,7 @@ export default function InterviewerNudgeTab({
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template</label>
             <select value={nudgeTemplateId} onChange={e => setNudgeTemplateId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">All Templates</option>
               {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
@@ -258,7 +273,7 @@ export default function InterviewerNudgeTab({
                 if (v === NUDGE_ROUND_OTHER) { setRoundCustomMode(true); setNudgeRound(""); }
                 else { setRoundCustomMode(false); setNudgeRound(v); }
               }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— Use template name —</option>
               {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
               <option value={NUDGE_ROUND_OTHER}>Other…</option>
@@ -266,18 +281,18 @@ export default function InterviewerNudgeTab({
             {roundCustomMode && (
               <input type="text" value={nudgeRound} onChange={e => setNudgeRound(e.target.value)}
                 placeholder="Enter custom round name…" autoFocus
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
             )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From Date</label>
             <input type="date" value={nudgeDateStart} onChange={e => setNudgeDateStart(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">To Date</label>
             <input type="date" value={nudgeDateEnd} min={nudgeDateStart} onChange={e => setNudgeDateEnd(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
         </div>
         <div className="border-t border-gray-100 pt-4">
@@ -289,43 +304,43 @@ export default function InterviewerNudgeTab({
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">Start Time</label>
               <input type="time" value={nudgeTimeStart} onChange={e => setNudgeTimeStart(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <span className="text-gray-400 pb-2.5">—</span>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">End Time</label>
               <input type="time" value={nudgeTimeEnd} onChange={e => setNudgeTimeEnd(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             {nudgeTimeStart && nudgeTimeEnd && (
               <p className="text-xs text-gray-400 pb-2.5">{formatTime(nudgeTimeStart)} – {formatTime(nudgeTimeEnd)}</p>
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Interviewers table */}
-      <div>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+      <motion.div initial="hidden" animate="visible" custom={1} variants={fadeUp}>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-gray-400" />
               Matched Interviewers ({matchedInterviewers.length})
               {manualInterviewers.length > 0 && (
-                <span className="ml-2 font-normal text-indigo-500">+{manualInterviewers.length} manual</span>
+                <span className="ml-1 font-normal text-brand-500 normal-case">+{manualInterviewers.length} manual</span>
               )}
             </p>
             <div className="flex items-center gap-2">
-              <button onClick={() => fetchSlots(activeInterviewers.map(u => u.id))} disabled={slotsLoading}
-                className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50 px-2 py-1.5 rounded-lg border border-gray-200 bg-white transition-colors">
-                <svg className={`w-3.5 h-3.5 ${slotsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+              <Button
+                variant="secondary" size="sm" icon={RefreshCw}
+                onClick={() => fetchSlots(activeInterviewers.map(u => u.id))} disabled={slotsLoading}
+                className={slotsLoading ? "[&_svg]:animate-spin" : ""}
+              >
                 {slotsLoading ? "Loading…" : "Refresh slots"}
-              </button>
-              <button onClick={openNudge} disabled={selectedIvrs.size === 0}
-                className="flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-3 py-1.5 rounded-lg transition-colors">
+              </Button>
+              <Button variant="primary" size="sm" icon={Send} onClick={openNudge} disabled={selectedIvrs.size === 0}>
                 Nudge Selected ({selectedIvrs.size})
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -337,7 +352,7 @@ export default function InterviewerNudgeTab({
                     checked={allChecked}
                     ref={el => { if (el) el.indeterminate = someChecked; }}
                     onChange={() => setSelectedIvrs(allChecked ? new Set() : new Set(displayedInterviewers.map(u => u.id)))}
-                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   />
                 </th>
                 {["Interviewer", "Skills", "Free Slots in Range", "Last Response"].map(h => (
@@ -356,10 +371,10 @@ export default function InterviewerNudgeTab({
                 const overlap  = skillOverlap(nudgeTemplate?.skills || [], u.skills || []);
                 const isManual = manuallyAdded.has(u.id);
                 return (
-                  <tr key={u.id} className={`hover:bg-gray-50 ${selectedIvrs.has(u.id) ? "bg-indigo-50/40" : ""}`}>
+                  <tr key={u.id} className={`hover:bg-gray-50/70 transition-colors ${selectedIvrs.has(u.id) ? "bg-brand-50/40" : ""}`}>
                     <td className="pl-4 pr-2 py-3 w-8">
                       <input type="checkbox" checked={selectedIvrs.has(u.id)} onChange={() => toggleIvr(u.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                        className="rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -368,7 +383,7 @@ export default function InterviewerNudgeTab({
                           <p className="text-xs text-gray-400">{u.email}</p>
                         </div>
                         {isManual && (
-                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-brand-600 bg-brand-50 border border-brand-200 px-1.5 py-0.5 rounded-full">
                             Manual
                           </span>
                         )}
@@ -421,18 +436,21 @@ export default function InterviewerNudgeTab({
         <div className="relative mt-2" ref={addPickerRef}>
           <button
             onClick={() => { setShowAddPicker(p => !p); setAddSearch(""); }}
-            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-1 py-1 transition-colors">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+            className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-800 px-1 py-1 transition-colors">
+            <Plus className="w-3.5 h-3.5" />
             Add Interviewer Manually
           </button>
           {showAddPicker && (
-            <div className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-xl shadow-lg w-72">
-              <div className="p-2 border-b border-gray-100">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.12 }}
+              className="absolute left-0 top-full mt-1 z-20 bg-white border border-gray-100 rounded-xl shadow-popover w-72"
+            >
+              <div className="p-2 border-b border-gray-100 relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input autoFocus type="text" value={addSearch} onChange={e => setAddSearch(e.target.value)}
                   placeholder="Search by name or email…"
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                  className="w-full text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-400" />
               </div>
               <div className="max-h-52 overflow-y-auto">
                 {availableToAdd.length === 0 ? (
@@ -441,8 +459,8 @@ export default function InterviewerNudgeTab({
                   </p>
                 ) : availableToAdd.map(u => (
                   <button key={u.id} onClick={() => addInterviewer(u)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-indigo-50 text-left transition-colors">
-                    <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-brand-50 text-left transition-colors">
+                    <div className="w-7 h-7 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
                       {(u.displayName || u.email || "?")[0].toUpperCase()}
                     </div>
                     <div className="min-w-0">
@@ -452,25 +470,27 @@ export default function InterviewerNudgeTab({
                   </button>
                 ))}
               </div>
-            </div>
+            </motion.div>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* Responses */}
-      <div>
+      <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}>
         <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-sm font-bold text-gray-700">Responses</h2>
+          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-gray-400" /> Responses
+          </h2>
           {unreadResponses > 0 && <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{unreadResponses} new</span>}
         </div>
         {incomingResponses.length === 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 flex flex-col items-center justify-center py-10">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
             <p className="text-sm text-gray-400">No responses yet.</p>
           </div>
         ) : (
           <div className="space-y-2">
             {incomingResponses.map(n => (
-              <div key={n.id} className={`bg-white rounded-xl border px-5 py-4 flex items-start gap-4 ${n.status === "unread" ? "border-red-200 bg-red-50" : "border-gray-200"}`}>
+              <div key={n.id} className={`bg-white rounded-2xl border px-5 py-4 flex items-start gap-4 shadow-soft ${n.status === "unread" ? "border-red-200 bg-red-50/60" : "border-gray-100"}`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900">{n.senderName}</p>
                   <p className="text-sm text-gray-600 mt-0.5">{n.message}</p>
@@ -483,7 +503,7 @@ export default function InterviewerNudgeTab({
             ))}
           </div>
         )}
-      </div>
+      </motion.div>
 
       {/* Nudge Modal */}
       <Modal open={!!nudgeTarget} onClose={() => setNudgeTarget(null)}
@@ -495,7 +515,7 @@ export default function InterviewerNudgeTab({
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Select Interviewers ({selectedIvrs.size} selected)</p>
                 <div className="flex gap-3">
                   <button type="button" onClick={() => setSelectedIvrs(new Set(nudgeTarget.interviewers.map(u => u.id)))}
-                    className="text-xs text-indigo-600 hover:underline font-medium">Select all</button>
+                    className="text-xs text-brand-600 hover:underline font-medium">Select all</button>
                   <button type="button" onClick={() => setSelectedIvrs(new Set())}
                     className="text-xs text-gray-400 hover:underline font-medium">Clear</button>
                 </div>
@@ -504,8 +524,8 @@ export default function InterviewerNudgeTab({
                 {nudgeTarget.interviewers.map(u => {
                   const overlap = skillOverlap(nudgeTarget.template?.skills || [], u.skills || []);
                   return (
-                    <label key={u.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 ${selectedIvrs.has(u.id) ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
-                      <input type="checkbox" checked={selectedIvrs.has(u.id)} onChange={() => toggleIvr(u.id)} className="accent-indigo-600" />
+                    <label key={u.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 ${selectedIvrs.has(u.id) ? "bg-brand-50" : "hover:bg-gray-50"}`}>
+                      <input type="checkbox" checked={selectedIvrs.has(u.id)} onChange={() => toggleIvr(u.id)} className="accent-brand-600" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900">{u.displayName || u.email}</p>
                         <p className="text-xs text-gray-400">{u.email}</p>
@@ -526,9 +546,7 @@ export default function InterviewerNudgeTab({
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Message</p>
               {messageIssues.length > 0 && (
                 <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex gap-2.5">
-                  <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                  </svg>
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
                     {messageIssues.map((issue, i) => (
                       <p key={i} className="text-xs text-amber-700">{issue}</p>
@@ -537,15 +555,16 @@ export default function InterviewerNudgeTab({
                 </div>
               )}
               <textarea rows={8} value={message} onChange={e => setMessage(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none font-mono" />
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none font-mono" />
             </div>
             <div className="flex gap-3 pt-1">
-              <button onClick={sendNudge} disabled={sending || selectedIvrs.size === 0}
-                className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+              <Button
+                variant="primary" size="lg" icon={Send} onClick={sendNudge} disabled={sending || selectedIvrs.size === 0}
+                className="flex-1"
+              >
                 {sending ? "Sending…" : `Send to ${selectedIvrs.size} Interviewer${selectedIvrs.size !== 1 ? "s" : ""}`}
-              </button>
-              <button onClick={() => setNudgeTarget(null)}
-                className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">Cancel</button>
+              </Button>
+              <Button variant="secondary" size="lg" onClick={() => setNudgeTarget(null)}>Cancel</Button>
             </div>
           </div>
         )}

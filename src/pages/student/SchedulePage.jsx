@@ -3,6 +3,11 @@ import { formatDate, formatDateLong, parseInterviewStart } from "../../utils/dat
 import { useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Mail, ShieldCheck, Calendar, CheckCircle2, Loader2,
+  XCircle, AlertTriangle, AlertCircle, Check, CalendarCheck2,
+} from "lucide-react";
 import {
   getScheduleInviteByToken, updateScheduleInvite,
   createOtpVerification, getLatestOtpByToken, markOtpUsed,
@@ -10,6 +15,7 @@ import {
   getAllUsers,
 } from "../../api/firestore";
 import StudentLayout from "../../components/StudentLayout";
+import Button from "../../components/Button";
 import { callAppsScript } from "../../lib/appsScript";
 import { maskEmail } from "../../utils/strings";
 import { ROLE } from "../../constants/roles";

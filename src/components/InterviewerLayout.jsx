@@ -7,17 +7,20 @@ import { useUserNotifications } from "../hooks/subscriptions";
 import { checkAndSendFeedbackNudges } from "../services/nudge.service";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
+import {
+  LayoutDashboard, CalendarClock, Clock3, Bell, UserCircle, Info, FileText, LogOut, UserCog2,
+} from "lucide-react";
 
 const NAV = [
-  { to: "/interviewer/dashboard",       label: "Dashboard",       icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
-  { to: "/interviewer/interviews",      label: "My Interviews",   icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
-  { to: "/interviewer/availability",    label: "My Availability", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
-  { to: "/interviewer/notifications",   label: "Notifications",   icon: "M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9", badge: true },
-  { to: "/interviewer/profile",         label: "My Profile",      icon: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-  { to: "/interviewer/about",           label: "About",           icon: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
+  { to: "/interviewer/dashboard",       label: "Dashboard",       icon: LayoutDashboard },
+  { to: "/interviewer/interviews",      label: "My Interviews",   icon: CalendarClock },
+  { to: "/interviewer/availability",    label: "My Availability", icon: Clock3 },
+  { to: "/interviewer/notifications",   label: "Notifications",   icon: Bell, badge: true },
+  { to: "/interviewer/profile",         label: "My Profile",      icon: UserCircle },
+  { to: "/interviewer/about",           label: "About",           icon: Info },
 ];
 
-const TEMPLATES_NAV = { to: "/admin/templates", label: "Templates", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" };
+const TEMPLATES_NAV = { to: "/admin/templates", label: "Templates", icon: FileText };
 
 export default function InterviewerLayout() {
   const { currentUser, userProfile } = useAuth();
@@ -35,56 +38,61 @@ export default function InterviewerLayout() {
     checkAndSendFeedbackNudges(currentUser.uid, userProfile.email).catch(() => {});
   }, [currentUser?.uid, userProfile?.email]);
 
+  const initials = (userProfile?.displayName || userProfile?.email || "?").trim().charAt(0).toUpperCase();
+
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-60 bg-white border-r border-gray-200 flex flex-col fixed inset-y-0">
+      <aside className="w-60 bg-white border-r border-gray-100 flex flex-col fixed inset-y-0">
         <div className="px-5 py-5 border-b border-gray-100">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-emerald-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+            <div className="w-8 h-8 bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-soft">
+              <UserCog2 className="w-4 h-4 text-white" strokeWidth={2.2} />
             </div>
             <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight">Interview</p>
+              <p className="text-sm font-bold text-gray-900 leading-tight tracking-tight">Interview</p>
               <p className="text-xs text-emerald-600 font-semibold leading-tight">Portal</p>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 px-3 py-4 space-y-0.5">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || "Interviewer"}</p>
-          {nav.map(item => (
-            <NavLink key={item.to} to={item.to}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-emerald-50 text-emerald-700 border-l-2 border-emerald-600 pl-2.5"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                }`
-              }>
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={item.icon} />
-              </svg>
-              <span className="flex-1">{item.label}</span>
-              {item.badge && unread > 0 && (
-                <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                  {unread}
-                </span>
-              )}
-            </NavLink>
-          ))}
+        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || "Interviewer"}</p>
+          {nav.map(item => {
+            const Icon = item.icon;
+            return (
+              <NavLink key={item.to} to={item.to}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                    isActive
+                      ? "bg-emerald-50 text-emerald-700 font-semibold"
+                      : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  }`
+                }>
+                <Icon className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
+                <span className="flex-1">{item.label}</span>
+                {item.badge && unread > 0 && (
+                  <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {unread}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
 
         <div className="px-4 py-4 border-t border-gray-100">
-          <NavLink to="/interviewer/profile" className="block group mb-0.5">
-            <p className="text-xs font-semibold text-emerald-600 truncate group-hover:text-emerald-700">{userProfile?.displayName || userProfile?.email}</p>
-            <p className="text-[10px] text-gray-400 group-hover:text-gray-500">Edit profile →</p>
+          <NavLink to="/interviewer/profile" className="flex items-center gap-2.5 mb-3 group">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+              {initials}
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-gray-800 truncate group-hover:text-emerald-700">{userProfile?.displayName || userProfile?.email}</p>
+              <p className="text-[11px] text-gray-400">{ROLE_LABELS[role] || "Interviewer"}</p>
+            </div>
           </NavLink>
-          <p className="text-xs text-gray-400 mb-3 mt-0.5">{ROLE_LABELS[role] || "Interviewer"}</p>
           <button onClick={() => signOut(auth).then(() => navigate("/login"))}
-            className="w-full text-left text-xs text-gray-500 hover:text-red-500 transition-colors">
-            Sign out →
+            className="w-full flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-red-500 transition-colors">
+            <LogOut className="w-3.5 h-3.5" /> Sign out
           </button>
         </div>
       </aside>

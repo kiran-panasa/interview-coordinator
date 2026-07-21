@@ -1,14 +1,26 @@
 import { useState, useRef, useMemo, useCallback } from "react";
 import * as XLSX from "xlsx";
+import { motion } from "framer-motion";
+import {
+  Search, Plus, Upload, UploadCloud, Users, Archive,
+  FileSpreadsheet, FileText, AlertTriangle, AlertCircle,
+} from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
+import Button from "../../components/Button";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
+import { SkeletonRows } from "../../components/Skeleton";
 import { usePagination } from "../../hooks/usePagination";
+
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
+};
 
 const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", program: "", templateIds: [] };
 
@@ -303,8 +315,8 @@ export default function CandidatesPage() {
 
   const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
 
-  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
-  const labelCls = "block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1";
+  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";
+  const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const toggleFormTemplate = (tid) => setField("templateIds",
     form.templateIds.includes(tid) ? form.templateIds.filter(id => id !== tid) : [...form.templateIds, tid]
@@ -312,40 +324,31 @@ export default function CandidatesPage() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Candidates</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Candidates</h1>
+          <p className="text-sm text-gray-500 mt-1">
             {candidates.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
           </p>
         </div>
         <div className="flex gap-2">
           {selected.size > 0 && (
-            <button onClick={() => { setBulkProgram(""); setBulkTemplates([]); setShowBulk(true); }}
-              className="flex items-center gap-2 border border-indigo-300 text-indigo-700 bg-indigo-50 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-100">
+            <Button variant="secondary" icon={Users} onClick={() => { setBulkProgram(""); setBulkTemplates([]); setShowBulk(true); }}>
               Edit Selected ({selected.size})
-            </button>
+            </Button>
           )}
-          <button onClick={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}
-            className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
+          <Button variant="secondary" icon={Upload} onClick={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}>
             Import CSV
-          </button>
-          <button onClick={openNew}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+          </Button>
+          <Button variant="primary" icon={Plus} onClick={openNew}>
             Add Candidate
-          </button>
+          </Button>
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Program Tabs ── */}
       {programs.length > 0 && (
-        <div className="flex border-b border-gray-200 mb-5">
+        <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="flex border-b border-gray-200 mb-5">
           {[
             { id: "all",        label: "All",        count: workingSet.length },
             ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(c => c.program === p.id).length })),
@@ -354,22 +357,25 @@ export default function CandidatesPage() {
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
                 activeProgram === tab.id
-                  ? "border-indigo-600 text-indigo-600"
+                  ? "border-brand-600 text-brand-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}>
               {tab.label}
               <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                activeProgram === tab.id ? "bg-indigo-100 text-indigo-700" : "bg-gray-100 text-gray-500"
+                activeProgram === tab.id ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
               }`}>{tab.count}</span>
             </button>
           ))}
-        </div>
+        </motion.div>
       )}
 
-      <div className="flex items-center gap-3 mb-5">
-        <input type="text" placeholder="Search by name, UID, or email…" value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="w-full max-w-sm border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2} className="flex items-center gap-3 mb-5">
+        <div className="relative w-full max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input type="text" placeholder="Search by name, UID, or email…" value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors" />
+        </div>
         <button
           onClick={() => { setShowArchived(s => !s); setCandPage(1); setSearch(""); }}
           className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${
@@ -377,13 +383,17 @@ export default function CandidatesPage() {
               ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
               : "text-gray-500 border-gray-200 hover:bg-gray-50"
           }`}>
-          {showArchived ? "← Active" : `Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}
+          {showArchived ? (
+            <>Active</>
+          ) : (
+            <><Archive className="w-3.5 h-3.5" /> {`Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}</>
+          )}
         </button>
-      </div>
+      </motion.div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3} className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
         {isLoading ? (
-          <p className="text-center text-gray-400 py-12 text-sm">Loading…</p>
+          <div className="p-4"><SkeletonRows count={6} /></div>
         ) : (
           <table className="w-full text-sm">
             <thead>
@@ -392,7 +402,7 @@ export default function CandidatesPage() {
                   <input type="checkbox"
                     checked={filtered.length > 0 && selected.size === filtered.length}
                     onChange={toggleAll}
-                    className="accent-indigo-600 w-4 h-4 cursor-pointer" />
+                    className="accent-brand-600 w-4 h-4 cursor-pointer" />
                 </th>
                 {["Name", "UID", "Email", "Program", "Templates", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
@@ -402,11 +412,15 @@ export default function CandidatesPage() {
             <tbody className="divide-y divide-gray-50">
               {filtered.length === 0 ? (
                 <tr><td colSpan={7} className="text-center text-gray-400 py-12">No candidates found</td></tr>
-              ) : pagedCandidates.map(c => (
-                <tr key={c.id} className={`hover:bg-gray-50 ${selected.has(c.id) ? "bg-indigo-50" : ""}`}>
+              ) : pagedCandidates.map((c, idx) => (
+                <motion.tr
+                  key={c.id}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(idx, 10) * 0.02, duration: 0.2 }}
+                  className={`hover:bg-gray-50/70 transition-colors ${selected.has(c.id) ? "bg-brand-50" : ""}`}
+                >
                   <td className="px-4 py-3 w-8">
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
-                      className="accent-indigo-600 w-4 h-4 cursor-pointer" />
+                      className="accent-brand-600 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold text-gray-900">{isSwapped(c) ? c.uid : c.name}</p>
@@ -431,7 +445,7 @@ export default function CandidatesPage() {
                         {(c.templateIds || []).map(tid => {
                           const t = templates.find(x => x.id === tid);
                           return t ? (
-                            <span key={tid} className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
+                            <span key={tid} className="text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
                           ) : null;
                         })}
                       </div>
@@ -446,13 +460,13 @@ export default function CandidatesPage() {
                       { label: "Delete", onClick: () => handleDelete(c), danger: true },
                     ]} />
                   </td>
-                </tr>
+                </motion.tr>
               ))}
             </tbody>
           </table>
         )}
         <Pagination page={candPage} totalPages={candTotalPages} total={candTotal} pageSize={candPageSize} onPageChange={setCandPage} />
-      </div>
+      </motion.div>
 
       {/* Add / Edit modal */}
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editTarget ? "Edit Candidate" : "Add Candidate"} wide>
@@ -501,8 +515,8 @@ export default function CandidatesPage() {
                 {templates.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-3">No templates</p>
                 ) : templates.map(t => (
-                  <label key={t.id} className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer border-b border-gray-50 last:border-0 text-xs transition-colors ${form.templateIds.includes(t.id) ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
-                    <input type="checkbox" checked={form.templateIds.includes(t.id)} onChange={() => toggleFormTemplate(t.id)} className="accent-indigo-600" />
+                  <label key={t.id} className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer border-b border-gray-50 last:border-0 text-xs transition-colors ${form.templateIds.includes(t.id) ? "bg-brand-50" : "hover:bg-gray-50"}`}>
+                    <input type="checkbox" checked={form.templateIds.includes(t.id)} onChange={() => toggleFormTemplate(t.id)} className="accent-brand-600" />
                     <span className="font-medium text-gray-800">{t.name}</span>
                   </label>
                 ))}
@@ -511,12 +525,10 @@ export default function CandidatesPage() {
           </div>
 
           <div className="flex gap-3 pt-1">
-            <button onClick={handleSave} disabled={saving}
-              className="flex-1 bg-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+            <Button variant="primary" size="lg" className="flex-1" onClick={handleSave} disabled={saving}>
               {saving ? "Saving…" : editTarget ? "Update" : "Add Candidate"}
-            </button>
-            <button onClick={() => setShowModal(false)}
-              className="px-5 bg-gray-100 text-gray-700 rounded-lg py-2 text-sm font-semibold hover:bg-gray-200">Cancel</button>
+            </Button>
+            <Button variant="secondary" size="lg" onClick={() => setShowModal(false)}>Cancel</Button>
           </div>
         </div>
       </Modal>
@@ -538,8 +550,8 @@ export default function CandidatesPage() {
               {templates.length === 0 ? (
                 <p className="text-xs text-gray-400 text-center py-6">No templates</p>
               ) : templates.map(t => (
-                <label key={t.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${bulkTemplates.includes(t.id) ? "bg-indigo-50" : "hover:bg-gray-50"}`}>
-                  <input type="checkbox" checked={bulkTemplates.includes(t.id)} onChange={() => toggleBulkTemplate(t.id)} className="accent-indigo-600" />
+                <label key={t.id} className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${bulkTemplates.includes(t.id) ? "bg-brand-50" : "hover:bg-gray-50"}`}>
+                  <input type="checkbox" checked={bulkTemplates.includes(t.id)} onChange={() => toggleBulkTemplate(t.id)} className="accent-brand-600" />
                   <div>
                     <p className="text-sm font-semibold text-gray-900">{t.name}</p>
                     {t.program && <p className="text-xs text-gray-400">{t.program}</p>}
@@ -547,15 +559,17 @@ export default function CandidatesPage() {
                 </label>
               ))}
             </div>
-            {bulkTemplates.length > 0 && <p className="text-xs text-amber-600 mt-1.5">⚠ This will replace existing template assignments for selected candidates.</p>}
+            {bulkTemplates.length > 0 && (
+              <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" /> This will replace existing template assignments for selected candidates.
+              </p>
+            )}
           </div>
           <div className="flex gap-3 pt-1">
-            <button onClick={handleBulkSave} disabled={bulkSaving}
-              className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+            <Button variant="primary" size="lg" className="flex-1" onClick={handleBulkSave} disabled={bulkSaving}>
               {bulkSaving ? "Saving…" : `Update ${selected.size} Candidates`}
-            </button>
-            <button onClick={() => setShowBulk(false)}
-              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">Cancel</button>
+            </Button>
+            <Button variant="secondary" size="lg" onClick={() => setShowBulk(false)}>Cancel</Button>
           </div>
         </div>
       </Modal>
@@ -570,22 +584,20 @@ export default function CandidatesPage() {
               <br />Use <span className="font-mono">|</span> to separate multiple templates (e.g. <span className="font-mono">Template A|Template B</span>). Program and template values must match exact names in the system.
             </p>
             <div className="flex gap-2">
-              <button onClick={downloadSampleExcel}
-                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-3 py-1.5 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
+              <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={downloadSampleExcel}
+                className="!text-emerald-700 !border-emerald-200 hover:!bg-emerald-50">
                 Download Excel (.xlsx)
-              </button>
-              <button onClick={downloadSampleCSV}
-                className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-3 py-1.5 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors">
+              </Button>
+              <Button variant="secondary" size="sm" icon={FileText} onClick={downloadSampleCSV}
+                className="!text-brand-600 !border-brand-200 hover:!bg-brand-50">
                 Download CSV
-              </button>
+              </Button>
             </div>
           </div>
 
           <div onClick={() => fileRef.current?.click()}
-            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-indigo-300 hover:bg-indigo-50 transition-colors">
-            <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
+            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-colors">
+            <UploadCloud className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
             <p className="text-sm font-semibold text-gray-600">Click to choose a CSV file</p>
             <p className="text-xs text-gray-400">.csv files only</p>
             <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
@@ -593,7 +605,9 @@ export default function CandidatesPage() {
 
           {csvErrors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-1">
-              <p className="text-xs font-bold text-red-700 uppercase tracking-wide">Errors</p>
+              <p className="text-xs font-bold text-red-700 uppercase tracking-wide flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5" /> Errors
+              </p>
               {csvErrors.map((e, i) => <p key={i} className="text-xs text-red-600">• {e}</p>)}
             </div>
           )}
@@ -602,7 +616,8 @@ export default function CandidatesPage() {
             const dupeCount = csvPreview.filter(r => findExisting(r)).length;
             return dupeCount > 0 && csvMode === null ? (
               <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-                <p className="text-sm font-semibold text-amber-800">
+                <p className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                   {dupeCount} of {csvPreview.length} candidate{dupeCount !== 1 ? "s" : ""} already exist{dupeCount === 1 ? "s" : ""} (matched by email or UID).
                 </p>
                 <p className="text-xs text-amber-700">How would you like to handle duplicates?</p>
@@ -642,7 +657,7 @@ export default function CandidatesPage() {
                         <td className="px-3 py-2 text-gray-600">
                           {r.templateNames?.length
                             ? r.templateNames.map((t, j) => (
-                                <span key={j} className="inline-block text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full mr-1 mb-0.5">{t}</span>
+                                <span key={j} className="inline-block text-[10px] bg-brand-50 text-brand-700 border border-brand-200 px-1.5 py-0.5 rounded-full mr-1 mb-0.5">{t}</span>
                               ))
                             : "—"}
                         </td>
@@ -655,19 +670,19 @@ export default function CandidatesPage() {
           )}
 
           <div className="flex gap-3 pt-1">
-            <button onClick={closeCSV}
-              className="flex-1 border border-gray-200 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 transition-colors">Cancel</button>
+            <Button variant="secondary" size="lg" className="flex-1" onClick={closeCSV}>Cancel</Button>
             {csvPreview.length > 0 && (() => {
               const hasDupes = csvPreview.some(r => findExisting(r));
               const needsChoice = hasDupes && csvMode === null;
               const effectiveMode = csvMode || (hasDupes ? null : "append");
               return (
-                <button
+                <Button
+                  variant="primary" size="lg" className="flex-1"
                   onClick={() => effectiveMode && handleCSVImport(effectiveMode)}
                   disabled={csvImporting || csvPreview.length === 0 || needsChoice}
-                  className="flex-1 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-40 transition-colors">
+                >
                   {csvImporting ? "Importing…" : needsChoice ? "Choose how to handle duplicates ↑" : `Import ${csvPreview.length} Candidates`}
-                </button>
+                </Button>
               );
             })()}
           </div>
