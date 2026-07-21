@@ -1,3 +1,6 @@
+import { Save } from "lucide-react";
+import Button from "../Button";
+
 export default function QuestionForm({ form, setForm, skills, allDomainTypes, templates, toggleDomain, toggleSkill, toggleTemplate, onSave, onCancel, saving, submitLabel }) {
   return (
     <div className="space-y-4">
@@ -8,7 +11,7 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
         <textarea rows={3} value={form.text}
           onChange={e => setForm(f => ({ ...f, text: e.target.value }))}
           placeholder="e.g. Explain the difference between useMemo and useCallback in React."
-          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-none"
         />
       </div>
 
@@ -17,7 +20,7 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
         <textarea rows={4} value={form.suggestedAnswer || ""}
           onChange={e => setForm(f => ({ ...f, suggestedAnswer: e.target.value }))}
           placeholder="Key points, expected depth, or a model answer for interviewers to reference…"
-          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-none"
         />
       </div>
 
@@ -33,8 +36,8 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
               <button key={value} type="button" onClick={() => toggleDomain(value)}
                 className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
                   (form.domainTypes || []).includes(value)
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-brand-300"
                 }`}>
                 {label}
               </button>
@@ -69,7 +72,7 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
         <input value={form.topic}
           onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
           placeholder="e.g. React Hooks, Async JS, System Design…"
-          className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
         />
       </div>
 
@@ -83,8 +86,8 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
               <button key={s.id} type="button" onClick={() => toggleSkill(s.id)}
                 className={`text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
                   form.skills.includes(s.id)
-                    ? "bg-indigo-600 text-white border-indigo-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-indigo-300"
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-brand-300"
                 }`}>
                 {s.name}
               </button>
@@ -119,14 +122,12 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
       </div>
 
       <div className="flex gap-3 pt-1">
-        <button onClick={onSave} disabled={saving}
-          className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
+        <Button variant="primary" icon={Save} onClick={onSave} disabled={saving} className="flex-1">
           {saving ? "Saving…" : submitLabel}
-        </button>
-        <button onClick={onCancel}
-          className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+        </Button>
+        <Button variant="secondary" onClick={onCancel} className="px-5">
           Cancel
-        </button>
+        </Button>
       </div>
     </div>
   );

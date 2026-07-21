@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, Check } from "lucide-react";
 import {
   CODING_PS_LABELS, CODING_CI_LABELS, THEORY_LABELS,
   PROJECT_LABELS, RESUME_LABELS,
@@ -6,25 +7,23 @@ import {
 } from "../api/firestore";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
 import AutosaveIndicator from "./AutosaveIndicator";
+import Button from "./Button";
 
 // ── Collapsible section wrapper ───────────────────────────────────────────────
 
 function Section({ title, badge, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors">
         <div className="flex items-center gap-2">
           <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wide">{title}</h3>
           {badge && (
-            <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{badge}</span>
+            <span className="text-xs font-bold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">{badge}</span>
           )}
         </div>
-        <svg className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
         <div className="px-5 pb-5 pt-1 space-y-4 border-t border-gray-100">
@@ -40,21 +39,14 @@ function Section({ title, badge, children, defaultOpen = true }) {
 function ProblemBlock({ index, children, complete }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="border border-gray-100 rounded-lg overflow-hidden">
+    <div className="border border-gray-100 rounded-xl overflow-hidden">
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-gray-600 uppercase">Problem {index + 1}</span>
-          {complete && (
-            <svg className="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-            </svg>
-          )}
+          {complete && <Check className="w-3.5 h-3.5 text-emerald-500" strokeWidth={2.5} />}
         </div>
-        <svg className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-          fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && <div className="px-4 pb-4 pt-3 space-y-3">{children}</div>}
     </div>
@@ -70,8 +62,8 @@ export function RatingInput({ value, onChange, max = 5 }) {
         <button key={n} type="button" onClick={() => onChange(n)}
           className={`w-9 h-9 rounded-lg text-sm font-semibold border transition-colors ${
             value === n
-              ? "bg-indigo-600 text-white border-indigo-600"
-              : "bg-white text-gray-500 border-gray-200 hover:border-indigo-400 hover:text-indigo-700"
+              ? "bg-brand-600 text-white border-brand-600"
+              : "bg-white text-gray-500 border-gray-200 hover:border-brand-400 hover:text-brand-700"
           }`}>{n}</button>
       ))}
     </div>
@@ -81,7 +73,7 @@ export function RatingInput({ value, onChange, max = 5 }) {
 export function RatingDisplay({ value, labels }) {
   return (
     <div className="flex items-center gap-2 mt-1">
-      <span className="w-7 h-7 rounded bg-indigo-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">
+      <span className="w-7 h-7 rounded bg-brand-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">
         {value}
       </span>
       {labels?.[value] && (
@@ -99,13 +91,13 @@ function DescriptiveRating({ value, onChange, labels }) {
         <button key={n} type="button" onClick={() => onChange(n)}
           className={`w-full text-left flex items-start gap-3 px-3 py-2.5 rounded-lg border transition-colors ${
             value === n
-              ? "bg-indigo-50 border-indigo-400 ring-1 ring-indigo-400"
-              : "bg-white border-gray-200 hover:border-indigo-300 hover:bg-gray-50"
+              ? "bg-brand-50 border-brand-400 ring-1 ring-brand-400"
+              : "bg-white border-gray-200 hover:border-brand-300 hover:bg-gray-50"
           }`}>
           <span className={`mt-0.5 w-6 h-6 rounded-md text-xs font-bold flex items-center justify-center flex-shrink-0 ${
-            value === n ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-500"
+            value === n ? "bg-brand-600 text-white" : "bg-gray-100 text-gray-500"
           }`}>{n}</span>
-          <span className={`text-xs leading-relaxed ${value === n ? "text-indigo-800 font-medium" : "text-gray-600"}`}>
+          <span className={`text-xs leading-relaxed ${value === n ? "text-brand-800 font-medium" : "text-gray-600"}`}>
             {label}
           </span>
         </button>
@@ -204,7 +196,7 @@ export function StructuredFeedbackDisplay({ interview, template, feedback }) {
             <div>
               <p className="text-xs text-gray-400">Project Link</p>
               <a href={feedback.project.link} target="_blank" rel="noreferrer"
-                className="text-sm text-indigo-600 hover:underline break-all">{feedback.project.link} ↗</a>
+                className="text-sm text-brand-600 hover:underline break-all">{feedback.project.link} ↗</a>
             </div>
           )}
         </Section>
@@ -226,7 +218,7 @@ export function StructuredFeedbackDisplay({ interview, template, feedback }) {
             <div>
               <p className="text-xs text-gray-400">Resume Link</p>
               <a href={feedback.resume.link} target="_blank" rel="noreferrer"
-                className="text-sm text-indigo-600 hover:underline break-all">{feedback.resume.link} ↗</a>
+                className="text-sm text-brand-600 hover:underline break-all">{feedback.resume.link} ↗</a>
             </div>
           )}
         </Section>
@@ -282,7 +274,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
     onSubmit({ ...fb, type: "structured", codingAvgRating: avgCoding });
   };
 
-  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500";
+  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
 
   return (
@@ -429,14 +421,10 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={saving || previewMode}
-        className={`w-full rounded-lg py-2.5 text-sm font-semibold transition-colors ${
-          previewMode
-            ? "bg-gray-100 text-gray-400 cursor-default border border-dashed border-gray-300"
-            : "bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-60"
-        }`}>
+      <Button variant="primary" onClick={handleSubmit} disabled={saving || previewMode}
+        className={`w-full ${previewMode ? "!bg-gray-100 !text-gray-400 cursor-default border border-dashed border-gray-300 shadow-none" : ""}`}>
         {previewMode ? "Submit Feedback (Preview Only — not functional)" : saving ? "Submitting…" : "Submit Feedback"}
-      </button>
+      </Button>
     </div>
   );
 }
