@@ -382,7 +382,25 @@ export default function InterviewsPage() {
       await updateInterview(iv.id, { status: "cancelled", eventId: null, meetLink: "" });
       const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
       await markSlotFree(iv.interviewerId, slotId).catch(() => {});
-      setToast({ message: "Interview cancelled and calendar event deleted." });
+
+      const recipients = [
+        iv.candidateEmail   && { email: iv.candidateEmail,   name: iv.candidateName   || "Candidate" },
+        iv.interviewerEmail && { email: iv.interviewerEmail, name: iv.interviewerName || "Panelist"  },
+      ].filter(Boolean);
+      if (APPS_SCRIPT_URL && recipients.length) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject: `Interview Cancelled: ${iv.round || iv.templateName || "Interview"}`,
+          body:
+            `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
+            `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
+            `If you have any questions, please reach out to the interview coordination team.\n\n— NxtWave Team`,
+          recipients,
+        }).catch(() => {});
+      }
+
+      setToast({ message: "Interview cancelled and both parties notified by email." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
