@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Bell, CheckCircle2, XCircle, Inbox } from "lucide-react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
@@ -6,6 +8,9 @@ import { updateNotification, createNotification } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import { useUserNotifications } from "../../hooks/subscriptions";
 import Toast from "../../components/Toast";
+import Modal from "../../components/Modal";
+import Button from "../../components/Button";
+import { SkeletonRows } from "../../components/Skeleton";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -15,11 +20,15 @@ function linkify(text) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
   return parts.map((part, i) =>
     /^https?:\/\//.test(part)
-      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-indigo-600 underline break-all">{part}</a>
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-emerald-600 underline break-all">{part}</a>
       : part
   );
 }
 
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.04, duration: 0.3, ease: "easeOut" } }),
+};
 
 export default function NotificationsPage() {
   const { currentUser, userProfile } = useAuth();
@@ -119,43 +128,45 @@ export default function NotificationsPage() {
   };
 
   const statusBadge = (status) => {
-    if (status === "available")   return <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">✓ Available</span>;
-    if (status === "unavailable") return <span className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">✗ Not Available</span>;
+    if (status === "available")   return <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full"><CheckCircle2 className="w-3 h-3" /> Available</span>;
+    if (status === "unavailable") return <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full"><XCircle className="w-3 h-3" /> Not Available</span>;
     return null;
   };
 
   return (
     <div className="p-8 max-w-2xl">
-      <div className="flex items-center gap-3 mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="flex items-center gap-3 mb-8">
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Notifications</h1>
         {unread > 0 && (
           <span className="text-sm font-bold bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full">{unread} new</span>
         )}
-      </div>
+      </motion.div>
 
       {nudges.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-200 flex flex-col items-center justify-center py-16 gap-3">
-          <svg className="w-10 h-10 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-          </svg>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center">
+            <Inbox className="w-6 h-6 text-gray-300" />
+          </div>
           <p className="text-sm text-gray-400">No notifications yet.</p>
           <p className="text-xs text-gray-300">You'll see availability requests from the admin here.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {nudges.map(n => {
+          {nudges.map((n, idx) => {
             const isNew = n.status === "unread";
             const responded = n.status === "available" || n.status === "unavailable";
             return (
-              <div key={n.id}
+              <motion.div key={n.id}
+                custom={idx} initial="hidden" animate="visible" variants={fadeUp}
                 className={`bg-white rounded-2xl border p-5 transition-colors ${
-                  isNew ? "border-indigo-200 shadow-sm" : "border-gray-200"
+                  isNew ? "border-emerald-200 shadow-card" : "border-gray-100 shadow-soft"
                 }`}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-2 flex-wrap">
-                    {isNew && <span className="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0 mt-1" />}
+                    {isNew && <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 mt-1" />}
                     <div>
                       {n.type === "feedback_reminder" ? (
                         <>
@@ -201,7 +212,7 @@ export default function NotificationsPage() {
                   <Link
                     to={`/interviewer/interviews/${n.interviewId}`}
                     onClick={() => updateNotification(n.id, { status: "read" })}
-                    className="flex items-center justify-center gap-2 bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition-colors"
+                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-emerald-700 transition-colors"
                   >
                     {n.type === "interview_approval" ? "Review & Respond →" : "Go to Interview →"}
                   </Link>
@@ -210,64 +221,55 @@ export default function NotificationsPage() {
                 {/* Actions — availability nudge */}
                 {n.type === "nudge" && !responded && (
                   <div className="flex gap-3">
-                    <button
+                    <Button
+                      variant="primary" icon={CheckCircle2}
                       onClick={() => handleAvailable(n)}
                       disabled={responding[n.id]}
-                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                      className="flex-1 !bg-emerald-600 hover:!bg-emerald-700"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/>
-                      </svg>
                       I'm Available
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      variant="secondary" icon={XCircle}
                       onClick={() => openDecline(n)}
                       disabled={responding[n.id]}
-                      className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-50 disabled:opacity-60 transition-colors"
+                      className="flex-1"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
                       Not Available
-                    </button>
+                    </Button>
                   </div>
                 )}
-              </div>
+              </motion.div>
             );
           })}
         </div>
       )}
 
       {/* Decline reason modal */}
-      {reasonModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
-            <h3 className="text-base font-bold text-gray-900">Not Available</h3>
-            <p className="text-sm text-gray-600">
-              Let the admin know why (optional):
-            </p>
-            <textarea
-              rows={3}
-              value={reason}
-              onChange={e => setReason(e.target.value)}
-              placeholder="e.g. Out of town, other commitments…"
-              autoFocus
-              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-            />
-            <div className="flex gap-3">
-              <button onClick={handleUnavailable}
-                disabled={responding[reasonModal?.id]}
-                className="flex-1 bg-red-500 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-red-600 disabled:opacity-60 transition-colors">
-                {responding[reasonModal?.id] ? "Sending…" : "Send Response"}
-              </button>
-              <button onClick={() => setReasonModal(null)}
-                className="px-4 bg-gray-100 text-gray-700 text-sm font-semibold py-2.5 rounded-xl hover:bg-gray-200">
-                Cancel
-              </button>
-            </div>
+      <Modal open={!!reasonModal} onClose={() => setReasonModal(null)} title="Not Available">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Let the admin know why (optional):
+          </p>
+          <textarea
+            rows={3}
+            value={reason}
+            onChange={e => setReason(e.target.value)}
+            placeholder="e.g. Out of town, other commitments…"
+            autoFocus
+            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors resize-none"
+          />
+          <div className="flex gap-3">
+            <Button variant="danger" onClick={handleUnavailable}
+              disabled={responding[reasonModal?.id]} className="flex-1 !bg-red-500 hover:!bg-red-600">
+              {responding[reasonModal?.id] ? "Sending…" : "Send Response"}
+            </Button>
+            <Button variant="secondary" onClick={() => setReasonModal(null)} className="px-4">
+              Cancel
+            </Button>
           </div>
         </div>
-      )}
+      </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>

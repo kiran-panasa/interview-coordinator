@@ -1,12 +1,18 @@
 import { useState, useEffect, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  ArrowLeft, ListChecks, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Send,
+} from "lucide-react";
 import {
   getInterview, updateInterview, getTemplate,
   getQuestionsByIds, getCandidateAskedQuestions,
   incrementQuestionUsage, createAdhocQuestion,
 } from "../../api/firestore";
 import Toast from "../../components/Toast";
+import Button from "../../components/Button";
 import AutosaveIndicator from "../../components/AutosaveIndicator";
+import { Skeleton } from "../../components/Skeleton";
 import { useAutosaveDraft } from "../../hooks/useAutosaveDraft";
 
 const DIFF_BADGE = { easy: "bg-emerald-50 text-emerald-700", medium: "bg-amber-50 text-amber-700", hard: "bg-red-50 text-red-700" };
@@ -154,7 +160,15 @@ export default function InterviewQuestions() {
     { enabled: questionsAutosaveEnabled }
   );
 
-  if (loading) return <div className="p-8 text-gray-400 text-sm">Loading…</div>;
+  if (loading) {
+    return (
+      <div className="p-8 max-w-3xl space-y-5">
+        <Skeleton className="h-4 w-32" />
+        <div className="space-y-2"><Skeleton className="h-6 w-56" /><Skeleton className="h-3 w-40" /></div>
+        <Skeleton className="h-72 w-full rounded-2xl" />
+      </div>
+    );
+  }
   if (!interview) return <div className="p-8 text-gray-400 text-sm">Interview not found.</div>;
 
   const isCompleted = interview.status === "completed";
@@ -162,37 +176,40 @@ export default function InterviewQuestions() {
   return (
     <div className="p-8 max-w-3xl">
       <Link to={`/interviewer/interviews/${id}`}
-        className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">
-        ← Back to evaluation
+        className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 mb-6 transition-colors">
+        <ArrowLeft className="w-3.5 h-3.5" /> Back to evaluation
       </Link>
 
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Questions Asked</h1>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900 tracking-tight">Questions Asked</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {interview.candidateName}
-          {template && <> · <span className="text-indigo-700 font-medium">{template.name}</span></>}
+          {template && <> · <span className="text-emerald-700 font-medium">{template.name}</span></>}
         </p>
-      </div>
+      </motion.div>
 
       {templateQs.length === 0 ? (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-sm text-gray-400">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center text-sm text-gray-400">
           No questions are attached to this interview's template.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
+          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-xs text-gray-400">{askedQIds.size} / {templateQs.length} marked</span>
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
+              <ListChecks className="w-3.5 h-3.5 text-gray-400" /> {askedQIds.size} / {templateQs.length} marked
+            </span>
           </div>
 
           {(domainOptions.length > 0 || topicOptions.length > 0) && (
             <div className="flex flex-wrap items-center gap-2 mb-4">
               <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="">All Domains</option>
                 {domainOptions.map(d => <option key={d} value={d}>{d.replace(/_/g, " ")}</option>)}
               </select>
               <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
-                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-emerald-500">
                 <option value="">All Topics</option>
                 {topicOptions.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
@@ -218,19 +235,15 @@ export default function InterviewQuestions() {
                     const isAsked  = askedQIds.has(q.id);
                     const isRepeat = priorAskedSet.has(q.id);
                     return (
-                      <div key={q.id} className={`rounded-lg border p-3 transition-colors ${isAsked ? "border-indigo-200 bg-indigo-50/40" : "border-gray-100 bg-gray-50"}`}>
+                      <div key={q.id} className={`rounded-xl border p-3 transition-colors ${isAsked ? "border-emerald-200 bg-emerald-50/40" : "border-gray-100 bg-gray-50"}`}>
                         <div className="flex items-start gap-2.5">
                           {isCompleted ? (
-                            <div className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded ${isAsked ? "bg-indigo-600" : "bg-gray-200"}`}>
-                              {isAsked && (
-                                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
+                            <div className={`mt-0.5 w-4 h-4 flex-shrink-0 rounded flex items-center justify-center ${isAsked ? "bg-emerald-600" : "bg-gray-200"}`}>
+                              {isAsked && <CheckCircle2 className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
                             </div>
                           ) : (
                             <input type="checkbox" checked={isAsked} onChange={() => toggleAsked(q.id)}
-                              className="mt-0.5 w-4 h-4 flex-shrink-0 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                              className="mt-0.5 w-4 h-4 flex-shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
@@ -248,21 +261,19 @@ export default function InterviewQuestions() {
                               </span>
                               {isRepeat && (
                                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                  </svg>
+                                  <AlertTriangle className="w-3 h-3" />
                                   Asked before
                                 </span>
                               )}
                             </div>
                             {q.suggestedAnswer && (
                               <button type="button" onClick={() => toggleAnswerVisible(q.id)}
-                                className="mt-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                                {expandedAnswers.has(q.id) ? "Hide Answer ▲" : "Show Answer ▼"}
+                                className="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-800">
+                                {expandedAnswers.has(q.id) ? <>Hide Answer <ChevronUp className="w-3 h-3" /></> : <>Show Answer <ChevronDown className="w-3 h-3" /></>}
                               </button>
                             )}
                             {expandedAnswers.has(q.id) && q.suggestedAnswer && (
-                              <div className="mt-1.5 text-sm text-gray-700 bg-indigo-50/60 border border-indigo-100 rounded-lg px-3 py-2 whitespace-pre-wrap">
+                              <div className="mt-1.5 text-sm text-gray-700 bg-emerald-50/60 border border-emerald-100 rounded-lg px-3 py-2 whitespace-pre-wrap">
                                 {q.suggestedAnswer}
                               </div>
                             )}
@@ -272,7 +283,7 @@ export default function InterviewQuestions() {
                                 value={qRemarks[q.id] || ""}
                                 onChange={e => setQRemarks(r => ({ ...r, [q.id]: e.target.value }))}
                                 placeholder="Add remarks for this question…"
-                                className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none bg-white"
+                                className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none bg-white"
                               />
                             )}
                             {isAsked && isCompleted && qRemarks[q.id] && (
@@ -298,12 +309,12 @@ export default function InterviewQuestions() {
                   value={adhocText}
                   onChange={e => setAdhocText(e.target.value)}
                   placeholder="Type a question you asked that isn't listed above…"
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
                 />
-                <button onClick={handleAddAdhoc} disabled={qSaving || !adhocText.trim()}
-                  className="self-end px-4 py-2 bg-gray-800 text-white text-sm font-semibold rounded-lg hover:bg-gray-700 disabled:opacity-40 whitespace-nowrap">
+                <Button variant="secondary" icon={Send} onClick={handleAddAdhoc} disabled={qSaving || !adhocText.trim()}
+                  className="self-end !bg-gray-800 !text-white hover:!bg-gray-700 disabled:!opacity-40 whitespace-nowrap">
                   Submit
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -311,13 +322,13 @@ export default function InterviewQuestions() {
           {!isCompleted && (
             <div className="mt-4 flex items-center justify-end gap-3">
               <AutosaveIndicator status={qDraftStatus} lastSavedAt={qDraftSavedAt} />
-              <button onClick={handleSaveQuestions} disabled={qSaving}
-                className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-60">
+              <Button variant="primary" onClick={handleSaveQuestions} disabled={qSaving}
+                className="!bg-emerald-600 hover:!bg-emerald-700">
                 {qSaving ? "Saving…" : "Save Questions"}
-              </button>
+              </Button>
             </div>
           )}
-        </div>
+        </motion.div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
