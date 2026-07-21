@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { Printer, CheckCircle2 } from "lucide-react";
+import Button from "../../components/Button";
 
 const PRINT_CSS = `
 @media print {
@@ -18,10 +20,10 @@ function injectPrintCSS() {
 }
 
 function HowStep({ num, color, title, desc }) {
-  const bg = { indigo:"bg-indigo-600", emerald:"bg-emerald-500", violet:"bg-violet-600", amber:"bg-amber-500", blue:"bg-blue-600", teal:"bg-teal-600" };
+  const bg = { indigo:"bg-brand-600", emerald:"bg-emerald-500", violet:"bg-violet-600", amber:"bg-amber-500", blue:"bg-blue-600", teal:"bg-teal-600" };
   return (
     <div className="flex gap-4">
-      <div className={`w-8 h-8 rounded-full ${bg[color]||bg.indigo} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5`}>
+      <div className={`w-8 h-8 rounded-full ${bg[color]||bg.indigo} text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5 shadow-soft`}>
         {num}
       </div>
       <div className="flex-1 pb-5">
@@ -35,7 +37,7 @@ function HowStep({ num, color, title, desc }) {
 function Section({ title, sub, children }) {
   return (
     <div className="mb-8">
-      <h2 className="text-lg font-bold text-gray-900 mb-0.5">{title}</h2>
+      <h2 className="text-lg font-bold text-gray-900 mb-0.5 tracking-tight">{title}</h2>
       {sub && <p className="text-sm text-gray-400 mb-4">{sub}</p>}
       {children}
     </div>
@@ -44,10 +46,10 @@ function Section({ title, sub, children }) {
 
 function PageCard({ title, path, children, note }) {
   return (
-    <div className="print-avoid bg-white rounded-xl border border-gray-200 p-5 mb-4">
+    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-4">
       <div className="flex items-baseline gap-2 mb-3">
         <h3 className="text-sm font-bold text-gray-900">{title}</h3>
-        <code className="text-[10px] font-mono text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">{path}</code>
+        <code className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{path}</code>
       </div>
       <div className="text-sm text-gray-600 space-y-1.5">{children}</div>
       {note && (
@@ -62,7 +64,7 @@ function PageCard({ title, path, children, note }) {
 function Bullet({ children }) {
   return (
     <div className="flex items-start gap-2">
-      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0 mt-1.5" />
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 mt-1.5" />
       <span className="text-sm text-gray-600">{children}</span>
     </div>
   );
@@ -74,7 +76,7 @@ function SubHeading({ children }) {
 
 function ConceptCard({ title, children }) {
   return (
-    <div className="print-avoid bg-white rounded-xl border border-gray-200 p-4">
+    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
       <h3 className="text-sm font-bold text-gray-800 mb-1">{title}</h3>
       <p className="text-xs text-gray-500 leading-relaxed">{children}</p>
     </div>
@@ -93,21 +95,17 @@ export default function AboutPage() {
       {/* Header */}
       <div className="flex items-start justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Interviewer Guide</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviewer Guide</h1>
           <p className="text-sm text-gray-400 mt-0.5">Interview Coordinator — NxtWave Internal Tool</p>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="print-hide flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
+        <Button variant="primary" size="sm" icon={Printer} onClick={() => window.print()}
+          className="print-hide !bg-emerald-600 hover:!bg-emerald-700">
           Print / PDF
-        </button>
+        </Button>
       </div>
 
       {/* What is this */}
-      <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 mb-8 text-sm text-gray-600 leading-relaxed">
+      <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-8 text-sm text-gray-600 leading-relaxed">
         <p>
           <strong className="text-gray-900">Interview Coordinator</strong> is your workspace for managing interview assignments at NxtWave.
           You receive interview requests based on your availability, conduct structured interviews with a question checklist and domain-level
@@ -226,7 +224,7 @@ export default function AboutPage() {
 
       {/* Tips */}
       <Section title="Tips for a Smooth Interview">
-        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-3">
           {[
             { tip: "Update availability at least a week ahead", desc: "Admins run scheduling campaigns weekly. If your calendar is empty for an upcoming period, you won't be included in the invite pool." },
             { tip: "Save Questions Asked before submitting Evaluation", desc: "These are separate saves. Saving questions increments usage counters, giving the content team accurate data on question frequency." },
@@ -235,7 +233,9 @@ export default function AboutPage() {
             { tip: "Mark No-show promptly", desc: "Marking a no-show immediately frees the admin to reschedule the candidate or reallocate the slot to another interviewer." },
           ].map(({ tip, desc }) => (
             <div key={tip} className="flex gap-3">
-              <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">✓</span>
+              <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <CheckCircle2 className="w-3 h-3" strokeWidth={3} />
+              </span>
               <div>
                 <p className="text-sm font-semibold text-gray-800">{tip}</p>
                 <p className="text-xs text-gray-500 mt-0.5">{desc}</p>

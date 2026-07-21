@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox } from "lucide-react";
 import { formatDate } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
@@ -8,6 +10,7 @@ import {
   getScheduleInvitesByEmail,
 } from "../../api/firestore";
 import StudentLayout from "../../components/StudentLayout";
+import Button from "../../components/Button";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -52,11 +55,18 @@ const STATUS_STYLE = {
 
 function Card({ children }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-8">
       {children}
     </div>
   );
 }
+
+const stepMotion = {
+  initial: { opacity: 0, x: 16 },
+  animate: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: -16 },
+  transition: { duration: 0.25, ease: "easeOut" },
+};
 
 export default function CandidatePortal() {
   const [step,       setStep]       = useState("email");
@@ -125,152 +135,169 @@ export default function CandidatePortal() {
 
   return (
     <StudentLayout>
-      {step === "email" && (
-        <Card>
-          <div className="text-center mb-8">
-            <h2 className="text-xl font-bold text-gray-900">My Interviews</h2>
-            <p className="text-sm text-gray-500 mt-1">Enter your registered email to view your scheduling invites</p>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
-                Registered Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => { setEmail(e.target.value); setEmailError(""); }}
-                placeholder="your@email.com"
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                onKeyDown={e => e.key === "Enter" && handleSendOtp()}
-                autoFocus
-              />
-              {emailError && <p className="text-xs text-red-500 mt-1.5">{emailError}</p>}
-            </div>
-            <button onClick={handleSendOtp} disabled={busy}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors">
-              {busy ? "Sending OTP…" : "Send One-Time Code →"}
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {step === "otp" && (
-        <Card>
-          <div className="text-center mb-8">
-            <h2 className="text-xl font-bold text-gray-900">Verify Your Email</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              We sent a 6-digit code to <span className="font-semibold">{maskEmail(email)}</span>
-            </p>
-            <p className="text-xs text-gray-400 mt-0.5">Code expires in 10 minutes</p>
-          </div>
-          <div className="space-y-4">
-            <input
-              type="text"
-              inputMode="numeric"
-              maxLength={6}
-              value={otp}
-              onChange={e => { setOtp(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
-              placeholder="000000"
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              onKeyDown={e => e.key === "Enter" && handleVerifyOtp()}
-              autoFocus
-            />
-            {otpError && <p className="text-xs text-red-500 mt-1.5 text-center">{otpError}</p>}
-            <button onClick={handleVerifyOtp} disabled={busy || otp.length !== 6}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-xl text-sm hover:bg-indigo-700 disabled:opacity-60 transition-colors">
-              {busy ? "Verifying…" : "Verify Code →"}
-            </button>
-            <button onClick={() => { setStep("email"); setOtp(""); setOtpError(""); }}
-              className="w-full text-sm text-gray-400 hover:text-indigo-600 transition-colors">
-              Didn't receive it? Go back to resend
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {step === "invites" && (
-        <div className="space-y-4">
-          <div className="text-center mb-2">
-            <h2 className="text-xl font-bold text-gray-900">Your Scheduling Invites</h2>
-            <p className="text-sm text-gray-500 mt-1">{email}</p>
-          </div>
-
-          {invites.length === 0 ? (
+      <AnimatePresence mode="wait">
+        {step === "email" && (
+          <motion.div key="email" {...stepMotion}>
             <Card>
-              <p className="text-center text-sm text-gray-400 py-6">No invites found for this email.</p>
+              <div className="text-center mb-8">
+                <div className="w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
+                  <Mail className="w-6 h-6 text-brand-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 tracking-tight">My Interviews</h2>
+                <p className="text-sm text-gray-500 mt-1">Enter your registered email to view your scheduling invites</p>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                    Registered Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => { setEmail(e.target.value); setEmailError(""); }}
+                    placeholder="your@email.com"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+                    onKeyDown={e => e.key === "Enter" && handleSendOtp()}
+                    autoFocus
+                  />
+                  {emailError && <p className="text-xs text-red-500 mt-1.5">{emailError}</p>}
+                </div>
+                <Button variant="primary" size="lg" icon={busy ? undefined : ArrowRight}
+                  onClick={handleSendOtp} disabled={busy} className="w-full">
+                  {busy ? "Sending OTP…" : "Send One-Time Code"}
+                </Button>
+              </div>
             </Card>
-          ) : (
-            <>
-              {/* Active invites */}
-              {activeInvites.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Pending</p>
-                  {activeInvites.map(inv => (
-                    <div key={inv.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <p className="font-bold text-gray-900">{inv.round || inv.templateName || "Interview"}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
-                          </p>
-                        </div>
-                        <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_STYLE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                          {STATUS_LABEL[inv.status] || inv.status}
-                        </span>
-                      </div>
+          </motion.div>
+        )}
 
-                      {inv.status === "pending_confirmation" || inv.status === "slot_selected" ? (
-                        <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm text-violet-800 font-medium">
-                          Slot selected — waiting for admin confirmation.
-                        </div>
-                      ) : (
-                        <Link
-                          to={`/student/schedule?invite=${inv.inviteToken}`}
-                          className="block w-full text-center bg-indigo-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-indigo-700 transition-colors">
-                          Schedule Now →
-                        </Link>
-                      )}
-                    </div>
-                  ))}
+        {step === "otp" && (
+          <motion.div key="otp" {...stepMotion}>
+            <Card>
+              <div className="text-center mb-8">
+                <div className="w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
+                  <ShieldCheck className="w-6 h-6 text-brand-600" />
                 </div>
-              )}
+                <h2 className="text-xl font-bold text-gray-900 tracking-tight">Verify Your Email</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  We sent a 6-digit code to <span className="font-semibold">{maskEmail(email)}</span>
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Code expires in 10 minutes</p>
+              </div>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={otp}
+                  onChange={e => { setOtp(e.target.value.replace(/\D/g, "")); setOtpError(""); }}
+                  placeholder="000000"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+                  onKeyDown={e => e.key === "Enter" && handleVerifyOtp()}
+                  autoFocus
+                />
+                {otpError && <p className="text-xs text-red-500 mt-1.5 text-center">{otpError}</p>}
+                <Button variant="primary" size="lg" icon={busy ? undefined : ArrowRight}
+                  onClick={handleVerifyOtp} disabled={busy || otp.length !== 6} className="w-full">
+                  {busy ? "Verifying…" : "Verify Code"}
+                </Button>
+                <button onClick={() => { setStep("email"); setOtp(""); setOtpError(""); }}
+                  className="w-full text-sm text-gray-400 hover:text-brand-600 transition-colors">
+                  Didn't receive it? Go back to resend
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
 
-              {/* Past invites */}
-              {pastInvites.length > 0 && (
-                <div className="space-y-3">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4">Past</p>
-                  {pastInvites.map(inv => (
-                    <div key={inv.id} className="bg-white rounded-2xl border border-gray-100 p-5 opacity-70">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-gray-700 text-sm">{inv.round || inv.templateName || "Interview"}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
-                          </p>
-                        </div>
-                        <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                          {STATUS_LABEL[inv.status] || inv.status}
-                        </span>
-                      </div>
-                      {inv.status === "confirmed" && inv.bookedDate && (
-                        <p className="text-xs text-emerald-700 font-semibold mt-2">
-                          {formatDate(inv.bookedDate)} · {inv.bookedTime}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+        {step === "invites" && (
+          <motion.div key="invites" {...stepMotion} className="space-y-4">
+            <div className="text-center mb-2">
+              <h2 className="text-xl font-bold text-gray-900 tracking-tight">Your Scheduling Invites</h2>
+              <p className="text-sm text-gray-500 mt-1">{email}</p>
+            </div>
+
+            {invites.length === 0 ? (
+              <Card>
+                <div className="text-center py-6">
+                  <Inbox className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No invites found for this email.</p>
                 </div>
-              )}
-            </>
-          )}
+              </Card>
+            ) : (
+              <>
+                {/* Active invites */}
+                {activeInvites.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Pending</p>
+                    {activeInvites.map(inv => (
+                      <div key={inv.id} className="bg-white rounded-2xl border border-gray-100 shadow-soft p-6">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div>
+                            <p className="font-bold text-gray-900">{inv.round || inv.templateName || "Interview"}</p>
+                            <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                              <CalendarClock className="w-3 h-3" />
+                              {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
+                            </p>
+                          </div>
+                          <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_STYLE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                            {STATUS_LABEL[inv.status] || inv.status}
+                          </span>
+                        </div>
 
-          <button onClick={() => { setStep("email"); setOtp(""); setEmail(""); setInvites([]); }}
-            className="w-full text-sm text-gray-400 hover:text-gray-600 transition-colors pt-2">
-            Sign out
-          </button>
-        </div>
-      )}
+                        {inv.status === "pending_confirmation" || inv.status === "slot_selected" ? (
+                          <div className="flex items-center gap-2 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm text-violet-800 font-medium">
+                            <Clock3 className="w-4 h-4 flex-shrink-0" />
+                            Slot selected — waiting for admin confirmation.
+                          </div>
+                        ) : (
+                          <Link
+                            to={`/student/schedule?invite=${inv.inviteToken}`}
+                            className="flex items-center justify-center gap-1.5 w-full text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                            Schedule Now <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Past invites */}
+                {pastInvites.length > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4">Past</p>
+                    {pastInvites.map(inv => (
+                      <div key={inv.id} className="bg-white rounded-2xl border border-gray-100 p-5 opacity-70">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-gray-700 text-sm">{inv.round || inv.templateName || "Interview"}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
+                            </p>
+                          </div>
+                          <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                            {STATUS_LABEL[inv.status] || inv.status}
+                          </span>
+                        </div>
+                        {inv.status === "confirmed" && inv.bookedDate && (
+                          <p className="text-xs text-emerald-700 font-semibold mt-2">
+                            {formatDate(inv.bookedDate)} · {inv.bookedTime}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            <button onClick={() => { setStep("email"); setOtp(""); setEmail(""); setInvites([]); }}
+              className="w-full text-sm text-gray-400 hover:text-gray-600 transition-colors pt-2">
+              Sign out
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </StudentLayout>
   );
 }
