@@ -10,7 +10,6 @@ import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import { usePagination } from "../../hooks/usePagination";
-import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -38,16 +37,13 @@ function skillOverlap(templateSkills = [], userSkills = []) {
 
 export default function InterviewerNudgeTab({
   currentUser, userProfile,
-  templates, skills, users, activeInterviewers,
-  programs,
+  programs, templates, skills, users, activeInterviewers,
   responses,
   ivrSlots, slotsLoading, fetchSlots,
   setToast,
 }) {
   const [nudgeProgram,    setNudgeProgram]    = useState("");
   const [nudgeTemplateId, setNudgeTemplateId] = useState("");
-  const [nudgeRound,      setNudgeRound]      = useState("");
-  const [roundCustomMode, setRoundCustomMode] = useState(false);
   const [nudgeDateStart,  setNudgeDateStart]  = useState(today());
   const [nudgeDateEnd,    setNudgeDateEnd]    = useState(inDays(7));
   const [nudgeTimeStart,  setNudgeTimeStart]  = useState("09:00");
@@ -61,8 +57,6 @@ export default function InterviewerNudgeTab({
   const [sending,         setSending]         = useState(false);
   const addPickerRef = useRef(null);
 
-  const nudgeTemplate = templates.find(t => t.id === nudgeTemplateId) || null;
-
   // Templates explicitly assigned to the selected program, plus any template
   // that hasn't been assigned to a program yet (so nothing vanishes silently).
   const templateOptions = useMemo(
@@ -75,10 +69,9 @@ export default function InterviewerNudgeTab({
     if (nudgeTemplateId && !templateOptions.some(t => t.id === nudgeTemplateId)) setNudgeTemplateId("");
   }, [nudgeProgram]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const nudgeTemplate    = templateOptions.find(t => t.id === nudgeTemplateId) || null;
   const nudgeProgramName = programs?.find(p => p.id === nudgeProgram)?.name || "";
-  // Round (if the admin picked one) is the human-facing session label; falls
-  // back to the raw template name — interviewer matching is unaffected either way.
-  const sessionLabel = nudgeRound || nudgeTemplate?.name || "Interview";
+  const sessionLabel     = nudgeTemplate?.name || "Interview";
 
   const defaultMessage = useMemo(() => {
     const portal = `${window.location.origin}/interviewer/availability`;
@@ -95,9 +88,12 @@ export default function InterviewerNudgeTab({
     );
   }, [sessionLabel, nudgeProgramName, nudgeDateStart, nudgeDateEnd, nudgeTimeStart, nudgeTimeEnd, userProfile]);
 
+  const templateOptionIds = templateOptions.map(t => t.id);
   const matchedInterviewers = nudgeTemplateId
     ? activeInterviewers.filter(u => (u.templateIds || []).includes(nudgeTemplateId))
-    : activeInterviewers;
+    : nudgeProgram
+      ? activeInterviewers.filter(u => (u.templateIds || []).some(tid => templateOptionIds.includes(tid)))
+      : activeInterviewers;
 
   const manualInterviewers = activeInterviewers.filter(u =>
     manuallyAdded.has(u.id) && !matchedInterviewers.some(m => m.id === u.id)
@@ -190,7 +186,7 @@ export default function InterviewerNudgeTab({
           senderId: currentUser.uid, senderName: userProfile?.displayName || userProfile?.email,
           senderEmail: currentUser.email || userProfile?.email || "",
           templateId: nudgeTarget.template?.id || "", templateName: nudgeTarget.template?.name || "General",
-          round: nudgeRound || "", program: nudgeProgramName || "",
+          program: nudgeProgramName || "",
           dateRangeStart: nudgeDateStart, dateRangeEnd: nudgeDateEnd,
           timeRangeStart: nudgeTimeStart, timeRangeEnd: nudgeTimeEnd,
           message: message.replace(/\{\{name\}\}/g, r.displayName || r.email),
@@ -198,8 +194,6 @@ export default function InterviewerNudgeTab({
         });
       }
       setNudgeTarget(null);
-      // In-app notification already created above — email failure shouldn't
-      // undo that, but it should be visible instead of silently disappearing.
       let emailError = null;
       if (APPS_SCRIPT_URL) {
         try {
@@ -234,7 +228,7 @@ export default function InterviewerNudgeTab({
 
   const ivrPagination = usePagination(displayedInterviewers);
 
-  const allChecked = displayedInterviewers.length > 0 && selectedIvrs.size === displayedInterviewers.length;
+  const allChecked  = displayedInterviewers.length > 0 && selectedIvrs.size === displayedInterviewers.length;
   const someChecked = selectedIvrs.size > 0 && selectedIvrs.size < displayedInterviewers.length;
 
   return (
@@ -247,7 +241,7 @@ export default function InterviewerNudgeTab({
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
           <Megaphone className="w-3.5 h-3.5 text-gray-400" /> Slot Request Campaign
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
             <select value={nudgeProgram} onChange={e => setNudgeProgram(e.target.value)}
@@ -263,26 +257,6 @@ export default function InterviewerNudgeTab({
               <option value="">All Templates</option>
               {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Round (optional)</label>
-            <select
-              value={roundCustomMode ? NUDGE_ROUND_OTHER : nudgeRound}
-              onChange={e => {
-                const v = e.target.value;
-                if (v === NUDGE_ROUND_OTHER) { setRoundCustomMode(true); setNudgeRound(""); }
-                else { setRoundCustomMode(false); setNudgeRound(v); }
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-              <option value="">— Use template name —</option>
-              {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
-              <option value={NUDGE_ROUND_OTHER}>Other…</option>
-            </select>
-            {roundCustomMode && (
-              <input type="text" value={nudgeRound} onChange={e => setNudgeRound(e.target.value)}
-                placeholder="Enter custom round name…" autoFocus
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            )}
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From Date</label>

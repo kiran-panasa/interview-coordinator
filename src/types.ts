@@ -96,10 +96,11 @@ export interface QuestionBank {
 export interface Template {
   id: string;
   name: string;
+  program?: string;
   domains: Domain[];
+  skills?: string[];
   questionBank?: QuestionBank;
   questionIds?: string[];
-  program?: string;
   createdAt: string;
   updatedAt?: string;
 }

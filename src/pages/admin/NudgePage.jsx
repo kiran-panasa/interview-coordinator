@@ -117,8 +117,7 @@ export default function NudgePage() {
           {activeTab === "interviewers" && (
             <InterviewerNudgeTab
               currentUser={currentUser} userProfile={userProfile}
-              templates={templates} skills={skills} users={usersAll} activeInterviewers={activeInterviewers}
-              programs={programs}
+              programs={programs} templates={templates} skills={skills} users={usersAll} activeInterviewers={activeInterviewers}
               responses={responses}
               ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
               setToast={setToast}
@@ -127,7 +126,7 @@ export default function NudgePage() {
 
           {activeTab === "slots" && (
             <SlotOverviewTab
-              templates={templates} activeInterviewers={activeInterviewers}
+              programs={programs} templates={templates} activeInterviewers={activeInterviewers}
               ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
             />
           )}

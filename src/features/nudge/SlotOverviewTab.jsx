@@ -4,21 +4,33 @@ import { usePagination } from "../../hooks/usePagination";
 import { compareTimeLabels } from "../../utils/dates";
 
 
-export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots }) {
+export default function SlotOverviewTab({ programs, templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots }) {
+  const [selectedProgramId,  setSelectedProgramId]  = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate,   setToDate]   = useState("");
 
-  useEffect(() => {
-    if (!selectedTemplateId && templates.length > 0)
-      setSelectedTemplateId(templates[0].id);
-  }, [templates]); // eslint-disable-line
+  const programTemplates = selectedProgramId
+    ? templates.filter(t => t.program === selectedProgramId)
+    : templates;
 
-  const templateInterviewers = useMemo(() =>
-    selectedTemplateId
-      ? activeInterviewers.filter(u => (u.templateIds || []).includes(selectedTemplateId))
-      : activeInterviewers,
-  [activeInterviewers, selectedTemplateId]);
+  // Reset template when program changes and current template no longer fits
+  useEffect(() => {
+    if (selectedTemplateId && selectedProgramId) {
+      const stillValid = templates.some(t => t.id === selectedTemplateId && t.program === selectedProgramId);
+      if (!stillValid) setSelectedTemplateId("");
+    }
+  }, [selectedProgramId]); // eslint-disable-line
+
+  const templateInterviewers = useMemo(() => {
+    if (selectedTemplateId)
+      return activeInterviewers.filter(u => (u.templateIds || []).includes(selectedTemplateId));
+    if (selectedProgramId) {
+      const ptIds = programTemplates.map(t => t.id);
+      return activeInterviewers.filter(u => (u.templateIds || []).some(tid => ptIds.includes(tid)));
+    }
+    return activeInterviewers;
+  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates]);
 
   const datesSelected = !!(fromDate && toDate);
 
@@ -50,7 +62,7 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
 
   const datePagination = usePagination(byDate);
   // Reset to page 1 when filters change
-  useEffect(() => { datePagination.setPage(1); }, [selectedTemplateId, fromDate, toDate]); // eslint-disable-line
+  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, fromDate, toDate]); // eslint-disable-line
 
   // interviewer-level summary: total free slots in range per interviewer
   const ivrSummary = useMemo(() => {
@@ -69,12 +81,20 @@ export default function SlotOverviewTab({ templates, activeInterviewers, ivrSlot
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Overview</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
+            <select value={selectedProgramId} onChange={e => setSelectedProgramId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="">All Programs</option>
+              {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template</label>
             <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">All Templates</option>
-              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {programTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div>
