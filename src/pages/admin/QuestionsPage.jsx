@@ -139,20 +139,36 @@ export default function QuestionsPage() {
     return skills.filter(s => ids.has(s.id)).sort((a, b) => a.name.localeCompare(b.name));
   }, [scopedQuestions, skills]);
 
+  // Topics are scoped by both the selected template AND the selected domain
+  // (if any) — picking a domain narrows Topic the same way picking a
+  // template narrows Domain/Skill/Topic.
+  const domainScopedQuestions = useMemo(() => {
+    if (!filterDomain) return scopedQuestions;
+    const matchValues = domainFilterOptions.find(d => d.label === filterDomain)?.values || [filterDomain];
+    return scopedQuestions.filter(q => {
+      const types = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
+      return types.some(v => matchValues.includes(v));
+    });
+  }, [scopedQuestions, filterDomain, domainFilterOptions]);
+
   const allTopics = useMemo(
-    () => [...new Set(scopedQuestions.filter(q => q.status !== "archived" && q.topic).map(q => q.topic))].sort(),
-    [scopedQuestions]
+    () => [...new Set(domainScopedQuestions.filter(q => q.status !== "archived" && q.topic).map(q => q.topic))].sort(),
+    [domainScopedQuestions]
   );
 
-  // If the selected template changes and the current domain/skill/topic
-  // filter no longer applies to it, clear that filter rather than silently
+  // If the selected template/domain changes and the current domain/skill/topic
+  // filter no longer applies, clear that filter rather than silently
   // filtering everything out.
   useEffect(() => {
     if (filterDomain && !domainFilterOptions.some(d => d.label === filterDomain)) setFilterDomain("");
     if (filterSkill  && !skillFilterOptions.some(s => s.id === filterSkill))      setFilterSkill("");
-    if (filterTopic  && !allTopics.includes(filterTopic))                        setFilterTopic("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterTemplate]);
+
+  useEffect(() => {
+    if (filterTopic && !allTopics.includes(filterTopic)) setFilterTopic("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterTemplate, filterDomain]);
 
   const handleClearFilters = () => {
     setSearch("");
