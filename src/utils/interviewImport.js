@@ -35,9 +35,12 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
   if (lines.length < 2) return { globalError: "Need at least a header row and one data row." };
 
   const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ""));
-  const REQ = ["candidateemail", "intervieweremail", "templatename", "date", "time"];
+  const REQ = ["intervieweremail", "templatename", "date", "time"];
   const missing = REQ.filter(h => !headers.includes(h));
   if (missing.length) return { globalError: `Missing columns: ${missing.join(", ")}` };
+  if (!headers.includes("candidateemail") && !headers.includes("candidateuid")) {
+    return { globalError: "Missing columns: candidateEmail or candidateUid (need at least one)" };
+  }
 
   const idx = name => headers.indexOf(name.toLowerCase().replace(/\s+/g, ""));
 
@@ -47,21 +50,29 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
       const g = name => (f[idx(name)] || "").trim();
 
       const raw = {
-        candidateEmail:   g("candidateEmail"),
-        interviewerEmail: g("interviewerEmail"),
-        templateName:     g("templateName"),
-        date:             g("date"),
-        time:             g("time"),
-        round:            g("round") || "Round 1",
-        verdict:          g("verdict"),
-        notes:            g("notes"),
+        candidateEmail:       g("candidateEmail"),
+        candidateUid:         g("candidateUid"),
+        interviewerEmail:     g("interviewerEmail"),
+        templateName:         g("templateName"),
+        date:                 g("date"),
+        time:                 g("time"),
+        round:                g("round") || "Round 1",
+        verdict:              g("verdict"),
+        notes:                g("notes"),
+        meetingLink:          g("meetingLink"),
+        meetingRecordingLink: g("meetingRecordingLink"),
       };
 
       const errors = [], warnings = [];
 
-      const candidate = candidates.find(c => c.email?.toLowerCase() === raw.candidateEmail.toLowerCase());
-      if (!raw.candidateEmail) errors.push("candidateEmail required");
-      else if (!candidate) errors.push(`Candidate not found: ${raw.candidateEmail}`);
+      let candidate = raw.candidateEmail
+        ? candidates.find(c => c.email?.toLowerCase() === raw.candidateEmail.toLowerCase())
+        : null;
+      if (!candidate && raw.candidateUid) {
+        candidate = candidates.find(c => c.uid && c.uid === raw.candidateUid);
+      }
+      if (!raw.candidateEmail && !raw.candidateUid) errors.push("candidateEmail or candidateUid required");
+      else if (!candidate) errors.push(`Candidate not found: ${raw.candidateEmail || raw.candidateUid}`);
 
       const interviewer = interviewers.find(u => u.email?.toLowerCase() === raw.interviewerEmail.toLowerCase());
       if (!raw.interviewerEmail) errors.push("interviewerEmail required");
@@ -81,7 +92,10 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
 
       const verdict = raw.verdict ? (VERDICT_MAP[raw.verdict.toLowerCase()] || raw.verdict) : "";
 
-      const BASE_COLS = new Set(["candidateemail","intervieweremail","templatename","date","time","round","verdict","notes"]);
+      const BASE_COLS = new Set([
+        "candidateemail","candidateuid","intervieweremail","templatename","date","time","round","verdict","notes",
+        "meetinglink","meetingrecordinglink",
+      ]);
       const domainData = {};
       headers.forEach((h, j) => {
         if (!BASE_COLS.has(h)) domainData[h] = (f[j] || "").trim();
@@ -96,22 +110,48 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
 
       const hasDomainFeedback = Object.values(domainData).some(Boolean);
 
-      if (candidate && scheduledDate) {
-        const dup = existing.some(iv => iv.candidateId === candidate.id && iv.scheduledDate === scheduledDate);
-        if (dup) warnings.push("Duplicate: interview for this candidate on this date already exists");
+      // Upsert match — an existing interview for this candidate + template,
+      // preferring an exact date match but falling back to the sole existing
+      // interview for that pairing if the date wasn't matched. Rows that hit
+      // this get UPDATED (links + optional feedback) instead of creating a
+      // duplicate — this is what lets meeting/recording links be uploaded
+      // for interviews that already exist (completed or still scheduled).
+      let existingInterview = null;
+      if (candidate && template) {
+        const candidateTemplateIvs = existing.filter(iv => iv.candidateId === candidate.id && iv.templateId === template.id);
+        existingInterview = (scheduledDate && candidateTemplateIvs.find(iv => iv.scheduledDate === scheduledDate))
+          || (candidateTemplateIvs.length === 1 ? candidateTemplateIvs[0] : null);
+      }
+      if (existingInterview) {
+        const willAddFeedback = !!(verdict || hasDomainFeedback);
+        warnings.push(`Matches an existing ${existingInterview.status} interview — will update it${willAddFeedback ? " (links + feedback)" : " (links only)"} instead of creating a new one.`);
       }
 
-      return { rowNum: i + 2, raw, resolved: { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback }, errors, warnings };
+      return {
+        rowNum: i + 2, raw,
+        resolved: {
+          candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback,
+          existingInterview,
+          meetingLink:          raw.meetingLink,
+          meetingRecordingLink: raw.meetingRecordingLink,
+        },
+        errors, warnings,
+      };
     }),
   };
 }
 
 export function downloadImportTemplate(template) {
-  const baseHeaders = ["candidateEmail", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes"];
+  const baseHeaders = [
+    "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes",
+    "meetingLink", "meetingRecordingLink",
+  ];
   const baseExample = [
-    "john.doe@example.com", "interviewer@nxtwave.tech",
+    "john.doe@example.com", "",
+    "interviewer@nxtwave.tech",
     template?.name || "Product Mastery - Novice",
     "15/06/2026", "10:00 AM", "Round 1", "Proceed", "Overall interview notes",
+    "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
   ];
 
   const domainHeaders = [];

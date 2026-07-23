@@ -36,7 +36,8 @@ export default function ImportModal({
               </thead>
               <tbody className="text-gray-600 divide-y divide-gray-100">
                 {[
-                  ["candidateEmail",   "Yes", "john@example.com"],
+                  ["candidateEmail",   "Yes*", "john@example.com — *either this or candidateUid is required"],
+                  ["candidateUid",     "Yes*", "e.g. a1b2c3d4-... — use when email isn't reliable/known"],
                   ["interviewerEmail", "Yes", "interviewer@nxtwave.tech (need not be signed up yet)"],
                   ["templateName",     "Yes", "Product Mastery - Novice"],
                   ["date",             "Yes", "15/06/2026 or 2026-06-15"],
@@ -44,6 +45,8 @@ export default function ImportModal({
                   ["round",            "No",  "Round 1 (default)"],
                   ["verdict",          "No",  "Proceed / Hold / Reject — omit to create as scheduled (pending)"],
                   ["notes",            "No",  "Overall feedback notes"],
+                  ["meetingLink",          "No", "https://meet.google.com/abc-defg-hij"],
+                  ["meetingRecordingLink", "No", "Link to the recorded meeting"],
                   ["{domainId}_{fieldId}_rating","No",  "e.g. coding_ps_rating → score for that specific card field (0–5)"],
                   ["{domainId}_rating",          "No",  "e.g. resume_rating → for domains with no card fields"],
                   ["{domainId}_notes",            "No",  "e.g. coding_notes → overall remarks for that domain"],
@@ -51,8 +54,8 @@ export default function ImportModal({
                   <tr key={col}>
                     <td className="py-1.5 pr-4 font-mono text-[11px] text-brand-700">{col}</td>
                     <td className="py-1.5 pr-4">
-                      {req === "Yes"
-                        ? <span className="text-red-500 font-semibold">Yes</span>
+                      {req.startsWith("Yes")
+                        ? <span className="text-red-500 font-semibold">{req}</span>
                         : <span className="text-gray-400">No</span>}
                     </td>
                     <td className="py-1.5 text-gray-500">{ex}</td>
@@ -102,7 +105,7 @@ export default function ImportModal({
             rows={6}
             value={csvText}
             onChange={e => { setCsvText(e.target.value); setParsedRows(null); }}
-            placeholder={"candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes\njohn@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,Good candidate"}
+            placeholder={"candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes,meetingLink,meetingRecordingLink\njohn@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,Good candidate,https://meet.google.com/abc-defg-hij,"}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
           />
         </div>
@@ -139,7 +142,7 @@ export default function ImportModal({
                 <table className="w-full text-xs min-w-[700px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["#", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", "Feedback", ""].map(h => (
+                      {["#", "Action", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", "Feedback", ""].map(h => (
                         <th key={h} className="text-left font-semibold text-gray-400 uppercase tracking-wide px-3 py-2">{h}</th>
                       ))}
                     </tr>
@@ -160,8 +163,15 @@ export default function ImportModal({
                               {hasWarn && <AlertTriangle className="w-3 h-3 text-amber-500" title={row.warnings.join(" · ")} />}
                             </span>
                           </td>
+                          <td className="px-3 py-2">
+                            {row.resolved.existingInterview ? (
+                              <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">Update existing</span>
+                            ) : (
+                              <span className="text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">Create new</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 font-medium text-gray-800">
-                            {row.resolved.candidate?.name || <span className="text-red-500">{row.raw.candidateEmail}</span>}
+                            {row.resolved.candidate?.name || <span className="text-red-500">{row.raw.candidateEmail || row.raw.candidateUid}</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">
                             {row.resolved.interviewer?.displayName || row.resolved.interviewer?.email || <span className="text-red-500">{row.raw.interviewerEmail}</span>}

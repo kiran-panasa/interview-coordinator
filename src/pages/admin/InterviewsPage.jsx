@@ -482,7 +482,30 @@ export default function InterviewsPage() {
     setImporting(true);
     const results = await Promise.all(validRows.map(async (row) => {
       try {
-        const { candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback } = row.resolved;
+        const {
+          candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback,
+          existingInterview, meetingLink, meetingRecordingLink,
+        } = row.resolved;
+        const linkFields = {
+          ...(meetingLink          ? { meetLink: meetingLink }                     : {}),
+          ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+        };
+
+        // Row matches an interview that already exists (completed or still
+        // scheduled) — update it in place instead of creating a duplicate.
+        // This is how meeting/recording links get attached after the fact,
+        // for both past completed interviews and upcoming scheduled ones.
+        if (existingInterview) {
+          const update = { ...linkFields };
+          if (verdict || hasDomainFeedback) {
+            update.feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
+            update.status = "completed";
+            update.candidateJoined = true;
+          }
+          if (Object.keys(update).length > 0) await updateInterview(existingInterview.id, update);
+          return { ok: true };
+        }
+
         const interviewerEmail = interviewer?.email || row.raw.interviewerEmail;
         const interviewerName  = interviewer?.displayName || row.raw.interviewerEmail;
         const interviewerId    = interviewer?.id || "";
@@ -498,7 +521,8 @@ export default function InterviewsPage() {
           scheduledDate,
           scheduledTime,
           round:    row.raw.round,
-          meetLink: "",
+          meetLink: meetingLink || "",
+          ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
         };
         if (verdict || hasDomainFeedback) {
           const feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
