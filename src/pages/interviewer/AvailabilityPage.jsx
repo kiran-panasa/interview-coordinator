@@ -21,11 +21,15 @@ import {
 import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import { usePagination } from "../../hooks/usePagination";
 import { findBlockedDate, isDateBlocked } from "../../utils/blockedDates";
+import { callAppsScript } from "../../lib/appsScript";
 import Toast from "../../components/Toast";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import { Skeleton, SkeletonRows } from "../../components/Skeleton";
+
+const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
+const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -133,10 +137,12 @@ function InlineConfirm({ message, onConfirm, onCancel }) {
 export default function AvailabilityPage() {
   const { currentUser, userProfile } = useAuth();
   const [searchParams] = useSearchParams();
-  const nudgeFrom      = searchParams.get("from");
-  const nudgeTo        = searchParams.get("to");
-  const nudgeTemplate  = searchParams.get("template");
-  const nudgeNotifId   = searchParams.get("notifId");
+  const nudgeFrom       = searchParams.get("from");
+  const nudgeTo         = searchParams.get("to");
+  const nudgeTemplate   = searchParams.get("template");
+  const nudgeNotifId    = searchParams.get("notifId");
+  const nudgeSenderEmail = searchParams.get("senderEmail");
+  const nudgeSenderName  = searchParams.get("senderName");
   const isNudgeContext = !!(nudgeFrom || nudgeTo);
   const nudgeNotifiedRef = useRef(false);
 
@@ -309,24 +315,52 @@ export default function AvailabilityPage() {
     setShowSaveConfirm(true);
   };
 
-  const notifyAdminsSlotsAdded = () => {
+  // Fires once, only after slots are actually saved (not on the earlier
+  // "I'm Available" click) — `createdEntries` is the list of {date, time}
+  // slots that were just written, used both for the in-app admin
+  // notification and the confirmation email back to whoever sent the nudge.
+  const notifyAdminsSlotsAdded = (createdEntries) => {
     if (!isNudgeContext || nudgeNotifiedRef.current) return;
     nudgeNotifiedRef.current = true;
     const interviewerName = userProfile?.displayName || currentUser.email;
+    const dateRange = nudgeFrom && nudgeTo ? ` (${formatDate(nudgeFrom)} – ${formatDate(nudgeTo)})` : "";
+
     getAllUsers().then(allUsers => {
       const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
-      const dateRange = nudgeFrom && nudgeTo ? ` (${formatDate(nudgeFrom)} – ${formatDate(nudgeTo)})` : "";
       return Promise.all(admins.map(admin =>
         createNotification({
           type:        "slot_added",
           recipientId: admin.id,
           status:      "unread",
-          message:     `${interviewerName} has started adding slots${nudgeTemplate ? ` for "${nudgeTemplate}"` : ""}${dateRange}.`,
+          message:     `${interviewerName} has saved availability slots${nudgeTemplate ? ` for "${nudgeTemplate}"` : ""}${dateRange}.`,
           interviewerId: currentUser.uid,
           ...(nudgeNotifId ? { originalNotificationId: nudgeNotifId } : {}),
         })
       ));
     }).catch(() => {});
+
+    if (APPS_SCRIPT_URL && nudgeSenderEmail && createdEntries.length > 0) {
+      const countsByDate = createdEntries.reduce((acc, { date }) => {
+        acc[date] = (acc[date] || 0) + 1;
+        return acc;
+      }, {});
+      const dates = Object.keys(countsByDate).sort();
+      const dateLines = dates
+        .map(date => `• ${formatDate(date)}: ${countsByDate[date]} slot${countsByDate[date] !== 1 ? "s" : ""}`)
+        .join("\n");
+      const totalSlots = createdEntries.length;
+
+      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:  "sendEmail",
+        subject: `Availability Saved — ${interviewerName}`,
+        body:
+          `${interviewerName} has saved their availability for "${nudgeTemplate || "your request"}"${dateRange}:\n\n` +
+          `${dateLines}\n\n` +
+          `Total: ${totalSlots} slot${totalSlots !== 1 ? "s" : ""} across ${dates.length} date${dates.length !== 1 ? "s" : ""}.\n\n` +
+          `This confirms their availability has been successfully saved.`,
+        recipients: [{ email: nudgeSenderEmail, name: nudgeSenderName || "Admin" }],
+      }).catch(() => {});
+    }
   };
 
   const handleConfirmSave = async () => {
@@ -338,7 +372,7 @@ export default function AvailabilityPage() {
         ? ` (${plannedCreations.skipped} already existed and were skipped)`
         : "";
       setToast({ message: `Availability updated successfully — ${plannedCreations.toCreate.length} slot(s) saved across ${effectiveDates.length} date(s)${skippedNote}.` });
-      notifyAdminsSlotsAdded();
+      notifyAdminsSlotsAdded(plannedCreations.toCreate);
       // Reset the builder for a clean slate
       setPendingTimes(new Set());
       setRangeStart(""); setRangeEnd(""); setRangeError("");

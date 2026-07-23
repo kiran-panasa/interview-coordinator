@@ -53,10 +53,16 @@ export default function NotificationsPage() {
     if (n.dateRangeStart) params.set("from", n.dateRangeStart);
     if (n.dateRangeEnd)   params.set("to",   n.dateRangeEnd);
     if (n.templateName)   params.set("template", n.templateName);
+    if (n.senderEmail)    params.set("senderEmail", n.senderEmail);
+    if (n.senderName)     params.set("senderName", n.senderName);
     params.set("notifId", n.id);
     navigate(`/interviewer/availability?${params.toString()}`);
 
-    // Background: mark notification + notify admin
+    // Background: mark notification + notify admin in-app. The email
+    // confirmation is intentionally NOT sent here — it fires only once the
+    // interviewer actually saves slots on the Availability page, so the
+    // admin gets a real confirmation instead of an "I'm about to add slots"
+    // heads-up that may never be followed through on.
     const responderName = userProfile?.displayName || userProfile?.email || "Interviewer";
     const dateRange = n.dateRangeStart
       ? ` (${formatDate(n.dateRangeStart)} – ${formatDate(n.dateRangeEnd)})`
@@ -73,14 +79,6 @@ export default function NotificationsPage() {
       status:       "unread",
       originalNotificationId: n.id,
     }).catch(() => {});
-    if (APPS_SCRIPT_URL && n.senderEmail) {
-      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action: "sendEmail",
-        subject: `Slot Response — ${responderName} is Available`,
-        body: `${responderName} responded to your slot request for "${n.templateName || "interview"}"${dateRange} and is AVAILABLE. They are adding their slots now.`,
-        recipients: [{ email: n.senderEmail, name: n.senderName || "Admin" }],
-      }).catch(() => {});
-    }
   };
 
   const openDecline = (n) => { setReasonModal(n); setReason(""); };
