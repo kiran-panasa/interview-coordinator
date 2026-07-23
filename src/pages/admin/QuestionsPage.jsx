@@ -99,10 +99,72 @@ export default function QuestionsPage() {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [templates, questions]);
 
-  const allTopics = useMemo(
-    () => [...new Set(questions.filter(q => q.topic).map(q => q.topic))].sort(),
-    [questions]
+  // Scope of questions the filter dropdowns should draw their options from —
+  // narrowed to the selected template's own questions, or every question when
+  // no template is selected.
+  const templateQuestionSet = useMemo(
+    () => filterTemplate ? new Set(templates.find(t => t.id === filterTemplate)?.questionIds || []) : null,
+    [filterTemplate, templates]
   );
+  const scopedQuestions = useMemo(
+    () => templateQuestionSet ? questions.filter(q => templateQuestionSet.has(q.id)) : questions,
+    [questions, templateQuestionSet]
+  );
+
+  // Domain filter options: only domains actually used by a non-archived
+  // question in scope, grouped by display label — different templates
+  // sometimes define the "same" domain under a different slug, which
+  // otherwise shows up as duplicate entries with an identical name.
+  const domainFilterOptions = useMemo(() => {
+    const byLabel = new Map(); // labelKey -> { label, values: Set }
+    scopedQuestions.forEach(q => {
+      if (q.status === "archived") return;
+      const types = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
+      types.forEach(val => {
+        if (!val) return;
+        const label = (allDomainTypes.find(d => d.value === val)?.label || val).trim();
+        const key = label.toLowerCase();
+        if (!byLabel.has(key)) byLabel.set(key, { label, values: new Set() });
+        byLabel.get(key).values.add(val);
+      });
+    });
+    return [...byLabel.values()]
+      .map(({ label, values }) => ({ label, values: [...values] }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [scopedQuestions, allDomainTypes]);
+
+  const skillFilterOptions = useMemo(() => {
+    const ids = new Set();
+    scopedQuestions.forEach(q => { if (q.status !== "archived") (q.skills || []).forEach(sid => ids.add(sid)); });
+    return skills.filter(s => ids.has(s.id)).sort((a, b) => a.name.localeCompare(b.name));
+  }, [scopedQuestions, skills]);
+
+  const allTopics = useMemo(
+    () => [...new Set(scopedQuestions.filter(q => q.status !== "archived" && q.topic).map(q => q.topic))].sort(),
+    [scopedQuestions]
+  );
+
+  // If the selected template changes and the current domain/skill/topic
+  // filter no longer applies to it, clear that filter rather than silently
+  // filtering everything out.
+  useEffect(() => {
+    if (filterDomain && !domainFilterOptions.some(d => d.label === filterDomain)) setFilterDomain("");
+    if (filterSkill  && !skillFilterOptions.some(s => s.id === filterSkill))      setFilterSkill("");
+    if (filterTopic  && !allTopics.includes(filterTopic))                        setFilterTopic("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterTemplate]);
+
+  const handleClearFilters = () => {
+    setSearch("");
+    setFilterDomain("");
+    setFilterDifficulty("");
+    setFilterSkill("");
+    setFilterTopic("");
+    setFilterTemplate("");
+    setShowArchived(false);
+  };
+
+  const hasActiveFilters = !!(search || filterDomain || filterDifficulty || filterSkill || filterTopic || filterTemplate || showArchived);
 
   // reverse map: questionId → [template objects] for O(1) per-question lookups
   const qToTemplatesMap = useMemo(() => {
@@ -377,16 +439,14 @@ export default function QuestionsPage() {
 
   // ── Filtered list ────────────────────────────────────────────────────────────
 
-  const templateQuestionSet = useMemo(
-    () => filterTemplate ? new Set(templates.find(t => t.id === filterTemplate)?.questionIds || []) : null,
-    [filterTemplate, templates]
-  );
-
   const filtered = useMemo(() => questions.filter(q => {
     if (!showArchived && q.status === "archived") return false;
     if (showArchived  && q.status !== "archived") return false;
     const qDomains = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
-    if (filterDomain     && !qDomains.includes(filterDomain))        return false;
+    if (filterDomain) {
+      const matchValues = domainFilterOptions.find(d => d.label === filterDomain)?.values || [filterDomain];
+      if (!qDomains.some(v => matchValues.includes(v))) return false;
+    }
     if (filterDifficulty && q.difficulty !== filterDifficulty)       return false;
     if (filterSkill      && !(q.skills || []).includes(filterSkill)) return false;
     if (filterTopic      && q.topic !== filterTopic)                return false;
@@ -400,7 +460,7 @@ export default function QuestionsPage() {
       );
     }
     return true;
-  }), [questions, showArchived, filterDomain, filterDifficulty, filterSkill, filterTopic, templateQuestionSet, search]);
+  }), [questions, showArchived, filterDomain, filterDifficulty, filterSkill, filterTopic, templateQuestionSet, domainFilterOptions, search]);
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered, 20);
 
@@ -480,6 +540,7 @@ export default function QuestionsPage() {
           questions={questions} loading={loading}
           templates={templates} skills={skills}
           allDomainTypes={allDomainTypes} allTopics={allTopics} qToTemplatesMap={qToTemplatesMap}
+          domainFilterOptions={domainFilterOptions} skillFilterOptions={skillFilterOptions}
           search={search} setSearch={setSearch}
           filterDomain={filterDomain} setFilterDomain={setFilterDomain}
           filterDifficulty={filterDifficulty} setFilterDifficulty={setFilterDifficulty}
@@ -487,6 +548,7 @@ export default function QuestionsPage() {
           filterTopic={filterTopic} setFilterTopic={setFilterTopic}
           filterTemplate={filterTemplate} setFilterTemplate={setFilterTemplate}
           showArchived={showArchived} setShowArchived={setShowArchived}
+          hasActiveFilters={hasActiveFilters} onClearFilters={handleClearFilters}
           selected={selected} toggleSelect={toggleSelect} toggleSelectAll={toggleSelectAll} filtered={filtered}
           paged={paged} page={page} setPage={setPage} totalPages={totalPages} total={total} pageSize={pageSize}
           openCreate={openCreate} openEdit={openEdit}

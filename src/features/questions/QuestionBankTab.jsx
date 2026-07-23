@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { HelpCircle, Archive } from "lucide-react";
+import { HelpCircle, Archive, X } from "lucide-react";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { SkeletonRows } from "../../components/Skeleton";
@@ -14,6 +14,7 @@ const DIFF_BADGE = {
 export default function QuestionBankTab({
   questions, loading,
   templates, skills, allDomainTypes, allTopics, qToTemplatesMap,
+  domainFilterOptions, skillFilterOptions,
   search, setSearch,
   filterDomain, setFilterDomain,
   filterDifficulty, setFilterDifficulty,
@@ -21,6 +22,7 @@ export default function QuestionBankTab({
   filterTopic, setFilterTopic,
   filterTemplate, setFilterTemplate,
   showArchived, setShowArchived,
+  hasActiveFilters, onClearFilters,
   selected, toggleSelect, toggleSelectAll, filtered,
   paged, page, setPage, totalPages, total, pageSize,
   openCreate, openEdit, handleArchive, handleUnarchive,
@@ -37,10 +39,15 @@ export default function QuestionBankTab({
           onChange={e => setSearch(e.target.value)}
           className="w-56 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
         />
+        <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">All Templates</option>
+          {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
         <select value={filterDomain} onChange={e => setFilterDomain(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
           <option value="">All Domains</option>
-          {allDomainTypes.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+          {domainFilterOptions.map(({ label }) => <option key={label} value={label}>{label}</option>)}
         </select>
         <select value={filterDifficulty} onChange={e => setFilterDifficulty(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
@@ -50,23 +57,24 @@ export default function QuestionBankTab({
         <select value={filterSkill} onChange={e => setFilterSkill(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
           <option value="">All Skills</option>
-          {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          {skillFilterOptions.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <select value={filterTopic} onChange={e => setFilterTopic(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
           <option value="">All Topics</option>
           {allTopics.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-          <option value="">All Templates</option>
-          {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
         <button onClick={() => setShowArchived(a => !a)}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${showArchived ? "bg-gray-800 text-white border-gray-800" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
           <Archive className="w-3.5 h-3.5" />
           {showArchived ? "Viewing Archived" : "Show Archived"}
         </button>
+        {hasActiveFilters && (
+          <button onClick={onClearFilters}
+            className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
+            <X className="w-3.5 h-3.5" /> Clear
+          </button>
+        )}
       </motion.div>
 
       {/* Table */}
