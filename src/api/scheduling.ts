@@ -5,6 +5,7 @@ import {
 } from "firebase/firestore";
 import type { ScheduleInvite, OtpVerification } from "../types";
 import { parseInterviewStart } from "../utils/dates";
+import { findBlockedDateFor } from "./blockedDates";
 
 // ── Schedule Invites ──────────────────────────────────────────────────────────
 
@@ -108,6 +109,10 @@ export async function bookSlotForCandidate(
   const slotStart = parseInterviewStart(bookedDate, bookedTime);
   if (slotStart && slotStart < new Date()) {
     throw new Error("This slot has already passed — please choose a future time.");
+  }
+  const blocked = await findBlockedDateFor(bookedDate);
+  if (blocked) {
+    throw new Error(`This date is blocked${blocked.reason ? `: ${blocked.reason}` : ""}. Please choose another date.`);
   }
 
   const slotRef   = doc(db, "availability", interviewerId, "slots", slotId);

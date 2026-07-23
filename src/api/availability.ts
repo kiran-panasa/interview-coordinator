@@ -5,6 +5,8 @@ import {
 } from "firebase/firestore";
 import type { AvailabilitySlot, AvailableSlot } from "../types";
 import { compareTimeLabels } from "../utils/dates";
+import { getBlockedDates } from "./blockedDates";
+import { isDateBlocked } from "../utils/blockedDates";
 
 export function slotIdFor(date: string, time: string): string {
   return `${date}_${time.replace(/[: ]/g, "")}`;
@@ -153,7 +155,10 @@ export async function getAvailableSlotsForTemplate(
     } catch { /* sessionStorage unavailable */ }
   }
 
-  const usersSnap = await getDocs(collection(db, "users"));
+  const [usersSnap, blockedDates] = await Promise.all([
+    getDocs(collection(db, "users")),
+    getBlockedDates(),
+  ]);
   const interviewers = usersSnap.docs
     .map(d => d.data() as { role: string; status: string; templateIds?: string[]; displayName?: string; email: string } & { id: string })
     .map((u, i) => ({ ...u, id: usersSnap.docs[i].id }))
@@ -172,6 +177,7 @@ export async function getAvailableSlotsForTemplate(
     ));
     slotsSnap.docs.forEach(d => {
       const slot = d.data();
+      if (isDateBlocked(slot.date as string, blockedDates)) return;
       result.push({
         slotId:           d.id,
         interviewerId:    ivr.id,

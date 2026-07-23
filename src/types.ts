@@ -57,6 +57,15 @@ export interface Program {
   createdAt?: string;
 }
 
+export interface BlockedDate {
+  id: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD — same as startDate for a single blocked day
+  reason: string;
+  createdBy?: string;
+  createdAt?: string;
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export type FieldType = "text" | "scored_dropdown" | "dropdown" | "number" | "boolean";

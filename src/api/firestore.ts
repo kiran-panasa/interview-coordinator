@@ -10,3 +10,4 @@ export * from "./programs";
 export * from "./skills";
 export * from "./notifications";
 export * from "./scheduling";
+export * from "./blockedDates";

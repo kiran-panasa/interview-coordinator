@@ -16,9 +16,11 @@ import {
   flagAvailabilitySlot,
   getAllUsers,
   createNotification,
+  subscribeToBlockedDates,
 } from "../../api/firestore";
 import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import { usePagination } from "../../hooks/usePagination";
+import { findBlockedDate, isDateBlocked } from "../../utils/blockedDates";
 import Toast from "../../components/Toast";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
@@ -140,6 +142,7 @@ export default function AvailabilityPage() {
 
   const [slots, setSlots] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [blockedDates, setBlockedDates] = useState([]);
   const todayStr = new Date().toISOString().slice(0, 10);
 
   const [viewDate, setViewDate] = useState(() => {
@@ -181,6 +184,8 @@ export default function AvailabilityPage() {
     });
   }, [currentUser.uid]);
 
+  useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
+
   const year  = viewDate.getFullYear();
   const month = viewDate.getMonth();
   const firstDayOfWeek = new Date(year, month, 1).getDay();
@@ -214,8 +219,13 @@ export default function AvailabilityPage() {
   const effectiveDates = useMemo(() => {
     const set = new Set(selectedDates);
     recurrenceDates.forEach(d => set.add(d));
-    return [...set].filter(d => d >= todayStr).sort();
-  }, [selectedDates, recurrenceDates, todayStr]);
+    return [...set].filter(d => d >= todayStr && !isDateBlocked(d, blockedDates)).sort();
+  }, [selectedDates, recurrenceDates, todayStr, blockedDates]);
+
+  const recurrenceHasBlockedDates = useMemo(
+    () => recurrenceDates.some(d => isDateBlocked(d, blockedDates)),
+    [recurrenceDates, blockedDates]
+  );
 
   const sortedPendingTimes = useMemo(
     () => [...pendingTimes].sort((a, b) => timeSortKey(a) - timeSortKey(b)),
@@ -695,24 +705,37 @@ export default function AvailabilityPage() {
               const isSelected = selectedDates.has(ds);
               const isRecurPreview = !isSelected && recurrenceDates.includes(ds);
               const isPast     = ds < todayStr;
+              const blocked    = findBlockedDate(ds, blockedDates);
 
               return (
-                <button key={d} onClick={() => toggleDateSelect(ds)}
+                <button key={d}
+                  onClick={() => {
+                    if (blocked) {
+                      setToast({ message: `This date is blocked${blocked.reason ? `: ${blocked.reason}` : ""}.`, type: "info" });
+                      return;
+                    }
+                    toggleDateSelect(ds);
+                  }}
+                  title={blocked ? `Blocked${blocked.reason ? `: ${blocked.reason}` : ""}` : undefined}
                   className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-medium transition-colors
-                    ${isSelected
-                      ? isPast
-                        ? "bg-gray-400 text-white ring-2 ring-gray-200 ring-offset-1"
-                        : "bg-emerald-600 text-white ring-2 ring-emerald-300 ring-offset-1"
-                      : isRecurPreview
-                        ? "bg-emerald-100 text-emerald-700 font-semibold"
-                        : isToday
-                          ? "bg-emerald-50 text-emerald-700 font-bold"
-                          : isPast
-                            ? "text-gray-300 hover:bg-gray-50"
-                            : "text-gray-700 hover:bg-gray-50"
+                    ${blocked
+                      ? "bg-red-50 text-red-300 line-through cursor-not-allowed"
+                      : isSelected
+                        ? isPast
+                          ? "bg-gray-400 text-white ring-2 ring-gray-200 ring-offset-1"
+                          : "bg-emerald-600 text-white ring-2 ring-emerald-300 ring-offset-1"
+                        : isRecurPreview
+                          ? "bg-emerald-100 text-emerald-700 font-semibold"
+                          : isToday
+                            ? "bg-emerald-50 text-emerald-700 font-bold"
+                            : isPast
+                              ? "text-gray-300 hover:bg-gray-50"
+                              : "text-gray-700 hover:bg-gray-50"
                     }`}>
                   <span>{d}</span>
-                  {daySlotArr.length > 0 && (
+                  {blocked ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-0.5" />
+                  ) : daySlotArr.length > 0 && (
                     <div className="flex gap-0.5 mt-0.5">
                       {hasFree    && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
                       {hasBooked  && <span className="w-1.5 h-1.5 rounded-full bg-orange-400" />}
@@ -736,6 +759,9 @@ export default function AvailabilityPage() {
             </span>
             <span className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />Selected
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-400 inline-block" />Blocked
             </span>
           </div>
         </div>
@@ -952,6 +978,12 @@ export default function AvailabilityPage() {
                       <input type="date" value={recurUntil} min={todayStr} onChange={e => setRecurUntil(e.target.value)}
                         className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
+                  )}
+                  {recurrenceHasBlockedDates && (
+                    <p className="text-[11px] text-red-500 mt-1.5 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                      Some dates in this range are blocked by admin and will be skipped.
+                    </p>
                   )}
                 </div>
 

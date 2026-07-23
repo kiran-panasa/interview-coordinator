@@ -4,6 +4,7 @@ import {
   query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
 import { parseInterviewStart } from "../utils/dates";
+import { findBlockedDateFor } from "./blockedDates";
 import type { Interview, InterviewStatus } from "../types";
 
 export const DEFAULT_ROUNDS = [
@@ -59,6 +60,12 @@ export async function createInterview(
   const start = parseInterviewStart(rest.scheduledDate, rest.scheduledTime);
   if (start && start < new Date()) {
     throw new Error("Cannot schedule an interview in the past — please pick a future date and time.");
+  }
+  if (rest.scheduledDate) {
+    const blocked = await findBlockedDateFor(rest.scheduledDate);
+    if (blocked) {
+      throw new Error(`This date is blocked${blocked.reason ? `: ${blocked.reason}` : ""}. Please choose another date.`);
+    }
   }
   const ref = await addDoc(collection(db, "interviews"), {
     ...rest,

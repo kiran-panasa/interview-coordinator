@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Users, SlidersHorizontal, Shield, BookOpen, Sparkles, User as UserIcon,
-  CheckCircle2, Copy, Check, FileSpreadsheet, FileText, UploadCloud,
+  CheckCircle2, Copy, Check, FileSpreadsheet, FileText, UploadCloud, CalendarOff,
 } from "lucide-react";
 import UserManagementTab from "../../features/settings/UserManagementTab";
 import GeneralTab from "../../features/settings/GeneralTab";
+import BlockedDatesTab from "../../features/settings/BlockedDatesTab";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -16,6 +17,7 @@ import {
   subscribeToSkills, createSkill, updateSkill, deleteSkill,
   subscribeToPrograms, createProgram, updateProgram, deleteProgram,
   getTemplates, updateTemplate, getCandidates, updateCandidate,
+  subscribeToBlockedDates, createBlockedDate, updateBlockedDate, deleteBlockedDate,
 } from "../../api/firestore";
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
@@ -43,7 +45,10 @@ const ALL_ROLES = [
 const SECTIONS = [
   { value: "User Management", icon: Users },
   { value: "General",         icon: SlidersHorizontal },
+  { value: "Blocked Dates",   icon: CalendarOff },
 ];
+
+const BLANK_BLOCK = { startDate: "", endDate: "", reason: "" };
 
 const ROLE_GROUPS = [
   { value: "admin",               label: "Admin",                 dot: "bg-purple-400",  badge: "text-purple-700 bg-purple-50 border-purple-200" },
@@ -99,6 +104,14 @@ export default function SettingsPage() {
   const [newProgramName, setNewProgramName] = useState("");
   const [editingProgram, setEditingProgram] = useState(null);
   const [deletingProgram, setDeletingProgram] = useState(false);
+
+  // ── Blocked Dates state ───────────────────────────────────────────────────
+  const [blockedDates,    setBlockedDates]    = useState([]);
+  const [showBlockModal,  setShowBlockModal]  = useState(false);
+  const [blockEditTarget, setBlockEditTarget] = useState(null); // null = new
+  const [blockForm,       setBlockForm]       = useState(BLANK_BLOCK);
+  const [blockSaving,     setBlockSaving]     = useState(false);
+
   useEffect(() => {
     let usersReady = false, invitesReady = false;
     const checkReady = () => { if (usersReady && invitesReady) setLoading(false); };
@@ -106,7 +119,8 @@ export default function SettingsPage() {
     const unsubInvites = subscribeToInvites(i => { setInvites(i); invitesReady = true; checkReady(); });
     const unsubSkills  = subscribeToSkills(setSkills);
     const unsubPrograms = subscribeToPrograms(setPrograms);
-    return () => { unsubUsers(); unsubInvites(); unsubSkills(); unsubPrograms(); };
+    const unsubBlocked  = subscribeToBlockedDates(setBlockedDates);
+    return () => { unsubUsers(); unsubInvites(); unsubSkills(); unsubPrograms(); unsubBlocked(); };
   }, []);
 
   // ── User Management handlers ──────────────────────────────────────────────
@@ -327,6 +341,49 @@ export default function SettingsPage() {
     setToast({ message: `"${p.name}" deleted.` });
   };
 
+  // ── Blocked Dates handlers ────────────────────────────────────────────────
+  const openNewBlock = () => {
+    setBlockEditTarget(null);
+    setBlockForm(BLANK_BLOCK);
+    setShowBlockModal(true);
+  };
+  const openEditBlock = (b) => {
+    setBlockEditTarget(b);
+    setBlockForm({ startDate: b.startDate, endDate: b.endDate, reason: b.reason || "" });
+    setShowBlockModal(true);
+  };
+  const handleSaveBlock = async () => {
+    if (!blockForm.startDate) return setToast({ message: "Pick a start date.", type: "error" });
+    const endDate = blockForm.endDate || blockForm.startDate;
+    if (endDate < blockForm.startDate) return setToast({ message: "End date can't be before the start date.", type: "error" });
+    if (!blockForm.reason.trim()) return setToast({ message: "Please add a reason for blocking these dates.", type: "error" });
+    setBlockSaving(true);
+    try {
+      const data = { startDate: blockForm.startDate, endDate, reason: blockForm.reason.trim() };
+      if (blockEditTarget) {
+        await updateBlockedDate(blockEditTarget.id, data);
+        setToast({ message: "Blocked dates updated." });
+      } else {
+        await createBlockedDate({ ...data, createdBy: currentUser.uid });
+        setToast({ message: "Dates blocked." });
+      }
+      setShowBlockModal(false);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setBlockSaving(false);
+  };
+  const handleDeleteBlock = async (b) => {
+    const label = b.startDate === b.endDate ? b.startDate : `${b.startDate} – ${b.endDate}`;
+    if (!confirm(`Unblock ${label}? Interviewers and candidates will be able to use these dates again.`)) return;
+    try {
+      await deleteBlockedDate(b.id);
+      setToast({ message: "Dates unblocked." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   const usersPagination   = usePagination(filteredUsers,   10);
   const invitesPagination = usePagination(filteredInvites, 10);
 
@@ -419,6 +476,13 @@ export default function SettingsPage() {
           editingProgram={editingProgram} setEditingProgram={setEditingProgram}
           handleAddProgram={handleAddProgram} handleRenameProgram={handleRenameProgram}
           handleDeleteProgram={handleDeleteProgram} deletingProgram={deletingProgram}
+        />
+      )}
+
+      {activeSection === "Blocked Dates" && (
+        <BlockedDatesTab
+          blockedDates={blockedDates}
+          onAdd={openNewBlock} onEdit={openEditBlock} onDelete={handleDeleteBlock}
         />
       )}
 
@@ -616,6 +680,44 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* ── Block Dates modal ── */}
+      <Modal open={showBlockModal} onClose={() => setShowBlockModal(false)} title={blockEditTarget ? "Edit Blocked Dates" : "Block Dates"}>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Start Date <span className="text-red-400">*</span></label>
+              <input type="date" value={blockForm.startDate}
+                onChange={e => setBlockForm(f => ({ ...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? "" : f.endDate }))}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">End Date</label>
+              <input type="date" value={blockForm.endDate} min={blockForm.startDate || undefined}
+                onChange={e => setBlockForm(f => ({ ...f, endDate: e.target.value }))}
+                placeholder={blockForm.startDate}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              <p className="text-[11px] text-gray-400 mt-1">Leave blank to block a single day.</p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Reason / Remark <span className="text-red-400">*</span></label>
+            <textarea rows={3} value={blockForm.reason}
+              onChange={e => setBlockForm(f => ({ ...f, reason: e.target.value }))}
+              placeholder="e.g. Public holiday — Independence Day"
+              className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none" />
+            <p className="text-[11px] text-gray-400 mt-1">Visible to panelists on their Availability calendar.</p>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <Button variant="primary" className="flex-1" onClick={handleSaveBlock} disabled={blockSaving}>
+              {blockSaving ? "Saving…" : blockEditTarget ? "Save Changes" : "Block Dates"}
+            </Button>
+            <Button variant="secondary" onClick={() => setShowBlockModal(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
