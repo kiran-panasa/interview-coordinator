@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Upload, UserPlus, Users, Mail, Copy, Check, Shield, User as UserIcon, BookOpen, Sparkles } from "lucide-react";
+import { Upload, UserPlus, Users, Mail, Copy, Check, Shield, User as UserIcon, BookOpen, Sparkles, Search } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
@@ -46,6 +46,8 @@ export default function UserManagementTab({
   filteredInvites, invitesPagination, pendingInvites,
   userRoleFilter, setUserRoleFilter,
   inviteRoleFilter, setInviteRoleFilter,
+  userSearch, setUserSearch,
+  inviteSearch, setInviteSearch,
   activeUsers, pending,
   pendingRoles, setPendingRoles,
   saving,
@@ -85,14 +87,26 @@ export default function UserManagementTab({
               </span>
             )}
           </h2>
-          <select
-            value={userRoleFilter}
-            onChange={e => setUserRoleFilter(e.target.value)}
-            className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-600 cursor-pointer">
-            <option value="">All roles</option>
-            <option value="pending">Pending</option>
-            {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                placeholder="Search name or email…"
+                className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-48"
+              />
+            </div>
+            <select
+              value={userRoleFilter}
+              onChange={e => setUserRoleFilter(e.target.value)}
+              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-600 cursor-pointer">
+              <option value="">All roles</option>
+              <option value="pending">Pending</option>
+              {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
         </div>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
           {loading ? (
@@ -197,13 +211,25 @@ export default function UserManagementTab({
                 <span className="px-2 py-0.5 text-xs font-bold bg-gray-100 text-gray-600 rounded-full">{pendingInvites.length}</span>
               )}
             </h2>
-            <select
-              value={inviteRoleFilter}
-              onChange={e => setInviteRoleFilter(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-600 cursor-pointer">
-              <option value="">All roles</option>
-              {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  value={inviteSearch}
+                  onChange={e => setInviteSearch(e.target.value)}
+                  placeholder="Search name or email…"
+                  className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-48"
+                />
+              </div>
+              <select
+                value={inviteRoleFilter}
+                onChange={e => setInviteRoleFilter(e.target.value)}
+                className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-600 cursor-pointer">
+                <option value="">All roles</option>
+                {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+              </select>
+            </div>
           </div>
           {loading ? (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4"><SkeletonRows count={3} /></div>

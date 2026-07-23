@@ -84,6 +84,8 @@ export default function SettingsPage() {
 
   const [userRoleFilter,   setUserRoleFilter]   = useState("");
   const [inviteRoleFilter, setInviteRoleFilter] = useState("");
+  const [userSearch,       setUserSearch]       = useState("");
+  const [inviteSearch,     setInviteSearch]     = useState("");
 
   const [showCSV,      setShowCSV]      = useState(false);
   const [csvPreview,   setCsvPreview]   = useState([]);
@@ -118,15 +120,24 @@ export default function SettingsPage() {
 
   const filteredUsers = useMemo(() => {
     const all = [...pending, ...activeUsers];
-    if (!userRoleFilter) return all;
-    if (userRoleFilter === "pending") return pending;
-    return activeUsers.filter(u => u.role === userRoleFilter);
-  }, [pending, activeUsers, userRoleFilter]);
+    let result = !userRoleFilter ? all
+      : userRoleFilter === "pending" ? pending
+      : activeUsers.filter(u => u.role === userRoleFilter);
+    const q = userSearch.trim().toLowerCase();
+    if (q) result = result.filter(u =>
+      (u.displayName || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q)
+    );
+    return result;
+  }, [pending, activeUsers, userRoleFilter, userSearch]);
 
   const filteredInvites = useMemo(() => {
-    if (!inviteRoleFilter) return pendingInvites;
-    return pendingInvites.filter(i => i.role === inviteRoleFilter);
-  }, [pendingInvites, inviteRoleFilter]);
+    let result = !inviteRoleFilter ? pendingInvites : pendingInvites.filter(i => i.role === inviteRoleFilter);
+    const q = inviteSearch.trim().toLowerCase();
+    if (q) result = result.filter(i =>
+      (i.name || "").toLowerCase().includes(q) || (i.email || "").toLowerCase().includes(q)
+    );
+    return result;
+  }, [pendingInvites, inviteRoleFilter, inviteSearch]);
 
   const signupLink = (email) =>
     `${window.location.origin}/login?mode=signup&email=${encodeURIComponent(email)}`;
@@ -379,6 +390,8 @@ export default function SettingsPage() {
           filteredInvites={filteredInvites} invitesPagination={invitesPagination} pendingInvites={pendingInvites}
           userRoleFilter={userRoleFilter} setUserRoleFilter={setUserRoleFilter}
           inviteRoleFilter={inviteRoleFilter} setInviteRoleFilter={setInviteRoleFilter}
+          userSearch={userSearch} setUserSearch={setUserSearch}
+          inviteSearch={inviteSearch} setInviteSearch={setInviteSearch}
           activeUsers={activeUsers} pending={pending}
           pendingRoles={pendingRoles} setPendingRoles={setPendingRoles}
           saving={saving}
