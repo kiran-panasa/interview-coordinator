@@ -29,11 +29,6 @@ function inDays(n) {
   return d.toISOString().slice(0, 10);
 }
 
-function skillOverlap(templateSkills = [], userSkills = []) {
-  const ts = new Set(templateSkills);
-  return userSkills.filter(s => ts.has(s));
-}
-
 const STATUS_BADGE = {
   sent:                 "bg-blue-50 text-blue-700 border-blue-200",
   otp_verified:         "bg-amber-50 text-amber-700 border-amber-200",
@@ -49,8 +44,8 @@ const STATUS_LABEL = {
 
 export default function CandidateSchedulingTab({
   currentUser,
-  templates, programs, candidates, users, activeInterviewers,
-  invites, ivrSlots,
+  templates, programs, candidates, users,
+  invites,
   setToast,
 }) {
   const [dateStart,      setDateStart]      = useState(today());
@@ -66,19 +61,6 @@ export default function CandidateSchedulingTab({
   const [resendingId,    setResendingId]    = useState(null);
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
-
-  // Slot summary: per template, count free slots from matched interviewers within dateStart–dateEnd
-  const slotSummary = templates.map(tmpl => {
-    const matched = activeInterviewers.filter(u => {
-      const req = tmpl.skills || [];
-      return req.length === 0 || skillOverlap(req, u.skills || []).length > 0;
-    });
-    const total = matched.reduce((sum, u) => {
-      const slots = ivrSlots[u.id] || [];
-      return sum + slots.filter(s => !s.isBooked && s.date >= dateStart && s.date <= dateEnd).length;
-    }, 0);
-    return { tmpl, matched: matched.length, freeSlots: total };
-  }).filter(s => s.matched > 0);
 
   // Templates explicitly assigned to the selected program, plus any template
   // that hasn't been assigned to a program yet (so nothing vanishes silently).
@@ -349,36 +331,6 @@ export default function CandidateSchedulingTab({
 
   return (
     <div className="space-y-8">
-      {/* Slot availability summary */}
-      {slotSummary.length > 0 && (
-        <motion.div
-          initial="hidden" animate="visible" custom={0} variants={fadeUp}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
-        >
-          <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-              <CalendarRange className="w-3.5 h-3.5 text-gray-400" />
-              Available Slots · {formatDate(dateStart)} – {formatDate(dateEnd)}
-            </p>
-          </div>
-          <div className="divide-y divide-gray-50">
-            {slotSummary.map(({ tmpl, matched, freeSlots }) => (
-              <div key={tmpl.id} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/70 transition-colors">
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{tmpl.name}</p>
-                  <p className="text-xs text-gray-400">{matched} matched interviewer{matched !== 1 ? "s" : ""}</p>
-                </div>
-                <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-                  freeSlots > 0 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-600"
-                }`}>
-                  {freeSlots} free slot{freeSlots !== 1 ? "s" : ""}
-                </span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
       {/* Campaign config */}
       <motion.div
         initial="hidden" animate="visible" custom={1} variants={fadeUp}

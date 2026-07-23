@@ -4,11 +4,17 @@ import { usePagination } from "../../hooks/usePagination";
 import { compareTimeLabels } from "../../utils/dates";
 
 
+function today() { return new Date().toISOString().slice(0, 10); }
+function inDays(n) {
+  const d = new Date(); d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function SlotOverviewTab({ programs, templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots }) {
   const [selectedProgramId,  setSelectedProgramId]  = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate,   setToDate]   = useState("");
+  const [fromDate, setFromDate] = useState(today());
+  const [toDate,   setToDate]   = useState(inDays(7));
 
   const programTemplates = selectedProgramId
     ? templates.filter(t => t.program === selectedProgramId)
