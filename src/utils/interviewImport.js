@@ -141,6 +141,80 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
   };
 }
 
+// Lightweight companion to parseImportCSV — for attaching meeting/recording
+// links onto interviews that already exist, without needing to re-supply
+// interviewer/date/time. Never creates a new interview: a row that can't be
+// matched to an existing one is an error, not a fallback-create.
+export function parseLinksCSV(text, candidates, templates, existing) {
+  const lines = splitCSVLines(text);
+  if (lines.length < 2) return { globalError: "Need at least a header row and one data row." };
+
+  const headers = parseLine(lines[0]).map(h => h.toLowerCase().replace(/\s+/g, ""));
+  if (!headers.includes("templatename")) return { globalError: "Missing column: templateName" };
+  if (!headers.includes("candidateemail") && !headers.includes("candidateuid")) {
+    return { globalError: "Missing columns: candidateEmail or candidateUid (need at least one)" };
+  }
+  if (!headers.includes("meetinglink") && !headers.includes("meetingrecordinglink")) {
+    return { globalError: "Missing columns: meetingLink and/or meetingRecordingLink" };
+  }
+
+  const idx = name => headers.indexOf(name.toLowerCase().replace(/\s+/g, ""));
+
+  return {
+    rows: lines.slice(1).map((line, i) => {
+      const f = parseLine(line);
+      const g = name => (f[idx(name)] || "").trim();
+
+      const raw = {
+        candidateEmail:       g("candidateEmail"),
+        candidateUid:         g("candidateUid"),
+        templateName:         g("templateName"),
+        date:                 g("date"),
+        meetingLink:          g("meetingLink"),
+        meetingRecordingLink: g("meetingRecordingLink"),
+      };
+
+      const errors = [];
+
+      let candidate = raw.candidateEmail
+        ? candidates.find(c => c.email?.toLowerCase() === raw.candidateEmail.toLowerCase())
+        : null;
+      if (!candidate && raw.candidateUid) {
+        candidate = candidates.find(c => c.uid && c.uid === raw.candidateUid);
+      }
+      if (!raw.candidateEmail && !raw.candidateUid) errors.push("candidateEmail or candidateUid required");
+      else if (!candidate) errors.push(`Candidate not found: ${raw.candidateEmail || raw.candidateUid}`);
+
+      const template = templates.find(t => t.name.toLowerCase() === raw.templateName.toLowerCase());
+      if (!raw.templateName) errors.push("templateName required");
+      else if (!template) errors.push(`Template not found: "${raw.templateName}"`);
+
+      if (!raw.meetingLink && !raw.meetingRecordingLink) errors.push("Provide meetingLink and/or meetingRecordingLink");
+
+      const scheduledDate = raw.date ? normalizeDate(raw.date) : null;
+      if (raw.date && !scheduledDate) errors.push(`Bad date format: "${raw.date}" — use DD/MM/YYYY`);
+
+      let existingInterview = null;
+      if (candidate && template) {
+        const matches = existing.filter(iv => iv.candidateId === candidate.id && iv.templateId === template.id);
+        existingInterview = (scheduledDate && matches.find(iv => iv.scheduledDate === scheduledDate))
+          || (matches.length === 1 ? matches[0] : null);
+        if (!existingInterview) {
+          errors.push(matches.length === 0
+            ? "No existing interview found for this candidate + template."
+            : `${matches.length} interviews found for this candidate + template — add a date column to disambiguate.`);
+        }
+      }
+
+      return {
+        rowNum: i + 2, raw,
+        resolved: { candidate, template, existingInterview, meetingLink: raw.meetingLink, meetingRecordingLink: raw.meetingRecordingLink },
+        errors,
+      };
+    }),
+  };
+}
+
 export function downloadImportTemplate(template) {
   const baseHeaders = [
     "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes",

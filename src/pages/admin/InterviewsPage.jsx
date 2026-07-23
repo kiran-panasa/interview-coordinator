@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, Download, X, Video, Archive, ArchiveRestore, Inbox,
+  Plus, Upload, Download, X, Video, Archive, ArchiveRestore, Inbox, Link2,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
-import { parseImportCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
+import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -25,6 +25,7 @@ import { usePagination } from "../../hooks/usePagination";
 import ScheduleInterviewModal from "../../features/interviews/ScheduleInterviewModal";
 import FeedbackViewModal from "../../features/interviews/FeedbackViewModal";
 import ImportModal from "../../features/interviews/ImportModal";
+import UploadLinksModal from "../../features/interviews/UploadLinksModal";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
 import AiReportModal from "../../features/interviews/AiReportModal";
 
@@ -85,6 +86,10 @@ export default function InterviewsPage() {
   const [importing,       setImporting]       = useState(false);
   const [dlTemplateId,    setDlTemplateId]    = useState("");
   const [showArchived,    setShowArchived]    = useState(false);
+  const [showUploadLinks, setShowUploadLinks] = useState(false);
+  const [linksCsvText,    setLinksCsvText]    = useState("");
+  const [linksParsedRows, setLinksParsedRows] = useState(null);
+  const [linksImporting,  setLinksImporting]  = useState(false);
   const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
   const [recordingLoading,  setRecordingLoading]  = useState({}); // { [interviewId]: true }
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
@@ -546,6 +551,42 @@ export default function InterviewsPage() {
     }
   };
 
+  // ── Upload meeting/recording links for existing interviews ─────────────────
+
+  const handleParseLinksCSV = () => {
+    const result = parseLinksCSV(linksCsvText, candidates, templates, interviews);
+    if (result.globalError) { setToast({ message: result.globalError, type: "error" }); return; }
+    setLinksParsedRows(result.rows);
+  };
+
+  const handleImportLinks = async () => {
+    const validRows = linksParsedRows.filter(r => r.errors.length === 0);
+    setLinksImporting(true);
+    const results = await Promise.all(validRows.map(async (row) => {
+      try {
+        const { existingInterview, meetingLink, meetingRecordingLink } = row.resolved;
+        const update = {
+          ...(meetingLink          ? { meetLink: meetingLink }                     : {}),
+          ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+        };
+        await updateInterview(existingInterview.id, update);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, msg: `Row ${row.rowNum}: ${e.message}` };
+      }
+    }));
+    setLinksImporting(false);
+    const done   = results.filter(r => r.ok).length;
+    const failed = results.filter(r => !r.ok).map(r => r.msg);
+    if (failed.length) {
+      setToast({ message: `${done} updated, ${failed.length} failed. Check console.`, type: "error" });
+      console.error("Link upload failures:", failed);
+    } else {
+      setToast({ message: `${done} interview${done !== 1 ? "s" : ""} updated with links.` });
+      setShowUploadLinks(false); setLinksCsvText(""); setLinksParsedRows(null);
+    }
+  };
+
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const templateProgramMap = useMemo(
@@ -681,6 +722,10 @@ export default function InterviewsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" icon={Link2}
+            onClick={() => { setShowUploadLinks(true); setLinksCsvText(""); setLinksParsedRows(null); }}>
+            Upload Links
+          </Button>
           <Button variant="secondary" icon={Upload}
             onClick={() => { setShowImport(true); setCsvText(""); setParsedRows(null); }}>
             Import from Sheet
@@ -911,6 +956,13 @@ export default function InterviewsPage() {
         templates={templates}
         handleParseCSV={handleParseCSV} handleImport={handleImport} importing={importing}
         downloadImportTemplate={downloadImportTemplate}
+      />
+
+      <UploadLinksModal
+        open={showUploadLinks} onClose={() => setShowUploadLinks(false)}
+        csvText={linksCsvText} setCsvText={setLinksCsvText}
+        parsedRows={linksParsedRows} setParsedRows={setLinksParsedRows}
+        handleParseCSV={handleParseLinksCSV} handleImport={handleImportLinks} importing={linksImporting}
       />
 
       <FeedbackEditModal
