@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck,
+  CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck, Search,
 } from "lucide-react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import {
@@ -61,6 +61,7 @@ export default function CandidateSchedulingTab({
   const [resendingId,    setResendingId]    = useState(null);
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
+  const [candSearch,     setCandSearch]     = useState("");
 
   // Templates explicitly assigned to the selected program, plus any template
   // that hasn't been assigned to a program yet (so nothing vanishes silently).
@@ -77,6 +78,11 @@ export default function CandidateSchedulingTab({
   const filteredCandidates = candidates.filter(c => {
     if (filterProgram  && c.program !== filterProgram) return false;
     if (filterTemplate && !(c.templateIds || []).includes(filterTemplate)) return false;
+    if (candSearch) {
+      const q = candSearch.trim().toLowerCase();
+      const hay = [c.name, c.uid, c.email].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
@@ -410,16 +416,28 @@ export default function CandidateSchedulingTab({
         initial="hidden" animate="visible" custom={2} variants={fadeUp}
         className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
       >
-        <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+        <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap">
             <Users className="w-3.5 h-3.5 text-gray-400" />
-            Candidates {filterProgram || filterTemplate ? `(filtered: ${filteredCandidates.length})` : `(${candidates.length} total)`}
+            Candidates {filterProgram || filterTemplate || candSearch ? `(filtered: ${filteredCandidates.length})` : `(${candidates.length} total)`}
           </p>
-          {filteredCandidates.length > 0 && (
-            <button onClick={toggleAllCands} className="text-xs text-brand-600 hover:underline font-medium">
-              {selCandidates.size === filteredCandidates.length ? "Deselect all" : "Select all"}
-            </button>
-          )}
+          <div className="flex items-center gap-3 ml-auto">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={candSearch}
+                onChange={e => setCandSearch(e.target.value)}
+                placeholder="Search name or UID…"
+                className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-gray-700 w-52"
+              />
+            </div>
+            {filteredCandidates.length > 0 && (
+              <button onClick={toggleAllCands} className="text-xs text-brand-600 hover:underline font-medium whitespace-nowrap">
+                {selCandidates.size === filteredCandidates.length ? "Deselect all" : "Select all"}
+              </button>
+            )}
+          </div>
         </div>
         <table className="w-full text-sm">
           <thead>
