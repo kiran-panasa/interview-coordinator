@@ -9,7 +9,7 @@ import { formatDateShort } from "../../utils/dates";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createTemplate, updateTemplate, deleteTemplate,
-  getQuestions,
+  getQuestions, updateInterview,
 } from "../../api/firestore";
 import { useSkills, usePrograms, useTemplates, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -57,6 +57,7 @@ export default function TemplatesPage() {
   const [qbDomainFilter,setQbDomainFilter]= useState("");
   const [saving,        setSaving]        = useState(false);
   const [migrating,     setMigrating]     = useState(false);
+  const [syncingNames,  setSyncingNames]  = useState(false);
   const [toast,         setToast]         = useState(null);
   const [csvErrors,     setCsvErrors]     = useState([]);
   const csvFileRef = useRef(null);
@@ -360,6 +361,31 @@ export default function TemplatesPage() {
     setMigrating(false);
   };
 
+  // A template's name is snapshotted onto every interview at creation time
+  // (so history reads correctly even if a template is later deleted). When a
+  // template is renamed, those old copies go stale — this backfills them.
+  const handleSyncTemplateNames = async () => {
+    const nameById = new Map(templates.map(t => [t.id, t.name]));
+    const stale = interviews.filter(iv => iv.templateId && nameById.has(iv.templateId) && iv.templateName !== nameById.get(iv.templateId));
+    if (stale.length === 0) {
+      setToast({ message: "Every interview's template name is already up to date." });
+      return;
+    }
+    if (!confirm(
+      `${stale.length} interview record(s) reference a template that's since been renamed.\n\nUpdate them to show the current template name (including completed interviews)?`
+    )) return;
+    setSyncingNames(true);
+    try {
+      for (const iv of stale) {
+        await updateInterview(iv.id, { templateName: nameById.get(iv.templateId) });
+      }
+      setToast({ message: `${stale.length} interview record(s) updated to the current template name.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setSyncingNames(false);
+  };
+
   const programTabs = [
     { id: "all",        label: "All",        count: templates.length },
     ...programs.map(p => ({ id: p.id, label: p.name, count: programTemplateCounts.get(p.id) || 0 })),
@@ -377,6 +403,11 @@ export default function TemplatesPage() {
           <p className="text-sm text-gray-500 mt-1">Define domains, evaluation fields, and question banks</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={handleSyncTemplateNames} disabled={syncingNames || templates.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-300 text-brand-700 text-xs font-semibold rounded-xl hover:bg-brand-50 disabled:opacity-40 transition-colors">
+            <RefreshCw className={`w-3.5 h-3.5 ${syncingNames ? "animate-spin" : ""}`} />
+            {syncingNames ? "Syncing…" : "Sync Template Names"}
+          </button>
           <button onClick={handleMigrateDomainIds} disabled={migrating || templates.length === 0}
             className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold rounded-xl hover:bg-amber-50 disabled:opacity-40 transition-colors">
             <RefreshCw className={`w-3.5 h-3.5 ${migrating ? "animate-spin" : ""}`} />
