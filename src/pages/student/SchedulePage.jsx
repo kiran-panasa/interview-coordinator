@@ -99,6 +99,7 @@ export default function SchedulePage() {
           return;
         }
         setInvite(inv);
+        setEmail(inv.candidateEmail || "");
         setStep("email");
       } catch (e) {
         console.error(e);
@@ -354,6 +355,9 @@ export default function SchedulePage() {
                 onKeyDown={e => e.key === "Enter" && handleSendOtp()}
               />
               {emailError && <p className="text-xs text-red-500 mt-1.5">{emailError}</p>}
+              <p className="text-xs text-gray-400 mt-1.5">
+                Note: Please use the same email address to book your interview slot that was used to receive this invitation email.
+              </p>
             </div>
             <Button variant="primary" size="lg" onClick={handleSendOtp} disabled={busy} className="w-full">
               {busy ? "Sending OTP…" : "Send One-Time Code →"}
