@@ -331,8 +331,8 @@ export default function InterviewsPage() {
     setAiReportTarget(iv);
     setAiReportStatus(null);
     if (iv.aiReport) return; // already cached — modal renders it directly
-    if (!iv.eventId && !iv.meetLink) {
-      setToast({ message: "No Meet link/event on this interview — can't fetch a transcript to analyze.", type: "error" });
+    if (!iv.eventId && !iv.meetLink && !iv.transcriptUrl) {
+      setToast({ message: "No Meet link/event/transcript on this interview — can't fetch a transcript to analyze.", type: "error" });
       setAiReportTarget(null);
       return;
     }
@@ -342,6 +342,7 @@ export default function InterviewsPage() {
         action:         "generateAiReport",
         eventId:        iv.eventId || "",
         meetLink:       iv.meetLink || "",
+        transcriptUrl:  iv.transcriptUrl || "",
         recallBotId:    iv.recallBotId || "",
         candidateName:  iv.candidateName,
         round:          iv.round || iv.templateName || "Interview",
@@ -564,10 +565,11 @@ export default function InterviewsPage() {
     setLinksImporting(true);
     const results = await Promise.all(validRows.map(async (row) => {
       try {
-        const { existingInterview, meetingLink, meetingRecordingLink } = row.resolved;
+        const { existingInterview, meetingLink, meetingRecordingLink, transcriptLink } = row.resolved;
         const update = {
           ...(meetingLink          ? { meetLink: meetingLink }                     : {}),
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+          ...(transcriptLink       ? { transcriptUrl: transcriptLink }             : {}),
         };
         await updateInterview(existingInterview.id, update);
         return { ok: true };

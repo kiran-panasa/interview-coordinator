@@ -39,6 +39,7 @@ export default function UploadLinksModal({
                   ["date",                 "No",   "15/06/2026 — only needed if this candidate has more than one interview for the template"],
                   ["meetingLink",          "Yes*", "https://meet.google.com/abc-defg-hij — *at least one link column is required"],
                   ["meetingRecordingLink", "Yes*", "Link to the recorded meeting"],
+                  ["transcriptLink",       "No",   "A Google Doc link — lets Transcript open it directly and AI Report generate from it"],
                 ].map(([col, req, ex]) => (
                   <tr key={col}>
                     <td className="py-1.5 pr-4 font-mono text-[11px] text-brand-700">{col}</td>
@@ -84,7 +85,7 @@ export default function UploadLinksModal({
             rows={6}
             value={csvText}
             onChange={e => { setCsvText(e.target.value); setParsedRows(null); }}
-            placeholder={"candidateEmail,templateName,meetingLink,meetingRecordingLink\njohn@example.com,AI SYSTEMS MASTERY,https://meet.google.com/abc-defg-hij,https://drive.google.com/file/d/xxxx/view"}
+            placeholder={"candidateEmail,templateName,meetingLink,meetingRecordingLink,transcriptLink\njohn@example.com,AI SYSTEMS MASTERY,https://meet.google.com/abc-defg-hij,https://drive.google.com/file/d/xxxx/view,https://docs.google.com/document/d/xxxx/edit"}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
           />
         </div>
@@ -144,7 +145,7 @@ export default function UploadLinksModal({
                               : <span className="text-red-500">Not found</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">
-                            {[row.raw.meetingLink && "Meeting", row.raw.meetingRecordingLink && "Recording"].filter(Boolean).join(" + ") || "—"}
+                            {[row.raw.meetingLink && "Meeting", row.raw.meetingRecordingLink && "Recording", row.raw.transcriptLink && "Transcript"].filter(Boolean).join(" + ") || "—"}
                           </td>
                           <td className="px-3 py-2">
                             {hasErr ? (

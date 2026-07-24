@@ -154,8 +154,8 @@ export function parseLinksCSV(text, candidates, templates, existing) {
   if (!headers.includes("candidateemail") && !headers.includes("candidateuid")) {
     return { globalError: "Missing columns: candidateEmail or candidateUid (need at least one)" };
   }
-  if (!headers.includes("meetinglink") && !headers.includes("meetingrecordinglink")) {
-    return { globalError: "Missing columns: meetingLink and/or meetingRecordingLink" };
+  if (!headers.includes("meetinglink") && !headers.includes("meetingrecordinglink") && !headers.includes("transcriptlink")) {
+    return { globalError: "Missing columns: meetingLink, meetingRecordingLink, and/or transcriptLink (need at least one)" };
   }
 
   const idx = name => headers.indexOf(name.toLowerCase().replace(/\s+/g, ""));
@@ -172,6 +172,7 @@ export function parseLinksCSV(text, candidates, templates, existing) {
         date:                 g("date"),
         meetingLink:          g("meetingLink"),
         meetingRecordingLink: g("meetingRecordingLink"),
+        transcriptLink:       g("transcriptLink"),
       };
 
       const errors = [];
@@ -189,7 +190,9 @@ export function parseLinksCSV(text, candidates, templates, existing) {
       if (!raw.templateName) errors.push("templateName required");
       else if (!template) errors.push(`Template not found: "${raw.templateName}"`);
 
-      if (!raw.meetingLink && !raw.meetingRecordingLink) errors.push("Provide meetingLink and/or meetingRecordingLink");
+      if (!raw.meetingLink && !raw.meetingRecordingLink && !raw.transcriptLink) {
+        errors.push("Provide meetingLink, meetingRecordingLink, and/or transcriptLink");
+      }
 
       const scheduledDate = raw.date ? normalizeDate(raw.date) : null;
       if (raw.date && !scheduledDate) errors.push(`Bad date format: "${raw.date}" — use DD/MM/YYYY`);
@@ -208,7 +211,12 @@ export function parseLinksCSV(text, candidates, templates, existing) {
 
       return {
         rowNum: i + 2, raw,
-        resolved: { candidate, template, existingInterview, meetingLink: raw.meetingLink, meetingRecordingLink: raw.meetingRecordingLink },
+        resolved: {
+          candidate, template, existingInterview,
+          meetingLink:          raw.meetingLink,
+          meetingRecordingLink: raw.meetingRecordingLink,
+          transcriptLink:       raw.transcriptLink,
+        },
         errors,
       };
     }),
@@ -216,10 +224,11 @@ export function parseLinksCSV(text, candidates, templates, existing) {
 }
 
 export function downloadLinksTemplate() {
-  const headers = ["candidateEmail", "candidateUid", "templateName", "date", "meetingLink", "meetingRecordingLink"];
+  const headers = ["candidateEmail", "candidateUid", "templateName", "date", "meetingLink", "meetingRecordingLink", "transcriptLink"];
   const example = [
     "john.doe@example.com", "", "AI SYSTEMS MASTERY", "15/06/2026",
     "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
+    "https://docs.google.com/document/d/xxxx/edit",
   ];
   const rows = [headers.join(","), example.map(v => (v.includes(",") || v.includes(" ")) ? `"${v}"` : v).join(",")];
 
