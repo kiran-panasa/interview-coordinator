@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, Download, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet,
+  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
@@ -682,43 +682,6 @@ export default function InterviewsPage() {
     setFeedbackEditSaving(false);
   }
 
-  function exportToCSV() {
-    const csvEsc = v => {
-      const s = (v == null ? "" : String(v)).replace(/"/g, '""');
-      return /[,"\n\r]/.test(s) ? `"${s}"` : s;
-    };
-    const headers = [
-      "Candidate Name", "Candidate Email",
-      "Interviewer Name", "Interviewer Email",
-      "Template", "Program", "Round",
-      "Scheduled Date", "Scheduled Time", "Status",
-      "Overall Recommendation", "Final Verdict", "Notes",
-    ];
-    const programName = id => programs.find(p => p.id === id)?.name || "";
-    const rows = filtered.map(iv => [
-      iv.candidateName   || "",
-      iv.candidateEmail  || "",
-      iv.interviewerName || iv.interviewerEmail || "",
-      iv.interviewerEmail || "",
-      iv.templateName    || "",
-      programName(templateProgram(iv.templateId)),
-      iv.round           || "",
-      iv.scheduledDate   || "",
-      iv.scheduledTime   || "",
-      iv.status          || "",
-      iv.feedback?.overallRecommendation || "",
-      iv.feedback?.finalVerdict != null ? iv.feedback.finalVerdict : "",
-      iv.feedback?.comments      || "",
-    ].map(csvEsc).join(","));
-
-    const csv = [headers.join(","), ...rows].join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const today = new Date().toISOString().slice(0, 10);
-    a.download = `interviews_export_${today}.csv`;
-    a.click();
-  }
-
   const handleDownloadFeedback = () => {
     if (filtered.length === 0) {
       setToast({ message: "No interviews match the current filters.", type: "error" });
@@ -823,11 +786,6 @@ export default function InterviewsPage() {
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
             <FileSpreadsheet className="w-3.5 h-3.5" />
             Download Feedback{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
-          </button>
-          <button onClick={exportToCSV}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
-            <Download className="w-3.5 h-3.5" />
-            Export{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
           </button>
           <button
             onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}

@@ -1,90 +1,134 @@
 import * as XLSX from "xlsx";
 import { formatDate } from "./dates";
 
-// Flattens a template-based ("dynamic") feedback object into two readable
-// text blobs — scores and notes — rather than exploding into per-domain
-// columns, since different templates have different domains/fields and a
-// merged multi-template sheet needs a stable column set.
-function summarizeDomains(template, fb) {
-  if (!template?.domains || !fb?.domains) return { scores: "", notes: "" };
-  const domains = [...template.domains]
-    .filter(d => d.enabled !== false)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+// Resolves a stored field value to what "View Feedback" actually displays —
+// scored_dropdown stores just the numeric score, so it needs its option's
+// label looked back up; everything else already stores its display value.
+function resolveFieldValue(field, rawValue) {
+  if (rawValue == null || rawValue === "") return "";
+  if (field.type === "scored_dropdown") {
+    const opt = (field.options || []).find(o => String(o.score) === String(rawValue));
+    return opt ? `${opt.score} - ${opt.label}` : String(rawValue);
+  }
+  return String(rawValue);
+}
 
-  const scoreParts = [];
-  const noteParts = [];
+// Full text dump of everything View Feedback shows for one domain: every
+// card's fields (with resolved labels, not raw scores), every domain-level
+// field, and the computed domain rating.
+function buildDomainText(domain, domainData) {
+  if (!domainData) return "";
+  const lines = [];
+  const hasCards = (domain.cardFields || []).length > 0;
 
-  for (const domain of domains) {
-    const dData = fb.domains[domain.id];
-    if (!dData) continue;
-
-    if (dData.domain_rating != null) scoreParts.push(`${domain.label}: ${dData.domain_rating}/5`);
-
-    for (const f of (domain.domainFields || []).filter(f => f.type === "text")) {
-      const v = dData[f.id];
-      if (v) noteParts.push(`${domain.label} — ${f.label}: ${v}`);
-    }
-    (dData.cards || []).forEach((card, i) => {
-      for (const f of (domain.cardFields || []).filter(f => f.type === "text")) {
-        const v = card[f.id];
-        if (v) noteParts.push(`${domain.label} Card ${i + 1} — ${f.label}: ${v}`);
-      }
+  if (hasCards) {
+    (domainData.cards || []).forEach((card, i) => {
+      const parts = (domain.cardFields || [])
+        .map(f => {
+          const v = resolveFieldValue(f, card[f.id]);
+          return v ? `${f.label}: ${v}` : null;
+        })
+        .filter(Boolean);
+      if (parts.length) lines.push(`Card ${i + 1} — ${parts.join(" | ")}`);
     });
   }
 
-  return { scores: scoreParts.join("; "), notes: noteParts.join(" | ") };
+  const domainFieldParts = (domain.domainFields || [])
+    .map(f => {
+      const v = resolveFieldValue(f, domainData[f.id]);
+      return v ? `${f.label}: ${v}` : null;
+    })
+    .filter(Boolean);
+  if (domainFieldParts.length) lines.push(domainFieldParts.join(" | "));
+
+  if (domainData.domain_rating != null) lines.push(`Domain Rating: ${domainData.domain_rating}`);
+
+  return lines.join("\n");
 }
 
-const HEADERS = [
+const BASE_HEADERS = [
   "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
-  "Date", "Time", "Status", "Overall Recommendation", "Final Score",
-  "Domain Scores", "Notes / Comments", "Feedback Submitted At",
+  "Date", "Time", "Status",
 ];
-const COL_WIDTHS = [
-  { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
-  { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 10 },
-  { wch: 40 }, { wch: 50 }, { wch: 18 },
-];
-
-function buildFeedbackRow(iv, templateById, programNameById) {
-  const fb = iv.feedback || null;
-  const template = templateById.get(iv.templateId);
-  const isDynamic = !!(fb && (fb.domains || fb.sections));
-  const { scores, notes } = isDynamic ? summarizeDomains(template, fb) : { scores: "", notes: "" };
-  const programName = template?.program ? (programNameById.get(template.program) || "") : "";
-
-  return [
-    iv.candidateName || "",
-    iv.candidateEmail || "",
-    iv.interviewerName || iv.interviewerEmail || "",
-    iv.templateName || "",
-    programName,
-    iv.round || "",
-    iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
-    iv.scheduledTime || "",
-    iv.status || "",
-    fb?.overallRecommendation || "",
-    fb?.finalVerdict != null ? fb.finalVerdict : "",
-    scores,
-    notes || fb?.comments || "",
-    fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
-  ];
-}
+const TAIL_HEADERS = ["Overall Recommendation", "Final Verdict", "Comments", "Feedback Submitted At"];
 
 /**
  * Exports feedback for the given interviews (already filtered by the
- * caller) into a single merged Excel sheet — one row per interview,
- * regardless of how many different templates/domain structures are mixed
- * in. Also used for single-interview downloads (pass a 1-item array).
+ * caller) into a single merged Excel sheet — one row per interview. Every
+ * domain that appears in any of the involved templates becomes its own
+ * column, and each cell contains everything "View Feedback" shows for that
+ * domain (every card, every field, resolved option labels, domain rating) —
+ * not a summary. Interviews using different templates merge into the same
+ * sheet; a domain column is just blank for interviews whose template
+ * doesn't have it.
  */
 export function exportFeedbackToExcel(interviews, templates, programs, filenamePrefix = "interview_feedback") {
-  const templateById   = new Map(templates.map(t => [t.id, t]));
+  const templateById    = new Map(templates.map(t => [t.id, t]));
   const programNameById = new Map(programs.map(p => [p.id, p.name]));
 
-  const rows = interviews.map(iv => buildFeedbackRow(iv, templateById, programNameById));
+  const domainLabels = [];
+  const seenLabels = new Set();
+  interviews.forEach(iv => {
+    const t = templateById.get(iv.templateId);
+    (t?.domains || [])
+      .filter(d => d.enabled !== false)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .forEach(d => {
+        if (!seenLabels.has(d.label)) { seenLabels.add(d.label); domainLabels.push(d.label); }
+      });
+  });
 
-  const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
-  ws["!cols"] = COL_WIDTHS;
+  const headers = [...BASE_HEADERS, ...domainLabels, ...TAIL_HEADERS];
+
+  const rows = interviews.map(iv => {
+    const fb = iv.feedback || null;
+    const template = templateById.get(iv.templateId);
+    const programName = template?.program ? (programNameById.get(template.program) || "") : "";
+    const isDynamic = !!(fb && fb.domains);
+
+    const domainCells = domainLabels.map(label => {
+      if (!isDynamic) return "";
+      const domain = (template?.domains || []).find(d => d.label === label);
+      if (!domain) return "";
+      return buildDomainText(domain, fb.domains[domain.id]);
+    });
+
+    // Legacy (pre-template) feedback stored plain question->answer pairs
+    // instead of domains — fold those into the Comments column so nothing
+    // from older records is dropped either.
+    let comments = fb?.comments || "";
+    if (!isDynamic && fb?.answers) {
+      const legacyText = Object.entries(fb.answers)
+        .map(([qid, val]) => `${qid.replace(/_/g, " ")}: ${val}`)
+        .join(" | ");
+      comments = [legacyText, comments].filter(Boolean).join(" — ");
+    }
+
+    return [
+      iv.candidateName || "",
+      iv.candidateEmail || "",
+      iv.interviewerName || iv.interviewerEmail || "",
+      iv.templateName || "",
+      programName,
+      iv.round || "",
+      iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
+      iv.scheduledTime || "",
+      iv.status || "",
+      ...domainCells,
+      fb?.overallRecommendation || "",
+      fb?.finalVerdict != null ? fb.finalVerdict : "",
+      comments,
+      fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
+    ];
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws["!cols"] = [
+    { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
+    { wch: 12 }, { wch: 10 }, { wch: 12 },
+    ...domainLabels.map(() => ({ wch: 45 })),
+    { wch: 20 }, { wch: 12 }, { wch: 45 }, { wch: 18 },
+  ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Feedback");
 
