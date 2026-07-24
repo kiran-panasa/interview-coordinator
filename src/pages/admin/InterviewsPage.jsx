@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, Download, X, Video, Archive, ArchiveRestore, Inbox, Link2,
+  Plus, Upload, Download, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
+import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -68,6 +69,7 @@ export default function InterviewsPage() {
   const [filterDateTo,   setFilterDateTo]   = useState("");
   const [filterIvr,      setFilterIvr]      = useState("All");
   const [filterTemplate, setFilterTemplate] = useState("All");
+  const [candSearch,     setCandSearch]     = useState("");
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
   const [form,          setForm]          = useState(EMPTY_FORM);
@@ -622,8 +624,13 @@ export default function InterviewsPage() {
     if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
     if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
     if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
+    if (candSearch) {
+      const q = candSearch.trim().toLowerCase();
+      const hay = [i.candidateName, i.candidateEmail].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
-  }), [programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterTemplate]);
+  }), [programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterTemplate, candSearch]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -712,6 +719,19 @@ export default function InterviewsPage() {
     a.click();
   }
 
+  const handleDownloadFeedback = () => {
+    if (filtered.length === 0) {
+      setToast({ message: "No interviews match the current filters.", type: "error" });
+      return;
+    }
+    exportFeedbackToExcel(filtered, templates, programs);
+  };
+
+  const handleDownloadSingleFeedback = (iv) => {
+    const slug = (iv.candidateName || "candidate").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
+    exportFeedbackToExcel([iv], templates, programs, `feedback_${slug}`);
+  };
+
   return (
     <div className="p-8">
       <motion.div
@@ -764,6 +784,13 @@ export default function InterviewsPage() {
 
       {/* Filters */}
       <div className="flex gap-3 mb-5 flex-wrap items-center">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input type="text" value={candSearch}
+            onChange={e => { setCandSearch(e.target.value); setIvrPage(1); }}
+            placeholder="Search candidate…"
+            className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-48 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
+        </div>
         <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setIvrPage(1); }}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
@@ -785,13 +812,18 @@ export default function InterviewsPage() {
           <option value="All">All Interviewers</option>
           {uniqueIvrs.map(e => <option key={e} value={e}>{ivrNameByEmail[e] || e}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All") && (
-          <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setIvrPage(1); }}
+        {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All" || candSearch) && (
+          <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1); }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
           </button>
         )}
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={handleDownloadFeedback}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            Download Feedback{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
+          </button>
           <button onClick={exportToCSV}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
             <Download className="w-3.5 h-3.5" />
@@ -889,6 +921,11 @@ export default function InterviewsPage() {
                       onClick: () => openFeedback(iv),
                       show: iv.status === "completed" && !!iv.feedback,
                       highlight: true,
+                    },
+                    {
+                      label: "Download Feedback",
+                      onClick: () => handleDownloadSingleFeedback(iv),
+                      show: iv.status === "completed" && !!iv.feedback,
                     },
                     {
                       label: iv.feedback?.overallRecommendation ? "Edit Feedback" : "Add Feedback",
