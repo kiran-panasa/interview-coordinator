@@ -26,6 +26,7 @@ import ScheduleInterviewModal from "../../features/interviews/ScheduleInterviewM
 import FeedbackViewModal from "../../features/interviews/FeedbackViewModal";
 import ImportModal from "../../features/interviews/ImportModal";
 import UploadLinksModal from "../../features/interviews/UploadLinksModal";
+import DatePicker from "../../components/DatePicker";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
 import AiReportModal from "../../features/interviews/AiReportModal";
 
@@ -768,10 +769,10 @@ export default function InterviewsPage() {
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
         </select>
         <div className="flex items-center gap-1.5">
-          <input type="date" value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }}
+          <DatePicker value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
           <span className="text-gray-400 text-sm">–</span>
-          <input type="date" value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }}
+          <DatePicker value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
         <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}

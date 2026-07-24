@@ -9,6 +9,7 @@ import { callAppsScript } from "../../lib/appsScript";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
+import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 
 const fadeUp = {
@@ -260,12 +261,12 @@ export default function InterviewerNudgeTab({
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From Date</label>
-            <input type="date" value={nudgeDateStart} onChange={e => setNudgeDateStart(e.target.value)}
+            <DatePicker value={nudgeDateStart} onChange={e => setNudgeDateStart(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">To Date</label>
-            <input type="date" value={nudgeDateEnd} min={nudgeDateStart} onChange={e => setNudgeDateEnd(e.target.value)}
+            <DatePicker value={nudgeDateEnd} min={nudgeDateStart} onChange={e => setNudgeDateEnd(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
         </div>

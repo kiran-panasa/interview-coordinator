@@ -12,6 +12,7 @@ import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
+import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
 
@@ -348,12 +349,12 @@ export default function CandidateSchedulingTab({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
-            <input type="date" value={dateStart} onChange={e => setDateStart(e.target.value)}
+            <DatePicker value={dateStart} onChange={e => setDateStart(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
-            <input type="date" value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart}
+            <DatePicker value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>

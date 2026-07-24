@@ -23,6 +23,7 @@ import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
+import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
@@ -688,15 +689,15 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Start Date <span className="text-red-400">*</span></label>
-              <input type="date" value={blockForm.startDate}
+              <DatePicker value={blockForm.startDate}
                 onChange={e => setBlockForm(f => ({ ...f, startDate: e.target.value, endDate: f.endDate && f.endDate < e.target.value ? "" : f.endDate }))}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">End Date</label>
-              <input type="date" value={blockForm.endDate} min={blockForm.startDate || undefined}
+              <DatePicker value={blockForm.endDate} min={blockForm.startDate || undefined}
                 onChange={e => setBlockForm(f => ({ ...f, endDate: e.target.value }))}
-                placeholder={blockForm.startDate}
+                placeholder={blockForm.startDate || "dd/mm/yyyy"}
                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
               <p className="text-[11px] text-gray-400 mt-1">Leave blank to block a single day.</p>
             </div>

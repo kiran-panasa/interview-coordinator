@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { CalendarDays, AlertTriangle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
+import DatePicker from "../../components/DatePicker";
 import { formatDate } from "../../utils/dates";
 
 const OTHER_VALUE = "__other__";
@@ -55,7 +56,7 @@ export default function ScheduleInterviewModal({
               </select>
             ) : (
               <div>
-                <input type="date" min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
+                <DatePicker min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
                 {form.interviewerId && availDates.length === 0 &&
                   <p className="flex items-center gap-1 text-xs text-amber-600 mt-1">
                     <AlertTriangle className="w-3 h-3 flex-shrink-0" /> No availability set

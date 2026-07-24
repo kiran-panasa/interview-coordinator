@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import Pagination from "../../components/Pagination";
+import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 import { compareTimeLabels } from "../../utils/dates";
 
@@ -105,12 +106,12 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From</label>
-            <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+            <DatePicker value={fromDate} onChange={e => setFromDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">To</label>
-            <input type="date" value={toDate} min={fromDate} onChange={e => setToDate(e.target.value)}
+            <DatePicker value={toDate} min={fromDate} onChange={e => setToDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
         </div>

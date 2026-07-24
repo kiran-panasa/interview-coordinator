@@ -26,6 +26,7 @@ import Toast from "../../components/Toast";
 import Modal from "../../components/Modal";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
+import DatePicker from "../../components/DatePicker";
 import { Skeleton, SkeletonRows } from "../../components/Skeleton";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -1009,7 +1010,7 @@ export default function AvailabilityPage() {
                   {recurDays.size > 0 && (
                     <div className="flex items-center gap-2">
                       <label className="text-xs text-gray-500">Repeat until</label>
-                      <input type="date" value={recurUntil} min={todayStr} onChange={e => setRecurUntil(e.target.value)}
+                      <DatePicker value={recurUntil} min={todayStr} onChange={e => setRecurUntil(e.target.value)} accent="emerald"
                         className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
                     </div>
                   )}
@@ -1063,12 +1064,12 @@ export default function AvailabilityPage() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 mb-3 flex flex-wrap items-end gap-3">
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">From</label>
-              <input type="date" value={tableDateFrom} onChange={e => setTableDateFrom(e.target.value)}
+              <DatePicker value={tableDateFrom} onChange={e => setTableDateFrom(e.target.value)} accent="emerald"
                 className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">To</label>
-              <input type="date" value={tableDateTo} onChange={e => setTableDateTo(e.target.value)}
+              <DatePicker value={tableDateTo} onChange={e => setTableDateTo(e.target.value)} accent="emerald"
                 className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
             </div>
             <div>
