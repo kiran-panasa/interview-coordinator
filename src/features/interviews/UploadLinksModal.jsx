@@ -1,7 +1,8 @@
 import { useRef } from "react";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle } from "lucide-react";
+import { Upload, Download, FileSpreadsheet, CheckCircle2, XCircle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
+import { downloadLinksTemplate } from "../../utils/interviewImport";
 
 export default function UploadLinksModal({
   open, onClose,
@@ -56,6 +57,11 @@ export default function UploadLinksModal({
             This only updates interviews that already exist — it matches each row to one by candidate + template
             (and date, if given) and writes the link(s) onto it. It never creates a new interview.
           </p>
+          <button onClick={downloadLinksTemplate}
+            className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
+            <Download className="w-3.5 h-3.5" />
+            Download Sample CSV
+          </button>
         </div>
 
         {/* CSV input */}

@@ -215,6 +215,20 @@ export function parseLinksCSV(text, candidates, templates, existing) {
   };
 }
 
+export function downloadLinksTemplate() {
+  const headers = ["candidateEmail", "candidateUid", "templateName", "date", "meetingLink", "meetingRecordingLink"];
+  const example = [
+    "john.doe@example.com", "", "AI SYSTEMS MASTERY", "15/06/2026",
+    "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
+  ];
+  const rows = [headers.join(","), example.map(v => (v.includes(",") || v.includes(" ")) ? `"${v}"` : v).join(",")];
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
+  a.download = "meeting_links_upload_template.csv";
+  a.click();
+}
+
 export function downloadImportTemplate(template) {
   const baseHeaders = [
     "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes",
