@@ -1,19 +1,21 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, CalendarClock, LayoutGrid } from "lucide-react";
+import { Users, CalendarClock, LayoutGrid, BarChart3 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { getSlotsForInterviewers, subscribeToSlotsForInterviewers, subscribeToBlockedDates } from "../../api/firestore";
-import { useUserNotifications, useScheduleInvites } from "../../hooks/subscriptions";
+import { useUserNotifications, useScheduleInvites, useInterviews } from "../../hooks/subscriptions";
 import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Toast from "../../components/Toast";
 import InterviewerNudgeTab from "../../features/nudge/InterviewerNudgeTab";
 import CandidateSchedulingTab from "../../features/nudge/CandidateSchedulingTab";
 import SlotOverviewTab from "../../features/nudge/SlotOverviewTab";
+import NudgeAnalyticsTab from "../../features/nudge/NudgeAnalyticsTab";
 
 const TABS = [
   { id: "interviewers", label: "Interviewers",  icon: Users },
   { id: "candidates",   label: "Candidates",    icon: CalendarClock },
   { id: "slots",        label: "Slot Overview", icon: LayoutGrid },
+  { id: "analytics",    label: "Analytics",     icon: BarChart3 },
 ];
 
 export default function NudgePage() {
@@ -28,6 +30,7 @@ export default function NudgePage() {
   const { data: candidates = [] } = useCandidates();
   const responses = useUserNotifications(currentUser.uid);
   const invites   = useScheduleInvites();
+  const interviews = useInterviews();
 
   const activeInterviewers = usersAll.filter(
     u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
@@ -144,6 +147,15 @@ export default function NudgePage() {
               invites={invites} ivrSlots={ivrSlots}
               setToast={setToast}
               blockedDates={blockedDates}
+            />
+          )}
+
+          {activeTab === "analytics" && (
+            <NudgeAnalyticsTab
+              invites={invites} interviews={interviews}
+              templates={templates} programs={programs} users={usersAll}
+              blockedDates={blockedDates}
+              setToast={setToast}
             />
           )}
         </motion.div>

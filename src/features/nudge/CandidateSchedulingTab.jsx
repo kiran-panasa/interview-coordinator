@@ -7,6 +7,7 @@ import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate, createNotification,
+  logInviteHistory,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
@@ -115,10 +116,11 @@ export default function CandidateSchedulingTab({
       for (const c of chosen) {
         const inviteToken = crypto.randomUUID();
         const candidateProgramLabel = programs.find(p => p.id === c.program)?.name || "";
-        await createScheduleInvite({
+        const inviteId = await createScheduleInvite({
           candidateId:    c.id,
           candidateName:  c.name,
           candidateEmail: c.email,
+          candidateUid:   c.uid || "",
           templateId:     filterTemplate,
           templateName:   tmpl?.name || "",
           round,
@@ -132,7 +134,9 @@ export default function CandidateSchedulingTab({
           sentAt:         new Date().toISOString(),
           expiresAt,
           sentBy:         currentUser.uid,
+          nudgeCount:     1,
         });
+        logInviteHistory(inviteId, "sent", "Initial nudge sent").catch(() => {});
         sent++;
         // One candidate's email failing shouldn't stop the rest of the batch —
         // but unlike a true fire-and-forget, we still surface who failed and why.
@@ -218,6 +222,7 @@ export default function CandidateSchedulingTab({
         status:           "scheduled",
       });
       await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
+      logInviteHistory(inv.id, "confirmed", "Booking confirmed by admin").catch(() => {});
 
       // Interviewer isn't asked to Accept/Decline on this path (the slot was
       // already theirs to begin with) — but they still need to be told.
@@ -261,6 +266,7 @@ export default function CandidateSchedulingTab({
     try {
       await markSlotFree(inv.bookedInterviewerId, inv.bookedSlotId);
       await updateScheduleInvite(inv.id, { status: "cancelled", bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null });
+      logInviteHistory(inv.id, "cancelled", "Booking rejected by admin").catch(() => {});
       setToast({ message: "Booking rejected and slot freed." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
@@ -275,6 +281,7 @@ export default function CandidateSchedulingTab({
         sentAt: new Date().toISOString(), expiresAt,
         bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null,
       });
+      logInviteHistory(inv.id, "sent", "Manually resent by admin").catch(() => {});
       const link = `${window.location.origin}/student/schedule`;
       const invProgramLabel = programs.find(p => p.id === inv.program)?.name || "";
       const invRound = inv.round || inv.templateName || "Interview";

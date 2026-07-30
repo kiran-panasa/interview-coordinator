@@ -411,6 +411,7 @@ export default function InterviewsPage() {
         }).catch(() => {});
       }
 
+      notifyAdmins("interview_cancelled", `Interview with ${iv.candidateName} on ${formatDate(iv.scheduledDate)} was cancelled.`, iv);
       setToast({ message: "Interview cancelled and both parties notified by email." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -433,10 +434,30 @@ export default function InterviewsPage() {
     }
   };
 
+  // Fans a single in-app notification out to every active admin — same
+  // "loop over admins, create one notification each" shape used for the
+  // interviewer-facing interview_approval notification above.
+  const notifyAdmins = (type, message, iv) => {
+    usersAll
+      .filter(u => u.role === "admin" && u.status === "active")
+      .forEach(a => {
+        createNotification({
+          type,
+          recipientId:    a.id,
+          recipientEmail: a.email,
+          interviewId:    iv.id,
+          candidateName:  iv.candidateName,
+          message,
+          status:         "unread",
+        }).catch(() => {});
+      });
+  };
+
   const handleMarkNoShow = async (iv) => {
     if (!confirm(`Mark "${iv.candidateName}" as no-show?`)) return;
     try {
       await updateInterview(iv.id, { status: "no_show" });
+      notifyAdmins("no_show", `${iv.candidateName} was marked as a no-show for their interview on ${formatDate(iv.scheduledDate)}.`, iv);
       setToast({ message: "Marked as no-show." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -676,6 +697,9 @@ export default function InterviewsPage() {
         update.candidateJoined  = true;
       }
       await updateInterview(feedbackEditModal.id, update);
+      if (feedbackEditForm.markCompleted) {
+        notifyAdmins("interview_completed", `Interview with ${feedbackEditModal.candidateName} has been completed.`, feedbackEditModal);
+      }
       setToast({ message: "Feedback saved.", type: "success" });
       setFeedbackEditModal(null);
     } catch (e) {

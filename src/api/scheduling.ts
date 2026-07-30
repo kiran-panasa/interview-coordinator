@@ -3,7 +3,7 @@ import {
   collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
-import type { ScheduleInvite, OtpVerification } from "../types";
+import type { ScheduleInvite, OtpVerification, InviteHistoryEntry } from "../types";
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
@@ -57,6 +57,21 @@ export async function getScheduleInvitesByEmail(email: string): Promise<Schedule
     orderBy("createdAt", "desc")
   ));
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleInvite));
+}
+
+// ── Invite history (audit trail for the candidate lifecycle timeline) ─────────
+
+export async function logInviteHistory(inviteId: string, status: string, note?: string): Promise<void> {
+  await addDoc(collection(db, "scheduleInvites", inviteId, "history"), {
+    status, at: new Date().toISOString(), ...(note ? { note } : {}),
+  });
+}
+
+export async function getInviteHistory(inviteId: string): Promise<InviteHistoryEntry[]> {
+  const snap = await getDocs(
+    query(collection(db, "scheduleInvites", inviteId, "history"), orderBy("at", "asc"))
+  );
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as InviteHistoryEntry));
 }
 
 // ── OTP Verifications ─────────────────────────────────────────────────────────
@@ -117,23 +132,30 @@ export async function bookSlotForCandidate(
     throw new Error(`This date is blocked${blocked.reason ? `: ${blocked.reason}` : ""}. Please choose another date.`);
   }
 
-  const slotRef   = doc(db, "availability", interviewerId, "slots", slotId);
-  const inviteRef = doc(db, "scheduleInvites", inviteId);
+  const slotRef    = doc(db, "availability", interviewerId, "slots", slotId);
+  const inviteRef  = doc(db, "scheduleInvites", inviteId);
+  const historyRef = doc(collection(db, "scheduleInvites", inviteId, "history"));
 
   await runTransaction(db, async (txn) => {
     const slotDoc = await txn.get(slotRef);
     if (!slotDoc.exists()) throw new Error("Slot no longer exists.");
     if (slotDoc.data().isBooked) throw new Error("This slot is already booked. Please choose another available slot.");
 
-    txn.update(slotRef,   { isBooked: true, inviteId, bookedAt: new Date().toISOString() });
+    const now = new Date().toISOString();
+    txn.update(slotRef,   { isBooked: true, inviteId, bookedAt: now });
     txn.update(inviteRef, {
       status:              "pending_confirmation",
       bookedSlotId:        slotId,
       bookedInterviewerId: interviewerId,
       bookedDate,
       bookedTime,
-      bookedAt:            new Date().toISOString(),
-      updatedAt:           new Date().toISOString(),
+      bookedAt:            now,
+      updatedAt:           now,
     });
+    // Logged inside the same transaction as the booking itself — this is
+    // the one function every booking path (student portal, any future
+    // path) funnels through, so this is the single reliable place to
+    // guarantee the "candidate booked" history entry always exists.
+    txn.set(historyRef, { status: "pending_confirmation", at: now, note: "Candidate booked a slot" });
   });
 }

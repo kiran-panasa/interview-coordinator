@@ -66,6 +66,21 @@ export interface BlockedDate {
   createdAt?: string;
 }
 
+export interface NudgeReminderSettings {
+  reminder1DelayDays: number;
+  reminder2DelayDays: number;
+  sendTime: string; // "HH:mm", 24-hour, Asia/Kolkata
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+export interface InviteHistoryEntry {
+  id: string;
+  status: string;
+  at: string;
+  note?: string;
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export type FieldType = "text" | "scored_dropdown" | "dropdown" | "number" | "boolean";
@@ -277,26 +292,42 @@ export interface AvailableSlot {
 // ── Scheduling ────────────────────────────────────────────────────────────────
 
 export type ScheduleInviteStatus =
-  | "pending"
+  | "sent"
+  | "otp_verified"
   | "pending_confirmation"
   | "confirmed"
-  | "expired"
   | "cancelled";
 
 export interface ScheduleInvite {
   id: string;
+  candidateId?: string;
+  candidateUid?: string;
   candidateEmail: string;
   candidateName?: string;
   templateId?: string;
+  templateName?: string;
   round?: string;
+  program?: string;
   programName?: string;
+  dateRangeStart?: string;
+  dateRangeEnd?: string;
   inviteToken: string;
+  expiryHours?: number;
   status: ScheduleInviteStatus;
+  sentAt?: string;
+  expiresAt?: string;
+  sentBy?: string;
   bookedSlotId?: string;
   bookedInterviewerId?: string;
   bookedDate?: string;
   bookedTime?: string;
   bookedAt?: string;
+  interviewId?: string;
+  // Automated reminder tracking
+  nudgeCount?: number;
+  reminder1SentAt?: string | null;
+  reminder2SentAt?: string | null;
+  noResponseFlaggedAt?: string | null;
   updatedAt?: string;
   createdAt: string;
 }

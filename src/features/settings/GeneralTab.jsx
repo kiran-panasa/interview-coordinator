@@ -1,6 +1,9 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Tag, Layers, Plus, Pencil, Trash2, X, FolderKanban } from "lucide-react";
+import { Tag, Layers, Plus, Pencil, Trash2, X, FolderKanban, BellRing } from "lucide-react";
+import { subscribeToNudgeReminderSettings, updateNudgeReminderSettings } from "../../api/firestore";
+import { useAuth } from "../../AuthContext";
+import Button from "../../components/Button";
 
 function SectionTitle({ icon: Icon, label, count }) {
   return (
@@ -26,8 +29,80 @@ export default function GeneralTab({
   const newProgramRef = useRef(null);
   useEffect(() => { if (addingProgram) newProgramRef.current?.focus(); }, [addingProgram]);
 
+  const { currentUser } = useAuth();
+  const [reminderSettings, setReminderSettings] = useState(null);
+  const [reminderForm,     setReminderForm]     = useState(null);
+  const [reminderSaving,   setReminderSaving]   = useState(false);
+  const [reminderSaved,    setReminderSaved]    = useState(false);
+
+  useEffect(() => subscribeToNudgeReminderSettings(s => {
+    setReminderSettings(s);
+    setReminderForm(f => f || s);
+  }), []);
+
+  const reminderDirty = reminderForm && reminderSettings && (
+    reminderForm.reminder1DelayDays !== reminderSettings.reminder1DelayDays ||
+    reminderForm.reminder2DelayDays !== reminderSettings.reminder2DelayDays ||
+    reminderForm.sendTime           !== reminderSettings.sendTime
+  );
+
+  const handleSaveReminderSettings = async () => {
+    setReminderSaving(true);
+    try {
+      await updateNudgeReminderSettings(reminderForm, currentUser.uid);
+      setReminderSaved(true);
+      setTimeout(() => setReminderSaved(false), 2000);
+    } finally {
+      setReminderSaving(false);
+    }
+  };
+
   return (
     <div>
+      {/* Nudge Reminders */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="mb-8"
+      >
+        <SectionTitle icon={BellRing} label="Candidate Nudge Reminders" />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+          <p className="text-xs text-gray-400 mb-4">
+            Controls the automatic Day 1 / Day 2 follow-up reminders sent to candidates who haven't booked a slot yet.
+            After the final reminder, candidates who still haven't booked are flagged "No Response After 2 Reminders" and admins are notified.
+          </p>
+          {!reminderForm ? (
+            <p className="text-xs text-gray-400">Loading…</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Reminder 1 — days after nudge</label>
+                <input type="number" min={1} max={30} value={reminderForm.reminder1DelayDays}
+                  onChange={e => setReminderForm(f => ({ ...f, reminder1DelayDays: Number(e.target.value) }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Reminder 2 — days after nudge</label>
+                <input type="number" min={1} max={30} value={reminderForm.reminder2DelayDays}
+                  onChange={e => setReminderForm(f => ({ ...f, reminder2DelayDays: Number(e.target.value) }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Send time (IST)</label>
+                <input type="time" value={reminderForm.sendTime}
+                  onChange={e => setReminderForm(f => ({ ...f, sendTime: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-3 mt-4">
+            <Button variant="primary" size="sm" onClick={handleSaveReminderSettings} disabled={!reminderDirty || reminderSaving}>
+              {reminderSaving ? "Saving…" : "Save"}
+            </Button>
+            {reminderSaved && <span className="text-xs font-semibold text-emerald-600">Saved.</span>}
+          </div>
+        </div>
+      </motion.div>
+
       {/* Skills */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}

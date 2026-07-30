@@ -9,6 +9,14 @@ const STYLES = {
   pending:            "bg-amber-50 text-amber-700 ring-amber-200 [&>span]:bg-amber-500",
   admin:              "bg-brand-50 text-brand-700 ring-brand-200 [&>span]:bg-brand-500",
   interviewer:        "bg-teal-50  text-teal-700  ring-teal-200 [&>span]:bg-teal-500",
+  // Candidate nudge lifecycle (src/utils/nudgeLifecycle.js) — scheduled/
+  // completed/cancelled/no_show above are reused as-is for the "interview
+  // outcome" states, these cover the reminder/booking sub-stages.
+  nudge_sent:         "bg-gray-100  text-gray-600  ring-gray-200 [&>span]:bg-gray-400",
+  reminder_1_sent:    "bg-amber-50  text-amber-700 ring-amber-200 [&>span]:bg-amber-500",
+  reminder_2_sent:    "bg-orange-50 text-orange-700 ring-orange-200 [&>span]:bg-orange-500",
+  no_response:        "bg-red-50    text-red-600   ring-red-200 [&>span]:bg-red-500",
+  slot_booked:        "bg-violet-50 text-violet-700 ring-violet-200 [&>span]:bg-violet-500",
 };
 
 const LABELS = {
@@ -22,6 +30,11 @@ const LABELS = {
   pending:            "Pending",
   admin:              "Admin",
   interviewer:        "Interviewer",
+  nudge_sent:         "Nudge Sent",
+  reminder_1_sent:    "Reminder 1 Sent",
+  reminder_2_sent:    "Reminder 2 Sent",
+  no_response:        "No Response After 2 Reminders",
+  slot_booked:        "Slot Booked",
 };
 
 import { memo } from "react";
