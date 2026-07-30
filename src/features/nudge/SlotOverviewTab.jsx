@@ -11,7 +11,7 @@ function inDays(n) {
   return d.toISOString().slice(0, 10);
 }
 
-export default function SlotOverviewTab({ programs, templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots }) {
+export default function SlotOverviewTab({ programs, templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots, blockedDates = [] }) {
   const [selectedProgramId,  setSelectedProgramId]  = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [fromDate, setFromDate] = useState(today());
@@ -106,12 +106,12 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From</label>
-            <DatePicker value={fromDate} onChange={e => setFromDate(e.target.value)}
+            <DatePicker value={fromDate} onChange={e => setFromDate(e.target.value)} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">To</label>
-            <DatePicker value={toDate} min={fromDate} onChange={e => setToDate(e.target.value)}
+            <DatePicker value={toDate} min={fromDate} onChange={e => setToDate(e.target.value)} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
         </div>

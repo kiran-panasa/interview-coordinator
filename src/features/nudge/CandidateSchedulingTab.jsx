@@ -48,6 +48,7 @@ export default function CandidateSchedulingTab({
   templates, programs, candidates, users,
   invites,
   setToast,
+  blockedDates = [],
 }) {
   const [dateStart,      setDateStart]      = useState(today());
   const [dateEnd,        setDateEnd]        = useState(inDays(7));
@@ -349,12 +350,12 @@ export default function CandidateSchedulingTab({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
-            <DatePicker value={dateStart} onChange={e => setDateStart(e.target.value)}
+            <DatePicker value={dateStart} onChange={e => setDateStart(e.target.value)} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
-            <DatePicker value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart}
+            <DatePicker value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>

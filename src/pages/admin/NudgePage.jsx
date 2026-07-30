@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Users, CalendarClock, LayoutGrid } from "lucide-react";
 import { useAuth } from "../../AuthContext";
-import { getSlotsForInterviewers, subscribeToSlotsForInterviewers } from "../../api/firestore";
+import { getSlotsForInterviewers, subscribeToSlotsForInterviewers, subscribeToBlockedDates } from "../../api/firestore";
 import { useUserNotifications, useScheduleInvites } from "../../hooks/subscriptions";
 import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Toast from "../../components/Toast";
@@ -35,6 +35,9 @@ export default function NudgePage() {
 
   const [ivrSlots,     setIvrSlots]     = useState({});
   const [slotsLoading, setSlotsLoading] = useState(false);
+  const [blockedDates, setBlockedDates] = useState([]);
+
+  useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
 
   // Manual refresh still available for the button in each tab
   const fetchSlots = async (ids) => {
@@ -121,6 +124,7 @@ export default function NudgePage() {
               responses={responses}
               ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
               setToast={setToast}
+              blockedDates={blockedDates}
             />
           )}
 
@@ -128,6 +132,7 @@ export default function NudgePage() {
             <SlotOverviewTab
               programs={programs} templates={templates} activeInterviewers={activeInterviewers}
               ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
+              blockedDates={blockedDates}
             />
           )}
 
@@ -138,6 +143,7 @@ export default function NudgePage() {
               users={usersAll} activeInterviewers={activeInterviewers}
               invites={invites} ivrSlots={ivrSlots}
               setToast={setToast}
+              blockedDates={blockedDates}
             />
           )}
         </motion.div>

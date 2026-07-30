@@ -16,6 +16,7 @@ export default function ScheduleInterviewModal({
   candidates, interviewers, templates,
   availDates, availTimes,
   DEFAULT_ROUNDS, DURATIONS,
+  blockedDates = [],
 }) {
   const [customRound, setCustomRound] = useState(() => !!form.round && !DEFAULT_ROUNDS.includes(form.round));
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -56,7 +57,8 @@ export default function ScheduleInterviewModal({
               </select>
             ) : (
               <div>
-                <DatePicker min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls} />
+                <DatePicker min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)}
+                  blockedDates={blockedDates} disableBlocked className={inputCls} />
                 {form.interviewerId && availDates.length === 0 &&
                   <p className="flex items-center gap-1 text-xs text-amber-600 mt-1">
                     <AlertTriangle className="w-3 h-3 flex-shrink-0" /> No availability set

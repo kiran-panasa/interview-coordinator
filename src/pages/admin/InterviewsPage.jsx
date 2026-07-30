@@ -13,7 +13,7 @@ import {
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
-  createNotification,
+  createNotification, subscribeToBlockedDates,
 } from "../../api/firestore";
 import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
@@ -63,6 +63,8 @@ export default function InterviewsPage() {
     [usersAll]
   );
   const interviews = useInterviews();
+  const [blockedDates, setBlockedDates] = useState([]);
+  useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -759,10 +761,10 @@ export default function InterviewsPage() {
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
         </select>
         <div className="flex items-center gap-1.5">
-          <DatePicker value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }}
+          <DatePicker value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }} blockedDates={blockedDates}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
           <span className="text-gray-400 text-sm">–</span>
-          <DatePicker value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }}
+          <DatePicker value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }} blockedDates={blockedDates}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
         <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}
@@ -939,6 +941,7 @@ export default function InterviewsPage() {
         candidates={candidates} interviewers={interviewers} templates={templates}
         availDates={availDates} availTimes={availTimes}
         DEFAULT_ROUNDS={DEFAULT_ROUNDS} DURATIONS={DURATIONS}
+        blockedDates={blockedDates}
       />
 
       <FeedbackViewModal

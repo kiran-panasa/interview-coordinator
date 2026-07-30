@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { findBlockedDate } from "../utils/blockedDates";
 
 const DAY_LABELS  = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTH_NAMES = [
@@ -38,6 +39,7 @@ function formatDisplay(iso) {
 export default function DatePicker({
   value, onChange, min, max, className = "", placeholder = "dd/mm/yyyy",
   disabled = false, accent = "brand",
+  blockedDates = [], disableBlocked = false,
 }) {
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState(() => {
@@ -143,13 +145,18 @@ export default function DatePicker({
                 const iso = toIso(year, month, d);
                 const isSelected = iso === value;
                 const isToday = iso === todayIso;
-                const isDisabled = (min && iso < min) || (max && iso > max);
+                const blocked = findBlockedDate(iso, blockedDates);
+                const outOfRange = (min && iso < min) || (max && iso > max);
+                const isDisabled = outOfRange || (disableBlocked && !!blocked);
                 return (
                   <button key={d} type="button" disabled={isDisabled}
-                    onClick={() => emit(iso)}
+                    title={blocked ? `Blocked${blocked.reason ? `: ${blocked.reason}` : ""}` : undefined}
+                    onClick={() => { if (!isDisabled) emit(iso); }}
                     className={`aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-colors ${
-                      isSelected ? colors.selected
-                        : isDisabled ? "text-gray-200 cursor-not-allowed"
+                      blocked
+                        ? `bg-red-50 text-red-400 line-through ${isDisabled ? "cursor-not-allowed" : "hover:bg-red-100"}`
+                        : isSelected ? colors.selected
+                        : outOfRange ? "text-gray-200 cursor-not-allowed"
                         : isToday ? `font-bold ${colors.hover}`
                         : `text-gray-700 ${colors.hover}`
                     }`}>
@@ -158,6 +165,11 @@ export default function DatePicker({
                 );
               })}
             </div>
+            {blockedDates.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-2 pt-2 border-t border-gray-100 text-[10px] text-gray-400">
+                <span className="w-2 h-2 rounded-full bg-red-300 inline-block" /> Blocked by admin
+              </div>
+            )}
           </motion.div>
           )}
         </AnimatePresence>,
