@@ -4,11 +4,13 @@ import {
   query, orderBy, onSnapshot,
 } from "firebase/firestore";
 import type { Program } from "../types";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 export function subscribeToPrograms(callback: (programs: Program[]) => void): () => void {
   return onSnapshot(
     query(collection(db, "programs"), orderBy("order", "asc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Program)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Program))),
+    err => reportFirestoreListenerError("programs", err)
   );
 }
 

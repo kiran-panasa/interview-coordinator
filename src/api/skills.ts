@@ -4,6 +4,7 @@ import {
   query, orderBy, onSnapshot,
 } from "firebase/firestore";
 import type { Skill } from "../types";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 export async function getSkills(): Promise<Skill[]> {
   const snap = await getDocs(query(collection(db, "skills"), orderBy("name")));
@@ -13,7 +14,8 @@ export async function getSkills(): Promise<Skill[]> {
 export function subscribeToSkills(callback: (skills: Skill[]) => void): () => void {
   return onSnapshot(
     query(collection(db, "skills"), orderBy("name")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Skill)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Skill))),
+    err => reportFirestoreListenerError("skills", err)
   );
 }
 

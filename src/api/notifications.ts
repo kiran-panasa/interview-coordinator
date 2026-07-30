@@ -4,6 +4,7 @@ import {
   query, where, onSnapshot,
 } from "firebase/firestore";
 import type { AppNotification } from "../types";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 export function subscribeToUserNotifications(
   userId: string,
@@ -15,7 +16,8 @@ export function subscribeToUserNotifications(
       snap.docs
         .map(d => ({ id: d.id, ...d.data() } as AppNotification))
         .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""))
-    )
+    ),
+    err => reportFirestoreListenerError("notifications", err)
   );
 }
 

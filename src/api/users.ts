@@ -4,6 +4,7 @@ import {
   query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
 import type { User, Invite } from "../types";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
@@ -24,8 +25,10 @@ export async function getAllUsers(): Promise<User[]> {
 }
 
 export function subscribeToUsers(callback: (users: User[]) => void): () => void {
-  return onSnapshot(collection(db, "users"), snap =>
-    callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)))
+  return onSnapshot(
+    collection(db, "users"),
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as User))),
+    err => reportFirestoreListenerError("users", err)
   );
 }
 
@@ -108,6 +111,7 @@ export async function getAnyInviteByEmail(email: string): Promise<Invite | null>
 export function subscribeToInvites(callback: (invites: Invite[]) => void): () => void {
   return onSnapshot(
     query(collection(db, "invites"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Invite)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Invite))),
+    err => reportFirestoreListenerError("invites", err)
   );
 }

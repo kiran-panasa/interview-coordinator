@@ -5,6 +5,7 @@ import {
 } from "firebase/firestore";
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 import type { Interview, InterviewStatus } from "../types";
 
 export const DEFAULT_ROUNDS = [
@@ -168,7 +169,11 @@ export async function importCompletedInterview(
 
 export function subscribeToInterviews(callback: (interviews: Interview[]) => void): () => void {
   const q = query(collection(db, "interviews"), orderBy("scheduledDate", "desc"));
-  return onSnapshot(q, snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview))));
+  return onSnapshot(
+    q,
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview))),
+    err => reportFirestoreListenerError("interviews", err)
+  );
 }
 
 export function subscribeToInterviewerInterviews(
@@ -179,11 +184,15 @@ export function subscribeToInterviewerInterviews(
     collection(db, "interviews"),
     where("interviewerEmail", "==", interviewerEmail),
   );
-  return onSnapshot(q, snap => {
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
-    docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
-    callback(docs);
-  });
+  return onSnapshot(
+    q,
+    snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
+      docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
+      callback(docs);
+    },
+    err => reportFirestoreListenerError("interviewerInterviews", err)
+  );
 }
 
 export async function archiveInterview(id: string): Promise<void> {

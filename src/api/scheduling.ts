@@ -6,6 +6,7 @@ import {
 import type { ScheduleInvite, OtpVerification } from "../types";
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 // ── Schedule Invites ──────────────────────────────────────────────────────────
 
@@ -14,7 +15,8 @@ export function subscribeToScheduleInvites(
 ): () => void {
   return onSnapshot(
     query(collection(db, "scheduleInvites"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleInvite)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleInvite))),
+    err => reportFirestoreListenerError("scheduleInvites", err)
   );
 }
 

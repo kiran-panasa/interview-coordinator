@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "./firebase";
 import { getMyProfile, createUserProfile, updateUser, getInviteByEmail, getAnyInviteByEmail, updateInvite } from "./api/firestore";
 import { logError } from "./utils/logger";
+import { onFirestoreListenerError } from "./utils/firestoreSubscribe";
 import { BOOTSTRAP_EMAIL } from "./constants/roles";
 
 const AuthContext = createContext(null);
@@ -75,6 +76,31 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
+  // Firebase ID tokens expire hourly and normally auto-refresh on a timer —
+  // but browsers throttle timers in backgrounded tabs, so a tab left idle
+  // for a while can come back with a stale token. Every Firestore call then
+  // silently fails until the token refreshes on its own. Force a refresh
+  // the moment the tab becomes visible again, before that has a chance to
+  // bite.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && auth.currentUser) {
+        auth.currentUser.getIdToken(true).catch(e => logError(e, { label: "forceTokenRefresh" }));
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+
+  // Safety net for the cases the proactive refresh above doesn't catch
+  // (a genuine network drop, not just a stale token) — every onSnapshot()
+  // listener in the app reports here when its stream dies. Previously that
+  // failure was completely silent: no error, whatever "loading" flag was
+  // gating the page just never flipped again, and the only way out was a
+  // hard reload + re-login.
+  const [connectionLost, setConnectionLost] = useState(false);
+  useEffect(() => onFirestoreListenerError(() => setConnectionLost(true)), []);
+
   const refreshProfile = useCallback(() => {
     if (currentUser) loadProfile(currentUser);
   }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -87,6 +113,24 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={ctxValue}>
       {children}
+      {connectionLost && (
+        <div className="fixed bottom-0 inset-x-0 z-[9999] bg-amber-600 text-white text-sm px-4 py-2.5 flex items-center justify-center gap-3 shadow-lg">
+          <span>Connection to the server was lost — some data may be out of date.</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="font-semibold underline underline-offset-2 hover:no-underline"
+          >
+            Reload
+          </button>
+          <button
+            onClick={() => setConnectionLost(false)}
+            className="text-white/70 hover:text-white"
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }

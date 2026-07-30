@@ -5,11 +5,13 @@ import {
 } from "firebase/firestore";
 import type { BlockedDate } from "../types";
 import { findBlockedDate } from "../utils/blockedDates";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 export function subscribeToBlockedDates(callback: (dates: BlockedDate[]) => void): () => void {
   return onSnapshot(
     query(collection(db, "blockedDates"), orderBy("startDate", "asc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as BlockedDate)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as BlockedDate))),
+    err => reportFirestoreListenerError("blockedDates", err)
   );
 }
 

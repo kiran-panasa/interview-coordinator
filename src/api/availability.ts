@@ -7,6 +7,7 @@ import type { AvailabilitySlot, AvailableSlot } from "../types";
 import { compareTimeLabels } from "../utils/dates";
 import { getBlockedDates } from "./blockedDates";
 import { isDateBlocked } from "../utils/blockedDates";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 export function slotIdFor(date: string, time: string): string {
   return `${date}_${time.replace(/[: ]/g, "")}`;
@@ -42,7 +43,8 @@ export function subscribeToInterviewerAvailability(
 ): () => void {
   return onSnapshot(
     collection(db, "availability", interviewerId, "slots"),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AvailabilitySlot)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AvailabilitySlot))),
+    err => reportFirestoreListenerError("interviewerAvailability", err)
   );
 }
 
@@ -53,10 +55,14 @@ export function subscribeToSlotsForInterviewers(
   if (interviewerIds.length === 0) { callback({}); return () => {}; }
   const state: Record<string, AvailabilitySlot[]> = {};
   const unsubs = interviewerIds.map(id =>
-    onSnapshot(collection(db, "availability", id, "slots"), snap => {
-      state[id] = snap.docs.map(d => ({ id: d.id, ...d.data() } as AvailabilitySlot));
-      callback({ ...state });
-    })
+    onSnapshot(
+      collection(db, "availability", id, "slots"),
+      snap => {
+        state[id] = snap.docs.map(d => ({ id: d.id, ...d.data() } as AvailabilitySlot));
+        callback({ ...state });
+      },
+      err => reportFirestoreListenerError(`slotsForInterviewer:${id}`, err)
+    )
   );
   return () => unsubs.forEach(u => u());
 }

@@ -4,6 +4,7 @@ import {
   query, where, orderBy, onSnapshot, increment,
 } from "firebase/firestore";
 import type { Question, AdhocQuestion, QuestionFilters } from "../types";
+import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 // ── Rating label descriptors ──────────────────────────────────────────────────
 
@@ -98,7 +99,8 @@ export async function archiveQuestion(id: string): Promise<void> {
 export function subscribeToQuestions(callback: (questions: Question[]) => void): () => void {
   return onSnapshot(
     query(collection(db, "questions"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Question)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Question))),
+    err => reportFirestoreListenerError("questions", err)
   );
 }
 
@@ -115,7 +117,8 @@ export function subscribeToAdhocQuestions(
 ): () => void {
   return onSnapshot(
     query(collection(db, "adhocQuestions"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AdhocQuestion)))
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AdhocQuestion))),
+    err => reportFirestoreListenerError("adhocQuestions", err)
   );
 }
 
