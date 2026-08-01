@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { formatDate } from "./dates";
+import { withIntegrityDomain } from "./templateEngine";
 
 // Resolves a stored field value to what "View Feedback" actually displays —
 // scored_dropdown stores just the numeric score, so it needs its option's
@@ -61,9 +62,16 @@ const TAIL_HEADERS = ["Overall Recommendation", "Final Verdict", "Integrity Scor
  * not a summary. Interviews using different templates merge into the same
  * sheet; a domain column is just blank for interviews whose template
  * doesn't have it.
+ *
+ * `integrityDomainFields` is the live content of the global Interview
+ * Integrity checklist (settings/interviewIntegrity) — that domain isn't
+ * stored on the templates themselves (see withIntegrityDomain in
+ * templateEngine.js), so callers should fetch it once via
+ * getInterviewIntegrity() and pass it in; omitted, it falls back to the
+ * built-in default checklist.
  */
-export function exportFeedbackToExcel(interviews, templates, programs, filenamePrefix = "interview_feedback") {
-  const templateById    = new Map(templates.map(t => [t.id, t]));
+export function exportFeedbackToExcel(interviews, templates, programs, filenamePrefix = "interview_feedback", integrityDomainFields = null) {
+  const templateById    = new Map(templates.map(t => [t.id, withIntegrityDomain(t, integrityDomainFields)]));
   const programNameById = new Map(programs.map(p => [p.id, p.name]));
 
   const domainLabels = [];

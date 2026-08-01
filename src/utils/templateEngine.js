@@ -126,9 +126,14 @@ export const DOMAIN_PRESETS = {
 export const DOMAIN_TYPE_ORDER = ["coding", "theory", "project", "resume", "overall_feedback"];
 
 // ── Interview Integrity ─────────────────────────────────────────────────────
-// A fixed checklist domain injected into every template (see ensureIntegrityDomain
-// below) — excluded from the Final Interview Verdict (weightInVerdict: 0) and
-// scored separately via computeIntegrityScore, normalized to a 0–10 scale.
+// A fixed checklist domain merged live into every template at render/compute
+// time (see withIntegrityDomain below) from a single global definition
+// (settings/interviewIntegrity, src/api/interviewIntegrity.ts) — NOT stored
+// per-template. Editing it in Settings → Interview Integrity therefore
+// affects every template immediately, with no per-template copy that can
+// drift out of sync or get missed by a migration. Excluded from the Final
+// Interview Verdict (weightInVerdict: 0) and scored separately via
+// computeIntegrityScore, normalized to a 0–10 scale.
 
 export const INTEGRITY_DOMAIN_ID = "integrity";
 
@@ -138,8 +143,9 @@ const INTEGRITY_OPTIONS = [
   { label: "Non-Compliant / Violation", score: 1 },
 ];
 
-// Weights below match the requested table exactly (sums to 15) — admins can
-// still edit label/options/weight per template via the normal domain editor.
+// Weights below match the requested table exactly (sums to 15) — this is
+// also the seed content for settings/interviewIntegrity the first time an
+// admin opens Settings → Interview Integrity (before they've saved anything).
 export const INTEGRITY_DOMAIN_PRESET = {
   id: INTEGRITY_DOMAIN_ID,
   type: "integrity",
@@ -163,15 +169,28 @@ export const INTEGRITY_DOMAIN_PRESET = {
   ],
 };
 
-// Appends the Integrity domain to a template's domains array if it isn't
-// already present (by id) — used both when saving a template (so it's
-// impossible to create/edit a template without it) and by the one-time
-// background migration for templates that existed before this feature.
-export function ensureIntegrityDomain(domains) {
-  const list = domains || [];
-  if (list.some(d => d.id === INTEGRITY_DOMAIN_ID)) return list;
-  const maxOrder = list.reduce((m, d) => Math.max(m, d.order ?? 0), -1);
-  return [...list, { ...INTEGRITY_DOMAIN_PRESET, order: maxOrder + 1 }];
+// A template's own stored domains should never contain an "integrity" entry
+// — it's merged in live instead (see withIntegrityDomain). This strips any
+// legacy stored copy (from an earlier version of this feature that did save
+// it per-template) so it can't show up duplicated alongside the live one.
+export function stripIntegrityDomain(domains) {
+  return (domains || []).filter(d => d.id !== INTEGRITY_DOMAIN_ID);
+}
+
+// Returns a new template object with the CURRENT global Integrity domain
+// merged in as the first domain (order: -1, so it sorts before anything
+// else regardless of the other domains' own order values), and any stale
+// per-template copy stripped out first so it can never appear twice.
+// `domainFields` is the live content from settings/interviewIntegrity —
+// falls back to the built-in preset if that hasn't been customized yet.
+export function withIntegrityDomain(template, domainFields) {
+  if (!template) return template;
+  const domain = {
+    ...INTEGRITY_DOMAIN_PRESET,
+    domainFields: (domainFields && domainFields.length) ? domainFields : INTEGRITY_DOMAIN_PRESET.domainFields,
+    order: -1,
+  };
+  return { ...template, domains: [domain, ...stripIntegrityDomain(template.domains)] };
 }
 
 // ── State initializer ─────────────────────────────────────────────────────────

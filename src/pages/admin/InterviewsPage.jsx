@@ -13,7 +13,7 @@ import {
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
-  createNotification, subscribeToBlockedDates,
+  createNotification, subscribeToBlockedDates, getInterviewIntegrity,
 } from "../../api/firestore";
 import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
@@ -711,17 +711,19 @@ export default function InterviewsPage() {
     setFeedbackEditSaving(false);
   }
 
-  const handleDownloadFeedback = () => {
+  const handleDownloadFeedback = async () => {
     if (filtered.length === 0) {
       setToast({ message: "No interviews match the current filters.", type: "error" });
       return;
     }
-    exportFeedbackToExcel(filtered, templates, programs);
+    const integrity = await getInterviewIntegrity().catch(() => null);
+    exportFeedbackToExcel(filtered, templates, programs, undefined, integrity?.domainFields);
   };
 
-  const handleDownloadSingleFeedback = (iv) => {
+  const handleDownloadSingleFeedback = async (iv) => {
     const slug = (iv.candidateName || "candidate").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
-    exportFeedbackToExcel([iv], templates, programs, `feedback_${slug}`);
+    const integrity = await getInterviewIntegrity().catch(() => null);
+    exportFeedbackToExcel([iv], templates, programs, `feedback_${slug}`, integrity?.domainFields);
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, memo } from "react";
+import { useState, useCallback, useEffect, useMemo, memo } from "react";
 import { motion } from "framer-motion";
 import {
   ChevronDown, Plus, Check, Trash2, Award, Sparkles, ShieldCheck,
@@ -10,11 +10,22 @@ import {
   computeFinalVerdict,
   computeIntegrityScore,
   materializeFeedback,
+  withIntegrityDomain,
 } from "../utils/templateEngine";
-import { saveFeedbackAutoDraft } from "../api/firestore";
+import { saveFeedbackAutoDraft, subscribeToInterviewIntegrity } from "../api/firestore";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
 import AutosaveIndicator from "./AutosaveIndicator";
 import Button from "./Button";
+
+// Interview Integrity is a single global checklist (settings/interviewIntegrity)
+// merged live into whatever template is passed in — not stored per-template.
+// Both DynamicFeedbackForm and DynamicFeedbackDisplay need it, so it's a
+// small shared hook rather than duplicated subscribe logic in each.
+function useIntegrityDomainFields() {
+  const [fields, setFields] = useState(null); // null while loading
+  useEffect(() => subscribeToInterviewIntegrity(s => setFields(s.domainFields)), []);
+  return fields;
+}
 
 function cls(...parts) {
   return parts.filter(Boolean).join(" ");
@@ -405,8 +416,14 @@ const domainVariants = {
 // ── Main form (interviewer fills this) ────────────────────────────────────────
 
 export default function DynamicFeedbackForm({ template, interview, onSubmit, saving, previewMode = false }) {
+  const integrityFields = useIntegrityDomainFields();
+  const effectiveTemplate = useMemo(
+    () => withIntegrityDomain(template, integrityFields),
+    [template, integrityFields]
+  );
+
   const [feedbackData, setFeedbackData] = useState(
-    () => initFeedbackState(template, interview?.feedbackDraft || interview?.feedback)
+    () => initFeedbackState(effectiveTemplate, interview?.feedbackDraft || interview?.feedback)
   );
 
   const autosaveEnabled = !previewMode && !!interview?.id && !interview?.feedback?.submittedAt;
@@ -424,27 +441,27 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
   }, []);
 
   const enabledDomains = useMemo(() =>
-    (template?.domains || [])
+    (effectiveTemplate?.domains || [])
       .filter(d => d.enabled !== false)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-  [template?.domains]);
+  [effectiveTemplate?.domains]);
 
   const finalVerdict = useMemo(
-    () => computeFinalVerdict(template, feedbackData),
-    [template, feedbackData]
+    () => computeFinalVerdict(effectiveTemplate, feedbackData),
+    [effectiveTemplate, feedbackData]
   );
 
   const integrityScore = useMemo(
-    () => computeIntegrityScore(template, feedbackData),
-    [template, feedbackData]
+    () => computeIntegrityScore(effectiveTemplate, feedbackData),
+    [effectiveTemplate, feedbackData]
   );
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (previewMode) return;
-    const ratingError = validateRatingsComplete(template, feedbackData);
+    const ratingError = validateRatingsComplete(effectiveTemplate, feedbackData);
     if (ratingError) return onSubmit(null, ratingError);
-    onSubmit(materializeFeedback(template, feedbackData));
+    onSubmit(materializeFeedback(effectiveTemplate, feedbackData));
   };
 
   return (
@@ -495,20 +512,26 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
 const NOOP = () => {};
 
 export function DynamicFeedbackDisplay({ template, feedbackData }) {
+  const integrityFields = useIntegrityDomainFields();
+  const effectiveTemplate = useMemo(
+    () => withIntegrityDomain(template, integrityFields),
+    [template, integrityFields]
+  );
+
   const enabledDomains = useMemo(() =>
-    (template?.domains || [])
+    (effectiveTemplate?.domains || [])
       .filter(d => d.enabled !== false)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
-  [template?.domains]);
+  [effectiveTemplate?.domains]);
 
   const finalVerdict = useMemo(
-    () => feedbackData?.finalVerdict ?? computeFinalVerdict(template, feedbackData),
-    [template, feedbackData]
+    () => feedbackData?.finalVerdict ?? computeFinalVerdict(effectiveTemplate, feedbackData),
+    [effectiveTemplate, feedbackData]
   );
 
   const integrityScore = useMemo(
-    () => feedbackData?.integrityScore ?? computeIntegrityScore(template, feedbackData),
-    [template, feedbackData]
+    () => feedbackData?.integrityScore ?? computeIntegrityScore(effectiveTemplate, feedbackData),
+    [effectiveTemplate, feedbackData]
   );
 
   if (!template || !feedbackData) return null;

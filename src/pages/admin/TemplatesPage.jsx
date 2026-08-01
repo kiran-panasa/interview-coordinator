@@ -13,7 +13,7 @@ import {
 } from "../../api/firestore";
 import { useSkills, usePrograms, useTemplates, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
-import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER, INTEGRITY_DOMAIN_ID, ensureIntegrityDomain } from "../../utils/templateEngine";
+import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER, INTEGRITY_DOMAIN_ID, stripIntegrityDomain } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
@@ -74,23 +74,27 @@ export default function TemplatesPage() {
     }
   }, [activeTab, bankQuestionsLoaded]);
 
-  // One-time, silent background backfill: every template must carry the
-  // Interview Integrity domain, including ones created before this feature
-  // existed. New/edited/cloned templates already get it via ensureIntegrityDomain
-  // above — this just catches templates nobody has opened since. Runs once per
-  // page load (ref-guarded), non-destructive (purely additive), no confirm needed.
-  const integrityBackfillRan = useRef(false);
+  // Interview Integrity is now a single global checklist merged live into
+  // every template (see withIntegrityDomain in templateEngine.js) instead of
+  // being stored per-template — that's what makes "one edit, every template
+  // updates" actually true, with nothing to migrate and no template that can
+  // be missed. An earlier version of this feature DID save a copy into each
+  // template's own domains array; this one-time, silent cleanup strips any
+  // such stale copy still sitting in Firestore so it can't show up duplicated
+  // (once, live, alongside the fresh merged one). Ref-guarded, runs once per
+  // page load, no confirm needed (purely removing dead data).
+  const integrityCleanupRan = useRef(false);
   useEffect(() => {
-    if (isLoading || integrityBackfillRan.current || templates.length === 0) return;
-    integrityBackfillRan.current = true;
-    const missing = templates.filter(t => !(t.domains || []).some(d => d.id === INTEGRITY_DOMAIN_ID));
-    if (missing.length === 0) return;
+    if (isLoading || integrityCleanupRan.current || templates.length === 0) return;
+    integrityCleanupRan.current = true;
+    const stale = templates.filter(t => (t.domains || []).some(d => d.id === INTEGRITY_DOMAIN_ID));
+    if (stale.length === 0) return;
     (async () => {
-      for (const t of missing) {
+      for (const t of stale) {
         try {
-          await updateTemplate(t.id, { domains: ensureIntegrityDomain(t.domains) });
+          await updateTemplate(t.id, { domains: stripIntegrityDomain(t.domains) });
         } catch (e) {
-          console.error(`Failed to backfill Interview Integrity domain for template ${t.id}:`, e);
+          console.error(`Failed to remove stale Interview Integrity copy from template ${t.id}:`, e);
         }
       }
       queryClient.invalidateQueries({ queryKey: QK.templates });
@@ -133,7 +137,7 @@ export default function TemplatesPage() {
   const openBlank = () => {
     setEditTarget(null);
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
-    setForm({ name: "", program: defaultProgram, skills: [], domains: ensureIntegrityDomain([]), questionBank: {} });
+    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {} });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setAssignedQIds([]);
     setQbSearch(""); setQbDomainFilter("");
@@ -173,15 +177,11 @@ export default function TemplatesPage() {
     const rawDomains = (source.domains || []).length > 0
       ? source.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    // Integrity domain's id/type must stay exactly "integrity" — reslugging it
-    // from its label like every other domain would silently disconnect it
-    // from computeIntegrityScore (which looks it up by that fixed id).
     const resluggedDomains = deepClone(migrateDomainsForEdit(rawDomains)).map(d => {
-      if (d.id === INTEGRITY_DOMAIN_ID) return d;
       const slug = slugify(d.label) || d.id;
       return { ...d, id: slug, type: slug };
     });
-    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: ensureIntegrityDomain(resluggedDomains) });
+    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: stripIntegrityDomain(resluggedDomains) });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setAssignedQIds(source.questionIds || []);
     setQbSearch(""); setQbDomainFilter("");
@@ -195,7 +195,7 @@ export default function TemplatesPage() {
     const rawDomains = (t.domains || []).length > 0
       ? t.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: ensureIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))) });
+    setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: stripIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))) });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setAssignedQIds(t.questionIds || []);
     setQbSearch(""); setQbDomainFilter("");
@@ -214,7 +214,7 @@ export default function TemplatesPage() {
       if (errors.length) { setCsvErrors(errors); return; }
       setCsvErrors([]);
       setEditTarget(null);
-      setForm({ name: template.name, domains: ensureIntegrityDomain(template.domains), questionBank: template.questionBank || {} });
+      setForm({ name: template.name, domains: stripIntegrityDomain(template.domains), questionBank: template.questionBank || {} });
       setQbTexts({ theory: "", coding: "", project: "", resume: "" });
       setActiveTab("domains");
       setShowNewPicker(false);
@@ -309,10 +309,10 @@ export default function TemplatesPage() {
         name: form.name.trim(),
         program: form.program || "",
         skills: form.skills || [],
-        // Safety net — every entry point into this form already seeds the
-        // Integrity domain, but this guarantees no save path can ever
-        // produce a template without it.
-        domains: ensureIntegrityDomain([...form.domains]).sort((a, b) => a.order - b.order),
+        // Safety net — Interview Integrity is never stored per-template (it's
+        // merged in live from the global settings doc), so strip it here in
+        // case a stale copy somehow made it back into form state.
+        domains: stripIntegrityDomain([...form.domains]).sort((a, b) => a.order - b.order),
         questionBank: toArrays(qbTexts),
         questionIds: assignedQIds,
         schemaVersion: 2,
@@ -377,9 +377,7 @@ export default function TemplatesPage() {
     setMigrating(true);
     try {
       for (const t of templates) {
-        const newDomains = (t.domains || []).map(d => {
-          // Integrity domain's id/type must stay "integrity" — see openClone.
-          if (d.id === INTEGRITY_DOMAIN_ID) return d;
+        const newDomains = stripIntegrityDomain(t.domains || []).map(d => {
           const slug = slugify(d.label) || d.id;
           return { ...d, id: slug, type: slug };
         });
@@ -509,7 +507,9 @@ export default function TemplatesPage() {
           className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
         >
           {visibleTemplates.map(t => {
-            const domains = (t.domains || []).filter(d => d.enabled !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            const domains = stripIntegrityDomain(t.domains || [])
+              .filter(d => d.enabled !== false)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             const isV2 = t.schemaVersion === 2;
             const programName = programs.find(p => p.id === t.program)?.name;
             return (
@@ -539,6 +539,11 @@ export default function TemplatesPage() {
                 {/* Domain chips */}
                 {isV2 ? (
                   <div className="flex flex-wrap gap-1.5">
+                    {/* Interview Integrity is a global checklist applied to every
+                        template — always shown first, not sourced from t.domains. */}
+                    <span className="text-xs px-2 py-0.5 bg-amber-50 text-amber-700 rounded-full font-medium">
+                      Interview Integrity
+                    </span>
                     {domains.map(d => (
                       <span key={d.id} className="text-xs px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full font-medium">
                         {d.label}{(d.weightInVerdict ?? 0) > 0 ? ` ${d.weightInVerdict}%` : ""}
@@ -675,7 +680,9 @@ export default function TemplatesPage() {
               <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">Clone an existing template</p>
               <div className="space-y-2">
                 {templates.map(t => {
-                  const domains = (t.domains || []).filter(d => d.enabled !== false).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                  const domains = stripIntegrityDomain(t.domains || [])
+                    .filter(d => d.enabled !== false)
+                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                   return (
                     <button
                       key={t.id}
@@ -759,6 +766,13 @@ export default function TemplatesPage() {
           {/* ── Domains tab ── */}
           {activeTab === "domains" && (
             <div className="space-y-2">
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
+                <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                <span className="text-xs text-amber-700 font-medium">
+                  Interview Integrity is applied to every template automatically and isn't listed below —
+                  edit its checklist, weights, and options once in Settings → Interview Integrity.
+                </span>
+              </div>
               {sortedDomains.map((domain, i) => (
                 <DomainRow
                   key={domain.id}
