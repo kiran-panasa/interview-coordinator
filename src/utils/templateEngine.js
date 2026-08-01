@@ -286,9 +286,17 @@ export function computeDomainRating(domain, domainData) {
 // items aren't guaranteed to share the same range. So each answered item is
 // first normalized to its own 0..1 using THAT item's own min/max score, then
 // combined across however many items exist using their configured weights
-// (Σ weight·normalizedScore / Σ weight — a plain weighted average, so it's
-// unaffected by how many items there are or get added/removed later), and
-// only the final combined 0..1 average is scaled onto the fixed 0–5 output.
+// (Σ weight·normalizedScore / Σ weight), and the final combined 0..1 average
+// is scaled onto the fixed 0–5 output.
+//
+// Unlike every other weighted average in this file, an UNANSWERED item here
+// is NOT excluded from the total — it counts toward the denominator with a
+// 0 numerator contribution. This is a compliance checklist: "not yet
+// checked" must not score the same as "verified compliant," which excluding
+// it would effectively do (one "Yes" out of nine unanswered items would
+// otherwise average to a perfect score). The rating therefore starts low
+// and rises as items get marked compliant, reaching 5 only once every item
+// is answered as fully compliant.
 export function computeIntegrityScore(template, feedbackData) {
   const domain = (template?.domains || []).find(d => d.id === INTEGRITY_DOMAIN_ID && d.enabled !== false);
   if (!domain) return null;
@@ -302,18 +310,19 @@ export function computeIntegrityScore(template, feedbackData) {
   let totalWeight = 0;
 
   for (const f of scoredFields) {
-    const raw = parseFloat(domainData[f.id]);
-    if (isNaN(raw)) continue; // unanswered — excluded, same as every other weighted-average in this file
-
     const scores = (f.options || []).map(o => parseFloat(o.score)).filter(n => !isNaN(n));
     if (!scores.length) continue;
+
+    const w = parseFloat(f.weight) || 1;
+    totalWeight += w; // every configured item counts, answered or not
+
+    const raw = parseFloat(domainData[f.id]);
+    if (isNaN(raw)) continue; // not yet answered — contributes 0, but still counted above
+
     const fMin = Math.min(...scores);
     const fMax = Math.max(...scores);
     const normalized01 = fMax === fMin ? 1 : (raw - fMin) / (fMax - fMin);
-
-    const w = parseFloat(f.weight) || 1;
     weightedSum += normalized01 * w;
-    totalWeight += w;
   }
 
   if (!totalWeight) return null;

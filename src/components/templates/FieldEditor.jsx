@@ -281,10 +281,10 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight, weight
         <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs text-gray-500 leading-relaxed">
           <span className="font-semibold text-gray-600">Total weight: {totalWeight}</span> — not required to total
           anything specific, it's just each item's relative importance. How the final rating (out of 5) is
-          calculated: each answered item's selected option is first normalized to 0–1 using that item's own
-          lowest/highest possible option score, then those are combined using the weights above
-          (higher weight = counts for more), and the combined 0–1 result is scaled to a 0–5 rating —
-          the same scale as every other domain rating in this app.
+          calculated: each item's selected option is normalized to 0–1 using that item's own lowest/highest
+          possible option score, then combined using the weights above (higher weight = counts for more) and
+          scaled to a 0–5 rating. An item left unanswered counts as 0, not as skipped — so the rating starts
+          low and only reaches 5 once every item has been marked fully compliant.
         </div>
       )}
     </div>
