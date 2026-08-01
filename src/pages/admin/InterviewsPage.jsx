@@ -310,10 +310,11 @@ export default function InterviewsPage() {
     setRecordingLoading(s => ({ ...s, [iv.id]: true }));
     try {
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:      "getRecording",
-        eventId:     iv.eventId || "",
-        meetLink:    iv.meetLink || "",
-        recallBotId: iv.recallBotId || "",
+        action:        "getRecording",
+        eventId:       iv.eventId || "",
+        meetLink:      iv.meetLink || "",
+        recallBotId:   iv.recallBotId || "",
+        transcriptUrl: iv.transcriptUrl || "",
       });
       if (result?.status === "ready" && result.recordingUrl) {
         await updateInterview(iv.id, { meetingRecordingUrl: result.recordingUrl });
@@ -321,6 +322,8 @@ export default function InterviewsPage() {
       } else if (result?.status === "processing") {
         console.log("Recording processing in progress");
         setToast({ message: result.message || "Recording is still being processed — check back in a few minutes.", type: "info" });
+      } else if (result?.status === "not_found") {
+        setToast({ message: result.message || "No recording available for this interview.", type: "info" });
       } else {
         throw new Error(result?.message || result?.error || "Recording not available for this interview.");
       }
