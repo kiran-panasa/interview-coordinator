@@ -276,18 +276,28 @@ export function computeDomainRating(domain, domainData) {
 
 // Interview Integrity is deliberately excluded from the Final Verdict
 // (weightInVerdict: 0) and reported as its own 0–10 score instead. The
-// domain's own rating lands on the same 1–5 scale as every other domain
-// (scored_dropdown options are always 1–5 across this app) — this just
-// rescales that onto 0–10 for a friendlier, distinct metric.
-const INTEGRITY_SCALE = { min: 1, max: 5 };
-
+// domain's own rating lands on whatever scale its scored_dropdown options
+// actually use — admins can edit those freely (e.g. a plain 0/1 Yes/No),
+// so the min/max used to normalize onto 0–10 is derived from the options
+// actually configured, never assumed to be a fixed 1–5.
 export function computeIntegrityScore(template, feedbackData) {
   const domain = (template?.domains || []).find(d => d.id === INTEGRITY_DOMAIN_ID && d.enabled !== false);
   if (!domain) return null;
   const rating = computeDomainRating(domain, feedbackData?.domains?.[domain.id]);
   if (rating == null) return null;
-  const { min, max } = INTEGRITY_SCALE;
-  return Math.round(((rating - min) / (max - min)) * 100) / 10;
+
+  const allScores = (domain.domainFields || [])
+    .filter(f => f.type === "scored_dropdown")
+    .flatMap(f => (f.options || []).map(o => parseFloat(o.score)))
+    .filter(n => !isNaN(n));
+  if (!allScores.length) return null;
+
+  const min = Math.min(...allScores);
+  const max = Math.max(...allScores);
+  if (max === min) return rating >= max ? 10 : 0; // every option scores the same — degenerate scale
+
+  const normalized = ((rating - min) / (max - min)) * 10;
+  return Math.round(Math.max(0, Math.min(10, normalized)) * 10) / 10;
 }
 
 export function computeFinalVerdict(template, feedbackData) {
