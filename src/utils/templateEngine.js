@@ -275,29 +275,46 @@ export function computeDomainRating(domain, domainData) {
 }
 
 // Interview Integrity is deliberately excluded from the Final Verdict
-// (weightInVerdict: 0) and reported as its own 0–10 score instead. The
-// domain's own rating lands on whatever scale its scored_dropdown options
-// actually use — admins can edit those freely (e.g. a plain 0/1 Yes/No),
-// so the min/max used to normalize onto 0–10 is derived from the options
-// actually configured, never assumed to be a fixed 1–5.
+// (weightInVerdict: 0) and reported as its own 0–10 score instead.
+//
+// Admins can freely edit each checklist item's dropdown options (e.g. a
+// plain 0/1 Yes/No, or the default 1/3/5 compliance scale) — and different
+// items aren't guaranteed to share the same range. So each answered item is
+// first normalized to its own 0..1 using THAT item's own min/max score, then
+// combined across however many items exist using their configured weights
+// (Σ weight·normalizedScore / Σ weight — a plain weighted average, so it's
+// unaffected by how many items there are or get added/removed later), and
+// only the final combined 0..1 average is scaled onto the fixed 0–10 output.
 export function computeIntegrityScore(template, feedbackData) {
   const domain = (template?.domains || []).find(d => d.id === INTEGRITY_DOMAIN_ID && d.enabled !== false);
   if (!domain) return null;
-  const rating = computeDomainRating(domain, feedbackData?.domains?.[domain.id]);
-  if (rating == null) return null;
+  const domainData = feedbackData?.domains?.[domain.id];
+  if (!domainData) return null;
 
-  const allScores = (domain.domainFields || [])
-    .filter(f => f.type === "scored_dropdown")
-    .flatMap(f => (f.options || []).map(o => parseFloat(o.score)))
-    .filter(n => !isNaN(n));
-  if (!allScores.length) return null;
+  const scoredFields = (domain.domainFields || []).filter(f => f.type === "scored_dropdown");
+  if (!scoredFields.length) return null;
 
-  const min = Math.min(...allScores);
-  const max = Math.max(...allScores);
-  if (max === min) return rating >= max ? 10 : 0; // every option scores the same — degenerate scale
+  let weightedSum = 0;
+  let totalWeight = 0;
 
-  const normalized = ((rating - min) / (max - min)) * 10;
-  return Math.round(Math.max(0, Math.min(10, normalized)) * 10) / 10;
+  for (const f of scoredFields) {
+    const raw = parseFloat(domainData[f.id]);
+    if (isNaN(raw)) continue; // unanswered — excluded, same as every other weighted-average in this file
+
+    const scores = (f.options || []).map(o => parseFloat(o.score)).filter(n => !isNaN(n));
+    if (!scores.length) continue;
+    const fMin = Math.min(...scores);
+    const fMax = Math.max(...scores);
+    const normalized01 = fMax === fMin ? 1 : (raw - fMin) / (fMax - fMin);
+
+    const w = parseFloat(f.weight) || 1;
+    weightedSum += normalized01 * w;
+    totalWeight += w;
+  }
+
+  if (!totalWeight) return null;
+  const score10 = (weightedSum / totalWeight) * 10;
+  return Math.round(Math.max(0, Math.min(10, score10)) * 10) / 10;
 }
 
 export function computeFinalVerdict(template, feedbackData) {
