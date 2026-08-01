@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   BarChart3, Send, Clock3, AlertTriangle, CalendarCheck2, CalendarClock,
-  CheckCircle2, UserX, XCircle, Hourglass, X, ArrowUpDown, FileSpreadsheet,
+  CheckCircle2, UserX, XCircle, Hourglass, X, ArrowUpDown, FileSpreadsheet, Trash2,
 } from "lucide-react";
 import { formatDateTime } from "../../utils/dates";
 import {
@@ -10,6 +10,7 @@ import {
   isFinalOutcome, lastNudgeAt,
 } from "../../utils/nudgeLifecycle";
 import { exportNudgeAnalyticsToExcel } from "../../utils/nudgeAnalyticsExport";
+import { deleteScheduleInvite } from "../../api/firestore";
 import StatCard from "../../components/ui/StatCard";
 import { SkeletonStatCards } from "../../components/Skeleton";
 import Badge from "../../components/Badge";
@@ -35,6 +36,7 @@ export default function NudgeAnalyticsTab({
   const [filterSentBy,   setFilterSentBy]   = useState("All");
   const [sortKey,        setSortKey]        = useState("initialNudgeAt");
   const [sortDir,        setSortDir]        = useState("desc");
+  const [deletingAll,    setDeletingAll]    = useState(false);
 
   const interviewsById = useMemo(() => new Map(interviews.map(iv => [iv.id, iv])), [interviews]);
   const programNameById = useMemo(() => new Map(programs.map(p => [p.id, p.name])), [programs]);
@@ -122,6 +124,34 @@ export default function NudgeAnalyticsTab({
       return;
     }
     exportNudgeAnalyticsToExcel(filtered);
+  };
+
+  // Permanently removes every invite currently shown in this table (respects
+  // active filters — clear them first for a true "delete everything," or
+  // filter down to just a test batch to scope the deletion). Each invite's
+  // own history subcollection is left behind (Firestore doesn't cascade
+  // deletes) but is invisible/harmless once its parent invite is gone.
+  const handleDeleteAll = async () => {
+    if (filtered.length === 0) return;
+    const confirmed = confirm(
+      `Permanently delete all ${filtered.length} record${filtered.length !== 1 ? "s" : ""} currently shown in Candidate Tracking?\n\n` +
+      `This deletes the underlying invites entirely — it cannot be undone.`
+    );
+    if (!confirmed) return;
+    setDeletingAll(true);
+    try {
+      let done = 0, failed = 0;
+      for (const r of filtered) {
+        try { await deleteScheduleInvite(r.invite.id); done++; }
+        catch { failed++; }
+      }
+      setToast?.({
+        message: failed ? `${done} deleted, ${failed} failed.` : `${done} record${done !== 1 ? "s" : ""} deleted.`,
+        type: failed ? "error" : undefined,
+      });
+    } finally {
+      setDeletingAll(false);
+    }
   };
 
   const SortHeader = ({ label, sortField }) => (
@@ -246,6 +276,13 @@ export default function NudgeAnalyticsTab({
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
             Candidate Tracking {filtered.length !== rows.length ? `(filtered: ${filtered.length})` : `(${rows.length} total)`}
           </p>
+          {filtered.length > 0 && (
+            <button onClick={handleDeleteAll} disabled={deletingAll}
+              className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-lg transition-colors disabled:opacity-50">
+              <Trash2 className="w-3.5 h-3.5" />
+              {deletingAll ? "Deleting…" : `Delete All (${filtered.length})`}
+            </button>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
