@@ -37,6 +37,7 @@ export default function NudgeAnalyticsTab({
   const [sortKey,        setSortKey]        = useState("initialNudgeAt");
   const [sortDir,        setSortDir]        = useState("desc");
   const [deletingAll,    setDeletingAll]    = useState(false);
+  const [deletingId,     setDeletingId]     = useState(null);
 
   const interviewsById = useMemo(() => new Map(interviews.map(iv => [iv.id, iv])), [interviews]);
   const programNameById = useMemo(() => new Map(programs.map(p => [p.id, p.name])), [programs]);
@@ -152,6 +153,18 @@ export default function NudgeAnalyticsTab({
     } finally {
       setDeletingAll(false);
     }
+  };
+
+  const handleDeleteRow = async (r) => {
+    if (!confirm(`Permanently delete the nudge record for ${r.candidateName || "this candidate"}? This cannot be undone.`)) return;
+    setDeletingId(r.id);
+    try {
+      await deleteScheduleInvite(r.invite.id);
+      setToast?.({ message: "Record deleted." });
+    } catch (e) {
+      setToast?.({ message: e.message, type: "error" });
+    }
+    setDeletingId(null);
   };
 
   const SortHeader = ({ label, sortField }) => (
@@ -298,11 +311,12 @@ export default function NudgeAnalyticsTab({
                 <SortHeader label="Last Nudge"       sortField="lastNudgeAt" />
                 <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">Current Status</th>
                 <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">Final Outcome</th>
+                <th className="px-4 py-3 w-10"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {pagination.paged.length === 0 ? (
-                <tr><td colSpan={10} className="text-center text-gray-400 py-10 text-sm">
+                <tr><td colSpan={11} className="text-center text-gray-400 py-10 text-sm">
                   {rows.length === 0 ? "No nudges sent yet." : "No candidates match the selected filters."}
                 </td></tr>
               ) : pagination.paged.map(r => (
@@ -323,6 +337,13 @@ export default function NudgeAnalyticsTab({
                     {r.finalOutcome === "In Progress"
                       ? <span className="text-gray-400">In Progress</span>
                       : <span className="font-semibold text-gray-700">{r.finalOutcome}</span>}
+                  </td>
+                  <td className="px-4 py-3 w-10">
+                    <button onClick={() => handleDeleteRow(r)} disabled={deletingId === r.id}
+                      title="Delete this record"
+                      className="p-1.5 text-gray-300 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </td>
                 </tr>
               ))}
