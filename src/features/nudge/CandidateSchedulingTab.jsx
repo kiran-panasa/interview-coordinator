@@ -73,6 +73,18 @@ export default function CandidateSchedulingTab({
   const [copiedId,       setCopiedId]       = useState(null);
   const [candSearch,     setCandSearch]     = useState("");
 
+  // Pending Nudge mode: if every candidate waiting for a first nudge belongs
+  // to the same program, pre-select that program filter so the Template/Round
+  // auto-fill (below) fires with zero clicks — the common case for a batch
+  // just moved from Inbound. Only runs once (filterProgram still empty), so
+  // it never overrides an admin's own choice.
+  useEffect(() => {
+    if (!pendingOnly || filterProgram) return;
+    const pending = candidates.filter(c => c.nudgeStatus === "pending_nudge");
+    const distinctPrograms = [...new Set(pending.map(c => c.program).filter(Boolean))];
+    if (distinctPrograms.length === 1) setFilterProgram(distinctPrograms[0]);
+  }, [pendingOnly, candidates]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Templates explicitly assigned to the selected program, plus any template
   // that hasn't been assigned to a program yet (so nothing vanishes silently).
   const templateOptions = useMemo(
@@ -80,9 +92,20 @@ export default function CandidateSchedulingTab({
     [templates, filterProgram]
   );
 
-  // Program changed and the selected template no longer applies — clear it.
+  // Program changed — auto-fill Template/Round from that program's configured
+  // defaults (Settings → General → Programs), still overridable below. Falls
+  // back to clearing the template if it no longer applies and no default exists.
   useEffect(() => {
-    if (filterTemplate && !templateOptions.some(t => t.id === filterTemplate)) setFilterTemplate("");
+    const program = programs.find(p => p.id === filterProgram);
+    if (program?.defaultTemplateId && templateOptions.some(t => t.id === program.defaultTemplateId)) {
+      setFilterTemplate(program.defaultTemplateId);
+    } else if (filterTemplate && !templateOptions.some(t => t.id === filterTemplate)) {
+      setFilterTemplate("");
+    }
+    if (program?.defaultRound) {
+      setRound(program.defaultRound);
+      setRoundCustomMode(false);
+    }
   }, [filterProgram]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredCandidates = candidates.filter(c => {

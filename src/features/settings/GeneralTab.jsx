@@ -1,7 +1,9 @@
 import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Tag, Layers, Plus, Pencil, Trash2, X, FolderKanban, BellRing } from "lucide-react";
-import { subscribeToNudgeReminderSettings, updateNudgeReminderSettings } from "../../api/firestore";
+import { subscribeToNudgeReminderSettings, updateNudgeReminderSettings, updateProgram } from "../../api/firestore";
+import { useTemplates } from "../../hooks/queries";
+import { NUDGE_ROUND_OPTIONS } from "../../constants/nudgeRounds";
 import { useAuth } from "../../AuthContext";
 import Button from "../../components/Button";
 
@@ -28,6 +30,11 @@ export default function GeneralTab({
 }) {
   const newProgramRef = useRef(null);
   useEffect(() => { if (addingProgram) newProgramRef.current?.focus(); }, [addingProgram]);
+
+  const { data: templates = [] } = useTemplates();
+  const handleSetProgramDefault = (programId, changes) => {
+    updateProgram(programId, changes).catch(() => {});
+  };
 
   const { currentUser } = useAuth();
   const [reminderSettings, setReminderSettings] = useState(null);
@@ -168,7 +175,11 @@ export default function GeneralTab({
         className="mb-6"
       >
         <SectionTitle icon={Layers} label="Programs" />
-        <p className="text-xs text-gray-400 mb-4">Programs group templates and candidates. They are used as filter tabs across the app.</p>
+        <p className="text-xs text-gray-400 mb-4">
+          Programs group templates and candidates. They are used as filter tabs across the app. Set a default
+          Template and Round per program to auto-fill Nudge's campaign fields when that program is selected —
+          still changeable per campaign.
+        </p>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
           {programs.length === 0 && !addingProgram ? (
@@ -182,38 +193,68 @@ export default function GeneralTab({
             </div>
           ) : (
             <ul className="divide-y divide-gray-50">
-              {programs.map(p => (
-                <li key={p.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/70 transition-colors group">
-                  <span className="w-2 h-2 rounded-full bg-brand-400 flex-shrink-0" />
-                  {editingProgram?.id === p.id ? (
-                    <input
-                      autoFocus
-                      value={editingProgram.name}
-                      onChange={e => setEditingProgram(s => ({ ...s, name: e.target.value }))}
-                      onKeyDown={e => { if (e.key === "Enter") handleRenameProgram(); if (e.key === "Escape") setEditingProgram(null); }}
-                      onBlur={handleRenameProgram}
-                      className="flex-1 text-sm border-b border-brand-400 focus:outline-none bg-transparent text-gray-900 font-medium"
-                    />
-                  ) : (
-                    <span className="flex-1 text-sm font-medium text-gray-900">{p.name}</span>
-                  )}
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => setEditingProgram({ id: p.id, name: p.name })}
-                      className="p-1.5 text-gray-400 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors"
-                      title="Rename">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProgram(p)}
-                      disabled={deletingProgram}
-                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
-                      title="Delete program">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+              {programs.map(p => {
+                const programTemplates = templates.filter(t => !t.program || t.program === p.id);
+                return (
+                <li key={p.id} className="px-5 py-3.5 hover:bg-gray-50/70 transition-colors group">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full bg-brand-400 flex-shrink-0" />
+                    {editingProgram?.id === p.id ? (
+                      <input
+                        autoFocus
+                        value={editingProgram.name}
+                        onChange={e => setEditingProgram(s => ({ ...s, name: e.target.value }))}
+                        onKeyDown={e => { if (e.key === "Enter") handleRenameProgram(); if (e.key === "Escape") setEditingProgram(null); }}
+                        onBlur={handleRenameProgram}
+                        className="flex-1 text-sm border-b border-brand-400 focus:outline-none bg-transparent text-gray-900 font-medium"
+                      />
+                    ) : (
+                      <span className="flex-1 text-sm font-medium text-gray-900">{p.name}</span>
+                    )}
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => setEditingProgram({ id: p.id, name: p.name })}
+                        className="p-1.5 text-gray-400 hover:text-brand-600 rounded-lg hover:bg-brand-50 transition-colors"
+                        title="Rename">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProgram(p)}
+                        disabled={deletingProgram}
+                        className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-40"
+                        title="Delete program">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Nudge defaults — auto-fill Template/Round in Nudge when this
+                      Program is selected as the filter, still overridable there. */}
+                  <div className="flex items-center gap-3 mt-2 pl-5">
+                    <div className="flex-1 max-w-[220px]">
+                      <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Default Template</label>
+                      <select
+                        value={p.defaultTemplateId || ""}
+                        onChange={e => handleSetProgramDefault(p.id, { defaultTemplateId: e.target.value })}
+                        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <option value="">— None —</option>
+                        {programTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    </div>
+                    <div className="flex-1 max-w-[220px]">
+                      <label className="block text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Default Round</label>
+                      <select
+                        value={p.defaultRound || ""}
+                        onChange={e => handleSetProgramDefault(p.id, { defaultRound: e.target.value })}
+                        className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                        <option value="">— None —</option>
+                        {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           )}
 

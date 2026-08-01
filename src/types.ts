@@ -87,6 +87,11 @@ export interface Program {
   id: string;
   name: string;
   order: number;
+  // Auto-filled into Nudge's Template/Round fields when this Program is
+  // selected as the filter — still overridable per campaign. Solves having
+  // to manually pick a template every time (see src/features/settings/GeneralTab.jsx).
+  defaultTemplateId?: string;
+  defaultRound?: string;
   createdAt?: string;
 }
 
