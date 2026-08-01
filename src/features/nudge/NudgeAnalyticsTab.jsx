@@ -4,7 +4,7 @@ import {
   BarChart3, Send, Clock3, AlertTriangle, CalendarCheck2, CalendarClock,
   CheckCircle2, UserX, XCircle, Hourglass, X, ArrowUpDown, FileSpreadsheet,
 } from "lucide-react";
-import { formatDate, formatDateTime } from "../../utils/dates";
+import { formatDateTime } from "../../utils/dates";
 import {
   LIFECYCLE_STATUS, LIFECYCLE_LABELS, deriveLifecycleStatus, summarizeLifecycle,
   isFinalOutcome, lastNudgeAt,
@@ -259,15 +259,13 @@ export default function NudgeAnalyticsTab({
                 <SortHeader label="Reminder 2"       sortField="reminder2At" />
                 <SortHeader label="Nudges Sent"      sortField="nudgeCount" />
                 <SortHeader label="Last Nudge"       sortField="lastNudgeAt" />
-                <SortHeader label="Slot Booking"     sortField="slotBookingAt" />
-                <SortHeader label="Interview Date"   sortField="interviewDate" />
                 <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">Current Status</th>
                 <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">Final Outcome</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {pagination.paged.length === 0 ? (
-                <tr><td colSpan={12} className="text-center text-gray-400 py-10 text-sm">
+                <tr><td colSpan={10} className="text-center text-gray-400 py-10 text-sm">
                   {rows.length === 0 ? "No nudges sent yet." : "No candidates match the selected filters."}
                 </td></tr>
               ) : pagination.paged.map(r => (
@@ -283,8 +281,6 @@ export default function NudgeAnalyticsTab({
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{r.reminder2At ? formatDateTime(r.reminder2At) : "—"}</td>
                   <td className="px-4 py-3 text-xs text-gray-600 text-center">{r.nudgeCount}</td>
                   <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{r.lastNudgeAt ? formatDateTime(r.lastNudgeAt) : "—"}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{r.slotBookingAt ? formatDateTime(r.slotBookingAt) : "—"}</td>
-                  <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{r.interview?.scheduledDate ? `${formatDate(r.interview.scheduledDate)} · ${r.interview.scheduledTime || ""}` : "—"}</td>
                   <td className="px-4 py-3"><Badge value={r.status} /></td>
                   <td className="px-4 py-3 text-xs">
                     {r.finalOutcome === "In Progress"
