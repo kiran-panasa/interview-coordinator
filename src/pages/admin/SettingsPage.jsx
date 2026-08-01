@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  Users, SlidersHorizontal, Shield, ShieldCheck, BookOpen, Sparkles, User as UserIcon,
+  Users, SlidersHorizontal, Shield, BookOpen, Sparkles, User as UserIcon,
   CheckCircle2, Copy, Check, FileSpreadsheet, FileText, UploadCloud, CalendarOff,
 } from "lucide-react";
 import UserManagementTab from "../../features/settings/UserManagementTab";
 import GeneralTab from "../../features/settings/GeneralTab";
 import BlockedDatesTab from "../../features/settings/BlockedDatesTab";
 import PreInterviewResourcesTab from "../../features/settings/PreInterviewResourcesTab";
-import InterviewIntegrityTab from "../../features/settings/InterviewIntegrityTab";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -50,7 +49,6 @@ const SECTIONS = [
   { value: "General",                  icon: SlidersHorizontal },
   { value: "Blocked Dates",            icon: CalendarOff },
   { value: "Pre-Interview Resources",  icon: FileText },
-  { value: "Interview Integrity",      icon: ShieldCheck },
 ];
 
 const BLANK_BLOCK = { startDate: "", endDate: "", reason: "" };
@@ -492,8 +490,6 @@ export default function SettingsPage() {
       )}
 
       {activeSection === "Pre-Interview Resources" && <PreInterviewResourcesTab />}
-
-      {activeSection === "Interview Integrity" && <InterviewIntegrityTab />}
 
       {/* ── Invite Modal ── */}
       <Modal open={showInviteModal} onClose={() => { setShowInviteModal(false); setSavedInvite(null); }} title="Invite">

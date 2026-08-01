@@ -129,8 +129,8 @@ export const DOMAIN_TYPE_ORDER = ["coding", "theory", "project", "resume", "over
 // A fixed checklist domain merged live into every template at render/compute
 // time (see withIntegrityDomain below) from a single global definition
 // (settings/interviewIntegrity, src/api/interviewIntegrity.ts) — NOT stored
-// per-template. Editing it in Settings → Interview Integrity therefore
-// affects every template immediately, with no per-template copy that can
+// per-template. Editing it in the "Interview Integrity" tab on the Templates
+// page therefore affects every template immediately, with no per-template copy that can
 // drift out of sync or get missed by a migration. Excluded from the Final
 // Interview Verdict (weightInVerdict: 0) and scored separately via
 // computeIntegrityScore, normalized to a 0–10 scale.
@@ -145,7 +145,7 @@ const INTEGRITY_OPTIONS = [
 
 // Weights below match the requested table exactly (sums to 15) — this is
 // also the seed content for settings/interviewIntegrity the first time an
-// admin opens Settings → Interview Integrity (before they've saved anything).
+// admin opens the Interview Integrity tab (before they've saved anything).
 export const INTEGRITY_DOMAIN_PRESET = {
   id: INTEGRITY_DOMAIN_ID,
   type: "integrity",

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, RefreshCw, X, Copy, Upload, Download, CheckCircle2, AlertTriangle,
-  Info, FileWarning, ListChecks,
+  Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid,
 } from "lucide-react";
 import { useInterviews } from "../../hooks/subscriptions";
 import { formatDateShort } from "../../utils/dates";
@@ -23,6 +23,7 @@ import KebabMenu from "../../components/KebabMenu";
 import { deepClone, slugify } from "../../utils/templateHelpers";
 import { parseTemplateCSV, downloadSampleExcel, exportTemplateToExcel } from "../../utils/templateCSV";
 import { DomainRow, AddDomainPanel } from "../../components/templates/DomainEditor";
+import InterviewIntegrityTab from "../../components/templates/InterviewIntegrityTab";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -63,6 +64,7 @@ export default function TemplatesPage() {
   const csvFileRef = useRef(null);
 
   const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
+  const [pageView,       setPageView]       = useState("templates"); // "templates" | "integrity"
 
   // Lazy-load bank questions only when the question bank tab is first opened
   useEffect(() => {
@@ -432,23 +434,45 @@ export default function TemplatesPage() {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interview Templates</h1>
           <p className="text-sm text-gray-500 mt-1">Define domains, evaluation fields, and question banks</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleSyncTemplateNames} disabled={syncingNames || templates.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-300 text-brand-700 text-xs font-semibold rounded-xl hover:bg-brand-50 disabled:opacity-40 transition-colors">
-            <RefreshCw className={`w-3.5 h-3.5 ${syncingNames ? "animate-spin" : ""}`} />
-            {syncingNames ? "Syncing…" : "Sync Template Names"}
-          </button>
-          <button onClick={handleMigrateDomainIds} disabled={migrating || templates.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold rounded-xl hover:bg-amber-50 disabled:opacity-40 transition-colors">
-            <RefreshCw className={`w-3.5 h-3.5 ${migrating ? "animate-spin" : ""}`} />
-            {migrating ? "Migrating…" : "Sync Domain IDs"}
-          </button>
-          <Button variant="primary" size="md" icon={Plus} onClick={openNew}>
-            New Template
-          </Button>
-        </div>
+        {pageView === "templates" && (
+          <div className="flex items-center gap-2">
+            <button onClick={handleSyncTemplateNames} disabled={syncingNames || templates.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-300 text-brand-700 text-xs font-semibold rounded-xl hover:bg-brand-50 disabled:opacity-40 transition-colors">
+              <RefreshCw className={`w-3.5 h-3.5 ${syncingNames ? "animate-spin" : ""}`} />
+              {syncingNames ? "Syncing…" : "Sync Template Names"}
+            </button>
+            <button onClick={handleMigrateDomainIds} disabled={migrating || templates.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold rounded-xl hover:bg-amber-50 disabled:opacity-40 transition-colors">
+              <RefreshCw className={`w-3.5 h-3.5 ${migrating ? "animate-spin" : ""}`} />
+              {migrating ? "Migrating…" : "Sync Domain IDs"}
+            </button>
+            <Button variant="primary" size="md" icon={Plus} onClick={openNew}>
+              New Template
+            </Button>
+          </div>
+        )}
       </motion.div>
 
+      {/* ── Page view toggle: template list vs. the shared Integrity checklist ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.03 }}
+        className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6"
+      >
+        {[["templates", "Templates", LayoutGrid], ["integrity", "Interview Integrity", ShieldCheck]].map(([id, label, Icon]) => (
+          <button key={id} onClick={() => setPageView(id)}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+              pageView === id ? "bg-white text-brand-600 shadow-soft" : "text-gray-500 hover:text-gray-700"
+            }`}>
+            <Icon className="w-4 h-4" />
+            {label}
+          </button>
+        ))}
+      </motion.div>
+
+      {pageView === "integrity" ? (
+        <InterviewIntegrityTab />
+      ) : (
+      <>
       {/* ── Program Tabs (filter only — manage programs in Settings) ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
@@ -619,6 +643,8 @@ export default function TemplatesPage() {
           </div>
         </motion.div>
       )}
+      </>
+      )}
 
       {/* ── New Template Picker Modal ── */}
       <Modal open={showNewPicker} onClose={() => setShowNewPicker(false)} title="New Interview Template">
@@ -770,7 +796,7 @@ export default function TemplatesPage() {
                 <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                 <span className="text-xs text-amber-700 font-medium">
                   Interview Integrity is applied to every template automatically and isn't listed below —
-                  edit its checklist, weights, and options once in Settings → Interview Integrity.
+                  edit its checklist, weights, and options once in the "Interview Integrity" tab above.
                 </span>
               </div>
               {sortedDomains.map((domain, i) => (

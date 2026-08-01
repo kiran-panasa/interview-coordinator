@@ -3,8 +3,8 @@ import { motion } from "framer-motion";
 import { ShieldCheck } from "lucide-react";
 import { subscribeToInterviewIntegrity, updateInterviewIntegrity } from "../../api/firestore";
 import { useAuth } from "../../AuthContext";
-import { FieldListEditor } from "../../components/templates/FieldEditor";
-import Button from "../../components/Button";
+import { FieldListEditor } from "./FieldEditor";
+import Button from "../Button";
 
 function SectionTitle({ icon: Icon, label }) {
   return (
