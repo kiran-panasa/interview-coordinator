@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import { Inbox, Search, X, ArrowRightCircle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDate } from "../../utils/dates";
+import { resolveInboundProgramId } from "../../utils/inboundProgramMapping";
 import {
-  createCandidate, moveInboundRequestToNudge, dismissInboundRequest,
+  createCandidate, updateCandidate, moveInboundRequestToNudge, dismissInboundRequest,
 } from "../../api/firestore";
 import { useInboundRequests } from "../../hooks/subscriptions";
 import { useCandidates, usePrograms, QK } from "../../hooks/queries";
@@ -21,13 +22,6 @@ const fadeUp = {
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
 };
 
-// Every inbound request today comes from the IOE Admin Portal, which is
-// entirely the "Intensive Offline" program's own admin tool (confirmed:
-// its own header reads "Intensive Offline Assessment") — every request
-// therefore maps to Interview Coordinator's existing Intensive Offline
-// program, not a new/separate one.
-const INTENSIVE_PROGRAM_NAME = "Intensive Offline";
-
 export default function InboundPage() {
   const queryClient = useQueryClient();
   const { currentUser } = useAuth();
@@ -35,30 +29,35 @@ export default function InboundPage() {
   const { data: candidates = [] } = useCandidates();
   const { data: programs   = [] } = usePrograms();
 
-  const intensiveProgram = programs.find(p => p.name === INTENSIVE_PROGRAM_NAME);
+  const [search,        setSearch]        = useState("");
+  const [phaseFilter,   setPhaseFilter]   = useState("All");
+  const [batchFilter,   setBatchFilter]   = useState("All");
+  const [programFilter, setProgramFilter] = useState("All"); // program id, or "All"
+  const [statusFilter,  setStatusFilter]  = useState("pending");
+  const [selected,      setSelected]      = useState(new Set());
+  const [moving,        setMoving]        = useState(false);
+  const [toast,         setToast]         = useState(null);
 
-  const [search,       setSearch]       = useState("");
-  const [phaseFilter,  setPhaseFilter]  = useState("All");
-  const [batchFilter,  setBatchFilter]  = useState("All");
-  const [statusFilter, setStatusFilter] = useState("pending");
-  const [selected,     setSelected]     = useState(new Set());
-  const [moving,       setMoving]       = useState(false);
-  const [toast,        setToast]        = useState(null);
-
-  const phases = useMemo(() => [...new Set(requests.map(r => r.phase).filter(Boolean))].sort(), [requests]);
+  const phases  = useMemo(() => [...new Set(requests.map(r => r.phase).filter(Boolean))].sort(), [requests]);
   const batches = useMemo(() => [...new Set(requests.map(r => r.batch).filter(Boolean))].sort(), [requests]);
+
+  // Resolved once per request per render — cheap (programs list is tiny)
+  // and keeps the source->Program mapping in exactly one place.
+  const programIdFor = (r) => resolveInboundProgramId(r, programs);
+  const programNameFor = (r) => programs.find(p => p.id === programIdFor(r))?.name || "Unassigned";
 
   const filtered = useMemo(() => requests.filter(r => {
     if (statusFilter !== "All" && r.status !== statusFilter) return false;
     if (phaseFilter !== "All" && r.phase !== phaseFilter) return false;
     if (batchFilter !== "All" && r.batch !== batchFilter) return false;
+    if (programFilter !== "All" && resolveInboundProgramId(r, programs) !== programFilter) return false;
     if (search) {
       const q = search.trim().toLowerCase();
       const hay = [r.candidateName, r.candidateEmail, r.uid].filter(Boolean).join(" ").toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
-  }), [requests, statusFilter, phaseFilter, batchFilter, search]);
+  }), [requests, statusFilter, phaseFilter, batchFilter, programFilter, programs, search]);
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
 
@@ -95,18 +94,27 @@ export default function InboundPage() {
     try {
       let created = 0, matched = 0;
       for (const r of chosen) {
+        const resolvedProgramId = resolveInboundProgramId(r, programs) || "";
         const existing = candidates.find(c => (c.email || "").toLowerCase() === (r.candidateEmail || "").toLowerCase());
         let candidateId = existing?.id;
         if (candidateId) {
           matched++;
+          // Re-surfacing an existing candidate for a fresh nudge cycle —
+          // reset their status even if they'd already been nudged before,
+          // and keep their program in sync with this request's source.
+          await updateCandidate(candidateId, {
+            nudgeStatus: "pending_nudge",
+            program: resolvedProgramId || existing.program || "",
+          });
         } else {
           candidateId = await createCandidate({
             name:        r.candidateName,
             email:       r.candidateEmail,
             uid:         r.uid || "",
-            program:     intensiveProgram?.id || "",
+            program:     resolvedProgramId,
             templateIds: [],
-            source:      r.source || "ioe-portal",
+            source:      r.source || "",
+            nudgeStatus: "pending_nudge",
             notes:       `Imported from IOE Admin Portal — Phase ${r.phase || "—"}, Batch ${r.batch || "—"}, Week ${r.week || "—"}.`,
             createdBy:   currentUser.uid,
           });
@@ -116,7 +124,7 @@ export default function InboundPage() {
       }
       queryClient.invalidateQueries({ queryKey: QK.candidates });
       setSelected(new Set());
-      setToast({ message: `${chosen.length} candidate${chosen.length !== 1 ? "s" : ""} moved to Nudge (${created} new, ${matched} matched existing).` });
+      setToast({ message: `${chosen.length} candidate${chosen.length !== 1 ? "s" : ""} moved to Nudge's Pending Nudge tab (${created} new, ${matched} matched existing).` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -134,7 +142,7 @@ export default function InboundPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Inbound</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Interview requests from the IOE Admin Portal — review before sending to Nudge.
+            Interview requests from connected source systems — review before sending to Nudge.
             {pendingCount > 0 && ` ${pendingCount} awaiting review.`}
           </p>
         </div>
@@ -159,6 +167,11 @@ export default function InboundPage() {
           <option value="dismissed">Dismissed</option>
           <option value="All">All Statuses</option>
         </select>
+        <select value={programFilter} onChange={e => { setProgramFilter(e.target.value); setPage(1); }}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <option value="All">All Programs</option>
+          {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
         <select value={phaseFilter} onChange={e => { setPhaseFilter(e.target.value); setPage(1); }}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <option value="All">All Phases</option>
@@ -169,11 +182,8 @@ export default function InboundPage() {
           <option value="All">All Batches</option>
           {batches.map(b => <option key={b} value={b}>{b}</option>)}
         </select>
-        <span className="text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full">
-          Program: {INTENSIVE_PROGRAM_NAME}
-        </span>
-        {(search || statusFilter !== "pending" || phaseFilter !== "All" || batchFilter !== "All") && (
-          <button onClick={() => { setSearch(""); setStatusFilter("pending"); setPhaseFilter("All"); setBatchFilter("All"); setPage(1); }}
+        {(search || statusFilter !== "pending" || phaseFilter !== "All" || batchFilter !== "All" || programFilter !== "All") && (
+          <button onClick={() => { setSearch(""); setStatusFilter("pending"); setPhaseFilter("All"); setBatchFilter("All"); setProgramFilter("All"); setPage(1); }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
           </button>
@@ -202,14 +212,14 @@ export default function InboundPage() {
                   onChange={toggleAll}
                   className="accent-brand-600 w-4 h-4 cursor-pointer" />
               </th>
-              {["UID", "Name", "Email", "Phase / Batch / Week", "Requested Date", "Status", "Requested By", ""].map(h => (
+              {["UID", "Name", "Email", "Program", "Phase / Batch / Week", "Requested Date", "Status", "Requested By", ""].map(h => (
                 <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {paged.length === 0 ? (
-              <tr><td colSpan={8} className="py-16">
+              <tr><td colSpan={9} className="py-16">
                 <div className="flex flex-col items-center gap-2 text-gray-400">
                   <Inbox className="w-8 h-8 text-gray-300" />
                   <p className="text-sm">No inbound requests found</p>
@@ -228,6 +238,11 @@ export default function InboundPage() {
                 <td className="px-4 py-3 text-xs text-gray-500 font-mono">{r.uid || "—"}</td>
                 <td className="px-4 py-3 font-semibold text-gray-900">{r.candidateName}</td>
                 <td className="px-4 py-3 text-xs text-gray-500 font-mono">{r.candidateEmail}</td>
+                <td className="px-4 py-3">
+                  <span className="text-[11px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                    {programNameFor(r)}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <span className="text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 px-1.5 py-0.5 rounded-full whitespace-nowrap">
                     {[r.phase, r.batch, r.week].filter(Boolean).join("-") || "—"}

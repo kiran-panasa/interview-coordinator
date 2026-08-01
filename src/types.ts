@@ -39,6 +39,12 @@ export interface Candidate {
   notes?: string;
   source?: string; // e.g. "ioe-portal" — set when materialized from an InboundRequest
   status?: string;
+  // Set to "pending_nudge" when a candidate is moved from Inbound, so they
+  // surface in Nudge's "Pending Nudge" tab distinct from the full candidate
+  // list; flipped to "nudged" the moment the first invite is actually sent.
+  // Absent entirely for candidates added any other way (manual/CSV) — they
+  // only ever appear in the regular Candidates tab.
+  nudgeStatus?: "pending_nudge" | "nudged";
   archived?: boolean;
   archivedAt?: string | null;
   createdAt: string;
@@ -61,7 +67,8 @@ export interface InboundRequest {
   status: InboundRequestStatus;
   requestedAt: string;
   requestedBy: string;
-  source: string; // e.g. "ioe-portal"
+  source: string; // e.g. "ioe-portal" — see src/utils/inboundProgramMapping.js
+  program?: string; // explicit Program id/name, if the source system ever sends one directly
   notifiedAt?: string | null;
   candidateId?: string | null;
   movedAt?: string | null;

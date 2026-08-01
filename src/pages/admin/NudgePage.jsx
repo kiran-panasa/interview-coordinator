@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Users, CalendarClock, LayoutGrid, BarChart3 } from "lucide-react";
+import { Users, UserPlus, CalendarClock, LayoutGrid, BarChart3 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { getSlotsForInterviewers, subscribeToSlotsForInterviewers, subscribeToBlockedDates } from "../../api/firestore";
 import { useUserNotifications, useScheduleInvites, useInterviews } from "../../hooks/subscriptions";
@@ -13,6 +13,7 @@ import NudgeAnalyticsTab from "../../features/nudge/NudgeAnalyticsTab";
 
 const TABS = [
   { id: "interviewers", label: "Interviewers",  icon: Users },
+  { id: "pending",      label: "Pending Nudge", icon: UserPlus },
   { id: "candidates",   label: "Candidates",    icon: CalendarClock },
   { id: "slots",        label: "Slot Overview", icon: LayoutGrid },
   { id: "analytics",    label: "Analytics",     icon: BarChart3 },
@@ -63,8 +64,9 @@ export default function NudgePage() {
 
   const unreadResponses  = responses.filter(n => n.type === "response" && n.status === "unread").length;
   const pendingBookings  = invites.filter(i => i.status === "pending_confirmation").length;
+  const pendingNudgeCount = candidates.filter(c => c.nudgeStatus === "pending_nudge").length;
 
-  const badgeFor = (id) => id === "interviewers" ? unreadResponses : id === "candidates" ? pendingBookings : 0;
+  const badgeFor = (id) => id === "interviewers" ? unreadResponses : id === "candidates" ? pendingBookings : id === "pending" ? pendingNudgeCount : 0;
 
   return (
     <div className="p-8 max-w-5xl">
@@ -136,6 +138,18 @@ export default function NudgePage() {
               programs={programs} templates={templates} activeInterviewers={activeInterviewers}
               ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
               blockedDates={blockedDates}
+            />
+          )}
+
+          {activeTab === "pending" && (
+            <CandidateSchedulingTab
+              currentUser={currentUser}
+              templates={templates} programs={programs} candidates={candidates}
+              users={usersAll} activeInterviewers={activeInterviewers}
+              invites={invites} ivrSlots={ivrSlots}
+              setToast={setToast}
+              blockedDates={blockedDates}
+              pendingOnly
             />
           )}
 

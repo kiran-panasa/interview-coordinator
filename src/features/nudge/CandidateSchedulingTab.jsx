@@ -7,7 +7,7 @@ import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate, createNotification,
-  logInviteHistory, getPreInterviewResources,
+  logInviteHistory, getPreInterviewResources, updateCandidate,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
@@ -50,6 +50,13 @@ export default function CandidateSchedulingTab({
   invites,
   setToast,
   blockedDates = [],
+  // "Pending Nudge" mode — only shows candidates freshly moved from Inbound
+  // (nudgeStatus === "pending_nudge") that haven't been sent a first nudge
+  // yet, so a bulk-import doesn't get lost inside the full candidate list.
+  // Same component, same send-invite logic either way — just a narrower
+  // starting candidate set. Candidates drop out of this view automatically
+  // once handleSendInvites flips their nudgeStatus to "nudged".
+  pendingOnly = false,
 }) {
   const [dateStart,      setDateStart]      = useState(today());
   const [dateEnd,        setDateEnd]        = useState(inDays(7));
@@ -79,6 +86,7 @@ export default function CandidateSchedulingTab({
   }, [filterProgram]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredCandidates = candidates.filter(c => {
+    if (pendingOnly && c.nudgeStatus !== "pending_nudge") return false;
     if (filterProgram  && c.program !== filterProgram) return false;
     if (filterTemplate && !(c.templateIds || []).includes(filterTemplate)) return false;
     if (candSearch) {
@@ -137,6 +145,9 @@ export default function CandidateSchedulingTab({
           nudgeCount:     1,
         });
         logInviteHistory(inviteId, "sent", "Initial nudge sent").catch(() => {});
+        if (c.nudgeStatus === "pending_nudge") {
+          updateCandidate(c.id, { nudgeStatus: "nudged" }).catch(() => {});
+        }
         sent++;
         // One candidate's email failing shouldn't stop the rest of the batch —
         // but unlike a true fire-and-forget, we still surface who failed and why.
@@ -465,7 +476,9 @@ export default function CandidateSchedulingTab({
         <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap">
             <Users className="w-3.5 h-3.5 text-gray-400" />
-            Candidates {filterProgram || filterTemplate || candSearch ? `(filtered: ${filteredCandidates.length})` : `(${candidates.length} total)`}
+            {pendingOnly ? "Pending Nudge" : "Candidates"} {filterProgram || filterTemplate || candSearch
+              ? `(filtered: ${filteredCandidates.length})`
+              : pendingOnly ? `(${filteredCandidates.length} awaiting first nudge)` : `(${candidates.length} total)`}
           </p>
           <div className="flex items-center gap-3 ml-auto">
             <div className="relative">
@@ -497,7 +510,9 @@ export default function CandidateSchedulingTab({
           <tbody className="divide-y divide-gray-50">
             {filteredCandidates.length === 0 ? (
               <tr><td colSpan={5} className="text-center text-gray-400 py-10 text-sm">
-                {candidates.length === 0 ? "No candidates yet." : "No candidates match the selected filters."}
+                {pendingOnly
+                  ? "No candidates awaiting a first nudge — everyone's been sent one, or nothing's come in from Inbound yet."
+                  : candidates.length === 0 ? "No candidates yet." : "No candidates match the selected filters."}
               </td></tr>
             ) : candPagination.paged.map(c => (
               <tr key={c.id} className={`hover:bg-gray-50/70 transition-colors ${selCandidates.has(c.id) ? "bg-brand-50" : ""}`}>
@@ -508,9 +523,9 @@ export default function CandidateSchedulingTab({
                 <td className="px-4 py-3 font-semibold text-gray-900">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {c.name}
-                    {c.source === "ioe-portal" && (
-                      <span className="text-[10px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
-                        Intensive Program
+                    {c.source && (
+                      <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded-full">
+                        From Inbound
                       </span>
                     )}
                   </div>
@@ -647,7 +662,8 @@ export default function CandidateSchedulingTab({
           <div className="space-y-3">
             {pendingBookings.map(inv => {
               const cand = candidates.find(c => c.id === inv.candidateId);
-              const isIntensive = cand?.source === "ioe-portal";
+              const isFromInbound = !!cand?.source;
+              const candProgramName = cand?.program ? programName(cand.program) : null;
               return (
               <div key={inv.id} className="bg-white border border-violet-200 rounded-xl px-5 py-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
@@ -656,9 +672,14 @@ export default function CandidateSchedulingTab({
                     <span className="text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full uppercase tracking-wide">
                       Action Required
                     </span>
-                    {isIntensive && (
+                    {candProgramName && (
                       <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                        Intensive Program
+                        {candProgramName}
+                      </span>
+                    )}
+                    {isFromInbound && (
+                      <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+                        From Inbound
                       </span>
                     )}
                   </div>
