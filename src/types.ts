@@ -111,9 +111,11 @@ export interface Field {
   type: FieldType;
   options?: FieldOption[];
   required?: boolean;
+  weight?: number; // scored_dropdown only — % of 100 for card fields, relative points for domain-level checklists
+  placeholder?: string;
 }
 
-export type DomainType = "theory" | "coding" | "project" | "resume" | "overall_feedback";
+export type DomainType = "theory" | "coding" | "project" | "resume" | "overall_feedback" | "integrity";
 
 export interface Domain {
   id: string;
@@ -123,6 +125,8 @@ export interface Domain {
   order?: number;
   domainFields?: Field[];
   cardFields?: Field[];
+  weightInVerdict?: number; // % share of the Final Interview Verdict; 0 = excluded (e.g. Interview Integrity)
+  defaultCardCount?: number;
 }
 
 export interface QuestionBank {
@@ -198,6 +202,8 @@ export interface Feedback {
   comments?: string;
   submittedAt?: string;
   importedFromSheet?: boolean;
+  finalVerdict?: number;
+  integrityScore?: number; // 0–10, see computeIntegrityScore in utils/templateEngine.js
   [key: string]: unknown;
 }
 

@@ -99,7 +99,7 @@ function PlainOptionList({ options, onChange }) {
   );
 }
 
-function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWeight }) {
+function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWeight, weightMode = "percent" }) {
   const [showOptions, setShowOptions] = useState(false);
   const hasOptions = field.type === "scored_dropdown" || field.type === "dropdown";
 
@@ -142,13 +142,13 @@ function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWei
         {showWeight && field.type === "scored_dropdown" && (
           <div className="flex items-center gap-1 flex-shrink-0">
             <input
-              type="number" min={0} max={100}
+              type="number" min={0} max={weightMode === "points" ? 20 : 100}
               value={field.weight ?? ""}
               onChange={e => onUpdate({ weight: parseFloat(e.target.value) || 0 })}
               placeholder="0"
               className="w-12 px-1.5 py-1 border border-gray-200 rounded-md text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-400"
             />
-            <span className="text-xs text-gray-400">%</span>
+            {weightMode === "percent" && <span className="text-xs text-gray-400">%</span>}
           </div>
         )}
 
@@ -205,7 +205,14 @@ function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWei
   );
 }
 
-export function FieldListEditor({ fields, onChange, addLabel, showWeight }) {
+// weightMode "percent" (default, used by Card Fields): weights are a % of
+// 100 and must sum to 100 across all scored fields in the list, with an
+// Equalize shortcut. weightMode "points" (used for fixed-rubric domain-level
+// checklists like Interview Integrity): weights are arbitrary relative point
+// values with no required total — just an informational running total, no
+// Equalize (equal-weighting would defeat the point of a deliberately uneven
+// rubric).
+export function FieldListEditor({ fields, onChange, addLabel, showWeight, weightMode = "percent" }) {
   const add = () => {
     onChange([...fields, { id: makeFieldId("field"), label: "", type: "text" }]);
   };
@@ -221,7 +228,8 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight }) {
 
   const scoredFields = showWeight ? fields.filter(f => f.type === "scored_dropdown") : [];
   const totalWeight  = scoredFields.reduce((s, f) => s + (parseFloat(f.weight) || 0), 0);
-  const weightOk     = scoredFields.length <= 1 || Math.abs(totalWeight - 100) < 0.5;
+  const isPercentMode = weightMode === "percent";
+  const weightOk     = !isPercentMode || scoredFields.length <= 1 || Math.abs(totalWeight - 100) < 0.5;
 
   const equalizeWeights = () => {
     if (!scoredFields.length) return;
@@ -244,6 +252,7 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight }) {
           onDelete={() => remove(i)}
           onMove={dir => move(i, dir)}
           showWeight={showWeight}
+          weightMode={weightMode}
         />
       ))}
 
@@ -252,7 +261,7 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight }) {
         <Plus className="w-3.5 h-3.5" /> {addLabel || "Add Field"}
       </button>
 
-      {showWeight && scoredFields.length > 1 && (
+      {showWeight && scoredFields.length > 1 && isPercentMode && (
         <div className={`flex items-center justify-between px-3 py-1.5 rounded-lg border text-xs ${
           weightOk ? "bg-emerald-50 border-emerald-200" : "bg-red-50 border-red-200"
         }`}>
@@ -265,6 +274,14 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight }) {
             className="text-brand-600 font-semibold hover:text-brand-700 transition-colors ml-3">
             Equalize
           </button>
+        </div>
+      )}
+
+      {showWeight && scoredFields.length > 1 && !isPercentMode && (
+        <div className="flex items-center px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs">
+          <span className="text-gray-500 font-medium">
+            Total weight: {totalWeight} — used to combine item scores into the domain's score, not required to total anything specific.
+          </span>
         </div>
       )}
     </div>

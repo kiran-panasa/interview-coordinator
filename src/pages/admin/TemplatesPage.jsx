@@ -13,7 +13,7 @@ import {
 } from "../../api/firestore";
 import { useSkills, usePrograms, useTemplates, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
-import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER } from "../../utils/templateEngine";
+import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER, INTEGRITY_DOMAIN_ID, ensureIntegrityDomain } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
@@ -74,6 +74,29 @@ export default function TemplatesPage() {
     }
   }, [activeTab, bankQuestionsLoaded]);
 
+  // One-time, silent background backfill: every template must carry the
+  // Interview Integrity domain, including ones created before this feature
+  // existed. New/edited/cloned templates already get it via ensureIntegrityDomain
+  // above — this just catches templates nobody has opened since. Runs once per
+  // page load (ref-guarded), non-destructive (purely additive), no confirm needed.
+  const integrityBackfillRan = useRef(false);
+  useEffect(() => {
+    if (isLoading || integrityBackfillRan.current || templates.length === 0) return;
+    integrityBackfillRan.current = true;
+    const missing = templates.filter(t => !(t.domains || []).some(d => d.id === INTEGRITY_DOMAIN_ID));
+    if (missing.length === 0) return;
+    (async () => {
+      for (const t of missing) {
+        try {
+          await updateTemplate(t.id, { domains: ensureIntegrityDomain(t.domains) });
+        } catch (e) {
+          console.error(`Failed to backfill Interview Integrity domain for template ${t.id}:`, e);
+        }
+      }
+      queryClient.invalidateQueries({ queryKey: QK.templates });
+    })();
+  }, [isLoading, templates, queryClient]);
+
   // Stats per templateId: { [id]: { scheduled, completed, cancelled } }
   const templateStats = useMemo(() => interviews.reduce((acc, iv) => {
     const tid = iv.templateId;
@@ -110,7 +133,7 @@ export default function TemplatesPage() {
   const openBlank = () => {
     setEditTarget(null);
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
-    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {} });
+    setForm({ name: "", program: defaultProgram, skills: [], domains: ensureIntegrityDomain([]), questionBank: {} });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setAssignedQIds([]);
     setQbSearch(""); setQbDomainFilter("");
@@ -150,11 +173,15 @@ export default function TemplatesPage() {
     const rawDomains = (source.domains || []).length > 0
       ? source.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
+    // Integrity domain's id/type must stay exactly "integrity" — reslugging it
+    // from its label like every other domain would silently disconnect it
+    // from computeIntegrityScore (which looks it up by that fixed id).
     const resluggedDomains = deepClone(migrateDomainsForEdit(rawDomains)).map(d => {
+      if (d.id === INTEGRITY_DOMAIN_ID) return d;
       const slug = slugify(d.label) || d.id;
       return { ...d, id: slug, type: slug };
     });
-    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: resluggedDomains });
+    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: ensureIntegrityDomain(resluggedDomains) });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setAssignedQIds(source.questionIds || []);
     setQbSearch(""); setQbDomainFilter("");
@@ -168,7 +195,7 @@ export default function TemplatesPage() {
     const rawDomains = (t.domains || []).length > 0
       ? t.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: deepClone(migrateDomainsForEdit(rawDomains)) });
+    setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: ensureIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))) });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setAssignedQIds(t.questionIds || []);
     setQbSearch(""); setQbDomainFilter("");
@@ -187,7 +214,7 @@ export default function TemplatesPage() {
       if (errors.length) { setCsvErrors(errors); return; }
       setCsvErrors([]);
       setEditTarget(null);
-      setForm({ name: template.name, domains: template.domains, questionBank: template.questionBank || {} });
+      setForm({ name: template.name, domains: ensureIntegrityDomain(template.domains), questionBank: template.questionBank || {} });
       setQbTexts({ theory: "", coding: "", project: "", resume: "" });
       setActiveTab("domains");
       setShowNewPicker(false);
@@ -282,7 +309,10 @@ export default function TemplatesPage() {
         name: form.name.trim(),
         program: form.program || "",
         skills: form.skills || [],
-        domains: [...form.domains].sort((a, b) => a.order - b.order),
+        // Safety net — every entry point into this form already seeds the
+        // Integrity domain, but this guarantees no save path can ever
+        // produce a template without it.
+        domains: ensureIntegrityDomain([...form.domains]).sort((a, b) => a.order - b.order),
         questionBank: toArrays(qbTexts),
         questionIds: assignedQIds,
         schemaVersion: 2,
@@ -348,6 +378,8 @@ export default function TemplatesPage() {
     try {
       for (const t of templates) {
         const newDomains = (t.domains || []).map(d => {
+          // Integrity domain's id/type must stay "integrity" — see openClone.
+          if (d.id === INTEGRITY_DOMAIN_ID) return d;
           const slug = slugify(d.label) || d.id;
           return { ...d, id: slug, type: slug };
         });

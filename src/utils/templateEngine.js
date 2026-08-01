@@ -125,6 +125,55 @@ export const DOMAIN_PRESETS = {
 
 export const DOMAIN_TYPE_ORDER = ["coding", "theory", "project", "resume", "overall_feedback"];
 
+// ── Interview Integrity ─────────────────────────────────────────────────────
+// A fixed checklist domain injected into every template (see ensureIntegrityDomain
+// below) — excluded from the Final Interview Verdict (weightInVerdict: 0) and
+// scored separately via computeIntegrityScore, normalized to a 0–10 scale.
+
+export const INTEGRITY_DOMAIN_ID = "integrity";
+
+const INTEGRITY_OPTIONS = [
+  { label: "Compliant", score: 5 },
+  { label: "Partially Compliant / Needs Attention", score: 3 },
+  { label: "Non-Compliant / Violation", score: 1 },
+];
+
+// Weights below match the requested table exactly (sums to 15) — admins can
+// still edit label/options/weight per template via the normal domain editor.
+export const INTEGRITY_DOMAIN_PRESET = {
+  id: INTEGRITY_DOMAIN_ID,
+  type: "integrity",
+  label: "Interview Integrity",
+  order: 5,
+  enabled: true,
+  weightInVerdict: 0,
+  defaultCardCount: 0,
+  cardFields: [],
+  domainFields: [
+    { id: "camera_compliance",      label: "Student camera is ON",                          type: "scored_dropdown", weight: 1, options: INTEGRITY_OPTIONS },
+    { id: "screen_sharing",         label: "Screen sharing is enabled",                      type: "scored_dropdown", weight: 1, options: INTEGRITY_OPTIONS },
+    { id: "single_desktop",         label: "Only one desktop/monitor is in use",             type: "scored_dropdown", weight: 1, options: INTEGRITY_OPTIONS },
+    { id: "browser_extensions",     label: "Browser extensions are verified",                type: "scored_dropdown", weight: 1, options: INTEGRITY_OPTIONS },
+    { id: "mobile_position",        label: "Mobile is positioned correctly",                 type: "scored_dropdown", weight: 3, options: INTEGRITY_OPTIONS },
+    { id: "room_laptop_scan",       label: "Room and laptop setup scan is completed",        type: "scored_dropdown", weight: 2, options: INTEGRITY_OPTIONS },
+    { id: "bluetooth_compliance",   label: "No Bluetooth/wireless audio devices are in use", type: "scored_dropdown", weight: 1, options: INTEGRITY_OPTIONS },
+    { id: "av_quality",             label: "Audio and video quality is acceptable",          type: "scored_dropdown", weight: 2, options: INTEGRITY_OPTIONS },
+    { id: "no_suspicious_behavior", label: "No suspicious behavior is observed",             type: "scored_dropdown", weight: 3, options: INTEGRITY_OPTIONS },
+    { id: "integrity_remarks",      label: "Integrity Remarks", type: "text", placeholder: "Any additional notes on integrity/compliance observations" },
+  ],
+};
+
+// Appends the Integrity domain to a template's domains array if it isn't
+// already present (by id) — used both when saving a template (so it's
+// impossible to create/edit a template without it) and by the one-time
+// background migration for templates that existed before this feature.
+export function ensureIntegrityDomain(domains) {
+  const list = domains || [];
+  if (list.some(d => d.id === INTEGRITY_DOMAIN_ID)) return list;
+  const maxOrder = list.reduce((m, d) => Math.max(m, d.order ?? 0), -1);
+  return [...list, { ...INTEGRITY_DOMAIN_PRESET, order: maxOrder + 1 }];
+}
+
 // ── State initializer ─────────────────────────────────────────────────────────
 
 export function initFeedbackState(template, existing = {}) {
@@ -196,12 +245,30 @@ export function computeDomainRating(domain, domainData) {
     if (!ratings.length) return null;
     return Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10;
   } else {
-    // No-card domain (e.g. Resume): find first scored_dropdown in domainFields
-    const ratingField = (domain.domainFields || []).find(f => f.type === "scored_dropdown");
-    if (!ratingField) return null;
-    const v = parseFloat(domainData?.[ratingField.id]);
-    return isNaN(v) ? null : v;
+    // No-card domain (e.g. Resume, Interview Integrity): weighted average
+    // across ALL scored_dropdown domainFields — computeCardRating already
+    // does exactly this (weight-if-present, equal-weight fallback), it just
+    // reads a flat {fieldId: value} object, which domainData already is.
+    // (A domain with a single unweighted scored field — e.g. Resume Rating —
+    // reduces to that field's raw score, same as before this change.)
+    return computeCardRating(domain.domainFields, domainData);
   }
+}
+
+// Interview Integrity is deliberately excluded from the Final Verdict
+// (weightInVerdict: 0) and reported as its own 0–10 score instead. The
+// domain's own rating lands on the same 1–5 scale as every other domain
+// (scored_dropdown options are always 1–5 across this app) — this just
+// rescales that onto 0–10 for a friendlier, distinct metric.
+const INTEGRITY_SCALE = { min: 1, max: 5 };
+
+export function computeIntegrityScore(template, feedbackData) {
+  const domain = (template?.domains || []).find(d => d.id === INTEGRITY_DOMAIN_ID && d.enabled !== false);
+  if (!domain) return null;
+  const rating = computeDomainRating(domain, feedbackData?.domains?.[domain.id]);
+  if (rating == null) return null;
+  const { min, max } = INTEGRITY_SCALE;
+  return Math.round(((rating - min) / (max - min)) * 100) / 10;
 }
 
 export function computeFinalVerdict(template, feedbackData) {
@@ -242,5 +309,6 @@ export function materializeFeedback(template, feedbackData) {
     ...feedbackData,
     domains,
     finalVerdict: computeFinalVerdict(template, { domains }),
+    integrityScore: computeIntegrityScore(template, { domains }),
   };
 }

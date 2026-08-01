@@ -1,13 +1,14 @@
 import { useState, useCallback, useMemo, memo } from "react";
 import { motion } from "framer-motion";
 import {
-  ChevronDown, Plus, Check, Trash2, Award, Sparkles,
+  ChevronDown, Plus, Check, Trash2, Award, Sparkles, ShieldCheck,
 } from "lucide-react";
 import {
   initFeedbackState,
   computeCardRating,
   computeDomainRating,
   computeFinalVerdict,
+  computeIntegrityScore,
   materializeFeedback,
 } from "../utils/templateEngine";
 import { saveFeedbackAutoDraft } from "../api/firestore";
@@ -354,25 +355,43 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
   );
 });
 
-// ── Final Verdict banner ──────────────────────────────────────────────────────
+// ── Final Verdict / Candidate Integrity Rating banners ─────────────────────────
 
-function VerdictBanner({ value }) {
+function ScoreBanner({ icon: Icon, label, subtitle, value, gradient }) {
   if (value == null) return null;
   return (
-    <div className="bg-gradient-to-r from-brand-600 to-violet-600 rounded-2xl p-5 text-white shadow-popover">
+    <div className={`bg-gradient-to-r ${gradient} rounded-2xl p-5 text-white shadow-popover`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-            <Award className="w-5 h-5" />
+            <Icon className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold opacity-90">Final Interview Verdict</div>
-            <div className="text-xs opacity-60 mt-0.5">Weighted average of all domain ratings</div>
+            <div className="text-sm font-semibold opacity-90">{label}</div>
+            <div className="text-xs opacity-60 mt-0.5">{subtitle}</div>
           </div>
         </div>
         <div className="text-5xl font-bold">{value}</div>
       </div>
     </div>
+  );
+}
+
+function VerdictBanner({ value }) {
+  return (
+    <ScoreBanner
+      icon={Award} label="Final Interview Verdict" subtitle="Weighted average of all domain ratings"
+      value={value} gradient="from-brand-600 to-violet-600"
+    />
+  );
+}
+
+function IntegrityBanner({ value }) {
+  return (
+    <ScoreBanner
+      icon={ShieldCheck} label="Candidate Integrity Rating" subtitle="Weighted checklist score, out of 10"
+      value={value} gradient="from-amber-600 to-orange-600"
+    />
   );
 }
 
@@ -415,6 +434,11 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
     [template, feedbackData]
   );
 
+  const integrityScore = useMemo(
+    () => computeIntegrityScore(template, feedbackData),
+    [template, feedbackData]
+  );
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (previewMode) return;
@@ -450,7 +474,10 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
         </motion.div>
       ))}
 
-      <VerdictBanner value={finalVerdict} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <VerdictBanner value={finalVerdict} />
+        <IntegrityBanner value={integrityScore} />
+      </div>
 
       {!previewMode && (
         <div className="flex justify-end pt-2">
@@ -476,6 +503,11 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
 
   const finalVerdict = useMemo(
     () => feedbackData?.finalVerdict ?? computeFinalVerdict(template, feedbackData),
+    [template, feedbackData]
+  );
+
+  const integrityScore = useMemo(
+    () => feedbackData?.integrityScore ?? computeIntegrityScore(template, feedbackData),
     [template, feedbackData]
   );
 
@@ -506,7 +538,10 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
           <span className="text-sm font-bold text-brand-700">{feedbackData.overallRecommendation}</span>
         </div>
       )}
-      <VerdictBanner value={finalVerdict} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <VerdictBanner value={finalVerdict} />
+        <IntegrityBanner value={integrityScore} />
+      </div>
     </div>
   );
 }

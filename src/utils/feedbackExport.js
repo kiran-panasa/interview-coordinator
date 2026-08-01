@@ -50,7 +50,7 @@ const BASE_HEADERS = [
   "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
   "Date", "Time", "Status",
 ];
-const TAIL_HEADERS = ["Overall Recommendation", "Final Verdict", "Comments", "Feedback Submitted At"];
+const TAIL_HEADERS = ["Overall Recommendation", "Final Verdict", "Integrity Score", "Comments", "Feedback Submitted At"];
 
 /**
  * Exports feedback for the given interviews (already filtered by the
@@ -117,6 +117,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, filenameP
       ...domainCells,
       fb?.overallRecommendation || "",
       fb?.finalVerdict != null ? fb.finalVerdict : "",
+      fb?.integrityScore != null ? fb.integrityScore : "",
       comments,
       fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
     ];
@@ -127,7 +128,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, filenameP
     { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
     { wch: 12 }, { wch: 10 }, { wch: 12 },
     ...domainLabels.map(() => ({ wch: 45 })),
-    { wch: 20 }, { wch: 12 }, { wch: 45 }, { wch: 18 },
+    { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 45 }, { wch: 18 },
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Feedback");

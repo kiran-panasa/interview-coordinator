@@ -11,6 +11,11 @@ export function DomainRow({ domain, isFirst, isLast, onChange, onRemove, onMove 
 
   const hasCardFields = (domain.cardFields || []).length > 0;
   const cardHasScoredDropdown = (domain.cardFields || []).some(f => f.type === "scored_dropdown");
+  const scoredDomainFieldCount = (domain.domainFields || []).filter(f => f.type === "scored_dropdown").length;
+  // A domain-level checklist (e.g. Interview Integrity) with more than one
+  // scored item needs per-item weight editing too — cardFields already get
+  // this; a single scored domain field (e.g. Resume Rating) doesn't need it.
+  const domainFieldsNeedWeight = scoredDomainFieldCount > 1;
 
   return (
     <div className={`rounded-xl border transition-colors ${domain.enabled ? "border-gray-200 bg-white shadow-soft" : "border-gray-200 bg-gray-50"}`}>
@@ -113,10 +118,14 @@ export function DomainRow({ domain, isFirst, isLast, onChange, onRemove, onMove 
                     <span className="text-xs text-amber-700 font-medium">Domain Rating — auto-computed (avg of card ratings)</span>
                   </div>
                 )}
-                {!hasCardFields && (domain.domainFields || []).some(f => f.type === "scored_dropdown") && (
+                {!hasCardFields && scoredDomainFieldCount > 0 && (
                   <div className="mt-2 flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
                     <Info className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                    <span className="text-xs text-blue-700 font-medium">No-card domain — first Scored Dropdown in Domain Fields = Domain Rating</span>
+                    <span className="text-xs text-blue-700 font-medium">
+                      {scoredDomainFieldCount > 1
+                        ? "No-card domain — Domain Rating = weighted average of all Scored Dropdowns below"
+                        : "No-card domain — this Scored Dropdown = Domain Rating"}
+                    </span>
                   </div>
                 )}
               </div>
@@ -130,6 +139,8 @@ export function DomainRow({ domain, isFirst, isLast, onChange, onRemove, onMove 
                   fields={domain.domainFields || []}
                   onChange={fields => onChange({ ...domain, domainFields: fields })}
                   addLabel="Add Domain Field"
+                  showWeight={domainFieldsNeedWeight}
+                  weightMode="points"
                 />
               </div>
             </div>
