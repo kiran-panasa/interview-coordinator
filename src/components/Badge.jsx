@@ -17,6 +17,9 @@ const STYLES = {
   reminder_2_sent:    "bg-orange-50 text-orange-700 ring-orange-200 [&>span]:bg-orange-500",
   no_response:        "bg-red-50    text-red-600   ring-red-200 [&>span]:bg-red-500",
   slot_booked:        "bg-violet-50 text-violet-700 ring-violet-200 [&>span]:bg-violet-500",
+  // Inbound requests (src/pages/admin/InboundPage.jsx) — "pending" above is reused as-is.
+  moved_to_nudge:     "bg-emerald-50 text-emerald-700 ring-emerald-200 [&>span]:bg-emerald-500",
+  dismissed:          "bg-gray-100  text-gray-500  ring-gray-200 [&>span]:bg-gray-400",
 };
 
 const LABELS = {
@@ -35,6 +38,8 @@ const LABELS = {
   reminder_2_sent:    "Reminder 2 Sent",
   no_response:        "No Response After 2 Reminders",
   slot_booked:        "Slot Booked",
+  moved_to_nudge:     "Moved to Nudge",
+  dismissed:          "Dismissed",
 };
 
 import { memo } from "react";

@@ -12,6 +12,7 @@ const CandidatesPage     = lazy(() => import("./pages/admin/CandidatesPage"));
 const InterviewersPage   = lazy(() => import("./pages/admin/InterviewersPage"));
 const TemplatesPage      = lazy(() => import("./pages/admin/TemplatesPage"));
 const SettingsPage       = lazy(() => import("./pages/admin/SettingsPage"));
+const InboundPage        = lazy(() => import("./pages/admin/InboundPage"));
 const NudgePage          = lazy(() => import("./pages/admin/NudgePage"));
 const AdminAboutPage     = lazy(() => import("./pages/admin/AboutPage"));
 const QuestionsPage      = lazy(() => import("./pages/admin/QuestionsPage"));
@@ -81,6 +82,7 @@ function AppRoutes() {
           <Route path="templates"   element={<TemplatesPage />} />
           <Route path="settings"    element={<SettingsPage />} />
           <Route path="panel"       element={<Navigate to="/admin/settings" replace />} />
+          <Route path="inbound"     element={<InboundPage />} />
           <Route path="nudge"       element={<NudgePage />} />
           <Route path="questions"   element={<QuestionsPage />} />
           <Route path="about"       element={<AdminAboutPage />} />

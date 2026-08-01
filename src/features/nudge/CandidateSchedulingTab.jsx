@@ -505,7 +505,16 @@ export default function CandidateSchedulingTab({
                   <input type="checkbox" checked={selCandidates.has(c.id)} onChange={() => toggleCand(c.id)}
                     className="accent-brand-600 w-4 h-4 cursor-pointer" />
                 </td>
-                <td className="px-4 py-3 font-semibold text-gray-900">{c.name}</td>
+                <td className="px-4 py-3 font-semibold text-gray-900">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {c.name}
+                    {c.source === "ioe-portal" && (
+                      <span className="text-[10px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                        Intensive Program
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-xs text-gray-500 font-mono">{c.email || "—"}</td>
                 <td className="px-4 py-3">
                   {c.program
@@ -636,10 +645,23 @@ export default function CandidateSchedulingTab({
             <span className="text-xs font-bold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">{pendingBookings.length}</span>
           </div>
           <div className="space-y-3">
-            {pendingBookings.map(inv => (
+            {pendingBookings.map(inv => {
+              const cand = candidates.find(c => c.id === inv.candidateId);
+              const isIntensive = cand?.source === "ioe-portal";
+              return (
               <div key={inv.id} className="bg-white border border-violet-200 rounded-xl px-5 py-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900">{inv.candidateName}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-bold text-gray-900">{inv.candidateName}</p>
+                    <span className="text-[11px] font-extrabold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                      Action Required
+                    </span>
+                    {isIntensive && (
+                      <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                        Intensive Program
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-400">{inv.candidateEmail}</p>
                   <div className="flex gap-4 mt-1.5">
                     <span className="text-xs font-semibold text-brand-700">{inv.templateName}</span>
@@ -662,7 +684,8 @@ export default function CandidateSchedulingTab({
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

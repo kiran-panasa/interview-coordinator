@@ -34,12 +34,38 @@ export interface Candidate {
   phone?: string;
   uid?: string;
   program?: string;
-  templateId?: string;
+  templateIds?: string[];
+  resumeLink?: string;
+  notes?: string;
+  source?: string; // e.g. "ioe-portal" — set when materialized from an InboundRequest
   status?: string;
   archived?: boolean;
   archivedAt?: string | null;
   createdAt: string;
   createdBy?: string;
+}
+
+// ── Inbound requests (e.g. from IOE Admin Portal) ───────────────────────────────
+
+export type InboundRequestStatus = "pending" | "moved_to_nudge" | "dismissed";
+
+export interface InboundRequest {
+  id: string;
+  uid: string;
+  candidateName: string;
+  candidateEmail: string;
+  phase: string;
+  batch: string;
+  week: string;
+  requestedDate: string; // "YYYY-MM-DD"
+  status: InboundRequestStatus;
+  requestedAt: string;
+  requestedBy: string;
+  source: string; // e.g. "ioe-portal"
+  notifiedAt?: string | null;
+  candidateId?: string | null;
+  movedAt?: string | null;
+  movedBy?: string;
 }
 
 // ── Skills & Programs ─────────────────────────────────────────────────────────

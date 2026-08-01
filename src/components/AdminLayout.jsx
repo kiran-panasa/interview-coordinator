@@ -2,12 +2,14 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
-import { useMemo } from "react";
-import { useUserNotifications, useAdhocQuestions, useScheduleInvites } from "../hooks/subscriptions";
+import { useMemo, useEffect, useRef } from "react";
+import { useUserNotifications, useAdhocQuestions, useScheduleInvites, useInboundRequests } from "../hooks/subscriptions";
+import { useUsers } from "../hooks/queries";
+import { createNotification, markInboundRequestNotified } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
-  LayoutDashboard, Users, UserCog, FileText, Bell,
+  LayoutDashboard, Users, UserCog, FileText, Bell, Inbox,
   CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2,
 } from "lucide-react";
 
@@ -16,6 +18,7 @@ const ALL_NAV = [
   { to: "/admin/candidates",   label: "Candidates",          roles: ["admin"],                                        icon: Users },
   { to: "/admin/interviewers", label: "Interviewers",        roles: ["admin"],                                        icon: UserCog },
   { to: "/admin/templates",    label: "Interview Templates", roles: ["admin", "content_team", "interviewer_content"], icon: FileText },
+  { to: "/admin/inbound",      label: "Inbound",             roles: ["admin"],                                        icon: Inbox },
   { to: "/admin/nudge",        label: "Nudge",               roles: ["admin"],                                        icon: Bell },
   { to: "/admin/interviews",   label: "Interviews",          roles: ["admin"],                                        icon: CalendarClock },
   { to: "/admin/questions",    label: "Question Bank",       roles: ["admin", "content_team", "interviewer_content"], icon: HelpCircle },
@@ -29,13 +32,43 @@ export default function AdminLayout() {
   const role = userProfile?.role || "admin";
   const nav = useMemo(() => ALL_NAV.filter(item => item.roles.includes(role)), [role]);
 
-  const notifications = useUserNotifications(currentUser?.uid);
-  const adhocQs       = useAdhocQuestions();
-  const invites       = useScheduleInvites();
+  const notifications     = useUserNotifications(currentUser?.uid);
+  const adhocQs           = useAdhocQuestions();
+  const invites           = useScheduleInvites();
+  const inboundRequests   = useInboundRequests();
+  const { data: usersAll = [] } = useUsers();
   const unreadResponses  = notifications.filter(n => n.type === "response" && n.status === "unread").length;
   const pendingBookings  = invites.filter(i => i.status === "pending_confirmation").length;
   const pendingAdhoc     = adhocQs.filter(q => q.status === "pending").length;
+  const pendingInbound   = inboundRequests.filter(r => r.status === "pending").length;
   const nudgeBadge       = unreadResponses + pendingBookings;
+
+  // Fires an in-app notification to every active admin the first time a new
+  // pending inbound request appears — fires from whichever admin happens to
+  // have the app open (no server automation exists for this), same
+  // reliability level as every other in-app notification in this app.
+  // notifiedRef guards against re-firing on the next render before the
+  // Firestore markInboundRequestNotified write round-trips back down.
+  const notifiedRef = useRef(new Set());
+  useEffect(() => {
+    const toNotify = inboundRequests.filter(r => r.status === "pending" && !r.notifiedAt && !notifiedRef.current.has(r.id));
+    if (!toNotify.length) return;
+    const admins = usersAll.filter(u => u.role === "admin" && u.status === "active");
+    toNotify.forEach(r => {
+      notifiedRef.current.add(r.id);
+      admins.forEach(a => {
+        createNotification({
+          type:           "inbound_request",
+          recipientId:    a.id,
+          recipientEmail: a.email,
+          candidateName:  r.candidateName,
+          message:        `New Intensive Program interview request from ${r.candidateName} (${r.candidateEmail}) via IOE Admin Portal.`,
+          status:         "unread",
+        }).catch(() => {});
+      });
+      markInboundRequestNotified(r.id).catch(() => {});
+    });
+  }, [inboundRequests, usersAll]);
 
   const initials = (userProfile?.displayName || userProfile?.email || "?").trim().charAt(0).toUpperCase();
 
@@ -57,7 +90,7 @@ export default function AdminLayout() {
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || role}</p>
           {nav.map(item => {
-            const needsAttention = item.to === "/admin/nudge" && nudgeBadge > 0;
+            const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0);
             const Icon = item.icon;
             return (
               <NavLink key={item.to} to={item.to}
@@ -75,6 +108,11 @@ export default function AdminLayout() {
                 {item.to === "/admin/nudge" && nudgeBadge > 0 && (
                   <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                     {nudgeBadge}
+                  </span>
+                )}
+                {item.to === "/admin/inbound" && pendingInbound > 0 && (
+                  <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {pendingInbound}
                   </span>
                 )}
                 {item.to === "/admin/questions" && pendingAdhoc > 0 && (
