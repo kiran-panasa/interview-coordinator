@@ -11,6 +11,7 @@ import {
   computeIntegrityScore,
   materializeFeedback,
   withIntegrityDomain,
+  INTEGRITY_DOMAIN_ID,
 } from "../utils/templateEngine";
 import { saveFeedbackAutoDraft, subscribeToInterviewIntegrity } from "../api/firestore";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
@@ -280,7 +281,13 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
   }, [domainData, onChange]);
 
   const hasCards = (domain.cardFields || []).length > 0;
-  const domainRating = computeDomainRating(domain, domainData);
+  // Interview Integrity's own fields can use any admin-chosen scale (0/1,
+  // 1/3/5, ...) — its "Domain Rating" badge shows the same normalized 0–5
+  // number as the Candidate Integrity Rating card below, not the raw
+  // weighted average on whatever native scale the options happen to use.
+  const domainRating = domain.id === INTEGRITY_DOMAIN_ID
+    ? computeIntegrityScore({ domains: [domain] }, { domains: { [domain.id]: domainData } })
+    : computeDomainRating(domain, domainData);
 
   const cardNoun = domain.type === "coding" ? "Problem" : domain.type === "project" ? "Project" : "Question";
   const cards = domainData?.cards || [];
