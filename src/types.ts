@@ -203,7 +203,7 @@ export interface Feedback {
   submittedAt?: string;
   importedFromSheet?: boolean;
   finalVerdict?: number;
-  integrityScore?: number; // 0–10, see computeIntegrityScore in utils/templateEngine.js
+  integrityScore?: number; // 0–5, see computeIntegrityScore in utils/templateEngine.js
   [key: string]: unknown;
 }
 

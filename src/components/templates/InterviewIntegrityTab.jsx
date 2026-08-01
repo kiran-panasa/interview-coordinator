@@ -55,7 +55,8 @@ export default function InterviewIntegrityTab() {
           A single shared checklist, applied automatically to every interview template — it always renders as
           the first section of the feedback form and isn't stored per-template, so any change here takes effect
           across every template immediately. Each item is a scored dropdown with a relative weight; the
-          candidate's Integrity Rating is the weighted average of all answered items, normalized to a 0–10 score.
+          candidate's Integrity Rating is the weighted average of all answered items, normalized to a 0–5 rating
+          — the same scale as the Final Interview Verdict.
         </p>
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">

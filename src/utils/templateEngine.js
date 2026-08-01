@@ -133,7 +133,8 @@ export const DOMAIN_TYPE_ORDER = ["coding", "theory", "project", "resume", "over
 // page therefore affects every template immediately, with no per-template copy that can
 // drift out of sync or get missed by a migration. Excluded from the Final
 // Interview Verdict (weightInVerdict: 0) and scored separately via
-// computeIntegrityScore, normalized to a 0–10 scale.
+// computeIntegrityScore, normalized to a 0–5 rating (same scale as every
+// other domain rating and the Final Interview Verdict itself).
 
 export const INTEGRITY_DOMAIN_ID = "integrity";
 
@@ -275,7 +276,10 @@ export function computeDomainRating(domain, domainData) {
 }
 
 // Interview Integrity is deliberately excluded from the Final Verdict
-// (weightInVerdict: 0) and reported as its own 0–10 score instead.
+// (weightInVerdict: 0) and reported as its own 0–5 rating instead — same
+// 0–5 range as the Final Interview Verdict and every domain rating
+// elsewhere in the app, so it reads as "a rating," not a different kind
+// of number.
 //
 // Admins can freely edit each checklist item's dropdown options (e.g. a
 // plain 0/1 Yes/No, or the default 1/3/5 compliance scale) — and different
@@ -284,7 +288,7 @@ export function computeDomainRating(domain, domainData) {
 // combined across however many items exist using their configured weights
 // (Σ weight·normalizedScore / Σ weight — a plain weighted average, so it's
 // unaffected by how many items there are or get added/removed later), and
-// only the final combined 0..1 average is scaled onto the fixed 0–10 output.
+// only the final combined 0..1 average is scaled onto the fixed 0–5 output.
 export function computeIntegrityScore(template, feedbackData) {
   const domain = (template?.domains || []).find(d => d.id === INTEGRITY_DOMAIN_ID && d.enabled !== false);
   if (!domain) return null;
@@ -313,8 +317,8 @@ export function computeIntegrityScore(template, feedbackData) {
   }
 
   if (!totalWeight) return null;
-  const score10 = (weightedSum / totalWeight) * 10;
-  return Math.round(Math.max(0, Math.min(10, score10)) * 10) / 10;
+  const score5 = (weightedSum / totalWeight) * 5;
+  return Math.round(Math.max(0, Math.min(5, score5)) * 10) / 10;
 }
 
 export function computeFinalVerdict(template, feedbackData) {

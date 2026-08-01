@@ -400,7 +400,7 @@ function VerdictBanner({ value }) {
 function IntegrityBanner({ value }) {
   return (
     <ScoreBanner
-      icon={ShieldCheck} label="Candidate Integrity Rating" subtitle="Weighted checklist score, out of 10"
+      icon={ShieldCheck} label="Candidate Integrity Rating" subtitle="Weighted checklist rating, out of 5"
       value={value} gradient="from-amber-600 to-orange-600"
     />
   );
