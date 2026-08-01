@@ -12,3 +12,4 @@ export * from "./notifications";
 export * from "./scheduling";
 export * from "./blockedDates";
 export * from "./nudgeSettings";
+export * from "./preInterviewResources";

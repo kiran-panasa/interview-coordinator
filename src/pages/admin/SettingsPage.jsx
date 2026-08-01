@@ -7,6 +7,7 @@ import {
 import UserManagementTab from "../../features/settings/UserManagementTab";
 import GeneralTab from "../../features/settings/GeneralTab";
 import BlockedDatesTab from "../../features/settings/BlockedDatesTab";
+import PreInterviewResourcesTab from "../../features/settings/PreInterviewResourcesTab";
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -44,9 +45,10 @@ const ALL_ROLES = [
 
 
 const SECTIONS = [
-  { value: "User Management", icon: Users },
-  { value: "General",         icon: SlidersHorizontal },
-  { value: "Blocked Dates",   icon: CalendarOff },
+  { value: "User Management",          icon: Users },
+  { value: "General",                  icon: SlidersHorizontal },
+  { value: "Blocked Dates",            icon: CalendarOff },
+  { value: "Pre-Interview Resources",  icon: FileText },
 ];
 
 const BLANK_BLOCK = { startDate: "", endDate: "", reason: "" };
@@ -486,6 +488,8 @@ export default function SettingsPage() {
           onAdd={openNewBlock} onEdit={openEditBlock} onDelete={handleDeleteBlock}
         />
       )}
+
+      {activeSection === "Pre-Interview Resources" && <PreInterviewResourcesTab />}
 
       {/* ── Invite Modal ── */}
       <Modal open={showInviteModal} onClose={() => { setShowInviteModal(false); setSavedInvite(null); }} title="Invite">

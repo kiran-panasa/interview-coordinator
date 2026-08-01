@@ -7,7 +7,7 @@ import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate, createNotification,
-  logInviteHistory,
+  logInviteHistory, getPreInterviewResources,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
@@ -248,6 +248,43 @@ export default function CandidateSchedulingTab({
             (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
             `\nThank you.`,
           recipients: [{ email: ivr.email, name: ivr.displayName || ivr.email }],
+        }).catch(() => {});
+      }
+
+      // Candidate confirmation — separate from the interviewer email above,
+      // and the only place the admin-managed pre-interview resources (video
+      // setup guide + instruction/reference docs) get attached. Interviewers
+      // never see this section.
+      if (APPS_SCRIPT_URL && inv.candidateEmail) {
+        const resources = await getPreInterviewResources().catch(() => null);
+        const instructionLines = [];
+        if (resources?.videoGuideUrl) {
+          instructionLines.push(`${resources.videoGuideLabel || "Video Setup Guide"}: ${resources.videoGuideUrl}`);
+        }
+        (resources?.documents || [])
+          .filter(d => d.type === "instruction" && d.url)
+          .forEach(d => instructionLines.push(`${d.label || "Interview Instructions"}: ${d.url}`));
+        const referenceLines = (resources?.documents || [])
+          .filter(d => d.type === "reference" && d.url)
+          .map(d => `${d.label || "Reference Document"}: ${d.url}`);
+
+        const instructionsBlock = instructionLines.length
+          ? `\nPlease review the following before joining your interview:\n${instructionLines.map(l => `• ${l}`).join("\n")}\n`
+          : "";
+        const referenceBlock = referenceLines.length
+          ? `\nAdditional Reference Documents:\n${referenceLines.map(l => `• ${l}`).join("\n")}\n`
+          : "";
+
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject: `Interview Confirmed — ${roundLabel}`,
+          body:
+            `Hi ${inv.candidateName},\n\nYour interview has been confirmed:\n\n` +
+            `Round: ${roundLabel}\nDate: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\n` +
+            (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
+            instructionsBlock + referenceBlock +
+            `\nNxtWave Interview Team`,
+          recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
         }).catch(() => {});
       }
 

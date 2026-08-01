@@ -81,6 +81,21 @@ export interface InviteHistoryEntry {
   note?: string;
 }
 
+export interface PreInterviewResourceLink {
+  id: string;
+  label: string;
+  url: string;
+  type: "instruction" | "reference";
+}
+
+export interface PreInterviewResourcesSettings {
+  videoGuideLabel?: string;
+  videoGuideUrl?: string;
+  documents: PreInterviewResourceLink[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 // ── Templates ─────────────────────────────────────────────────────────────────
 
 export type FieldType = "text" | "scored_dropdown" | "dropdown" | "number" | "boolean";
