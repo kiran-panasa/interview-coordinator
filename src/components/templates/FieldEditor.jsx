@@ -278,10 +278,13 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight, weight
       )}
 
       {showWeight && scoredFields.length > 1 && !isPercentMode && (
-        <div className="flex items-center px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-xs">
-          <span className="text-gray-500 font-medium">
-            Total weight: {totalWeight} — used to combine item scores into the domain's score, not required to total anything specific.
-          </span>
+        <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-xs text-gray-500 leading-relaxed">
+          <span className="font-semibold text-gray-600">Total weight: {totalWeight}</span> — not required to total
+          anything specific, it's just each item's relative importance. How the final rating (out of 5) is
+          calculated: each answered item's selected option is first normalized to 0–1 using that item's own
+          lowest/highest possible option score, then those are combined using the weights above
+          (higher weight = counts for more), and the combined 0–1 result is scaled to a 0–5 rating —
+          the same scale as every other domain rating in this app.
         </div>
       )}
     </div>
