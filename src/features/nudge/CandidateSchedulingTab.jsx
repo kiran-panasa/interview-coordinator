@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck, Search,
@@ -72,6 +72,15 @@ export default function CandidateSchedulingTab({
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
   const [candSearch,     setCandSearch]     = useState("");
+
+  // Guards handleConfirmBooking against a rapid double-click/double-tap
+  // creating two Meet spaces + Calendar events + Interview docs for the same
+  // booking. confirmingId (React state) isn't enough by itself — it doesn't
+  // update the button's disabled attribute until the next render, and the
+  // Apps Script "schedule" call is slow enough (Meet space + Calendar API
+  // round-trip) for a second click to land well before that. A ref updates
+  // synchronously, so it can't race the same way.
+  const confirmingIdsRef = useRef(new Set());
 
   // Pending Nudge mode: if every candidate waiting for a first nudge belongs
   // to the same program, pre-select that program filter so the Template/Round
@@ -212,6 +221,8 @@ export default function CandidateSchedulingTab({
   };
 
   const handleConfirmBooking = async (inv) => {
+    if (confirmingIdsRef.current.has(inv.id)) return; // already in flight — see confirmingIdsRef comment above
+    confirmingIdsRef.current.add(inv.id);
     setConfirmingId(inv.id);
     try {
       const tmpl = inv.templateId ? await getTemplate(inv.templateId) : null;
@@ -329,6 +340,7 @@ export default function CandidateSchedulingTab({
         setToast({ message: `Booking confirmed for ${inv.candidateName}.` });
       }
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
+    confirmingIdsRef.current.delete(inv.id);
     setConfirmingId(null);
   };
 
