@@ -13,7 +13,7 @@ import {
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
-  createNotification, subscribeToBlockedDates, getInterviewIntegrity,
+  createNotification, subscribeToBlockedDates, getInterviewIntegrity, getPreInterviewResources,
 } from "../../api/firestore";
 import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
@@ -253,6 +253,43 @@ export default function InterviewsPage() {
           recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || iv.interviewerEmail }],
         }).catch(() => {});
       }
+
+      // Candidate confirmation — separate from the interviewer email above,
+      // and (same as the Nudge confirm flow) the only place the admin-managed
+      // pre-interview resources get attached. Interviewers never see this.
+      if (result.meetLink && iv.candidateEmail) {
+        const resources = await getPreInterviewResources().catch(() => null);
+        const instructionLines = [];
+        if (resources?.videoGuideUrl) {
+          instructionLines.push(`${resources.videoGuideLabel || "Video Setup Guide"}: ${resources.videoGuideUrl}`);
+        }
+        (resources?.documents || [])
+          .filter(d => d.type === "instruction" && d.url)
+          .forEach(d => instructionLines.push(`${d.label || "Interview Instructions"}: ${d.url}`));
+        const referenceLines = (resources?.documents || [])
+          .filter(d => d.type === "reference" && d.url)
+          .map(d => `${d.label || "Reference Document"}: ${d.url}`);
+
+        const instructionsBlock = instructionLines.length
+          ? `\nPlease review the following before joining your interview:\n${instructionLines.map(l => `• ${l}`).join("\n")}\n`
+          : "";
+        const referenceBlock = referenceLines.length
+          ? `\nAdditional Reference Documents:\n${referenceLines.map(l => `• ${l}`).join("\n")}\n`
+          : "";
+
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject: `Interview Confirmed — ${iv.round || iv.templateName || "Interview"}`,
+          body:
+            `Hi ${iv.candidateName || "there"},\n\nYour interview has been confirmed:\n\n` +
+            `Round: ${iv.round || iv.templateName || "Interview"}\nDate: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+            `Meeting Link: ${result.meetLink}\n` +
+            instructionsBlock + referenceBlock +
+            `\nNxtWave Interview Team`,
+          recipients: [{ email: iv.candidateEmail, name: iv.candidateName || iv.candidateEmail }],
+        }).catch(() => {});
+      }
+
       if (result.hostManagementWarning) {
         console.error("Host management warning:", result.hostManagementWarning);
         setToast({ message: "Invite sent, but couldn't enable panelist recording access — see browser console for details.", type: "info" });
