@@ -317,6 +317,10 @@ export interface Interview {
   importedFromSheet?: boolean;
   archived?: boolean;
   archivedAt?: string | null;
+  // Admin who created this interview (uid) — used to route admin-facing
+  // email notifications (e.g. "interviewer accepted") to just that admin
+  // instead of every admin. Absent for legacy/imported interviews.
+  createdBy?: string;
   createdAt: string;
   updatedAt?: string;
 }

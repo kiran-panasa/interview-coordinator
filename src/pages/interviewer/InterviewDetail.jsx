@@ -14,7 +14,7 @@ import {
   getAllUsers, getCandidate,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
-import { ROLE } from "../../constants/roles";
+import { resolveActionAdminRecipients } from "../../utils/adminNotify";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -109,7 +109,7 @@ export default function InterviewDetail() {
   const notifyAdminsInterviewAccepted = async (iv) => {
     try {
       const allUsers = await getAllUsers();
-      const admins = allUsers.filter(u => u.role === ROLE.ADMIN && u.status === "active");
+      const admins = resolveActionAdminRecipients(allUsers, iv.createdBy);
       if (!admins.length || !APPS_SCRIPT_URL) return;
       const round = iv.round || iv.templateName || "Interview";
       const subject = `${iv.interviewerName || "Interviewer"} accepted the interview with ${iv.candidateName}`;

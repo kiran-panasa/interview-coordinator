@@ -18,7 +18,7 @@ import StudentLayout from "../../components/StudentLayout";
 import Button from "../../components/Button";
 import { callAppsScript } from "../../lib/appsScript";
 import { maskEmail } from "../../utils/strings";
-import { ROLE } from "../../constants/roles";
+import { resolveActionAdminRecipients } from "../../utils/adminNotify";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -175,7 +175,7 @@ export default function SchedulePage() {
   const notifyAdminsBookingPending = async () => {
     try {
       const allUsers = await getAllUsers();
-      const admins = allUsers.filter(u => u.role === ROLE.ADMIN && u.status === "active");
+      const admins = resolveActionAdminRecipients(allUsers, invite.sentBy);
       if (!admins.length || !APPS_SCRIPT_URL) return;
       const round = invite.round || invite.templateName || "Interview";
       const subject = `Action needed: ${invite.candidateName} selected a slot for ${round}`;
