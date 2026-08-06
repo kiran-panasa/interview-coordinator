@@ -20,6 +20,22 @@ export function subscribeToScheduleInvites(
   );
 }
 
+// Scoped to just the pending-confirmation subset — used for the admin
+// sidebar's "pending bookings" badge, which only ever needs to know about
+// this small, transient slice, not the full (constantly-growing) history
+// that subscribeToScheduleInvites() reads for pages like Nudge Analytics.
+// Keeping this always-on listener narrow is what keeps it cheap to run for
+// the entire admin session.
+export function subscribeToPendingScheduleInvites(
+  callback: (invites: ScheduleInvite[]) => void
+): () => void {
+  return onSnapshot(
+    query(collection(db, "scheduleInvites"), where("status", "==", "pending_confirmation")),
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as ScheduleInvite))),
+    err => reportFirestoreListenerError("scheduleInvites", err)
+  );
+}
+
 export async function createScheduleInvite(
   data: Omit<ScheduleInvite, "id" | "createdAt">
 ): Promise<string> {

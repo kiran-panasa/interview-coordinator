@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useMemo, useEffect, useRef } from "react";
-import { useUserNotifications, useAdhocQuestions, useScheduleInvites, useInboundRequests } from "../hooks/subscriptions";
+import { useUserNotifications, useAdhocQuestions, usePendingScheduleInvites, useInboundRequests } from "../hooks/subscriptions";
 import { useUsers } from "../hooks/queries";
 import { createNotification, markInboundRequestNotified } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
@@ -34,11 +34,11 @@ export default function AdminLayout() {
 
   const notifications     = useUserNotifications(currentUser?.uid);
   const adhocQs           = useAdhocQuestions();
-  const invites           = useScheduleInvites();
+  const pendingInvites    = usePendingScheduleInvites();
   const inboundRequests   = useInboundRequests();
   const { data: usersAll = [] } = useUsers();
   const unreadResponses  = notifications.filter(n => n.type === "response" && n.status === "unread").length;
-  const pendingBookings  = invites.filter(i => i.status === "pending_confirmation").length;
+  const pendingBookings  = pendingInvites.length;
   const pendingAdhoc     = adhocQs.filter(q => q.status === "pending").length;
   const pendingInbound   = inboundRequests.filter(r => r.status === "pending").length;
   const nudgeBadge       = unreadResponses + pendingBookings;

@@ -1,12 +1,10 @@
-import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   BarChart3, TrendingUp, Clock, CheckCircle2,
   ArrowRight, CalendarClock, UserPlus,
 } from "lucide-react";
-import { getAllUsers } from "../../api/firestore";
-import { useInterviews } from "../../hooks/subscriptions";
+import { useAllInterviews, useUsers } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
 import { SkeletonStatCards, SkeletonRows } from "../../components/Skeleton";
@@ -26,16 +24,10 @@ const fadeUp = {
 };
 
 export default function AdminDashboard() {
-  const interviews = useInterviews();
-  const [pendingUsers, setPendingUsers] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    getAllUsers().then(users => {
-      setPendingUsers(users.filter(u => u.status === "pending"));
-      setLoaded(true);
-    });
-  }, []);
+  const { data: interviews = [], isLoading: interviewsLoading } = useAllInterviews();
+  const { data: users      = [], isLoading: usersLoading      } = useUsers();
+  const pendingUsers = users.filter(u => u.status === "pending");
+  const loaded = !interviewsLoading && !usersLoading;
 
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = interviews

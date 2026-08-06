@@ -4,14 +4,13 @@ import {
   Plus, RefreshCw, X, Copy, Upload, Download, CheckCircle2, AlertTriangle,
   Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid,
 } from "lucide-react";
-import { useInterviews } from "../../hooks/subscriptions";
 import { formatDateShort } from "../../utils/dates";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createTemplate, updateTemplate, deleteTemplate,
   getQuestions, updateInterview,
 } from "../../api/firestore";
-import { useSkills, usePrograms, useTemplates, QK } from "../../hooks/queries";
+import { useSkills, usePrograms, useTemplates, useAllInterviews, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
 import { DOMAIN_PRESETS, DOMAIN_TYPE_ORDER, INTEGRITY_DOMAIN_ID, stripIntegrityDomain } from "../../utils/templateEngine";
 import Modal from "../../components/Modal";
@@ -43,7 +42,7 @@ export default function TemplatesPage() {
   const { data: templates = [], isLoading } = useTemplates();
   const { data: programs  = [] } = usePrograms();
   const { data: skills    = [] } = useSkills();
-  const interviews = useInterviews();
+  const { data: interviews = [] } = useAllInterviews();
   const [showNewPicker, setShowNewPicker] = useState(false);
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
@@ -411,6 +410,10 @@ export default function TemplatesPage() {
       for (const iv of stale) {
         await updateInterview(iv.id, { templateName: nameById.get(iv.templateId) });
       }
+      // interviews is a one-time cached fetch here (not a live listener,
+      // see useAllInterviews) — invalidate so the "stale" list reflects the
+      // update instead of showing the pre-backfill snapshot until refresh.
+      queryClient.invalidateQueries({ queryKey: QK.interviews });
       setToast({ message: `${stale.length} interview record(s) updated to the current template name.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
