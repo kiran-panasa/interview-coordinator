@@ -11,7 +11,7 @@ import {
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
-  getAllUsers,
+  getAllUsers, getCandidate,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import { ROLE } from "../../constants/roles";
@@ -52,6 +52,7 @@ export default function InterviewDetail() {
   const { id } = useParams();
   const [interview, setInterview] = useState(null);
   const [template,  setTemplate]  = useState(null);
+  const [candidate, setCandidate] = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [toast,     setToast]     = useState(null);
@@ -71,6 +72,14 @@ export default function InterviewDetail() {
       if (iv?.templateId) {
         const tmpl = await getTemplate(iv.templateId);
         setTemplate(tmpl);
+      }
+      // Live candidate lookup — so a resume link (or any other candidate
+      // detail) added/edited after this interview was scheduled shows up
+      // here immediately, instead of the stale snapshot taken at scheduling
+      // time. Falls back to that snapshot below if there's no resolvable
+      // candidate (legacy/imported interviews).
+      if (iv?.candidateId) {
+        getCandidate(iv.candidateId).then(setCandidate).catch(() => {});
       }
       const legacySource = iv?.feedbackDraft || iv?.feedback;
       if (legacySource) {
@@ -254,6 +263,12 @@ export default function InterviewDetail() {
   const totalQuestions = template?.questionIds?.length || 0;
   const askedCount      = interview.questionsAsked?.length || 0;
 
+  // Live candidate value wins when available — see the candidateId fetch
+  // above. Falls back to the interview's own snapshot for legacy/imported
+  // interviews with no resolvable candidate record.
+  const resumeLink = candidate?.resumeLink || interview.resumeLink || "";
+  const assignmentLinks = interview.assignmentLinks || [];
+
   const inputCls = "w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors bg-white";
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
 
@@ -311,15 +326,24 @@ export default function InterviewDetail() {
               </a>
             </div>
           )}
-          {interview.resumeLink && (
+          {resumeLink && (
             <div className="col-span-2">
               <p className="text-xs text-gray-400 mb-0.5">Resume</p>
-              <a href={interview.resumeLink} target="_blank" rel="noreferrer"
+              <a href={resumeLink} target="_blank" rel="noreferrer"
                 className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline">
                 <FileText className="w-3.5 h-3.5 flex-shrink-0" /> View Resume <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
               </a>
             </div>
           )}
+          {assignmentLinks.map((url, i) => (
+            <div className="col-span-2" key={i}>
+              <p className="text-xs text-gray-400 mb-0.5">Assignment {i + 1}</p>
+              <a href={url} target="_blank" rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline break-all">
+                <FileText className="w-3.5 h-3.5 flex-shrink-0" /> {url} <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
+              </a>
+            </div>
+          ))}
         </div>
       </motion.div>
 

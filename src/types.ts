@@ -300,6 +300,16 @@ export interface Interview {
   meetingRecordingUrl?: string;
   recallBotId?: string;
   aiReport?: AiCandidateReport;
+  // Snapshotted from the candidate at scheduling time — stale once the
+  // candidate record changes. The Interviewer Portal prefers a live lookup
+  // via candidateId instead (see InterviewDetail.jsx); these remain as a
+  // fallback for legacy/imported interviews with no resolvable candidateId.
+  roleAppliedFor?: string;
+  resumeLink?: string;
+  // Admin-managed, editable any time after scheduling — shown to the
+  // interviewer alongside the Meet link and Resume, in order (Assignment 1,
+  // Assignment 2, ...). Plain URLs; display order IS the label.
+  assignmentLinks?: string[];
   reminder24hSentAt?: string;
   reminder1hSentAt?: string;
   nextNudgeAt?: string | null;

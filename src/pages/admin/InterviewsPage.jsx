@@ -29,6 +29,7 @@ import ImportModal from "../../features/interviews/ImportModal";
 import UploadLinksModal from "../../features/interviews/UploadLinksModal";
 import DatePicker from "../../components/DatePicker";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
+import AssignmentLinksModal from "../../features/interviews/AssignmentLinksModal";
 import AiReportModal from "../../features/interviews/AiReportModal";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -84,6 +85,9 @@ export default function InterviewsPage() {
   const [feedbackEditModal, setFeedbackEditModal] = useState(null); // interview
   const [feedbackEditForm,  setFeedbackEditForm]  = useState({ overallRecommendation: "", comments: "", markCompleted: true });
   const [feedbackEditSaving, setFeedbackEditSaving] = useState(false);
+  const [assignmentLinksModal,   setAssignmentLinksModal]   = useState(null); // interview
+  const [assignmentLinksForm,    setAssignmentLinksForm]    = useState([]);
+  const [assignmentLinksSaving,  setAssignmentLinksSaving]  = useState(false);
   const [toast,         setToast]         = useState(null);
   const [showImport,      setShowImport]      = useState(false);
   const [csvText,         setCsvText]         = useState("");
@@ -748,6 +752,25 @@ export default function InterviewsPage() {
     setFeedbackEditSaving(false);
   }
 
+  function openAssignmentLinks(iv) {
+    setAssignmentLinksForm(iv.assignmentLinks?.length ? [...iv.assignmentLinks] : [""]);
+    setAssignmentLinksModal(iv);
+  }
+
+  async function handleSaveAssignmentLinks() {
+    if (!assignmentLinksModal) return;
+    setAssignmentLinksSaving(true);
+    try {
+      const links = assignmentLinksForm.map(l => l.trim()).filter(Boolean);
+      await updateInterview(assignmentLinksModal.id, { assignmentLinks: links });
+      setToast({ message: "Assignment links saved." });
+      setAssignmentLinksModal(null);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setAssignmentLinksSaving(false);
+  }
+
   const handleDownloadFeedback = async () => {
     if (filtered.length === 0) {
       setToast({ message: "No interviews match the current filters.", type: "error" });
@@ -938,6 +961,11 @@ export default function InterviewsPage() {
                       show: iv.status !== "cancelled" && iv.status !== "completed" && iv.status !== "no_show",
                     },
                     {
+                      label: iv.assignmentLinks?.length ? `Assignment Links (${iv.assignmentLinks.length})` : "Assignment Links",
+                      onClick: () => openAssignmentLinks(iv),
+                      show: iv.status !== "cancelled",
+                    },
+                    {
                       label: "Mark No-show",
                       onClick: () => handleMarkNoShow(iv),
                       show: iv.status === "scheduled" || iv.status === "pending_acceptance",
@@ -1039,6 +1067,15 @@ export default function InterviewsPage() {
         setFeedbackEditForm={setFeedbackEditForm}
         handleSaveFeedbackEdit={handleSaveFeedbackEdit}
         feedbackEditSaving={feedbackEditSaving}
+      />
+
+      <AssignmentLinksModal
+        assignmentLinksModal={assignmentLinksModal}
+        onClose={() => setAssignmentLinksModal(null)}
+        assignmentLinksForm={assignmentLinksForm}
+        setAssignmentLinksForm={setAssignmentLinksForm}
+        handleSaveAssignmentLinks={handleSaveAssignmentLinks}
+        assignmentLinksSaving={assignmentLinksSaving}
       />
 
       <AiReportModal
