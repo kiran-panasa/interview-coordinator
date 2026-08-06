@@ -70,9 +70,9 @@ function parseCandidatesCSV(text) {
 
 function downloadSampleCSV() {
   const content = [
-    "name,uid,email,phone,resumeLink,notes,program,templates",
-    "John Doe,STU-2024-001,john.doe@example.com,+91 98765 43210,https://drive.google.com/file/sample,Strong candidate,NIAT,Product Mastery - Novice|Systems Mastery - Novice || V1",
-    "Jane Smith,STU-2024-002,jane.smith@example.com,+91 98765 43211,,,Academy,",
+    "uid,name,phone,email,program,templates,resumeLink,notes",
+    "STU-2024-001,John Doe,+91 98765 43210,john.doe@example.com,NIAT,Product Mastery - Novice|Systems Mastery - Novice || V1,https://drive.google.com/file/sample,Strong candidate",
+    "STU-2024-002,Jane Smith,+91 98765 43211,jane.smith@example.com,Academy,,,",
   ].join("\n");
   const blob = new Blob([content], { type: "text/csv" });
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "candidates_sample.csv" });
@@ -81,12 +81,12 @@ function downloadSampleCSV() {
 
 function downloadSampleExcel() {
   const rows = [
-    { name: "John Doe", uid: "STU-2024-001", email: "john.doe@example.com", phone: "+91 98765 43210", resumeLink: "https://drive.google.com/file/sample", notes: "Strong candidate", program: "NIAT", templates: "Product Mastery - Novice|Systems Mastery - Novice || V1" },
-    { name: "Jane Smith", uid: "STU-2024-002", email: "jane.smith@example.com", phone: "+91 98765 43211", resumeLink: "", notes: "", program: "Academy", templates: "" },
+    { uid: "STU-2024-001", name: "John Doe", phone: "+91 98765 43210", email: "john.doe@example.com", program: "NIAT", templates: "Product Mastery - Novice|Systems Mastery - Novice || V1", resumeLink: "https://drive.google.com/file/sample", notes: "Strong candidate" },
+    { uid: "STU-2024-002", name: "Jane Smith", phone: "+91 98765 43211", email: "jane.smith@example.com", program: "Academy", templates: "", resumeLink: "", notes: "" },
   ];
-  const header = ["name", "uid", "email", "phone", "resumeLink", "notes", "program", "templates"];
+  const header = ["uid", "name", "phone", "email", "program", "templates", "resumeLink", "notes"];
   const ws = XLSX.utils.json_to_sheet(rows, { header });
-  ws["!cols"] = [{ wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 36 }, { wch: 24 }, { wch: 14 }, { wch: 48 }];
+  ws["!cols"] = [{ wch: 16 }, { wch: 20 }, { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 48 }, { wch: 36 }, { wch: 24 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Candidates");
   XLSX.writeFile(wb, "candidates_sample.xlsx");
@@ -580,7 +580,7 @@ export default function CandidatesPage() {
           <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
             <p className="text-sm font-semibold text-gray-700 mb-0.5">Template format</p>
             <p className="text-xs text-gray-400 mb-3">
-              Columns: <span className="font-mono">name, uid, email, phone, resumeLink, notes, program, templates</span>
+              Columns: <span className="font-mono">uid, name, phone, email, program, templates, resumeLink, notes</span>
               <br />Use <span className="font-mono">|</span> to separate multiple templates (e.g. <span className="font-mono">Template A|Template B</span>). Program and template values must match exact names in the system.
             </p>
             <div className="flex gap-2">
