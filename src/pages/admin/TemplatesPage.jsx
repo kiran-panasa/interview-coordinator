@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
-  Plus, RefreshCw, X, Copy, Upload, Download, CheckCircle2, AlertTriangle,
+  Plus, RefreshCw, Copy, Upload, Download, CheckCircle2, AlertTriangle,
   Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid,
 } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  createTemplate, updateTemplate, deleteTemplate,
-  getQuestions, updateInterview,
+  createTemplate, updateTemplate, deleteTemplate, updateInterview,
 } from "../../api/firestore";
 import { useSkills, usePrograms, useTemplates, useAllInterviews, QK } from "../../hooks/queries";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -49,12 +48,11 @@ export default function TemplatesPage() {
   const [previewTarget, setPreviewTarget] = useState(null);
   const [form,          setForm]          = useState(makeEmptyForm);
   const [qbTexts,       setQbTexts]       = useState({ theory: "", coding: "", project: "", resume: "" });
-  const [activeTab,     setActiveTab]     = useState("domains");
-  const [bankQuestions,       setBankQuestions]       = useState([]);
-  const [bankQuestionsLoaded, setBankQuestionsLoaded] = useState(false);
+  // Assigned question-bank questions are still read/saved with the template
+  // (preserves whatever's already assigned), but are no longer editable from
+  // here — that's now done from the Question Bank page instead, which has a
+  // more complete per-question/bulk assignment UI (see QuestionsPage.jsx).
   const [assignedQIds,  setAssignedQIds]  = useState([]);
-  const [qbSearch,      setQbSearch]      = useState("");
-  const [qbDomainFilter,setQbDomainFilter]= useState("");
   const [saving,        setSaving]        = useState(false);
   const [migrating,     setMigrating]     = useState(false);
   const [syncingNames,  setSyncingNames]  = useState(false);
@@ -64,16 +62,6 @@ export default function TemplatesPage() {
 
   const [activeProgram,  setActiveProgram]  = useState("all"); // "all" | programId | "unassigned"
   const [pageView,       setPageView]       = useState("templates"); // "templates" | "integrity"
-
-  // Lazy-load bank questions only when the question bank tab is first opened
-  useEffect(() => {
-    if (activeTab === "questionbank" && !bankQuestionsLoaded) {
-      getQuestions().then(qs => {
-        setBankQuestions(qs.filter(q => q.status !== "archived"));
-        setBankQuestionsLoaded(true);
-      });
-    }
-  }, [activeTab, bankQuestionsLoaded]);
 
   // Interview Integrity is now a single global checklist merged live into
   // every template (see withIntegrityDomain in templateEngine.js) instead of
@@ -141,8 +129,6 @@ export default function TemplatesPage() {
     setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {} });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setAssignedQIds([]);
-    setQbSearch(""); setQbDomainFilter("");
-    setActiveTab("domains");
     setShowNewPicker(false);
     setShowModal(true);
   };
@@ -185,8 +171,6 @@ export default function TemplatesPage() {
     setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: stripIntegrityDomain(resluggedDomains) });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setAssignedQIds(source.questionIds || []);
-    setQbSearch(""); setQbDomainFilter("");
-    setActiveTab("domains");
     setShowNewPicker(false);
     setShowModal(true);
   };
@@ -199,8 +183,6 @@ export default function TemplatesPage() {
     setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: stripIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))) });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setAssignedQIds(t.questionIds || []);
-    setQbSearch(""); setQbDomainFilter("");
-    setActiveTab("domains");
     setShowModal(true);
   };
 
@@ -217,7 +199,6 @@ export default function TemplatesPage() {
       setEditTarget(null);
       setForm({ name: template.name, domains: stripIntegrityDomain(template.domains), questionBank: template.questionBank || {} });
       setQbTexts({ theory: "", coding: "", project: "", resume: "" });
-      setActiveTab("domains");
       setShowNewPicker(false);
       setShowModal(true);
     };
@@ -782,19 +763,8 @@ export default function TemplatesPage() {
             />
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {[["domains", "Domains"], ["questionbank", "Question Banks"]].map(([tab, label]) => (
-              <button key={tab} type="button" onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  activeTab === tab ? "bg-white text-gray-900 shadow-soft" : "text-gray-500 hover:text-gray-700"
-                }`}>{label}</button>
-            ))}
-          </div>
-
-          {/* ── Domains tab ── */}
-          {activeTab === "domains" && (
-            <div className="space-y-2">
+          {/* ── Domains ── */}
+          <div className="space-y-2">
               <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
                 <Info className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
                 <span className="text-xs text-amber-700 font-medium">
@@ -836,109 +806,7 @@ export default function TemplatesPage() {
                   Equalize
                 </button>
               </div>
-            </div>
-          )}
-
-          {/* ── Question Banks tab ── */}
-          {activeTab === "questionbank" && (() => {
-            const enabledTypes = new Set(enabledDomains.filter(d => d.type !== "overall_feedback").map(d => d.type));
-            const assigned   = bankQuestions.filter(q => assignedQIds.includes(q.id));
-            const available  = bankQuestions.filter(q => !assignedQIds.includes(q.id) && (enabledTypes.size === 0 || enabledTypes.has(q.domainType)));
-            const filteredAvail = available.filter(q => {
-              if (qbDomainFilter && q.domainType !== qbDomainFilter) return false;
-              if (qbSearch) {
-                const sq = qbSearch.toLowerCase();
-                return q.text?.toLowerCase().includes(sq) || q.topic?.toLowerCase().includes(sq);
-              }
-              return true;
-            });
-            const availDomainTypes = [...new Set(available.map(q => q.domainType).filter(Boolean))].sort();
-            const DIFF_COLORS = { easy: "text-emerald-600", medium: "text-amber-600", hard: "text-red-600" };
-
-            return (
-              <div className="space-y-4">
-                {/* Assigned questions */}
-                <div>
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                    Assigned to this template ({assigned.length})
-                  </p>
-                  {assigned.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-gray-200 py-6 text-center">
-                      <p className="text-sm text-gray-400">No questions assigned yet. Search below to add from the bank.</p>
-                    </div>
-                  ) : (
-                    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-50 max-h-48 overflow-y-auto">
-                      {assigned.map(q => (
-                        <div key={q.id} className="flex items-start gap-3 px-4 py-2.5 hover:bg-gray-50/70 transition-colors">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] font-mono text-brand-500">{q.domainType}</span>
-                              {q.topic && <span className="text-[10px] text-gray-400">· {q.topic}</span>}
-                              {q.difficulty && <span className={`text-[10px] font-semibold ${DIFF_COLORS[q.difficulty] || ""}`}>· {q.difficulty}</span>}
-                            </div>
-                          </div>
-                          <button type="button"
-                            onClick={() => setAssignedQIds(ids => ids.filter(id => id !== q.id))}
-                            className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors mt-0.5">
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Search from bank */}
-                <div>
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
-                    Add from Question Bank
-                  </p>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      placeholder="Search questions…"
-                      value={qbSearch}
-                      onChange={e => setQbSearch(e.target.value)}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 transition-shadow"
-                    />
-                    <select value={qbDomainFilter} onChange={e => setQbDomainFilter(e.target.value)}
-                      className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 transition-shadow">
-                      <option value="">All Domains</option>
-                      {availDomainTypes.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  {bankQuestions.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-4">
-                      No questions in the bank yet. Go to <span className="font-semibold">Question Bank</span> to add some.
-                    </p>
-                  ) : filteredAvail.length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-4">
-                      {available.length === 0 ? "All matching questions are already assigned." : "No questions match your search."}
-                    </p>
-                  ) : (
-                    <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-50 max-h-56 overflow-y-auto">
-                      {filteredAvail.map(q => (
-                        <button key={q.id} type="button"
-                          onClick={() => setAssignedQIds(ids => [...ids, q.id])}
-                          className="w-full flex items-start gap-3 px-4 py-2.5 hover:bg-brand-50 text-left transition-colors">
-                          <Plus className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] font-mono text-brand-500">{q.domainType}</span>
-                              {q.topic && <span className="text-[10px] text-gray-400">· {q.topic}</span>}
-                              {q.difficulty && <span className={`text-[10px] font-semibold ${DIFF_COLORS[q.difficulty] || ""}`}>· {q.difficulty}</span>}
-                            </div>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })()}
+          </div>
 
           {/* Actions */}
           <div className="flex gap-3 pt-1">
