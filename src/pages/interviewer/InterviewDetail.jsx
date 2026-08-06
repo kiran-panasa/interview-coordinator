@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { formatDate, formatDateShort, toInterviewDateTime } from "../../utils/dates";
+import { formatDate, formatDateShort, parseInterviewStart } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -33,20 +33,6 @@ const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.3, ease: "easeOut" } }),
 };
-
-function isPastInterviewTime(scheduledDate, scheduledTime) {
-  if (!scheduledDate || !scheduledTime) return false;
-  try {
-    const match = scheduledTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-    if (!match) return false;
-    let h = parseInt(match[1]);
-    const m = parseInt(match[2]);
-    const ampm = match[3]?.toUpperCase();
-    if (ampm === "PM" && h < 12) h += 12;
-    if (ampm === "AM" && h === 12) h = 0;
-    return Date.now() >= toInterviewDateTime(scheduledDate, h, m).getTime();
-  } catch { return false; }
-}
 
 export default function InterviewDetail() {
   const { id } = useParams();
@@ -253,7 +239,8 @@ export default function InterviewDetail() {
   const isDynamic    = !!(template?.domains);
   const isStructured = !!template && !isDynamic;
 
-  const pastTime          = isPastInterviewTime(interview.scheduledDate, interview.scheduledTime);
+  const interviewStart    = parseInterviewStart(interview.scheduledDate, interview.scheduledTime);
+  const pastTime          = !!interviewStart && now.getTime() >= interviewStart.getTime();
   const attended          = interview.candidateJoined ?? null; // null | true | false
   const showAttendanceGate = isScheduled && pastTime && attended === null;
   const isNoShow          = attended === false;

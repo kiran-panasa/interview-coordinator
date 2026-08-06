@@ -24,9 +24,15 @@ export function formatDateTime(isoStr: string | null | undefined): string {
   });
 }
 
+// All interview times are scheduled and displayed in IST — parsed with an
+// explicit +05:30 offset so the resulting instant is correct regardless of
+// the viewer's own machine/browser timezone. Without this, a device whose
+// OS timezone isn't IST would compare against the wrong moment (e.g. the
+// "past interview time" gate on the Interviewer Portal's "Mark as Completed"
+// button silently staying wrong for hours).
 export function toInterviewDateTime(scheduledDate: string, hour: number, minute: number): Date {
   return new Date(
-    `${scheduledDate}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00`
+    `${scheduledDate}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+05:30`
   );
 }
 
