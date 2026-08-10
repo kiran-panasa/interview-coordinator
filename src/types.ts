@@ -137,6 +137,7 @@ export interface InterviewHistoryEntry {
   changedByName: string;
   changedAt: string;
   calendarSyncStatus: "synced" | "failed" | "not_applicable";
+  calendarSyncError?: string;
   notificationStatus: "sent" | "failed" | "not_applicable";
 }
 

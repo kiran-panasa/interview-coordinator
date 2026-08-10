@@ -236,6 +236,7 @@ export default function InterviewsPage() {
         await updateInterview(editTarget.id, data);
 
         let calendarSyncStatus = "not_applicable";
+        let calendarSyncError  = "";
         let notificationStatus = "not_applicable";
 
         // Reschedule the EXISTING Calendar event/Meet space in place — never
@@ -260,6 +261,7 @@ export default function InterviewsPage() {
             calendarSyncStatus = "synced";
           } catch (e) {
             calendarSyncStatus = "failed";
+            calendarSyncError  = e.message || String(e);
             console.error("Calendar reschedule failed:", e);
           }
         }
@@ -345,11 +347,12 @@ export default function InterviewsPage() {
           changedBy:          currentUser.uid,
           changedByName:      userProfile?.displayName || userProfile?.email || currentUser.email || "Admin",
           calendarSyncStatus,
+          calendarSyncError,
           notificationStatus,
         }).catch(() => {});
 
         if (calendarSyncStatus === "failed") {
-          setToast({ message: "Interview updated, but the calendar event couldn't be synced — see browser console for details.", type: "info" });
+          setToast({ message: `Interview updated, but the calendar event couldn't be synced: ${calendarSyncError}`, type: "info" });
         } else {
           setToast({ message: "Interview updated." });
         }

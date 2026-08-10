@@ -66,6 +66,11 @@ export default function InterviewHistoryModal({ historyModal, onClose, entries, 
                         </p>
                       ))}
                     </div>
+                    {entry.calendarSyncError && (
+                      <p className="text-xs text-red-600 mt-2 bg-red-50 border border-red-100 rounded-lg px-2.5 py-1.5">
+                        {entry.calendarSyncError}
+                      </p>
+                    )}
                   </div>
                 );
               })}
