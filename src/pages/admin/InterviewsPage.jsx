@@ -33,6 +33,7 @@ import DatePicker from "../../components/DatePicker";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
 import AssignmentLinksModal from "../../features/interviews/AssignmentLinksModal";
 import InterviewHistoryModal from "../../features/interviews/InterviewHistoryModal";
+import CopyButton from "../../components/CopyButton";
 import AiReportModal from "../../features/interviews/AiReportModal";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -1117,11 +1118,14 @@ export default function InterviewsPage() {
                 </td>
                 <td className="px-4 py-3">
                   {iv.meetLink ? (
-                    <a href={iv.meetLink} target="_blank" rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100 transition-colors">
-                      <Video className="w-3 h-3" />
-                      Join Meet
-                    </a>
+                    <div className="inline-flex items-center gap-1">
+                      <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full hover:bg-emerald-100 transition-colors">
+                        <Video className="w-3 h-3" />
+                        Join Meet
+                      </a>
+                      <CopyButton value={iv.meetLink} />
+                    </div>
                   ) : (
                     <span className="text-xs text-gray-300">—</span>
                   )}
@@ -1172,11 +1176,13 @@ export default function InterviewsPage() {
                       label: recordingLoading[iv.id] ? "Opening Recording…" : "Meet Recording",
                       onClick: () => { if (!recordingLoading[iv.id]) handleViewRecording(iv); },
                       show: iv.status === "completed",
+                      copyValue: iv.meetingRecordingUrl || undefined,
                     },
                     {
                       label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",
                       onClick: () => { if (!transcriptLoading[iv.id]) handleViewTranscript(iv); },
                       show: iv.status === "completed",
+                      copyValue: iv.transcriptUrl || undefined,
                     },
                     {
                       label: "AI Report",

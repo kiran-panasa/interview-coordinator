@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { MoreVertical } from "lucide-react";
+import CopyButton from "./CopyButton";
 
 function KebabMenu({ actions }) {
   const [open, setOpen] = useState(false);
@@ -68,20 +69,22 @@ function KebabMenu({ actions }) {
               className="bg-white border border-gray-100 rounded-xl shadow-popover py-1.5 min-w-[170px]"
             >
               {visible.map((a, i) => (
-                <button
-                  key={i}
-                  disabled={a.disabled}
-                  onClick={() => { if (!a.disabled) { setOpen(false); a.onClick(); } }}
-                  className={`w-full text-left px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                    a.danger
-                      ? "text-red-500 hover:bg-red-50 disabled:hover:bg-transparent"
-                      : a.highlight
-                        ? "text-emerald-700 hover:bg-emerald-50 disabled:hover:bg-transparent"
-                        : "text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
-                  }`}
-                >
-                  {a.label}
-                </button>
+                <div key={i} className="flex items-center w-full">
+                  <button
+                    disabled={a.disabled}
+                    onClick={() => { if (!a.disabled) { setOpen(false); a.onClick(); } }}
+                    className={`flex-1 min-w-0 text-left px-4 py-2 text-sm font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                      a.danger
+                        ? "text-red-500 hover:bg-red-50 disabled:hover:bg-transparent"
+                        : a.highlight
+                          ? "text-emerald-700 hover:bg-emerald-50 disabled:hover:bg-transparent"
+                          : "text-gray-700 hover:bg-gray-50 disabled:hover:bg-transparent"
+                    }`}
+                  >
+                    {a.label}
+                  </button>
+                  {a.copyValue && <CopyButton value={a.copyValue} className="mr-2" />}
+                </div>
               ))}
             </motion.div>
           )}

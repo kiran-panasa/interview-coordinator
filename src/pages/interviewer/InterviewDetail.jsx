@@ -19,6 +19,7 @@ import { resolveActionAdminRecipients } from "../../utils/adminNotify";
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 import Badge from "../../components/Badge";
+import CopyButton from "../../components/CopyButton";
 import Toast from "../../components/Toast";
 import AutosaveIndicator from "../../components/AutosaveIndicator";
 import { Skeleton } from "../../components/Skeleton";
@@ -317,10 +318,13 @@ export default function InterviewDetail() {
           {interview.meetLink && (
             <div className="col-span-2">
               <p className="text-xs text-gray-400 mb-0.5">Meet Link</p>
-              <a href={interview.meetLink} target="_blank" rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline break-all">
-                <Video className="w-3.5 h-3.5 flex-shrink-0" /> {interview.meetLink} <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
-              </a>
+              <div className="inline-flex items-center gap-1">
+                <a href={interview.meetLink} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline break-all">
+                  <Video className="w-3.5 h-3.5 flex-shrink-0" /> {interview.meetLink} <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
+                </a>
+                <CopyButton value={interview.meetLink} />
+              </div>
             </div>
           )}
           {resumeLink && (
