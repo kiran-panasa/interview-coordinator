@@ -66,6 +66,17 @@ export async function getScheduleInviteByToken(token: string): Promise<ScheduleI
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as ScheduleInvite;
 }
 
+// Reverse lookup — used when an admin edits an already-scheduled interview,
+// so the linked invite's bookedDate/bookedTime/bookedIntervierId can be kept
+// in sync (that invite is what the Candidate Portal actually reads).
+export async function getScheduleInviteByInterviewId(interviewId: string): Promise<ScheduleInvite | null> {
+  const snap = await getDocs(query(
+    collection(db, "scheduleInvites"),
+    where("interviewId", "==", interviewId)
+  ));
+  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as ScheduleInvite;
+}
+
 export async function getScheduleInvitesByEmail(email: string): Promise<ScheduleInvite[]> {
   const snap = await getDocs(query(
     collection(db, "scheduleInvites"),

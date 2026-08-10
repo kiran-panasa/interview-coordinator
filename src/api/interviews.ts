@@ -6,7 +6,7 @@ import {
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
-import type { Interview, InterviewStatus } from "../types";
+import type { Interview, InterviewStatus, InterviewHistoryEntry } from "../types";
 
 export const DEFAULT_ROUNDS = [
   "HR Round", "Technical Round 1", "Technical Round 2", "Final Round",
@@ -80,6 +80,15 @@ export async function updateInterview(
   id: string,
   data: Partial<Omit<Interview, "id">>
 ): Promise<void> {
+  // Mirrors createInterview's blocked-date guard — previously only enforced
+  // when scheduling a brand-new interview, so an edit could freely move an
+  // existing interview onto an admin-blocked date.
+  if (data.scheduledDate) {
+    const blocked = await findBlockedDateFor(data.scheduledDate);
+    if (blocked) {
+      throw new Error(`This date is blocked${blocked.reason ? `: ${blocked.reason}` : ""}. Please choose another date.`);
+    }
+  }
   await updateDoc(doc(db, "interviews", id), {
     ...data, updatedAt: new Date().toISOString(),
   });
@@ -176,6 +185,17 @@ export function subscribeToInterviews(callback: (interviews: Interview[]) => voi
   );
 }
 
+// Live single-interview subscription — used by the Interviewer Portal's
+// interview-detail page so an admin's edit (reschedule, panelist swap, etc.)
+// shows up immediately instead of only on the next page load.
+export function subscribeToInterview(id: string, callback: (interview: Interview | null) => void): () => void {
+  return onSnapshot(
+    doc(db, "interviews", id),
+    snap => callback(snap.exists() ? { id: snap.id, ...snap.data() } as Interview : null),
+    err => reportFirestoreListenerError("interview", err)
+  );
+}
+
 export function subscribeToInterviewerInterviews(
   interviewerEmail: string,
   callback: (interviews: Interview[]) => void
@@ -209,6 +229,25 @@ export async function unarchiveInterview(id: string): Promise<void> {
     archivedAt: null,
     updatedAt: new Date().toISOString(),
   });
+}
+
+export async function logInterviewHistory(
+  interviewId: string,
+  entry: Omit<InterviewHistoryEntry, "id" | "changedAt">
+): Promise<void> {
+  if (!entry.changes.length) return; // nothing actually changed — don't log a no-op entry
+  await addDoc(collection(db, "interviews", interviewId, "history"), {
+    ...entry,
+    changedAt: new Date().toISOString(),
+  });
+}
+
+export async function getInterviewHistory(interviewId: string): Promise<InterviewHistoryEntry[]> {
+  const snap = await getDocs(query(
+    collection(db, "interviews", interviewId, "history"),
+    orderBy("changedAt", "desc")
+  ));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as InterviewHistoryEntry));
 }
 
 export async function getCandidateAskedQuestions(

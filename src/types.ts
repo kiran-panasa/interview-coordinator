@@ -119,6 +119,27 @@ export interface InviteHistoryEntry {
   note?: string;
 }
 
+// One entry per admin edit to an already-scheduled Interview — logged to
+// interviews/{id}/history. `changes` covers every field touched by that
+// single save action (a reschedule that also swaps the panelist is one
+// entry with two changes, not two entries).
+export interface InterviewFieldChange {
+  field: string;
+  label: string;
+  from: unknown;
+  to: unknown;
+}
+
+export interface InterviewHistoryEntry {
+  id: string;
+  changes: InterviewFieldChange[];
+  changedBy: string;
+  changedByName: string;
+  changedAt: string;
+  calendarSyncStatus: "synced" | "failed" | "not_applicable";
+  notificationStatus: "sent" | "failed" | "not_applicable";
+}
+
 export interface PreInterviewResourceLink {
   id: string;
   label: string;

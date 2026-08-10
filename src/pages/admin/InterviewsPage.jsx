@@ -14,6 +14,8 @@ import {
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
   createNotification, subscribeToBlockedDates, getInterviewIntegrity, getPreInterviewResources,
+  logInterviewHistory, getInterviewHistory,
+  getScheduleInviteByInterviewId, updateScheduleInvite,
 } from "../../api/firestore";
 import { useInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
@@ -30,6 +32,7 @@ import UploadLinksModal from "../../features/interviews/UploadLinksModal";
 import DatePicker from "../../components/DatePicker";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
 import AssignmentLinksModal from "../../features/interviews/AssignmentLinksModal";
+import InterviewHistoryModal from "../../features/interviews/InterviewHistoryModal";
 import AiReportModal from "../../features/interviews/AiReportModal";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -50,6 +53,25 @@ const EMPTY_FORM = {
 };
 
 const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
+
+// Builds the field-level diff logged to interviews/{id}/history on every
+// edit — human-readable labels/values, not raw ids, since this is what an
+// admin reviewing the change log actually wants to read.
+function buildInterviewChanges(before, after) {
+  const changes = [];
+  const push = (field, label, from, to) => {
+    if ((from ?? "") !== (to ?? "")) changes.push({ field, label, from: from ?? null, to: to ?? null });
+  };
+  push("candidateId",   "Candidate",           before.candidateName,   after.candidateName);
+  push("interviewerId", "Interviewer",         before.interviewerName, after.interviewerName);
+  push("scheduledDate", "Date",                before.scheduledDate,   after.scheduledDate);
+  push("scheduledTime", "Time",                before.scheduledTime,   after.scheduledTime);
+  push("duration",      "Duration (minutes)",  before.duration,        after.duration);
+  push("round",         "Round",               before.round,          after.round);
+  push("templateId",    "Evaluation Template", before.templateName,   after.templateName);
+  push("notes",         "Notes",               before.notes,          after.notes);
+  return changes;
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -104,6 +126,9 @@ export default function InterviewsPage() {
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
+  const [historyModal,      setHistoryModal]      = useState(null); // interview
+  const [historyEntries,    setHistoryEntries]    = useState([]);
+  const [historyLoading,    setHistoryLoading]    = useState(false);
 
   useEffect(() => {
     if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }
@@ -173,16 +198,160 @@ export default function InterviewsPage() {
       };
 
       if (editTarget) {
-        if (editTarget.scheduledDate !== form.scheduledDate ||
-            editTarget.scheduledTime !== form.scheduledTime ||
-            editTarget.interviewerId !== form.interviewerId) {
+        const candidateChanged   = editTarget.candidateId   !== form.candidateId;
+        const interviewerChanged = editTarget.interviewerId !== form.interviewerId;
+        const dateChanged        = editTarget.scheduledDate !== form.scheduledDate;
+        const timeChanged        = editTarget.scheduledTime !== form.scheduledTime;
+        const durationChanged    = (editTarget.duration || 60)   !== (form.duration || 60);
+        const roundChanged       = (editTarget.round || "")      !== (form.round || "");
+        const templateChanged    = (editTarget.templateId || "") !== (form.templateId || "");
+        const notesChanged       = (editTarget.notes || "")      !== (form.notes || "");
+        const anyChanged = candidateChanged || interviewerChanged || dateChanged || timeChanged ||
+          durationChanged || roundChanged || templateChanged || notesChanged;
+        const calendarRelevantChange = candidateChanged || interviewerChanged || dateChanged || timeChanged || durationChanged;
+
+        if (!anyChanged) {
+          setToast({ message: "No changes to save." });
+          setShowModal(false);
+          setSaving(false);
+          return;
+        }
+
+        if (dateChanged || timeChanged || interviewerChanged) {
           const oldSlotId = `${editTarget.scheduledDate}_${editTarget.scheduledTime.replace(/[: ]/g, "")}`;
           await markSlotFree(editTarget.interviewerId, oldSlotId).catch(() => {});
           const newSlotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
           await markSlotBooked(form.interviewerId, newSlotId, editTarget.id).catch(() => {});
         }
+
+        // Reassigning the panelist restarts their Accept/Decline — they
+        // shouldn't inherit the previous panelist's acceptance of a slot
+        // they never agreed to. Only for interviews still in flight; never
+        // touch the status of a completed/cancelled/no-show/declined record.
+        if (interviewerChanged && ["scheduled", "pending_acceptance"].includes(editTarget.status)) {
+          data.status = "pending_acceptance";
+        }
+
         await updateInterview(editTarget.id, data);
-        setToast({ message: "Interview updated." });
+
+        let calendarSyncStatus = "not_applicable";
+        let notificationStatus = "not_applicable";
+
+        // Reschedule the EXISTING Calendar event/Meet space in place — never
+        // delete+recreate, so the same Meet link stays associated with this
+        // interview (single source of truth, no duplicate calendar events).
+        if (calendarRelevantChange && editTarget.eventId && APPS_SCRIPT_URL) {
+          try {
+            await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+              action:              "reschedule",
+              eventId:             editTarget.eventId,
+              date:                form.scheduledDate,
+              startTime:           form.scheduledTime,
+              durationMinutes:     form.duration || 60,
+              candidateEmail:      data.candidateEmail,
+              candidateName:       data.candidateName,
+              interviewerEmail:    data.interviewerEmail,
+              interviewerName:     data.interviewerName,
+              round:               form.round,
+              prevCandidateEmail:  candidateChanged   ? editTarget.candidateEmail   : "",
+              prevInterviewerEmail: interviewerChanged ? editTarget.interviewerEmail : "",
+            });
+            calendarSyncStatus = "synced";
+          } catch (e) {
+            calendarSyncStatus = "failed";
+            console.error("Calendar reschedule failed:", e);
+          }
+        }
+
+        // Notify whoever's affected: current candidate/interviewer of the
+        // update, plus anyone who was just removed from the interview.
+        try {
+          const recipients = [];
+          if ((dateChanged || timeChanged || interviewerChanged) && data.candidateEmail) {
+            recipients.push({ email: data.candidateEmail, name: data.candidateName || "Candidate", kind: "updated" });
+          }
+          if ((dateChanged || timeChanged || candidateChanged) && !interviewerChanged && data.interviewerEmail) {
+            recipients.push({ email: data.interviewerEmail, name: data.interviewerName || "Panelist", kind: "updated" });
+          }
+          if (interviewerChanged && data.interviewerEmail) {
+            recipients.push({ email: data.interviewerEmail, name: data.interviewerName || "Panelist", kind: "assigned" });
+          }
+          if (interviewerChanged && editTarget.interviewerEmail) {
+            recipients.push({ email: editTarget.interviewerEmail, name: editTarget.interviewerName || "Panelist", kind: "removed" });
+          }
+          if (candidateChanged && editTarget.candidateEmail) {
+            recipients.push({ email: editTarget.candidateEmail, name: editTarget.candidateName || "Candidate", kind: "removed" });
+          }
+
+          if (APPS_SCRIPT_URL && recipients.length) {
+            await Promise.all(recipients.map(r => callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+              action: "sendEmail",
+              subject: r.kind === "removed"
+                ? `Interview Update: ${form.round || "Interview"}`
+                : r.kind === "assigned"
+                  ? "Action Required: Interview Assigned"
+                  : `Interview Updated: ${form.round || "Interview"}`,
+              body: r.kind === "removed"
+                ? `Hi ${r.name},\n\nYou are no longer on this interview — it has been reassigned.\n\n` +
+                  `If this is unexpected, please reach out to the interview coordination team.\n\n— NxtWave Team`
+                : `Hi ${r.name},\n\nThis interview has been updated:\n\n` +
+                  `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
+                  `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n` +
+                  (data.meetLink ? `Meeting Link: ${data.meetLink}\n` : "") +
+                  (r.kind === "assigned" ? `\nPlease log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${editTarget.id}\n` : "") +
+                  `\n— NxtWave Team`,
+              recipients: [{ email: r.email, name: r.name }],
+            })));
+            notificationStatus = "sent";
+          }
+        } catch (e) {
+          notificationStatus = "failed";
+          console.error("Interview update notification failed:", e);
+        }
+
+        if (interviewerChanged && form.interviewerId) {
+          createNotification({
+            type:           "interview_approval",
+            recipientId:    form.interviewerId,
+            recipientEmail: data.interviewerEmail,
+            interviewId:    editTarget.id,
+            candidateName:  data.candidateName,
+            message:        `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`,
+            status:         "unread",
+          }).catch(() => {});
+        }
+
+        // Keep the linked Nudge invite (if any) pointing at the same
+        // booking — the Candidate Portal reads scheduleInvites, not
+        // interviews directly, so this is what keeps it accurate.
+        if (dateChanged || timeChanged || interviewerChanged) {
+          try {
+            const linkedInvite = await getScheduleInviteByInterviewId(editTarget.id);
+            if (linkedInvite) {
+              await updateScheduleInvite(linkedInvite.id, {
+                bookedDate:          form.scheduledDate,
+                bookedTime:          form.scheduledTime,
+                bookedInterviewerId: form.interviewerId,
+              });
+            }
+          } catch (e) {
+            console.error("Failed to sync linked invite after interview edit:", e);
+          }
+        }
+
+        await logInterviewHistory(editTarget.id, {
+          changes:            buildInterviewChanges(editTarget, data),
+          changedBy:          currentUser.uid,
+          changedByName:      userProfile?.displayName || userProfile?.email || currentUser.email || "Admin",
+          calendarSyncStatus,
+          notificationStatus,
+        }).catch(() => {});
+
+        if (calendarSyncStatus === "failed") {
+          setToast({ message: "Interview updated, but the calendar event couldn't be synced — see browser console for details.", type: "info" });
+        } else {
+          setToast({ message: "Interview updated." });
+        }
       } else {
         const id = await createInterview({ ...data, createdBy: currentUser.uid });
         const slotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
@@ -771,6 +940,18 @@ export default function InterviewsPage() {
     setAssignmentLinksSaving(false);
   }
 
+  async function openHistory(iv) {
+    setHistoryModal(iv);
+    setHistoryLoading(true);
+    try {
+      const entries = await getInterviewHistory(iv.id);
+      setHistoryEntries(entries);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setHistoryLoading(false);
+  }
+
   const handleDownloadFeedback = async () => {
     if (filtered.length === 0) {
       setToast({ message: "No interviews match the current filters.", type: "error" });
@@ -965,6 +1146,7 @@ export default function InterviewsPage() {
                       onClick: () => openAssignmentLinks(iv),
                       show: iv.status !== "cancelled",
                     },
+                    { label: "View History", onClick: () => openHistory(iv) },
                     {
                       label: "Mark No-show",
                       onClick: () => handleMarkNoShow(iv),
@@ -1076,6 +1258,13 @@ export default function InterviewsPage() {
         setAssignmentLinksForm={setAssignmentLinksForm}
         handleSaveAssignmentLinks={handleSaveAssignmentLinks}
         assignmentLinksSaving={assignmentLinksSaving}
+      />
+
+      <InterviewHistoryModal
+        historyModal={historyModal}
+        onClose={() => setHistoryModal(null)}
+        entries={historyEntries}
+        loading={historyLoading}
       />
 
       <AiReportModal

@@ -7,7 +7,7 @@ import {
   AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2,
 } from "lucide-react";
 import {
-  getInterview, updateInterview, saveFeedbackDraft,
+  subscribeToInterview, updateInterview, saveFeedbackDraft,
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
@@ -52,42 +52,52 @@ export default function InterviewDetail() {
     return () => clearInterval(t);
   }, []);
 
+  // Live subscription — so an admin edit (reschedule, panelist swap, new
+  // Meet/assignment links, etc.) shows up here immediately instead of only
+  // on the next page load. Also supersedes the old window-focus refresh
+  // that only kept questionsAsked in sync; the live snapshot covers that
+  // and everything else in one place now.
   useEffect(() => {
-    getInterview(id).then(async iv => {
+    let cancelled = false;
+    let seeded = false;
+    let loadedTemplateId = null;
+    let loadedCandidateId = null;
+
+    const unsubscribe = subscribeToInterview(id, iv => {
+      if (cancelled) return;
       setInterview(iv);
-      if (iv?.templateId) {
-        const tmpl = await getTemplate(iv.templateId);
-        setTemplate(tmpl);
+
+      if (iv?.templateId && iv.templateId !== loadedTemplateId) {
+        loadedTemplateId = iv.templateId;
+        getTemplate(iv.templateId).then(tmpl => { if (!cancelled) setTemplate(tmpl); });
       }
       // Live candidate lookup — so a resume link (or any other candidate
       // detail) added/edited after this interview was scheduled shows up
       // here immediately, instead of the stale snapshot taken at scheduling
       // time. Falls back to that snapshot below if there's no resolvable
       // candidate (legacy/imported interviews).
-      if (iv?.candidateId) {
-        getCandidate(iv.candidateId).then(setCandidate).catch(() => {});
+      if (iv?.candidateId && iv.candidateId !== loadedCandidateId) {
+        loadedCandidateId = iv.candidateId;
+        getCandidate(iv.candidateId).then(c => { if (!cancelled) setCandidate(c); }).catch(() => {});
       }
-      const legacySource = iv?.feedbackDraft || iv?.feedback;
-      if (legacySource) {
-        setAnswers(legacySource.answers || {});
-        setComments(legacySource.comments || "");
+
+      // Seed the evaluation form from the last-saved draft/feedback once, on
+      // first load only — later snapshots (e.g. an admin reschedule while
+      // this page is open) must never clobber what the panelist is actively
+      // typing.
+      if (!seeded) {
+        seeded = true;
+        const legacySource = iv?.feedbackDraft || iv?.feedback;
+        if (legacySource) {
+          setAnswers(legacySource.answers || {});
+          setComments(legacySource.comments || "");
+        }
       }
+
       setLoading(false);
     });
-  }, [id]);
 
-  // Refresh just the questions-asked count when the tab regains focus (e.g. after
-  // the panelist selects questions in the separate Questions tab) — without
-  // touching in-progress evaluation form state.
-  useEffect(() => {
-    const onFocus = () => {
-      getInterview(id).then(iv => {
-        if (!iv) return;
-        setInterview(prev => prev ? { ...prev, questionsAsked: iv.questionsAsked, questionRemarks: iv.questionRemarks } : prev);
-      });
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
+    return () => { cancelled = true; unsubscribe(); };
   }, [id]);
 
   const setAnswer = (qid, val) => setAnswers(a => ({ ...a, [qid]: val }));
