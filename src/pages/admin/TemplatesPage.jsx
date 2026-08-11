@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, RefreshCw, Copy, Upload, Download, CheckCircle2, AlertTriangle,
-  Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid,
+  Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid, ExternalLink,
 } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
 import { useQueryClient } from "@tanstack/react-query";
@@ -126,7 +126,7 @@ export default function TemplatesPage() {
   const openBlank = () => {
     setEditTarget(null);
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
-    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {} });
+    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {}, guidelinesDocUrl: "", guidelinesDocLabel: "" });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setAssignedQIds([]);
     setShowNewPicker(false);
@@ -168,7 +168,11 @@ export default function TemplatesPage() {
       const slug = slugify(d.label) || d.id;
       return { ...d, id: slug, type: slug };
     });
-    setForm({ name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [], domains: stripIntegrityDomain(resluggedDomains) });
+    setForm({
+      name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [],
+      domains: stripIntegrityDomain(resluggedDomains),
+      guidelinesDocUrl: source.guidelinesDocUrl || "", guidelinesDocLabel: source.guidelinesDocLabel || "",
+    });
     setQbTexts(toTexts(source.questionBank || source.questions));
     setAssignedQIds(source.questionIds || []);
     setShowNewPicker(false);
@@ -180,7 +184,11 @@ export default function TemplatesPage() {
     const rawDomains = (t.domains || []).length > 0
       ? t.domains
       : DOMAIN_TYPE_ORDER.map((type, i) => ({ ...deepClone(DOMAIN_PRESETS[type]), order: i }));
-    setForm({ name: t.name, program: t.program || "", skills: t.skills || [], domains: stripIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))) });
+    setForm({
+      name: t.name, program: t.program || "", skills: t.skills || [],
+      domains: stripIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))),
+      guidelinesDocUrl: t.guidelinesDocUrl || "", guidelinesDocLabel: t.guidelinesDocLabel || "",
+    });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setAssignedQIds(t.questionIds || []);
     setShowModal(true);
@@ -297,6 +305,8 @@ export default function TemplatesPage() {
         domains: stripIntegrityDomain([...form.domains]).sort((a, b) => a.order - b.order),
         questionBank: toArrays(qbTexts),
         questionIds: assignedQIds,
+        guidelinesDocUrl: (form.guidelinesDocUrl || "").trim(),
+        guidelinesDocLabel: (form.guidelinesDocLabel || "").trim(),
         schemaVersion: 2,
       };
       if (editTarget) {
@@ -761,6 +771,44 @@ export default function TemplatesPage() {
               onChange={v => setForm(f => ({ ...f, skills: v }))}
               placeholder="Tag required skills for this template…"
             />
+          </div>
+
+          {/* Interview Guidelines / Format document */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+              Interview Guidelines / Format Document
+            </label>
+            <p className="text-xs text-gray-400 mb-2">
+              Shown to the interviewer above Questions Asked for every interview scheduled on this template.
+            </p>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={form.guidelinesDocLabel || ""}
+                onChange={e => setForm(f => ({ ...f, guidelinesDocLabel: e.target.value }))}
+                placeholder="Label (optional, e.g. Academy Bucket C Guidelines)"
+                className="w-2/5 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white transition-shadow"
+              />
+              <input
+                type="url"
+                value={form.guidelinesDocUrl || ""}
+                onChange={e => setForm(f => ({ ...f, guidelinesDocUrl: e.target.value }))}
+                placeholder="https://drive.google.com/…"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white transition-shadow"
+              />
+            </div>
+            {form.guidelinesDocUrl && (
+              <div className="flex items-center gap-3">
+                <a href={form.guidelinesDocUrl} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:underline">
+                  <ExternalLink className="w-3 h-3" /> View current document
+                </a>
+                <button type="button" onClick={() => setForm(f => ({ ...f, guidelinesDocUrl: "", guidelinesDocLabel: "" }))}
+                  className="text-xs text-red-500 hover:text-red-700 font-medium">
+                  Remove
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ── Domains ── */}

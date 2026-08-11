@@ -402,6 +402,30 @@ export default function InterviewDetail() {
         </motion.div>
       )}
 
+      {/* ── Interview Guidelines / Format — template-specific, always live (never
+          snapshotted onto the interview), so editing/removing it on the
+          template applies immediately here too. ── */}
+      {template?.guidelinesDocUrl && (
+        <motion.div initial="hidden" animate="visible" custom={2.5} variants={fadeUp}
+          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-gray-400" /> Interview Guidelines / Format
+            </h2>
+            <p className="text-xs text-gray-400 mt-1">{template.guidelinesDocLabel || template.name}</p>
+          </div>
+          <a
+            href={template.guidelinesDocUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
+          >
+            View Document
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </a>
+        </motion.div>
+      )}
+
       {/* ── Questions Asked — opens in a separate tab so the evaluation form isn't lost ── */}
       {showEvaluation && totalQuestions > 0 && (
         <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}

@@ -204,6 +204,13 @@ export interface Template {
   skills?: string[];
   questionBank?: QuestionBank;
   questionIds?: string[];
+  // Link to this template's Interview Guidelines / Format doc (e.g. a Google
+  // Drive link) — shown to the interviewer above Questions Asked on the
+  // interview they're running. Always read live from the template at render
+  // time (never snapshotted onto the interview), so editing/removing it here
+  // applies immediately to every interview already scheduled on this template.
+  guidelinesDocUrl?: string;
+  guidelinesDocLabel?: string;
   createdAt: string;
   updatedAt?: string;
 }
