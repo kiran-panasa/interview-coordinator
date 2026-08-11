@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -97,12 +98,33 @@ export default function LoginPage() {
   const [maskedEmail,   setMaskedEmail]   = useState(""); // e.g. m***@nxtwave.co.in
   const [otpCode,       setOtpCode]       = useState("");
   const [confirmResult, setConfirmResult] = useState(null);
+  // Bumped to force React to unmount and remount a genuinely fresh DOM node
+  // for the reCAPTCHA widget — reusing the same container across a retry
+  // (even after calling .clear()) is what throws "reCAPTCHA has already
+  // been rendered in this element".
+  const [captchaKey, setCaptchaKey] = useState(0);
   const recaptchaRef = useRef(null);
   const verifierRef  = useRef(null);
+  // Synchronous re-entrancy guard — `disabled={loading}` on the button lags
+  // one render behind a tap, which is enough for a fast double-tap (common
+  // on mobile) to fire this handler twice before the button visually
+  // disables, each call trying to render its own reCAPTCHA into the same
+  // container.
+  const findAccountInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => { verifierRef.current?.clear?.(); };
   }, []);
+
+  // Clears the current verifier and forces a brand-new reCAPTCHA container
+  // before the caller creates a new RecaptchaVerifier — flushSync makes the
+  // remount happen synchronously so recaptchaRef.current already points at
+  // the fresh node by the time this returns.
+  const resetRecaptchaContainer = () => {
+    try { verifierRef.current?.clear?.(); } catch { /* already gone */ }
+    verifierRef.current = null;
+    flushSync(() => setCaptchaKey(k => k + 1));
+  };
 
   // ── Login / signup ────────────────────────────────────────────────────────────
 
@@ -139,21 +161,18 @@ export default function LoginPage() {
 
   const handleFindAccount = async (e) => {
     e.preventDefault();
+    if (findAccountInFlightRef.current) return; // synchronous guard — see ref comment above
     if (!otpPhone.trim()) { setError("Enter your phone number."); return; }
+    findAccountInFlightRef.current = true;
     setError(""); setLoading(true);
     try {
       const e164 = toE164(otpPhone.trim());
-      if (!e164) { setError("Enter a valid phone number (e.g. +91 98765 43210)."); setLoading(false); return; }
+      if (!e164) { setError("Enter a valid phone number (e.g. +91 98765 43210)."); return; }
 
       const user = await getUserByPhone(otpPhone.trim());
-      if (!user) {
-        setError("No account found with this phone number. Contact your admin.");
-        setLoading(false); return;
-      }
-      if (!user.email) {
-        setError("Account found but has no email on file. Contact your admin.");
-        setLoading(false); return;
-      }
+      if (!user) { setError("No account found with this phone number. Contact your admin."); return; }
+      if (!user.email) { setError("Account found but has no email on file. Contact your admin."); return; }
+
       setFoundEmail(user.email);
       setMaskedEmail(maskEmail(user.email));
       setOtpE164(e164);
@@ -167,10 +186,11 @@ export default function LoginPage() {
     } catch (err) {
       console.error("OTP send error:", err.code, err.message, "project:", auth.app.options.projectId);
       setError(FIREBASE_ERRORS[err.code] || `Could not send OTP. (${err.code || err.message})`);
-      verifierRef.current?.clear?.();
-      verifierRef.current = null;
+      resetRecaptchaContainer();
+    } finally {
+      setLoading(false);
+      findAccountInFlightRef.current = false;
     }
-    setLoading(false);
   };
 
   // ── OTP reset — step 2: verify code ──────────────────────────────────────────
@@ -194,8 +214,7 @@ export default function LoginPage() {
   const handleResendOtp = async () => {
     setError(""); setLoading(true);
     try {
-      verifierRef.current?.clear?.();
-      verifierRef.current = null;
+      resetRecaptchaContainer();
       verifierRef.current = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
       const result = await signInWithPhoneNumber(auth, otpE164, verifierRef.current);
       setConfirmResult(result);
@@ -203,8 +222,7 @@ export default function LoginPage() {
       setError("");
     } catch (err) {
       setError(FIREBASE_ERRORS[err.code] || "Could not resend OTP.");
-      verifierRef.current?.clear?.();
-      verifierRef.current = null;
+      resetRecaptchaContainer();
     }
     setLoading(false);
   };
@@ -232,8 +250,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-50/40 to-gray-50 flex flex-col items-center justify-center px-4 py-12">
-      {/* invisible reCAPTCHA anchor — must be in the DOM when OTP is requested */}
-      <div ref={recaptchaRef} />
+      {/* invisible reCAPTCHA anchor — must be in the DOM when OTP is requested.
+          key={captchaKey} forces a fresh DOM node on retry (see resetRecaptchaContainer). */}
+      <div key={captchaKey} ref={recaptchaRef} />
 
       <div className="w-full max-w-md">
         {/* Brand */}
