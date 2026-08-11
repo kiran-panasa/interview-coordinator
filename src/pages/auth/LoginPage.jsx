@@ -32,7 +32,7 @@ const FIREBASE_ERRORS = {
   "auth/invalid-verification-code":   "Incorrect code. Try again.",
   "auth/code-expired":                "Code expired. Go back and request a new one.",
   "auth/missing-phone-number":        "No phone number found. Contact your admin.",
-  "auth/operation-not-allowed":       "SMS for this region is not enabled. Go to Firebase Console → Authentication → Sign-in method → Phone → SMS regions and enable India (+91).",
+  "auth/operation-not-allowed":       "Phone sign-in isn't available. This usually means either the project isn't on the Blaze (pay-as-you-go) plan — required for SMS delivery — or India (+91) isn't enabled as an SMS region under Firebase Console → Authentication → Sign-in method → Phone.",
 };
 
 function toE164(raw = "") {
