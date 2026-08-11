@@ -34,6 +34,7 @@ const FIREBASE_ERRORS = {
   "auth/code-expired":                "Code expired. Go back and request a new one.",
   "auth/missing-phone-number":        "No phone number found. Contact your admin.",
   "auth/operation-not-allowed":       "Phone sign-in isn't available. This usually means either the project isn't on the Blaze (pay-as-you-go) plan — required for SMS delivery — or India (+91) isn't enabled as an SMS region under Firebase Console → Authentication → Sign-in method → Phone.",
+  "auth/billing-not-enabled":         "Phone OTP isn't available on this project's current plan. SMS delivery requires upgrading to Firebase's Blaze (pay-as-you-go) plan under Firebase Console → Usage and billing. Use \"Send reset email\" instead until that's done.",
 };
 
 function toE164(raw = "") {
