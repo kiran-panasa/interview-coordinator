@@ -1,4 +1,4 @@
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, deleteField,
   query, where, orderBy, onSnapshot,
@@ -135,12 +135,27 @@ export async function clearFeedbackAutoDraft(id: string): Promise<void> {
   });
 }
 
+async function pushToAcademyIfApplicable(interviewId: string) {
+  try {
+    const idToken = await auth.currentUser?.getIdToken();
+    if (!idToken) return;
+    await fetch("/api/push-academy-feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ interviewId }),
+    });
+  } catch (err) {
+    console.error("Failed to push completed interview to Academy Nexus:", err);
+  }
+}
+
 export async function submitFeedback(id: string, feedback: Record<string, unknown>): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
     status: "completed",
     updatedAt: new Date().toISOString(),
   });
+  pushToAcademyIfApplicable(id);
 }
 
 export async function importScheduledInterview(
