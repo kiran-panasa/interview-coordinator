@@ -5,7 +5,7 @@ import {
   ArrowLeft, ListChecks, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Send,
 } from "lucide-react";
 import {
-  getInterview, updateInterview, getTemplate, getTemplates, getPrograms,
+  getInterview, updateInterview, getTemplate,
   getQuestionsByIds, getCandidateAskedQuestions,
   incrementQuestionUsage, createAdhocQuestion,
 } from "../../api/firestore";
@@ -27,7 +27,6 @@ export default function InterviewQuestions() {
   const { id } = useParams();
   const [interview, setInterview] = useState(null);
   const [template,  setTemplate]  = useState(null);
-  const [programName, setProgramName] = useState("");
   const [loading,   setLoading]   = useState(true);
   const [toast,     setToast]     = useState(null);
 
@@ -47,21 +46,12 @@ export default function InterviewQuestions() {
       if (iv?.templateId) {
         const tmpl = await getTemplate(iv.templateId);
         setTemplate(tmpl);
-        if (tmpl?.program) {
-          // Program-wide pool — questions are curated onto whichever
-          // template they were assigned to, and a Program can have several
-          // templates (different rounds). Interviewers should see every
-          // question tagged anywhere within the candidate's Program, not
-          // just the subset that happens to be linked to this one template.
-          const [allTemplates, programs] = await Promise.all([getTemplates(), getPrograms()]);
-          setProgramName(programs.find(p => p.id === tmpl.program)?.name || "");
-          const idSet = new Set();
-          allTemplates
-            .filter(t => t.program === tmpl.program)
-            .forEach(t => (t.questionIds || []).forEach(qid => idSet.add(qid)));
-          if (idSet.size) getQuestionsByIds([...idSet]).then(setTemplateQs);
-        } else if (tmpl?.questionIds?.length) {
-          // No Program set on this template — fall back to just its own list.
+        // Scoped strictly to THIS interview's own template — not pooled
+        // across the whole Program. A template (e.g. an Academy "Bucket")
+        // is its own self-contained track; pooling across every template in
+        // the same Program mixed in questions/domains from unrelated
+        // buckets, which is wrong.
+        if (tmpl?.questionIds?.length) {
           getQuestionsByIds(tmpl.questionIds).then(setTemplateQs);
         }
       }
@@ -199,17 +189,13 @@ export default function InterviewQuestions() {
         <h1 className="text-xl font-bold text-gray-900 tracking-tight">Questions Asked</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           {interview.candidateName}
-          {(programName || template?.name) && (
-            <> · <span className="text-emerald-700 font-medium">{programName || template.name}</span></>
-          )}
+          {template && <> · <span className="text-emerald-700 font-medium">{template.name}</span></>}
         </p>
       </motion.div>
 
       {templateQs.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center text-sm text-gray-400">
-          {programName
-            ? `No questions are attached to any template in the ${programName} program yet.`
-            : "No questions are attached to this interview's template."}
+          No questions are attached to this interview's template.
         </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
