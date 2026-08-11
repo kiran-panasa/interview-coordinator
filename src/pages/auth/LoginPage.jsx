@@ -1,22 +1,17 @@
-import { useState, useRef, useEffect } from "react";
-import { flushSync } from "react-dom";
+import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Mail, Lock, Eye, EyeOff, LogIn, UserPlus, AlertCircle, Loader2,
-  Smartphone, ArrowLeft, CheckCircle2, MailCheck, User, ShieldCheck,
-  RefreshCw, CalendarCheck2,
+  Smartphone, ArrowLeft, CheckCircle2, MailCheck, User, CalendarCheck2,
 } from "lucide-react";
 import { auth } from "../../firebase";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
-  signInWithPhoneNumber,
-  RecaptchaVerifier,
 } from "firebase/auth";
 import { getUserByPhone } from "../../api/firestore";
-import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 import { maskEmail } from "../../utils/strings";
 import Button from "../../components/Button";
 
@@ -28,27 +23,7 @@ const FIREBASE_ERRORS = {
   "auth/weak-password":               "Password must be at least 6 characters.",
   "auth/invalid-email":               "Enter a valid email address.",
   "auth/too-many-requests":           "Too many attempts. Try again later.",
-  "auth/invalid-phone-number":        "Invalid phone number. Contact your admin.",
-  "auth/quota-exceeded":              "SMS quota exceeded. Try again later.",
-  "auth/invalid-verification-code":   "Incorrect code. Try again.",
-  "auth/code-expired":                "Code expired. Go back and request a new one.",
-  "auth/missing-phone-number":        "No phone number found. Contact your admin.",
-  "auth/operation-not-allowed":       "Phone sign-in isn't available. This usually means either the project isn't on the Blaze (pay-as-you-go) plan — required for SMS delivery — or India (+91) isn't enabled as an SMS region under Firebase Console → Authentication → Sign-in method → Phone.",
-  "auth/billing-not-enabled":         "Phone OTP isn't available on this project's current plan. SMS delivery requires upgrading to Firebase's Blaze (pay-as-you-go) plan under Firebase Console → Usage and billing. Use \"Send reset email\" instead until that's done.",
 };
-
-function toE164(raw = "") {
-  const d = raw.replace(/\D/g, "");
-  if (d.length === 10) return `+91${d}`;
-  if (d.length === 12 && d.startsWith("91")) return `+${d}`;
-  if (d.length > 10) return `+${d}`;
-  return null;
-}
-
-function maskPhone(raw = "") {
-  const d = raw.replace(/\D/g, "");
-  return d.length >= 4 ? `×× ×× ×× ${d.slice(-4)}` : "your registered number";
-}
 
 // Small helper so the Button component's fixed icon slot can render a spinner.
 function SpinIcon({ className = "" }) {
@@ -88,44 +63,18 @@ export default function LoginPage() {
 
   // Reset — method picker + email flow
   const [resetMode,   setResetMode]   = useState(false);
-  const [resetMethod, setResetMethod] = useState(""); // "" | "email" | "otp"
+  const [resetMethod, setResetMethod] = useState(""); // "" | "email" | "phone"
   const [resetSent,   setResetSent]   = useState(false);
 
-  // OTP flow
-  const [otpStep,       setOtpStep]       = useState(1); // 1=enter phone, 2=enter code, 3=done
-  const [otpPhone,      setOtpPhone]      = useState("");
-  const [otpE164,       setOtpE164]       = useState("");
-  const [foundEmail,    setFoundEmail]    = useState(""); // account email found by phone lookup
-  const [maskedEmail,   setMaskedEmail]   = useState(""); // e.g. m***@nxtwave.co.in
-  const [otpCode,       setOtpCode]       = useState("");
-  const [confirmResult, setConfirmResult] = useState(null);
-  // Bumped to force React to unmount and remount a genuinely fresh DOM node
-  // for the reCAPTCHA widget — reusing the same container across a retry
-  // (even after calling .clear()) is what throws "reCAPTCHA has already
-  // been rendered in this element".
-  const [captchaKey, setCaptchaKey] = useState(0);
-  const recaptchaRef = useRef(null);
-  const verifierRef  = useRef(null);
-  // Synchronous re-entrancy guard — `disabled={loading}` on the button lags
-  // one render behind a tap, which is enough for a fast double-tap (common
-  // on mobile) to fire this handler twice before the button visually
-  // disables, each call trying to render its own reCAPTCHA into the same
-  // container.
-  const findAccountInFlightRef = useRef(false);
-
-  useEffect(() => {
-    return () => { verifierRef.current?.clear?.(); };
-  }, []);
-
-  // Clears the current verifier and forces a brand-new reCAPTCHA container
-  // before the caller creates a new RecaptchaVerifier — flushSync makes the
-  // remount happen synchronously so recaptchaRef.current already points at
-  // the fresh node by the time this returns.
-  const resetRecaptchaContainer = () => {
-    try { verifierRef.current?.clear?.(); } catch { /* already gone */ }
-    verifierRef.current = null;
-    flushSync(() => setCaptchaKey(k => k + 1));
-  };
+  // Phone-based reset — looks the account up by phone number, then sends
+  // the same Firebase reset email used by the "email" method. No SMS/OTP
+  // involved: Firebase Phone Auth requires the Blaze billing plan, which
+  // this project isn't on, so SMS delivery can never work here regardless
+  // of app code. This just gives people who don't remember their email a
+  // way to find their account and get the reset link the same way.
+  const [phoneStep,    setPhoneStep]    = useState(1); // 1=enter phone, 2=done
+  const [phone,        setPhone]        = useState("");
+  const [maskedEmail,  setMaskedEmail]  = useState(""); // e.g. m***@nxtwave.co.in
 
   // ── Login / signup ────────────────────────────────────────────────────────────
 
@@ -158,81 +107,33 @@ export default function LoginPage() {
     } finally { setLoading(false); }
   };
 
-  // ── OTP reset — step 1: find account ─────────────────────────────────────────
+  // ── Phone-lookup reset ────────────────────────────────────────────────────────
 
-  const handleFindAccount = async (e) => {
+  const handlePhoneReset = async (e) => {
     e.preventDefault();
-    if (findAccountInFlightRef.current) return; // synchronous guard — see ref comment above
-    if (!otpPhone.trim()) { setError("Enter your phone number."); return; }
-    findAccountInFlightRef.current = true;
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) { setError("Enter a valid phone number."); return; }
     setError(""); setLoading(true);
     try {
-      const e164 = toE164(otpPhone.trim());
-      if (!e164) { setError("Enter a valid phone number (e.g. +91 98765 43210)."); return; }
-
-      const user = await getUserByPhone(otpPhone.trim());
+      const user = await getUserByPhone(phone.trim());
       if (!user) { setError("No account found with this phone number. Contact your admin."); return; }
       if (!user.email) { setError("Account found but has no email on file. Contact your admin."); return; }
 
-      setFoundEmail(user.email);
+      await sendPasswordResetEmail(auth, user.email);
       setMaskedEmail(maskEmail(user.email));
-      setOtpE164(e164);
-
-      if (!verifierRef.current) {
-        verifierRef.current = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
-      }
-      const result = await signInWithPhoneNumber(auth, e164, verifierRef.current);
-      setConfirmResult(result);
-      setOtpStep(2);
+      setPhoneStep(2);
     } catch (err) {
-      console.error("OTP send error:", err.code, err.message, "project:", auth.app.options.projectId);
-      setError(FIREBASE_ERRORS[err.code] || `Could not send OTP. (${err.code || err.message})`);
-      resetRecaptchaContainer();
+      setError(FIREBASE_ERRORS[err.code] || "Could not send reset email.");
     } finally {
       setLoading(false);
-      findAccountInFlightRef.current = false;
     }
-  };
-
-  // ── OTP reset — step 2: verify code ──────────────────────────────────────────
-
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    if (otpCode.replace(/\D/g, "").length < 6) { setError("Enter the 6-digit code."); return; }
-    setError(""); setLoading(true);
-    try {
-      await confirmResult.confirm(otpCode.replace(/\D/g, ""));
-      // AuthContext detects phone-only sign-in and immediately signs out.
-      // We fire the reset email here; no auth state changes needed.
-      await sendPasswordResetEmail(auth, foundEmail);
-      setOtpStep(3);
-    } catch (err) {
-      setError(FIREBASE_ERRORS[err.code] || "Invalid code. Try again.");
-    }
-    setLoading(false);
-  };
-
-  const handleResendOtp = async () => {
-    setError(""); setLoading(true);
-    try {
-      resetRecaptchaContainer();
-      verifierRef.current = new RecaptchaVerifier(auth, recaptchaRef.current, { size: "invisible" });
-      const result = await signInWithPhoneNumber(auth, otpE164, verifierRef.current);
-      setConfirmResult(result);
-      setOtpCode("");
-      setError("");
-    } catch (err) {
-      setError(FIREBASE_ERRORS[err.code] || "Could not resend OTP.");
-      resetRecaptchaContainer();
-    }
-    setLoading(false);
   };
 
   // ── Navigation helpers ────────────────────────────────────────────────────────
 
   const openReset = () => {
     setResetMode(true); setResetMethod(""); setResetSent(false);
-    setOtpStep(1); setOtpPhone(""); setOtpCode(""); setFoundEmail(""); setMaskedEmail(""); setConfirmResult(null);
+    setPhoneStep(1); setPhone(""); setMaskedEmail("");
     setError("");
   };
 
@@ -242,7 +143,7 @@ export default function LoginPage() {
     } else {
       setResetMethod("");
       setResetSent(false);
-      setOtpStep(1); setOtpCode(""); setConfirmResult(null);
+      setPhoneStep(1);
     }
     setError("");
   };
@@ -251,10 +152,6 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-50/40 to-gray-50 flex flex-col items-center justify-center px-4 py-12">
-      {/* invisible reCAPTCHA anchor — must be in the DOM when OTP is requested.
-          key={captchaKey} forces a fresh DOM node on retry (see resetRecaptchaContainer). */}
-      <div key={captchaKey} ref={recaptchaRef} />
-
       <div className="w-full max-w-md">
         {/* Brand */}
         <motion.div
@@ -306,16 +203,16 @@ export default function LoginPage() {
                     </div>
                   </motion.button>
 
-                  {/* Phone OTP option */}
+                  {/* Phone-lookup option */}
                   <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} type="button"
-                    onClick={() => { setResetMethod("otp"); setError(""); }}
+                    onClick={() => { setResetMethod("phone"); setError(""); }}
                     className="w-full flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-emerald-400 hover:bg-emerald-50 transition-colors text-left group">
                     <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl flex items-center justify-center transition-colors">
                       <Smartphone className="w-5 h-5 text-emerald-600" />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-gray-900">Verify via phone OTP</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Get a one-time code on your registered phone number</p>
+                      <p className="text-sm font-bold text-gray-900">Find account by phone</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Don't remember your email? We'll look up your account and email you a reset link</p>
                     </div>
                   </motion.button>
 
@@ -365,29 +262,29 @@ export default function LoginPage() {
                 )
               )}
 
-              {/* Phone OTP reset */}
-              {resetMethod === "otp" && (
+              {/* Phone-lookup reset */}
+              {resetMethod === "phone" && (
                 <>
                   {/* Step 1 — find account */}
-                  {otpStep === 1 && (
-                    <form onSubmit={handleFindAccount} className="space-y-4 animate-fade-in">
+                  {phoneStep === 1 && (
+                    <form onSubmit={handlePhoneReset} className="space-y-4 animate-fade-in">
                       <div>
-                        <p className="font-semibold text-gray-900 mb-1">Verify via phone OTP</p>
+                        <p className="font-semibold text-gray-900 mb-1">Find account by phone</p>
                         <p className="text-sm text-gray-500 mb-4">
-                          Enter your registered phone number. We'll send a one-time code to verify it's you.
+                          Enter your registered phone number and we'll email a reset link to the account on file.
                         </p>
                         <label className={labelClass}>Phone Number</label>
                         <div className="relative">
                           <Smartphone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input type="tel" placeholder="+91 98765 43210" value={otpPhone}
-                            onChange={e => setOtpPhone(e.target.value)} required
+                          <input type="tel" placeholder="+91 98765 43210" value={phone}
+                            onChange={e => setPhone(e.target.value)} required
                             className={inputClass.replace("focus:ring-brand-500/10 focus:border-brand-400", "focus:ring-emerald-500/10 focus:border-emerald-400")} />
                         </div>
                       </div>
                       <ErrorBox>{error}</ErrorBox>
                       <Button type="submit" disabled={loading} size="lg"
                         icon={loading ? SpinIcon : Smartphone} className="w-full bg-emerald-600 shadow-soft hover:bg-emerald-700 disabled:bg-emerald-300 text-white">
-                        {loading ? "Looking up…" : "Send OTP"}
+                        {loading ? "Looking up…" : "Find account & send reset link"}
                       </Button>
                       <button type="button" onClick={backFromReset}
                         className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
@@ -396,52 +293,13 @@ export default function LoginPage() {
                     </form>
                   )}
 
-                  {/* Step 2 — enter OTP */}
-                  {otpStep === 2 && (
-                    <form onSubmit={handleVerifyOtp} className="space-y-4 animate-fade-in">
-                      <div className="text-center mb-2">
-                        <div className="inline-flex items-center justify-center w-12 h-12 bg-emerald-100 rounded-full mb-3">
-                          <Smartphone className="w-6 h-6 text-emerald-600" />
-                        </div>
-                        <p className="font-semibold text-gray-900">Enter the 6-digit code</p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Sent to <span className="font-mono font-semibold">{maskPhone(otpPhone)}</span>
-                        </p>
-                      </div>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="— — — — — —"
-                        maxLength={6}
-                        value={otpCode}
-                        onChange={e => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-3 text-center text-xl font-mono tracking-[0.5em] focus:outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-colors"
-                      />
-                      <ErrorBox>{error}</ErrorBox>
-                      <Button type="submit" disabled={loading || otpCode.length < 6} size="lg"
-                        icon={loading ? SpinIcon : ShieldCheck} className="w-full bg-emerald-600 shadow-soft hover:bg-emerald-700 disabled:bg-emerald-300 text-white">
-                        {loading ? "Verifying…" : "Verify & send reset link"}
-                      </Button>
-                      <div className="flex items-center justify-between text-sm">
-                        <button type="button" onClick={() => { setOtpStep(1); setOtpCode(""); setError(""); }}
-                          className="flex items-center gap-1.5 text-gray-500 hover:text-gray-700 transition-colors">
-                          <ArrowLeft className="w-3.5 h-3.5" /> Change number
-                        </button>
-                        <button type="button" onClick={handleResendOtp} disabled={loading}
-                          className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-800 font-medium disabled:opacity-50 transition-colors">
-                          <RefreshCw className="w-3.5 h-3.5" /> Resend code
-                        </button>
-                      </div>
-                    </form>
-                  )}
-
-                  {/* Step 3 — success */}
-                  {otpStep === 3 && (
+                  {/* Step 2 — success */}
+                  {phoneStep === 2 && (
                     <div className="text-center animate-fade-in">
                       <div className="inline-flex items-center justify-center w-14 h-14 bg-emerald-100 rounded-full mb-4">
                         <CheckCircle2 className="w-7 h-7 text-emerald-600" strokeWidth={2.2} />
                       </div>
-                      <p className="font-semibold text-gray-900 mb-1">Phone verified!</p>
+                      <p className="font-semibold text-gray-900 mb-1">Account found!</p>
                       <p className="text-sm text-gray-500 mb-2">
                         A password reset link has been sent to
                       </p>
@@ -449,7 +307,7 @@ export default function LoginPage() {
                       <p className="text-xs text-gray-400 mb-6">
                         Can't find the email? Check your spam folder or ask your admin to resend it.
                       </p>
-                      <button onClick={() => { setResetMode(false); setResetMethod(""); setOtpStep(1); }}
+                      <button onClick={() => { setResetMode(false); setResetMethod(""); setPhoneStep(1); }}
                         className="text-brand-600 text-sm font-medium hover:underline">
                         Back to sign in
                       </button>
