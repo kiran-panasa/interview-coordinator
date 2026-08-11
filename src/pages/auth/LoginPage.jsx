@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Mail, Lock, Eye, EyeOff, LogIn, UserPlus, AlertCircle, Loader2,
-  Smartphone, ArrowLeft, CheckCircle2, MailCheck, User, CalendarCheck2,
+  ArrowLeft, MailCheck, User, CalendarCheck2,
 } from "lucide-react";
 import { auth } from "../../firebase";
 import {
@@ -11,8 +11,6 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
 } from "firebase/auth";
-import { getUserByPhone } from "../../api/firestore";
-import { maskEmail } from "../../utils/strings";
 import Button from "../../components/Button";
 
 const FIREBASE_ERRORS = {
@@ -61,20 +59,12 @@ export default function LoginPage() {
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Reset — method picker + email flow
-  const [resetMode,   setResetMode]   = useState(false);
-  const [resetMethod, setResetMethod] = useState(""); // "" | "email" | "phone"
-  const [resetSent,   setResetSent]   = useState(false);
-
-  // Phone-based reset — looks the account up by phone number, then sends
-  // the same Firebase reset email used by the "email" method. No SMS/OTP
-  // involved: Firebase Phone Auth requires the Blaze billing plan, which
-  // this project isn't on, so SMS delivery can never work here regardless
-  // of app code. This just gives people who don't remember their email a
-  // way to find their account and get the reset link the same way.
-  const [phoneStep,    setPhoneStep]    = useState(1); // 1=enter phone, 2=done
-  const [phone,        setPhone]        = useState("");
-  const [maskedEmail,  setMaskedEmail]  = useState(""); // e.g. m***@nxtwave.co.in
+  // Reset — email only. Phone-based reset (with or without SMS OTP) was
+  // removed: real SMS delivery needs Firebase's Blaze plan, which this
+  // project isn't on, and this app has no other way to verify phone
+  // ownership — so email is the only reset path.
+  const [resetMode, setResetMode] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   // ── Login / signup ────────────────────────────────────────────────────────────
 
@@ -107,44 +97,15 @@ export default function LoginPage() {
     } finally { setLoading(false); }
   };
 
-  // ── Phone-lookup reset ────────────────────────────────────────────────────────
-
-  const handlePhoneReset = async (e) => {
-    e.preventDefault();
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 10) { setError("Enter a valid phone number."); return; }
-    setError(""); setLoading(true);
-    try {
-      const user = await getUserByPhone(phone.trim());
-      if (!user) { setError("No account found with this phone number. Contact your admin."); return; }
-      if (!user.email) { setError("Account found but has no email on file. Contact your admin."); return; }
-
-      await sendPasswordResetEmail(auth, user.email);
-      setMaskedEmail(maskEmail(user.email));
-      setPhoneStep(2);
-    } catch (err) {
-      setError(FIREBASE_ERRORS[err.code] || "Could not send reset email.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // ── Navigation helpers ────────────────────────────────────────────────────────
 
   const openReset = () => {
-    setResetMode(true); setResetMethod(""); setResetSent(false);
-    setPhoneStep(1); setPhone(""); setMaskedEmail("");
+    setResetMode(true); setResetSent(false);
     setError("");
   };
 
   const backFromReset = () => {
-    if (!resetMethod) {
-      setResetMode(false);
-    } else {
-      setResetMethod("");
-      setResetSent(false);
-      setPhoneStep(1);
-    }
+    setResetMode(false);
     setError("");
   };
 
@@ -182,140 +143,43 @@ export default function LoginPage() {
           className="bg-white rounded-2xl shadow-card border border-gray-100 p-8"
         >
 
-          {/* ── Reset flow ── */}
+          {/* ── Reset flow (email only) ── */}
           {resetMode ? (
-            <>
-              {/* Method picker */}
-              {!resetMethod && (
-                <div className="space-y-4 animate-fade-in">
-                  <p className="text-sm text-gray-600 mb-5">Choose how you'd like to reset your password.</p>
-
-                  {/* Email option */}
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} type="button"
-                    onClick={() => { setResetMethod("email"); setError(""); }}
-                    className="w-full flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-brand-400 hover:bg-brand-50 transition-colors text-left group">
-                    <div className="flex-shrink-0 w-10 h-10 bg-brand-100 group-hover:bg-brand-200 rounded-xl flex items-center justify-center transition-colors">
-                      <Mail className="w-5 h-5 text-brand-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">Send reset email</p>
-                      <p className="text-xs text-gray-500 mt-0.5">We'll email you a link to reset your password</p>
-                    </div>
-                  </motion.button>
-
-                  {/* Phone-lookup option */}
-                  <motion.button whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }} type="button"
-                    onClick={() => { setResetMethod("phone"); setError(""); }}
-                    className="w-full flex items-start gap-4 p-4 border-2 border-gray-200 rounded-xl hover:border-emerald-400 hover:bg-emerald-50 transition-colors text-left group">
-                    <div className="flex-shrink-0 w-10 h-10 bg-emerald-100 group-hover:bg-emerald-200 rounded-xl flex items-center justify-center transition-colors">
-                      <Smartphone className="w-5 h-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-900">Find account by phone</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Don't remember your email? We'll look up your account and email you a reset link</p>
-                    </div>
-                  </motion.button>
-
-                  <button type="button" onClick={backFromReset}
-                    className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 pt-1 transition-colors">
-                    <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
-                  </button>
+            resetSent ? (
+              <div className="text-center animate-fade-in">
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-brand-100 rounded-full mb-4">
+                  <MailCheck className="w-7 h-7 text-brand-600" />
                 </div>
-              )}
-
-              {/* Email reset */}
-              {resetMethod === "email" && (
-                resetSent ? (
-                  <div className="text-center animate-fade-in">
-                    <div className="inline-flex items-center justify-center w-14 h-14 bg-brand-100 rounded-full mb-4">
-                      <MailCheck className="w-7 h-7 text-brand-600" />
-                    </div>
-                    <p className="font-semibold text-gray-900 mb-1">Check your inbox</p>
-                    <p className="text-sm text-gray-500 mb-6">Reset link sent to <strong>{email}</strong></p>
-                    <button onClick={() => { setResetMode(false); setResetSent(false); setResetMethod(""); }}
-                      className="text-brand-600 text-sm font-medium hover:underline">
-                      Back to sign in
-                    </button>
+                <p className="font-semibold text-gray-900 mb-1">Check your inbox</p>
+                <p className="text-sm text-gray-500 mb-6">Reset link sent to <strong>{email}</strong></p>
+                <button onClick={() => { setResetMode(false); setResetSent(false); }}
+                  className="text-brand-600 text-sm font-medium hover:underline">
+                  Back to sign in
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleEmailReset} className="space-y-4 animate-fade-in">
+                <div>
+                  <p className="font-semibold text-gray-900 mb-1">Reset via email</p>
+                  <p className="text-sm text-gray-500 mb-4">Enter your email and we'll send a reset link.</p>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input type="email" placeholder="you@example.com" value={email}
+                      onChange={e => setEmail(e.target.value)} required
+                      className={inputClass} />
                   </div>
-                ) : (
-                  <form onSubmit={handleEmailReset} className="space-y-4 animate-fade-in">
-                    <div>
-                      <p className="font-semibold text-gray-900 mb-1">Reset via email</p>
-                      <p className="text-sm text-gray-500 mb-4">Enter your email and we'll send a reset link.</p>
-                      <div className="relative">
-                        <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input type="email" placeholder="you@example.com" value={email}
-                          onChange={e => setEmail(e.target.value)} required
-                          className={inputClass} />
-                      </div>
-                    </div>
-                    <ErrorBox>{error}</ErrorBox>
-                    <Button type="submit" disabled={loading} variant="primary" size="lg"
-                      icon={loading ? SpinIcon : Mail} className="w-full">
-                      {loading ? "Sending…" : "Send reset link"}
-                    </Button>
-                    <button type="button" onClick={backFromReset}
-                      className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
-                      <ArrowLeft className="w-3.5 h-3.5" /> Back
-                    </button>
-                  </form>
-                )
-              )}
-
-              {/* Phone-lookup reset */}
-              {resetMethod === "phone" && (
-                <>
-                  {/* Step 1 — find account */}
-                  {phoneStep === 1 && (
-                    <form onSubmit={handlePhoneReset} className="space-y-4 animate-fade-in">
-                      <div>
-                        <p className="font-semibold text-gray-900 mb-1">Find account by phone</p>
-                        <p className="text-sm text-gray-500 mb-4">
-                          Enter your registered phone number and we'll email a reset link to the account on file.
-                        </p>
-                        <label className={labelClass}>Phone Number</label>
-                        <div className="relative">
-                          <Smartphone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input type="tel" placeholder="+91 98765 43210" value={phone}
-                            onChange={e => setPhone(e.target.value)} required
-                            className={inputClass.replace("focus:ring-brand-500/10 focus:border-brand-400", "focus:ring-emerald-500/10 focus:border-emerald-400")} />
-                        </div>
-                      </div>
-                      <ErrorBox>{error}</ErrorBox>
-                      <Button type="submit" disabled={loading} size="lg"
-                        icon={loading ? SpinIcon : Smartphone} className="w-full bg-emerald-600 shadow-soft hover:bg-emerald-700 disabled:bg-emerald-300 text-white">
-                        {loading ? "Looking up…" : "Find account & send reset link"}
-                      </Button>
-                      <button type="button" onClick={backFromReset}
-                        className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
-                        <ArrowLeft className="w-3.5 h-3.5" /> Back
-                      </button>
-                    </form>
-                  )}
-
-                  {/* Step 2 — success */}
-                  {phoneStep === 2 && (
-                    <div className="text-center animate-fade-in">
-                      <div className="inline-flex items-center justify-center w-14 h-14 bg-emerald-100 rounded-full mb-4">
-                        <CheckCircle2 className="w-7 h-7 text-emerald-600" strokeWidth={2.2} />
-                      </div>
-                      <p className="font-semibold text-gray-900 mb-1">Account found!</p>
-                      <p className="text-sm text-gray-500 mb-2">
-                        A password reset link has been sent to
-                      </p>
-                      <p className="text-sm font-semibold text-brand-700 mb-6">{maskedEmail}</p>
-                      <p className="text-xs text-gray-400 mb-6">
-                        Can't find the email? Check your spam folder or ask your admin to resend it.
-                      </p>
-                      <button onClick={() => { setResetMode(false); setResetMethod(""); setPhoneStep(1); }}
-                        className="text-brand-600 text-sm font-medium hover:underline">
-                        Back to sign in
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </>
+                </div>
+                <ErrorBox>{error}</ErrorBox>
+                <Button type="submit" disabled={loading} variant="primary" size="lg"
+                  icon={loading ? SpinIcon : Mail} className="w-full">
+                  {loading ? "Sending…" : "Send reset link"}
+                </Button>
+                <button type="button" onClick={backFromReset}
+                  className="w-full flex items-center justify-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back
+                </button>
+              </form>
+            )
           ) : (
             /* ── Login / signup form ── */
             <form onSubmit={handleSubmit} className="space-y-4 animate-fade-in">

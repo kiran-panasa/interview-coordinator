@@ -67,22 +67,6 @@ export async function deleteInvite(id: string): Promise<void> {
   await deleteDoc(doc(db, "invites", id));
 }
 
-export async function getUserByPhone(rawPhone: string): Promise<User | null> {
-  const digits = rawPhone.replace(/\D/g, "");
-  if (!digits) return null;
-  const last10 = digits.slice(-10);
-  // Try all common storage formats since admins/users enter phones differently
-  const candidates = [...new Set([
-    rawPhone.trim(), digits, `+${digits}`,
-    `+91${last10}`, `91${last10}`, last10,
-  ])].filter(Boolean).slice(0, 10);
-  const snap = await getDocs(query(
-    collection(db, "users"),
-    where("phone", "in", candidates),
-  ));
-  return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as User;
-}
-
 export async function getUserByEmail(email: string): Promise<User | null> {
   const snap = await getDocs(query(
     collection(db, "users"),
