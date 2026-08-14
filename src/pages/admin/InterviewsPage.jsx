@@ -9,7 +9,7 @@ import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, deleteInterview,
+  createInterview, updateInterview, markInterviewCompleted, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
@@ -745,13 +745,15 @@ export default function InterviewsPage() {
         // This is how meeting/recording links get attached after the fact,
         // for both past completed interviews and upcoming scheduled ones.
         if (existingInterview) {
-          const update = { ...linkFields };
           if (verdict || hasDomainFeedback) {
-            update.feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
-            update.status = "completed";
-            update.candidateJoined = true;
+            await markInterviewCompleted(existingInterview.id, {
+              ...linkFields,
+              feedback: buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes),
+              candidateJoined: true,
+            });
+          } else if (Object.keys(linkFields).length > 0) {
+            await updateInterview(existingInterview.id, linkFields);
           }
-          if (Object.keys(update).length > 0) await updateInterview(existingInterview.id, update);
           return { ok: true };
         }
 
@@ -908,12 +910,11 @@ export default function InterviewsPage() {
         comments:              feedbackEditForm.comments,
         submittedAt:           feedbackEditModal.feedback?.submittedAt || new Date().toISOString(),
       };
-      const update = { feedback };
       if (feedbackEditForm.markCompleted) {
-        update.status           = "completed";
-        update.candidateJoined  = true;
+        await markInterviewCompleted(feedbackEditModal.id, { feedback, candidateJoined: true });
+      } else {
+        await updateInterview(feedbackEditModal.id, { feedback });
       }
-      await updateInterview(feedbackEditModal.id, update);
       if (feedbackEditForm.markCompleted) {
         notifyAdmins("interview_completed", `Interview with ${feedbackEditModal.candidateName} has been completed.`, feedbackEditModal);
       }

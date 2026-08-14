@@ -7,7 +7,7 @@ import {
   AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2,
 } from "lucide-react";
 import {
-  subscribeToInterview, updateInterview, saveFeedbackDraft,
+  subscribeToInterview, updateInterview, markInterviewCompleted, saveFeedbackDraft,
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
@@ -168,7 +168,7 @@ export default function InterviewDetail() {
   const handleMarkCompleted = async () => {
     if (!confirm("Mark this interview as completed?")) return;
     setSaving(true);
-    await updateInterview(id, { status: "completed" });
+    await markInterviewCompleted(id);
     setInterview(iv => ({ ...iv, status: "completed" }));
     setToast({ message: "Interview marked as completed." });
     setSaving(false);

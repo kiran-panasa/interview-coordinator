@@ -329,6 +329,13 @@ export interface Interview {
   meetingRecordingUrl?: string;
   recallBotId?: string;
   aiReport?: AiCandidateReport;
+  // Set true whenever an interview is marked completed (see
+  // markInterviewCompleted in api/interviews.ts); the Apps Script sweep
+  // queries on this instead of scanning every completed interview, and
+  // flips it back to false once a report is generated or it gives up after
+  // a few days with no recording/transcript ever showing up.
+  aiReportPending?: boolean;
+  aiReportPendingSince?: string;
   // Snapshotted from the candidate at scheduling time — stale once the
   // candidate record changes. The Interviewer Portal prefers a live lookup
   // via candidateId instead (see InterviewDetail.jsx); these remain as a

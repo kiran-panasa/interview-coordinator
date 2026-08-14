@@ -149,13 +149,30 @@ async function pushToAcademyIfApplicable(interviewId: string) {
   }
 }
 
-export async function submitFeedback(id: string, feedback: Record<string, unknown>): Promise<void> {
+// Single choke point for marking an interview completed — every path that
+// can complete an interview (feedback submission, the interviewer's Mark as
+// Completed button, admin feedback edits, CSV/Sheet import) must funnel
+// through here so aiReportPending and the Academy Nexus push never get
+// forgotten on a new code path. aiReportPending is what the Apps Script
+// sweep queries on instead of rescanning every completed interview.
+export async function markInterviewCompleted(
+  id: string,
+  extraFields: Record<string, unknown> = {}
+): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
-    feedback: { ...feedback, submittedAt: new Date().toISOString() },
+    ...extraFields,
     status: "completed",
+    aiReportPending: true,
+    aiReportPendingSince: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
   pushToAcademyIfApplicable(id);
+}
+
+export async function submitFeedback(id: string, feedback: Record<string, unknown>): Promise<void> {
+  await markInterviewCompleted(id, {
+    feedback: { ...feedback, submittedAt: new Date().toISOString() },
+  });
 }
 
 export async function importScheduledInterview(
@@ -185,6 +202,10 @@ export async function importCompletedInterview(
     questionsAsked: [],
     questionRemarks: {},
     importedFromSheet: true,
+    // No recording/transcript link yet (imported rows can carry one already,
+    // via meetingRecordingUrl in `data`) — let the sweep try to find one.
+    aiReportPending: !data.meetingRecordingUrl,
+    aiReportPendingSince: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
