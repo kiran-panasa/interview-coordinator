@@ -1036,16 +1036,46 @@ export default function InterviewsPage() {
     return results;
   }
 
-  // Download Feedback previously only ever showed a recording/transcript
-  // link if the background sweep had already found and cached it — for any
-  // interview it hasn't reached yet, this now does the same live lookup the
-  // "Meet Recording"/"Transcript" buttons do (resolveRecordingUrl_ /
-  // resolveTranscriptUrl_ above), in parallel across the export set, right
-  // before generating the file. Each resolver also persists what it finds
-  // back onto the interview doc, so this doubles as an on-demand backfill —
-  // the next download (or the sweep) won't need to re-fetch it. A genuinely
-  // unavailable resource (never recorded, still processing) is left blank,
-  // same as everywhere else — never a fake link.
+  // Same idea as resolveRecordingUrl_/resolveTranscriptUrl_ but for the AI
+  // report — skips straight to the Gemini call (no Calendar/Drive discovery)
+  // since by the time this runs, transcriptUrl is either already on the
+  // interview or was just resolved earlier in the same download pass.
+  const resolveAiReportForExport_ = async (iv, transcriptUrl) => {
+    if (iv.aiReport) return iv.aiReport;
+    if (!transcriptUrl) {
+      const err = new Error("No transcript available yet.");
+      err.status = "processing";
+      throw err;
+    }
+    const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+      action:        "generateAiReport",
+      transcriptUrl,
+      candidateName: iv.candidateName,
+      round:         iv.round || iv.templateName || "Interview",
+      templateName:  iv.templateName || "",
+    });
+    if (result?.status === "ready" && result.report) {
+      const aiReport = { ...result.report, generatedAt: new Date().toISOString() };
+      await updateInterview(iv.id, { aiReport, aiReportPending: false });
+      return aiReport;
+    }
+    const err = new Error(result?.message || result?.error || "AI report not available.");
+    err.status = result?.status || "error";
+    throw err;
+  };
+
+  // Download Feedback previously only ever showed a recording/transcript/AI
+  // report link if the background sweep had already found/generated it —
+  // for any interview it hasn't reached yet, this now does the same live
+  // lookups the "Meet Recording"/"Transcript"/"AI Report" actions do, in
+  // parallel across the export set, right before generating the file (AI
+  // report resolution runs last per interview so it can use a transcript
+  // that was just discovered a moment earlier in the same pass). Each
+  // resolver also persists what it finds back onto the interview doc, so
+  // this doubles as an on-demand backfill — the next download (or the
+  // sweep) won't need to re-fetch it. A genuinely unavailable resource
+  // (never recorded, still processing) is left blank, same as everywhere
+  // else — never a fake link.
   async function withResolvedLinks(list) {
     return mapWithConcurrency(list, 8, async (iv) => {
       if (iv.status !== "completed" || (!iv.eventId && !iv.meetLink)) return iv;
@@ -1055,6 +1085,9 @@ export default function InterviewsPage() {
       }
       if (!iv.transcriptUrl) {
         try { patch.transcriptUrl = await resolveTranscriptUrl_(iv); } catch { /* leave blank */ }
+      }
+      if (!iv.aiReport) {
+        try { patch.aiReport = await resolveAiReportForExport_(iv, patch.transcriptUrl || iv.transcriptUrl); } catch { /* leave blank */ }
       }
       return Object.keys(patch).length ? { ...iv, ...patch } : iv;
     });
@@ -1177,7 +1210,7 @@ export default function InterviewsPage() {
           <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
             {downloadingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
-            {downloadingFeedback ? "Fetching recording/transcript links…" : `Download Feedback${filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}`}
+            {downloadingFeedback ? "Fetching recording/transcript/AI report links…" : `Download Feedback${filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}`}
           </button>
           <button
             onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
