@@ -278,6 +278,7 @@ export type InterviewStatus =
   | "pending_acceptance"
   | "scheduled"
   | "completed"
+  | "partially_completed"
   | "no_show"
   | "cancelled";
 
@@ -317,6 +318,12 @@ export interface Interview {
   scheduledTime: string;
   round?: string;
   status: InterviewStatus;
+  // Mandatory whenever status is "partially_completed" (see
+  // markInterviewPartiallyCompleted in api/interviews.ts) — the
+  // interviewer-supplied reason the interview wasn't fully completed,
+  // carried through to admin views and the Download Feedback export for
+  // payment reconciliation / audit purposes.
+  partialCompletionReason?: string;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];

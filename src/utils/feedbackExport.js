@@ -129,7 +129,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
 
   const headers = [
     "UID", "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
-    "Date", "Time", "Status",
+    "Date", "Time", "Status", "Partial Completion Reason",
     "Interview Integrity", "Integrity Score",
     ...sectionHeaders,
     "Overall Recommendation", "Final Verdict", "Comments",
@@ -185,6 +185,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
       iv.scheduledTime || "",
       iv.status || "",
+      iv.partialCompletionReason || "",
       integrityText,
       fb?.integrityScore != null ? fb.integrityScore : "",
       ...sectionCells,
@@ -202,7 +203,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [
     { wch: 24 }, { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
-    { wch: 12 }, { wch: 10 }, { wch: 12 },
+    { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 30 },
     { wch: 45 }, { wch: 14 },
     ...sectionColWidths,
     { wch: 20 }, { wch: 12 }, { wch: 45 },

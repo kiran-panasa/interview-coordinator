@@ -149,24 +149,46 @@ async function pushToAcademyIfApplicable(interviewId: string) {
   }
 }
 
-// Single choke point for marking an interview completed — every path that
-// can complete an interview (feedback submission, the interviewer's Mark as
-// Completed button, admin feedback edits, CSV/Sheet import) must funnel
-// through here so aiReportPending and the Academy Nexus push never get
-// forgotten on a new code path. aiReportPending is what the Apps Script
-// sweep queries on instead of rescanning every completed interview.
-export async function markInterviewCompleted(
+// Shared choke point behind both markInterviewCompleted and
+// markInterviewPartiallyCompleted below — every path that can complete an
+// interview (feedback submission, the interviewer's Mark as
+// Completed/Partially Completed buttons, admin feedback edits, CSV/Sheet
+// import) must funnel through one of those two so aiReportPending and the
+// Academy Nexus push never get forgotten on a new code path.
+// aiReportPending is what the Apps Script sweep queries on instead of
+// rescanning every completed interview — a partial completion still gets a
+// recording/transcript/AI report generated where one exists.
+async function completeInterview(
   id: string,
+  status: "completed" | "partially_completed",
   extraFields: Record<string, unknown> = {}
 ): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     ...extraFields,
-    status: "completed",
+    status,
     aiReportPending: true,
     aiReportPendingSince: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
   pushToAcademyIfApplicable(id);
+}
+
+export async function markInterviewCompleted(
+  id: string,
+  extraFields: Record<string, unknown> = {}
+): Promise<void> {
+  await completeInterview(id, "completed", extraFields);
+}
+
+// `reason` is mandatory at the call site (enforced in the UI, not here) —
+// carried through to admin views and the Download Feedback export for
+// payment reconciliation / audit purposes.
+export async function markInterviewPartiallyCompleted(
+  id: string,
+  reason: string,
+  extraFields: Record<string, unknown> = {}
+): Promise<void> {
+  await completeInterview(id, "partially_completed", { ...extraFields, partialCompletionReason: reason });
 }
 
 export async function submitFeedback(id: string, feedback: Record<string, unknown>): Promise<void> {

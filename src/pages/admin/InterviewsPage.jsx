@@ -40,7 +40,11 @@ import AiReportModal from "../../features/interviews/AiReportModal";
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 
-const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "cancelled", "declined", "no_show"];
+const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"];
+// A partially completed interview is "done" for the same purposes a fully
+// completed one is (viewing/downloading feedback, recording/transcript/AI
+// report actions, archiving) — it just carries a mandatory reason alongside.
+const isDoneStatus = (status) => status === "completed" || status === "partially_completed";
 const DURATIONS = [
   { label: "30 min",  value: 30  },
   { label: "45 min",  value: 45  },
@@ -1288,7 +1292,14 @@ export default function InterviewsPage() {
                     <span className="text-xs text-gray-300">—</span>
                   )}
                 </td>
-                <td className="px-4 py-3"><Badge value={iv.status} /></td>
+                <td className="px-4 py-3">
+                  <Badge value={iv.status} />
+                  {iv.status === "partially_completed" && iv.partialCompletionReason && (
+                    <p className="text-[11px] text-amber-600 mt-1 max-w-[160px] truncate" title={iv.partialCompletionReason}>
+                      {iv.partialCompletionReason}
+                    </p>
+                  )}
+                </td>
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
@@ -1301,7 +1312,7 @@ export default function InterviewsPage() {
                     {
                       label: inviting[iv.id] ? "Sending…" : iv.eventId ? "✓ Invite Sent" : "Send Invite",
                       onClick: () => { if (!iv.eventId && !inviting[iv.id]) sendInvite(iv); },
-                      show: iv.status !== "cancelled" && iv.status !== "completed" && iv.status !== "no_show",
+                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
                     },
                     {
                       label: iv.assignmentLinks?.length ? `Assignment Links (${iv.assignmentLinks.length})` : "Assignment Links",
@@ -1317,13 +1328,13 @@ export default function InterviewsPage() {
                     {
                       label: "View Feedback",
                       onClick: () => openFeedback(iv),
-                      show: iv.status === "completed" && !!iv.feedback,
+                      show: isDoneStatus(iv.status) && !!iv.feedback,
                       highlight: true,
                     },
                     {
                       label: "Download Feedback",
                       onClick: () => handleDownloadSingleFeedback(iv),
-                      show: iv.status === "completed" && !!iv.feedback,
+                      show: isDoneStatus(iv.status) && !!iv.feedback,
                     },
                     {
                       label: iv.feedback?.overallRecommendation ? "Edit Feedback" : "Add Feedback",
@@ -1333,27 +1344,27 @@ export default function InterviewsPage() {
                     {
                       label: recordingLoading[iv.id] ? "Opening Recording…" : "Meet Recording",
                       onClick: () => { if (!recordingLoading[iv.id]) handleViewRecording(iv); },
-                      show: iv.status === "completed",
+                      show: isDoneStatus(iv.status),
                       copyValue: iv.meetingRecordingUrl || undefined,
                       copyResolve: (!iv.meetingRecordingUrl && (iv.eventId || iv.meetLink)) ? () => resolveRecordingUrl_(iv) : undefined,
                     },
                     {
                       label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",
                       onClick: () => { if (!transcriptLoading[iv.id]) handleViewTranscript(iv); },
-                      show: iv.status === "completed",
+                      show: isDoneStatus(iv.status),
                       copyValue: iv.transcriptUrl || undefined,
                       copyResolve: (!iv.transcriptUrl && (iv.eventId || iv.meetLink)) ? () => resolveTranscriptUrl_(iv) : undefined,
                     },
                     {
                       label: "AI Report",
                       onClick: () => handleViewAiReport(iv),
-                      show: iv.status === "completed",
+                      show: isDoneStatus(iv.status),
                       highlight: true,
                     },
                     {
                       label: "Archive",
                       onClick: () => handleArchive(iv),
-                      show: iv.archived !== true && (iv.status === "completed" || iv.status === "cancelled" || iv.status === "no_show"),
+                      show: iv.archived !== true && (isDoneStatus(iv.status) || iv.status === "cancelled" || iv.status === "no_show"),
                     },
                     {
                       label: "Unarchive",
@@ -1363,7 +1374,7 @@ export default function InterviewsPage() {
                     {
                       label: "Cancel",
                       onClick: () => handleCancel(iv),
-                      show: iv.status !== "cancelled" && iv.status !== "completed" && iv.status !== "no_show",
+                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
                       danger: true,
                     },
                     { label: "Delete", onClick: () => handleDelete(iv), danger: true },

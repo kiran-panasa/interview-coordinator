@@ -7,7 +7,7 @@ import {
   AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2,
 } from "lucide-react";
 import {
-  subscribeToInterview, updateInterview, markInterviewCompleted, saveFeedbackDraft,
+  subscribeToInterview, updateInterview, markInterviewCompleted, markInterviewPartiallyCompleted, saveFeedbackDraft,
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
@@ -21,6 +21,7 @@ const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 import Badge from "../../components/Badge";
 import CopyButton from "../../components/CopyButton";
 import Toast from "../../components/Toast";
+import Modal from "../../components/Modal";
 import AutosaveIndicator from "../../components/AutosaveIndicator";
 import { Skeleton } from "../../components/Skeleton";
 import { useAutosaveDraft } from "../../hooks/useAutosaveDraft";
@@ -35,6 +36,16 @@ const fadeUp = {
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06, duration: 0.3, ease: "easeOut" } }),
 };
 
+// Common reasons an interviewer can pick from when marking an interview
+// Partially Completed — "Other" always requires typing a free-text reason.
+const PARTIAL_COMPLETION_REASONS = [
+  "Technical/connectivity issues",
+  "Candidate left early",
+  "Ran out of time",
+  "Interview stopped for integrity concerns",
+  "Other",
+];
+
 export default function InterviewDetail() {
   const { id } = useParams();
   const [interview, setInterview] = useState(null);
@@ -46,6 +57,9 @@ export default function InterviewDetail() {
   const [answers,        setAnswers]        = useState({});
   const [comments,       setComments]       = useState("");
   const [now,            setNow]            = useState(new Date());
+  const [partialModalOpen,   setPartialModalOpen]   = useState(false);
+  const [partialReasonPreset, setPartialReasonPreset] = useState("");
+  const [partialReasonText,  setPartialReasonText]  = useState("");
 
   // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
   useEffect(() => {
@@ -174,6 +188,28 @@ export default function InterviewDetail() {
     setSaving(false);
   };
 
+  const openPartialCompletionModal = () => {
+    setPartialReasonPreset("");
+    setPartialReasonText("");
+    setPartialModalOpen(true);
+  };
+
+  const partialCompletionReason = partialReasonPreset === "Other" ? partialReasonText.trim() : partialReasonPreset;
+
+  const handleMarkPartiallyCompleted = async () => {
+    if (!partialCompletionReason) return; // Save button is disabled without one, but guard anyway
+    setSaving(true);
+    try {
+      await markInterviewPartiallyCompleted(id, partialCompletionReason);
+      setInterview(iv => ({ ...iv, status: "partially_completed", partialCompletionReason }));
+      setToast({ message: "Interview marked as partially completed." });
+      setPartialModalOpen(false);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setSaving(false);
+  };
+
   // Saves feedback WITHOUT marking completed — called from all form types while scheduled
   const handleSaveFeedback = async (feedbackData, errorMsg) => {
     if (errorMsg) return setToast({ message: errorMsg, type: "error" });
@@ -245,7 +281,7 @@ export default function InterviewDetail() {
 
   const isPending    = interview.status === "pending_acceptance";
   const isScheduled  = interview.status === "scheduled";
-  const isCompleted  = interview.status === "completed";
+  const isCompleted  = interview.status === "completed" || interview.status === "partially_completed";
   const hasFeedback  = !!interview.feedback?.submittedAt;
   const isDynamic    = !!(template?.domains);
   const isStructured = !!template && !isDynamic;
@@ -398,6 +434,20 @@ export default function InterviewDetail() {
           <div>
             <p className="text-sm font-semibold text-red-700">Candidate did not join</p>
             <p className="text-xs text-red-400 mt-0.5">Marked as no-show. No feedback required.</p>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Partially Completed notice ── */}
+      {interview.status === "partially_completed" && (
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-amber-700">Marked as Partially Completed</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Reason: {interview.partialCompletionReason || "—"}
+            </p>
           </div>
         </motion.div>
       )}
@@ -568,23 +618,87 @@ export default function InterviewDetail() {
                     {canComplete && "Ready — interview time has passed and evaluation is submitted."}
                   </p>
                 </div>
-                <button
-                  onClick={handleMarkCompleted}
-                  disabled={!canComplete || saving}
-                  className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
-                    canComplete
-                      ? "bg-emerald-600 text-white shadow-soft hover:bg-emerald-700"
-                      : "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  }`}
-                >
-                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {saving ? "Saving…" : "Mark as Completed"}
-                </button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    onClick={openPartialCompletionModal}
+                    disabled={!canComplete || saving}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
+                      canComplete
+                        ? "bg-white border border-amber-300 text-amber-700 hover:bg-amber-50"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent"
+                    }`}
+                  >
+                    Mark as Partially Completed
+                  </button>
+                  <button
+                    onClick={handleMarkCompleted}
+                    disabled={!canComplete || saving}
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
+                      canComplete
+                        ? "bg-emerald-600 text-white shadow-soft hover:bg-emerald-700"
+                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    }`}
+                  >
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {saving ? "Saving…" : "Mark as Completed"}
+                  </button>
+                </div>
               </div>
             </div>
           )}
         </motion.div>
       )}
+
+      {/* Partially Completed — reason is mandatory, either a preset pick or free text under "Other" */}
+      <Modal open={partialModalOpen} onClose={() => setPartialModalOpen(false)} title="Mark as Partially Completed">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            This interview will be marked <span className="font-semibold text-amber-700">Partially Completed</span>.
+            A reason is required — it's shown to admins for payment reconciliation and kept as part of the audit trail.
+          </p>
+          <div>
+            <label className={labelCls}>Reason</label>
+            <select
+              value={partialReasonPreset}
+              onChange={e => setPartialReasonPreset(e.target.value)}
+              className={inputCls}
+            >
+              <option value="" disabled>Select a reason…</option>
+              {PARTIAL_COMPLETION_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          {partialReasonPreset === "Other" && (
+            <div>
+              <label className={labelCls}>Please specify</label>
+              <textarea
+                value={partialReasonText}
+                onChange={e => setPartialReasonText(e.target.value)}
+                rows={3}
+                placeholder="Describe why the interview was only partially completed…"
+                className={inputCls}
+              />
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setPartialModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleMarkPartiallyCompleted}
+              disabled={!partialCompletionReason || saving}
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                partialCompletionReason
+                  ? "bg-amber-600 text-white shadow-soft hover:bg-amber-700"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? "Saving…" : "Confirm Partially Completed"}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>

@@ -1,4 +1,4 @@
-import { User, CalendarDays, Layers, Clock3, MessageSquare, Award } from "lucide-react";
+import { User, CalendarDays, Layers, Clock3, MessageSquare, Award, AlertTriangle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 import { formatDate, formatDateTime } from "../../utils/dates";
@@ -22,6 +22,18 @@ export default function FeedbackViewModal({ feedbackModal, onClose }) {
                 <span className="flex items-center gap-1"><Clock3 className="w-3.5 h-3.5 text-gray-400" /><span className="font-semibold text-gray-700">Submitted:</span> {formatDateTime(fb.submittedAt)}</span>
               )}
             </div>
+
+            {feedbackModal.interview.status === "partially_completed" && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-amber-800">Partially Completed</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Reason: {feedbackModal.interview.partialCompletionReason || "—"}
+                  </p>
+                </div>
+              </div>
+            )}
 
             {isDynamic ? (
               <DynamicFeedbackDisplay template={tmpl} feedbackData={fb} />
