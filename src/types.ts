@@ -12,6 +12,12 @@ export interface User {
   templateIds?: string[];
   skills?: string[];
   phoneNumber?: string;
+  // Interviewer-only — per-interview payment rate, set by an admin on the
+  // Interviewers page. Used by the admin Payment & Statistics page to
+  // compute each interviewer's payable amount for a filtered date range;
+  // undefined/null means no rate has been set yet (shows as unpriced there,
+  // never assumed to be 0).
+  paymentRatePerInterview?: number | null;
   createdAt?: string;
 }
 

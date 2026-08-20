@@ -16,6 +16,7 @@ const InboundPage        = lazy(() => import("./pages/admin/InboundPage"));
 const NudgePage          = lazy(() => import("./pages/admin/NudgePage"));
 const AdminAboutPage     = lazy(() => import("./pages/admin/AboutPage"));
 const QuestionsPage      = lazy(() => import("./pages/admin/QuestionsPage"));
+const PaymentStatsPage   = lazy(() => import("./pages/admin/PaymentStatsPage"));
 
 const InterviewerLayout    = lazy(() => import("./components/InterviewerLayout"));
 const InterviewerDashboard = lazy(() => import("./pages/interviewer/Dashboard"));
@@ -85,6 +86,7 @@ function AppRoutes() {
           <Route path="inbound"     element={<InboundPage />} />
           <Route path="nudge"       element={<NudgePage />} />
           <Route path="questions"   element={<QuestionsPage />} />
+          <Route path="payments"    element={<PaymentStatsPage />} />
           <Route path="about"       element={<AdminAboutPage />} />
         </Route>
 

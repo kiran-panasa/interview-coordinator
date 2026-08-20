@@ -88,8 +88,9 @@ export default function InterviewersPage() {
 
   const openEdit = (u) => setEditModal({
     user: u,
-    draftSkills:    u.skills      || [],
-    draftTemplates: u.templateIds || [],
+    draftSkills:      u.skills      || [],
+    draftTemplates:   u.templateIds || [],
+    draftPaymentRate: u.paymentRatePerInterview != null ? String(u.paymentRatePerInterview) : "",
   });
 
   const handleSave = async () => {
@@ -99,6 +100,7 @@ export default function InterviewersPage() {
       await updateUser(editModal.user.id, {
         skills:      editModal.draftSkills,
         templateIds: editModal.draftTemplates,
+        paymentRatePerInterview: editModal.draftPaymentRate === "" ? null : Number(editModal.draftPaymentRate),
       });
       queryClient.invalidateQueries({ queryKey: QK.users });
       setToast({ message: "Interviewer updated." });
@@ -553,6 +555,25 @@ export default function InterviewersPage() {
                 onChange={v => setEditModal(m => ({ ...m, draftSkills: v }))}
                 placeholder="Select skills…"
               />
+            </div>
+
+            {/* Payment rate */}
+            <div>
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Payment</p>
+              <label className="block text-sm font-semibold text-gray-700 mb-1.5">Rate per Interview</label>
+              <div className="relative w-48">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
+                <input
+                  type="number" min="0" step="1"
+                  value={editModal.draftPaymentRate}
+                  onChange={e => setEditModal(m => ({ ...m, draftPaymentRate: e.target.value }))}
+                  placeholder="Not set"
+                  className="w-full border border-gray-200 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+              <p className="text-xs text-gray-400 mt-1.5">
+                Used on the Payment &amp; Statistics page — Partially Completed interviews pay half this rate.
+              </p>
             </div>
 
             {/* Templates section */}
