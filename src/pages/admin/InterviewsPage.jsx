@@ -10,7 +10,7 @@ import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, markInterviewCompleted, deleteInterview,
+  createInterview, updateInterview, markInterviewCompleted, backfillAiReportPendingOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
@@ -91,6 +91,10 @@ export default function InterviewsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [blockedDates, setBlockedDates] = useState([]);
   useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
+  // Self-guarding — see backfillAiReportPendingOnce in src/api/interviews.ts.
+  // Only ever does real work the first time any admin loads this page after
+  // deploy; every load after that is a single cheap marker-doc read.
+  useEffect(() => { backfillAiReportPendingOnce().catch(err => console.error("aiReportPending backfill failed:", err)); }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");

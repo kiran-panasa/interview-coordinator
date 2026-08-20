@@ -1,7 +1,7 @@
 import { db, auth } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, deleteField,
-  query, where, orderBy, onSnapshot,
+  query, where, orderBy, onSnapshot, writeBatch, setDoc,
 } from "firebase/firestore";
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
@@ -173,6 +173,48 @@ export async function submitFeedback(id: string, feedback: Record<string, unknow
   await markInterviewCompleted(id, {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
   });
+}
+
+// One-time, self-guarding backfill so interviews completed BEFORE
+// aiReportPending existed (see markInterviewCompleted above) still get
+// picked up by the Apps Script sweep automatically, instead of only newly-
+// completed interviews benefiting — matches what backfillAiReportPending_()
+// in Code.gs does, but runs itself from the client so it doesn't depend on
+// anyone manually running that Apps Script function.
+//
+// Guarded by a settings/aiReportBackfill marker doc so the (potentially
+// large) status=="completed" query only ever runs once total, not once per
+// admin session — re-running that query on every page load would reproduce
+// the exact unbounded-read problem this whole aiReportPending mechanism was
+// built to avoid. Only touches interviews that have literally never been
+// considered (aiReportPendingSince still unset) — one that already tried
+// and gave up (see GIVE_UP_AFTER_DAYS in Code.gs) is left alone rather than
+// being re-queued forever.
+export async function backfillAiReportPendingOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "aiReportBackfill");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const snap = await getDocs(query(collection(db, "interviews"), where("status", "==", "completed")));
+  const now = new Date().toISOString();
+  const targets = snap.docs.filter(d => {
+    const data = d.data() as Interview;
+    return !data.aiReport && data.aiReportPendingSince == null;
+  });
+
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    targets.slice(i, i + 450).forEach(d => {
+      const data = d.data() as Interview;
+      batch.update(d.ref, {
+        aiReportPending: true,
+        aiReportPendingSince: data.createdAt || now,
+      });
+    });
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: now, count: targets.length });
 }
 
 export async function importScheduledInterview(
