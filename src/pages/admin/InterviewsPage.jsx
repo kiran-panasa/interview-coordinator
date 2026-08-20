@@ -568,39 +568,23 @@ export default function InterviewsPage() {
 
   // ── AI Report ────────────────────────────────────────────────────────────────
 
-  // Deliberately does NOT run the recording/transcript discovery chain
-  // (Calendar attachment scan, Meet API fallback, etc.) from a click — that's
-  // slow (the "up to a minute" spinner the user was seeing even when the
-  // transcript wasn't ready yet) and is already the background sweep's job
-  // (see aiReportPending in src/api/interviews.ts / sweepRecordingsPipeline_
-  // in Code.gs, which runs every 15 minutes and populates iv.transcriptUrl +
-  // iv.aiReport automatically). This only ever does two things: show a
-  // cached report instantly, or — once a transcript is already known —
-  // make the single (fast) Gemini call to generate one. If no transcript is
-  // cached yet, it reports status immediately with no network call at all.
   const handleViewAiReport = async (iv) => {
     setAiReportTarget(iv);
     setAiReportStatus(null);
     if (iv.aiReport) return; // already cached — modal renders it directly
-
-    if (!iv.transcriptUrl) {
-      if (!iv.eventId && !iv.meetLink) {
-        setToast({ message: "No Meet link/event on this interview — nothing to analyze.", type: "error" });
-        setAiReportTarget(null);
-        return;
-      }
-      setAiReportStatus({
-        status: "processing",
-        message: "Transcript not ready yet — the report will be generated automatically once it's available. Check back in a few minutes.",
-      });
+    if (!iv.eventId && !iv.meetLink && !iv.transcriptUrl) {
+      setToast({ message: "No Meet link/event/transcript on this interview — can't fetch a transcript to analyze.", type: "error" });
+      setAiReportTarget(null);
       return;
     }
-
     setAiReportLoading(true);
     try {
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action:         "generateAiReport",
-        transcriptUrl:  iv.transcriptUrl,
+        eventId:        iv.eventId || "",
+        meetLink:       iv.meetLink || "",
+        transcriptUrl:  iv.transcriptUrl || "",
+        recallBotId:    iv.recallBotId || "",
         candidateName:  iv.candidateName,
         round:          iv.round || iv.templateName || "Interview",
         templateName:   iv.templateName || "",
@@ -610,6 +594,9 @@ export default function InterviewsPage() {
         await updateInterview(iv.id, { aiReport });
         setAiReportTarget({ ...iv, aiReport });
       } else if (result?.status === "processing" || result?.status === "not_found") {
+        console.log(result.status === "processing" ? "Waiting for recording processing to complete." : "Recording not yet available.");
+        console.log("Transcript generation queued.");
+        console.log("AI report generation queued.");
         setAiReportStatus({ status: result.status, message: result.message });
       } else {
         throw new Error(result?.message || result?.error || "No report returned.");
@@ -627,13 +614,8 @@ export default function InterviewsPage() {
     await handleViewAiReport(iv);
   };
 
-  // Re-reads the interview from the live `interviews` list (not the stale
-  // snapshot captured when the modal opened) so "Check Again" actually picks
-  // up a transcriptUrl the background sweep found in the meantime.
   const handleRetryAiReport = () => {
-    if (!aiReportTarget) return;
-    const latest = interviews.find(x => x.id === aiReportTarget.id) || aiReportTarget;
-    handleViewAiReport(latest);
+    if (aiReportTarget) handleViewAiReport(aiReportTarget);
   };
 
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
