@@ -1081,13 +1081,19 @@ export default function InterviewsPage() {
       if (iv.status !== "completed" || (!iv.eventId && !iv.meetLink)) return iv;
       const patch = {};
       if (!iv.meetingRecordingUrl) {
-        try { patch.meetingRecordingUrl = await resolveRecordingUrl_(iv); } catch { /* leave blank */ }
+        try { patch.meetingRecordingUrl = await resolveRecordingUrl_(iv); }
+        catch (e) { console.warn(`Recording not resolved for "${iv.candidateName}" (${iv.id}, status=${e.status || "?"}):`, e.message); }
       }
       if (!iv.transcriptUrl) {
-        try { patch.transcriptUrl = await resolveTranscriptUrl_(iv); } catch { /* leave blank */ }
+        try { patch.transcriptUrl = await resolveTranscriptUrl_(iv); }
+        catch (e) { console.warn(`Transcript not resolved for "${iv.candidateName}" (${iv.id}, status=${e.status || "?"}):`, e.message); }
       }
       if (!iv.aiReport) {
-        try { patch.aiReport = await resolveAiReportForExport_(iv, patch.transcriptUrl || iv.transcriptUrl); } catch { /* leave blank */ }
+        try {
+          patch.aiReport = await resolveAiReportForExport_(iv, patch.transcriptUrl || iv.transcriptUrl);
+        } catch (e) {
+          console.warn(`AI report not resolved for "${iv.candidateName}" (${iv.id}, status=${e.status || "?"}):`, e.message);
+        }
       }
       return Object.keys(patch).length ? { ...iv, ...patch } : iv;
     });
