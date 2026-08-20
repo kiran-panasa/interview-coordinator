@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet,
+  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
@@ -130,6 +130,7 @@ export default function InterviewsPage() {
   const [linksImporting,  setLinksImporting]  = useState(false);
   const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
   const [recordingLoading,  setRecordingLoading]  = useState({}); // { [interviewId]: true }
+  const [downloadingFeedback, setDownloadingFeedback] = useState(false);
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
@@ -1017,19 +1018,73 @@ export default function InterviewsPage() {
     setHistoryLoading(false);
   }
 
+  // Runs `worker` over `items` with at most `limit` in flight at once —
+  // used below so resolving dozens/hundreds of missing recording/transcript
+  // links doesn't fire them all at the same instant (Apps Script Web Apps
+  // have a concurrent-execution ceiling) while still being much faster than
+  // doing them one at a time.
+  async function mapWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function run() {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await worker(items[i], i);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
+    return results;
+  }
+
+  // Download Feedback previously only ever showed a recording/transcript
+  // link if the background sweep had already found and cached it — for any
+  // interview it hasn't reached yet, this now does the same live lookup the
+  // "Meet Recording"/"Transcript" buttons do (resolveRecordingUrl_ /
+  // resolveTranscriptUrl_ above), in parallel across the export set, right
+  // before generating the file. Each resolver also persists what it finds
+  // back onto the interview doc, so this doubles as an on-demand backfill —
+  // the next download (or the sweep) won't need to re-fetch it. A genuinely
+  // unavailable resource (never recorded, still processing) is left blank,
+  // same as everywhere else — never a fake link.
+  async function withResolvedLinks(list) {
+    return mapWithConcurrency(list, 8, async (iv) => {
+      if (iv.status !== "completed" || (!iv.eventId && !iv.meetLink)) return iv;
+      const patch = {};
+      if (!iv.meetingRecordingUrl) {
+        try { patch.meetingRecordingUrl = await resolveRecordingUrl_(iv); } catch { /* leave blank */ }
+      }
+      if (!iv.transcriptUrl) {
+        try { patch.transcriptUrl = await resolveTranscriptUrl_(iv); } catch { /* leave blank */ }
+      }
+      return Object.keys(patch).length ? { ...iv, ...patch } : iv;
+    });
+  }
+
   const handleDownloadFeedback = async () => {
     if (filtered.length === 0) {
       setToast({ message: "No interviews match the current filters.", type: "error" });
       return;
     }
-    const integrity = await getInterviewIntegrity().catch(() => null);
-    exportFeedbackToExcel(filtered, templates, programs, candidates, undefined, integrity?.domainFields);
+    setDownloadingFeedback(true);
+    try {
+      const integrity = await getInterviewIntegrity().catch(() => null);
+      const resolved = await withResolvedLinks(filtered);
+      exportFeedbackToExcel(resolved, templates, programs, candidates, undefined, integrity?.domainFields);
+    } finally {
+      setDownloadingFeedback(false);
+    }
   };
 
   const handleDownloadSingleFeedback = async (iv) => {
     const slug = (iv.candidateName || "candidate").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
-    const integrity = await getInterviewIntegrity().catch(() => null);
-    exportFeedbackToExcel([iv], templates, programs, candidates, `feedback_${slug}`, integrity?.domainFields);
+    setDownloadingFeedback(true);
+    try {
+      const integrity = await getInterviewIntegrity().catch(() => null);
+      const [resolved] = await withResolvedLinks([iv]);
+      exportFeedbackToExcel([resolved], templates, programs, candidates, `feedback_${slug}`, integrity?.domainFields);
+    } finally {
+      setDownloadingFeedback(false);
+    }
   };
 
   return (
@@ -1119,10 +1174,10 @@ export default function InterviewsPage() {
           </button>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={handleDownloadFeedback}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            Download Feedback{filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}
+          <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            {downloadingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+            {downloadingFeedback ? "Fetching recording/transcript links…" : `Download Feedback${filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}`}
           </button>
           <button
             onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
