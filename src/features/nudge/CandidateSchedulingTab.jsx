@@ -104,7 +104,13 @@ export default function CandidateSchedulingTab({
   // Program changed — auto-fill Template/Round from that program's configured
   // defaults (Settings → General → Programs), still overridable below. Falls
   // back to clearing the template if it no longer applies and no default exists.
+  // Skipped when the Program change itself came FROM picking a Template (see
+  // handleTemplateChange below) — otherwise a program whose own default
+  // template differs would immediately stomp the template the admin just
+  // explicitly chose.
+  const templateJustPickedRef = useRef(false);
   useEffect(() => {
+    if (templateJustPickedRef.current) { templateJustPickedRef.current = false; return; }
     const program = programs.find(p => p.id === filterProgram);
     if (program?.defaultTemplateId && templateOptions.some(t => t.id === program.defaultTemplateId)) {
       setFilterTemplate(program.defaultTemplateId);
@@ -116,6 +122,18 @@ export default function CandidateSchedulingTab({
       setRoundCustomMode(false);
     }
   }, [filterProgram]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Picking a Template directly auto-selects its Program too, so the visible
+  // "Filter by Program" field always reflects what was actually chosen
+  // instead of silently staying on "All Programs".
+  const handleTemplateChange = (tid) => {
+    setFilterTemplate(tid);
+    const tmpl = templates.find(t => t.id === tid);
+    if (tmpl?.program && tmpl.program !== filterProgram) {
+      templateJustPickedRef.current = true;
+      setFilterProgram(tmpl.program);
+    }
+  };
 
   const filteredCandidates = candidates.filter(c => {
     if (pendingOnly && c.nudgeStatus !== "pending_nudge") return false;
@@ -440,12 +458,12 @@ export default function CandidateSchedulingTab({
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
-            <DatePicker value={dateStart} onChange={e => setDateStart(e.target.value)} blockedDates={blockedDates}
+            <DatePicker value={dateStart} onChange={e => setDateStart(e.target.value)} min={today()} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">End Date</label>
-            <DatePicker value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart} blockedDates={blockedDates}
+            <DatePicker value={dateEnd} onChange={e => setDateEnd(e.target.value)} min={dateStart || today()} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
@@ -455,7 +473,7 @@ export default function CandidateSchedulingTab({
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Template (required)</label>
-            <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)}
+            <select value={filterTemplate} onChange={e => handleTemplateChange(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— Select template —</option>
               {templateOptions.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}

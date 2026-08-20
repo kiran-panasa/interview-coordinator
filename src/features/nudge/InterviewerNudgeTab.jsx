@@ -262,12 +262,12 @@ export default function InterviewerNudgeTab({
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From Date</label>
-            <DatePicker value={nudgeDateStart} onChange={e => setNudgeDateStart(e.target.value)} blockedDates={blockedDates}
+            <DatePicker value={nudgeDateStart} onChange={e => setNudgeDateStart(e.target.value)} min={today()} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">To Date</label>
-            <DatePicker value={nudgeDateEnd} min={nudgeDateStart} onChange={e => setNudgeDateEnd(e.target.value)} blockedDates={blockedDates}
+            <DatePicker value={nudgeDateEnd} min={nudgeDateStart || today()} onChange={e => setNudgeDateEnd(e.target.value)} blockedDates={blockedDates}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
           </div>
         </div>
