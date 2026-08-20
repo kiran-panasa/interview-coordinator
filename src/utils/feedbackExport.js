@@ -54,16 +54,20 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
 
 /**
  * Exports feedback for the given interviews (already filtered by the
- * caller) into a single merged Excel sheet — one row per interview.
+ * caller) into a single merged Excel sheet — one row per interview, in this
+ * fixed column order:
  *
- * Column order: UID, Recording/Transcript/AI Report links, the rest of the
- * interview's own data, then one pair of columns per section/domain
- * detected across the involved templates — "<Section>" (the full card-by-
- * card text dump, same as before) immediately followed by
- * "<Section> – Domain Rating" (just that section's numeric rating on its
- * own). Interview Integrity is excluded from the Domain Rating column (its
- * text-dump column and the separate Integrity Score column are unaffected)
- * since it's a compliance checklist, not a scored section. Interviews using
+ *   UID, Candidate Name, Candidate Email, Interviewer, Template, Program,
+ *   Round, Date, Time, Status, Interview Integrity, Integrity Score,
+ *   [<Section>, <Section> – Domain Rating] per non-Integrity section
+ *   (dynamic per the templates involved), Overall Recommendation,
+ *   Final Verdict, Comments, Meet Link, Recording Link, Transcript Link,
+ *   AI Report, Feedback Submitted At.
+ *
+ * Interview Integrity gets its own text-dump column (like every other
+ * section) but never a "– Domain Rating" column of its own — it's a
+ * compliance checklist, not a scored section; Integrity Score (a distinct,
+ * separately-computed field) covers that role instead. Interviews using
  * different templates merge into the same sheet; a section's columns are
  * just blank for interviews whose template doesn't have that section.
  *
@@ -82,9 +86,10 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
  * record (iv.meetingRecordingUrl / iv.transcriptUrl / iv.aiReport) — the
  * same canonical fields the app itself displays and copies everywhere else
  * (InterviewsPage's Meet Recording/Transcript/AI Report actions, the Academy
- * Nexus push). This function never generates or discovers a new one; a
- * blank cell means that field genuinely isn't populated on the interview
- * yet. The AI Report column has no separately-hosted report page, so its
+ * Nexus push, the AI Report modal's Copy Link button). This function never
+ * generates or discovers a new one — a blank cell means that field
+ * genuinely isn't populated on the interview yet, not a bug in this export.
+ * The AI Report column has no separately-hosted report page, so its
  * "canonical URL" is a deep link into this same app
  * (/admin/interviews?aiReport=<id>) that auto-opens the existing AI Report
  * modal for that interview — stable across downloads, only ever written
@@ -95,9 +100,9 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   const programNameById = new Map(programs.map(p => [p.id, p.name]));
   const uidByCandidateId = new Map(candidates.map(c => [c.id, c.uid || ""]));
 
-  // One entry per distinct section/domain across all involved templates,
-  // in first-seen order — isIntegrity controls whether it gets a paired
-  // Domain Rating column.
+  // One entry per distinct section/domain across all involved templates, in
+  // first-seen order. Integrity always sorts first (order: -1, see
+  // withIntegrityDomain) so it naturally ends up separated from the rest.
   const domainDefs = [];
   const seenLabels = new Set();
   interviews.forEach(iv => {
@@ -112,26 +117,33 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
         }
       });
   });
+  const integrityDef = domainDefs.find(d => d.isIntegrity) || null;
+  const scoredDefs = domainDefs.filter(d => !d.isIntegrity);
 
   const sectionHeaders = [];
   const sectionColWidths = [];
-  domainDefs.forEach(d => {
-    sectionHeaders.push(d.label);
-    sectionColWidths.push({ wch: 45 });
-    if (!d.isIntegrity) {
-      sectionHeaders.push(`${d.label} – Domain Rating`);
-      sectionColWidths.push({ wch: 16 });
-    }
+  scoredDefs.forEach(d => {
+    sectionHeaders.push(d.label, `${d.label} – Domain Rating`);
+    sectionColWidths.push({ wch: 45 }, { wch: 16 });
   });
 
   const headers = [
-    "UID", "Recording Link", "Transcript Link", "AI Report",
-    "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
+    "UID", "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
     "Date", "Time", "Status",
-    "Overall Recommendation", "Final Verdict", "Integrity Score", "Comments", "Feedback Submitted At",
-    "Meet Link",
+    "Interview Integrity", "Integrity Score",
     ...sectionHeaders,
+    "Overall Recommendation", "Final Verdict", "Comments",
+    "Meet Link", "Recording Link", "Transcript Link", "AI Report",
+    "Feedback Submitted At",
   ];
+
+  // Looks up one domain's stored data for a given interview/template pair —
+  // shared by the Integrity text-dump cell and the per-section cells below.
+  function domainDataFor(template, fb, isDynamic, label) {
+    const domain = (template?.domains || []).find(x => x.label === label);
+    const data = isDynamic && domain ? fb.domains[domain.id] : null;
+    return { domain, data };
+  }
 
   const rows = interviews.map(iv => {
     const fb = iv.feedback || null;
@@ -139,15 +151,16 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
     const programName = template?.program ? (programNameById.get(template.program) || "") : "";
     const isDynamic = !!(fb && fb.domains);
 
+    const integrityText = integrityDef
+      ? (() => { const { domain, data } = domainDataFor(template, fb, isDynamic, integrityDef.label); return domain && data ? buildDomainText(domain, data) : ""; })()
+      : "";
+
     const sectionCells = [];
-    domainDefs.forEach(d => {
-      const domain = (template?.domains || []).find(x => x.label === d.label);
-      const domainData = isDynamic && domain ? fb.domains[domain.id] : null;
-      sectionCells.push(domain && domainData ? buildDomainText(domain, domainData) : "");
-      if (!d.isIntegrity) {
-        const rating = domainData?.domain_rating;
-        sectionCells.push(rating != null ? rating : "");
-      }
+    scoredDefs.forEach(d => {
+      const { domain, data } = domainDataFor(template, fb, isDynamic, d.label);
+      sectionCells.push(domain && data ? buildDomainText(domain, data) : "");
+      const rating = data?.domain_rating;
+      sectionCells.push(rating != null ? rating : "");
     });
 
     // Legacy (pre-template) feedback stored plain question->answer pairs
@@ -163,9 +176,6 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
 
     return [
       uidByCandidateId.get(iv.candidateId) || "",
-      iv.meetingRecordingUrl || "",
-      iv.transcriptUrl || "",
-      iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
       iv.candidateName || "",
       iv.candidateEmail || "",
       iv.interviewerName || iv.interviewerEmail || "",
@@ -175,24 +185,29 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
       iv.scheduledTime || "",
       iv.status || "",
+      integrityText,
+      fb?.integrityScore != null ? fb.integrityScore : "",
+      ...sectionCells,
       fb?.overallRecommendation || "",
       fb?.finalVerdict != null ? fb.finalVerdict : "",
-      fb?.integrityScore != null ? fb.integrityScore : "",
       comments,
-      fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
       iv.meetLink || "",
-      ...sectionCells,
+      iv.meetingRecordingUrl || "",
+      iv.transcriptUrl || "",
+      iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
+      fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
     ];
   });
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [
-    { wch: 24 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
-    { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
+    { wch: 24 }, { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
     { wch: 12 }, { wch: 10 }, { wch: 12 },
-    { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 45 }, { wch: 18 },
-    { wch: 40 },
+    { wch: 45 }, { wch: 14 },
     ...sectionColWidths,
+    { wch: 20 }, { wch: 12 }, { wch: 45 },
+    { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
+    { wch: 18 },
   ];
 
   // Turn every URL-bearing cell in a LINK_HEADERS column into an actual
