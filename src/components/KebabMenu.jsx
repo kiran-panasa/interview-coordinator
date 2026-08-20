@@ -83,7 +83,7 @@ function KebabMenu({ actions }) {
                   >
                     {a.label}
                   </button>
-                  {a.copyValue && <CopyButton value={a.copyValue} className="mr-2" />}
+                  {(a.copyValue || a.copyResolve) && <CopyButton value={a.copyValue} resolve={a.copyResolve} className="mr-2" />}
                 </div>
               ))}
             </motion.div>

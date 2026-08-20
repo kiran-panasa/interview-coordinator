@@ -481,68 +481,87 @@ export default function InterviewsPage() {
 
   // ── Transcript ───────────────────────────────────────────────────────────────
 
-  const handleViewTranscript = async (iv) => {
-    if (iv.transcriptUrl) { window.open(iv.transcriptUrl, "_blank", "noopener"); return; }
+  // Shared by the "Transcript" click-to-open button and the kebab's copy
+  // icon — resolves (and caches into Firestore) the transcript link on
+  // demand instead of requiring it to already be stored, so the copy icon
+  // can show up for every completed interview, not just ones the sweep has
+  // already reached.
+  const resolveTranscriptUrl_ = async (iv) => {
+    if (iv.transcriptUrl) return iv.transcriptUrl;
     if (!iv.eventId && !iv.meetLink) {
-      setToast({ message: "No Meet link/event on this interview — nothing to look up.", type: "error" });
-      return;
+      const err = new Error("No Meet link/event on this interview — nothing to look up.");
+      err.status = "no_link";
+      throw err;
     }
+    const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+      action:       "getTranscript",
+      eventId:      iv.eventId || "",
+      meetLink:     iv.meetLink || "",
+      recallBotId:  iv.recallBotId || "",
+      candidateName: iv.candidateName,
+    });
+    if (result?.status === "ready" && result.transcriptUrl) {
+      await updateInterview(iv.id, { transcriptUrl: result.transcriptUrl });
+      return result.transcriptUrl;
+    }
+    const err = new Error(result?.message || result?.error || "Transcript not available for this interview.");
+    err.status = result?.status || "error";
+    throw err;
+  };
+
+  const handleViewTranscript = async (iv) => {
     setTranscriptLoading(s => ({ ...s, [iv.id]: true }));
     try {
-      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:       "getTranscript",
-        eventId:      iv.eventId || "",
-        meetLink:     iv.meetLink || "",
-        recallBotId:  iv.recallBotId || "",
-        candidateName: iv.candidateName,
-      });
-      if (result?.status === "ready" && result.transcriptUrl) {
-        await updateInterview(iv.id, { transcriptUrl: result.transcriptUrl });
-        window.open(result.transcriptUrl, "_blank", "noopener");
-      } else if (result?.status === "processing") {
-        console.log("Recording not yet available.");
-        console.log("Waiting for recording processing to complete.");
-        console.log("Transcript generation queued.");
-        setToast({ message: result.message || "Recording is still being processed — check back in a few minutes.", type: "info" });
-      } else {
-        throw new Error(result?.message || result?.error || "Transcript not available for this interview.");
-      }
+      const url = await resolveTranscriptUrl_(iv);
+      window.open(url, "_blank", "noopener");
     } catch (e) {
-      setToast({ message: "Couldn't open transcript: " + e.message, type: "error" });
+      if (e.status === "processing") {
+        setToast({ message: e.message, type: "info" });
+      } else {
+        setToast({ message: "Couldn't open transcript: " + e.message, type: "error" });
+      }
     }
     setTranscriptLoading(s => ({ ...s, [iv.id]: false }));
   };
 
   // ── Meet Recording ───────────────────────────────────────────────────────────
 
-  const handleViewRecording = async (iv) => {
-    if (iv.meetingRecordingUrl) { window.open(iv.meetingRecordingUrl, "_blank", "noopener"); return; }
+  // Same pattern as resolveTranscriptUrl_ above — used by both the click-to-
+  // open button and the kebab's copy icon.
+  const resolveRecordingUrl_ = async (iv) => {
+    if (iv.meetingRecordingUrl) return iv.meetingRecordingUrl;
     if (!iv.eventId && !iv.meetLink) {
-      setToast({ message: "No Meet link/event on this interview — nothing to look up.", type: "error" });
-      return;
+      const err = new Error("No Meet link/event on this interview — nothing to look up.");
+      err.status = "no_link";
+      throw err;
     }
+    const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+      action:        "getRecording",
+      eventId:       iv.eventId || "",
+      meetLink:      iv.meetLink || "",
+      recallBotId:   iv.recallBotId || "",
+      transcriptUrl: iv.transcriptUrl || "",
+    });
+    if (result?.status === "ready" && result.recordingUrl) {
+      await updateInterview(iv.id, { meetingRecordingUrl: result.recordingUrl });
+      return result.recordingUrl;
+    }
+    const err = new Error(result?.message || result?.error || "Recording not available for this interview.");
+    err.status = result?.status || "error";
+    throw err;
+  };
+
+  const handleViewRecording = async (iv) => {
     setRecordingLoading(s => ({ ...s, [iv.id]: true }));
     try {
-      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:        "getRecording",
-        eventId:       iv.eventId || "",
-        meetLink:      iv.meetLink || "",
-        recallBotId:   iv.recallBotId || "",
-        transcriptUrl: iv.transcriptUrl || "",
-      });
-      if (result?.status === "ready" && result.recordingUrl) {
-        await updateInterview(iv.id, { meetingRecordingUrl: result.recordingUrl });
-        window.open(result.recordingUrl, "_blank", "noopener");
-      } else if (result?.status === "processing") {
-        console.log("Recording processing in progress");
-        setToast({ message: result.message || "Recording is still being processed — check back in a few minutes.", type: "info" });
-      } else if (result?.status === "not_found") {
-        setToast({ message: result.message || "No recording available for this interview.", type: "info" });
-      } else {
-        throw new Error(result?.message || result?.error || "Recording not available for this interview.");
-      }
+      const url = await resolveRecordingUrl_(iv);
+      window.open(url, "_blank", "noopener");
     } catch (e) {
-      setToast({ message: "Couldn't open recording: " + e.message, type: "error" });
+      if (e.status === "processing" || e.status === "not_found") {
+        setToast({ message: e.message, type: "info" });
+      } else {
+        setToast({ message: "Couldn't open recording: " + e.message, type: "error" });
+      }
     }
     setRecordingLoading(s => ({ ...s, [iv.id]: false }));
   };
@@ -1181,12 +1200,14 @@ export default function InterviewsPage() {
                       onClick: () => { if (!recordingLoading[iv.id]) handleViewRecording(iv); },
                       show: iv.status === "completed",
                       copyValue: iv.meetingRecordingUrl || undefined,
+                      copyResolve: (!iv.meetingRecordingUrl && (iv.eventId || iv.meetLink)) ? () => resolveRecordingUrl_(iv) : undefined,
                     },
                     {
                       label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",
                       onClick: () => { if (!transcriptLoading[iv.id]) handleViewTranscript(iv); },
                       show: iv.status === "completed",
                       copyValue: iv.transcriptUrl || undefined,
+                      copyResolve: (!iv.transcriptUrl && (iv.eventId || iv.meetLink)) ? () => resolveTranscriptUrl_(iv) : undefined,
                     },
                     {
                       label: "AI Report",
