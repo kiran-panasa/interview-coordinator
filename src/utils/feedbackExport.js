@@ -47,28 +47,25 @@ function buildDomainText(domain, domainData) {
   return lines.join("\n");
 }
 
-const BASE_HEADERS = [
-  "UID", "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
-  "Date", "Time", "Status",
-];
-const TAIL_HEADERS = [
-  "Overall Recommendation", "Final Verdict", "Integrity Score", "Comments", "Feedback Submitted At",
-  "Meet Link", "Recording Link", "Transcript Link", "AI Report",
-];
 // Columns whose value should be written as an actual clickable hyperlink
-// (not just URL-looking text) — matched by header name so the position stays
-// robust if BASE_HEADERS/TAIL_HEADERS/domain columns are ever reordered.
+// (not just URL-looking text) — matched by header name so this stays robust
+// to reordering.
 const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", "AI Report"]);
 
 /**
  * Exports feedback for the given interviews (already filtered by the
- * caller) into a single merged Excel sheet — one row per interview. Every
- * domain that appears in any of the involved templates becomes its own
- * column, and each cell contains everything "View Feedback" shows for that
- * domain (every card, every field, resolved option labels, domain rating) —
- * not a summary. Interviews using different templates merge into the same
- * sheet; a domain column is just blank for interviews whose template
- * doesn't have it.
+ * caller) into a single merged Excel sheet — one row per interview.
+ *
+ * Column order: UID, Recording/Transcript/AI Report links, the rest of the
+ * interview's own data, then one pair of columns per section/domain
+ * detected across the involved templates — "<Section>" (the full card-by-
+ * card text dump, same as before) immediately followed by
+ * "<Section> – Domain Rating" (just that section's numeric rating on its
+ * own). Interview Integrity is excluded from the Domain Rating column (its
+ * text-dump column and the separate Integrity Score column are unaffected)
+ * since it's a compliance checklist, not a scored section. Interviews using
+ * different templates merge into the same sheet; a section's columns are
+ * just blank for interviews whose template doesn't have that section.
  *
  * `integrityDomainFields` is the live content of the global Interview
  * Integrity checklist (settings/interviewIntegrity) — that domain isn't
@@ -79,19 +76,29 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
  *
  * `candidates` supplies the UID column (Candidate.uid, the candidate's
  * Firebase Auth uid — blank for legacy/CSV-imported candidates that never
- * had one). The AI Report column reuses the interview's own record — there's
- * no separately-hosted report page, so the link is a deep link into this
- * same app (/admin/interviews?aiReport=<id>) that auto-opens the existing AI
- * Report modal for that interview; InterviewsPage.jsx reads that query param
- * on load. Only written when iv.aiReport already exists — never generates
- * one just for the export.
+ * had one).
+ *
+ * Recording/Transcript/AI Report links are read straight off the interview
+ * record (iv.meetingRecordingUrl / iv.transcriptUrl / iv.aiReport) — the
+ * same canonical fields the app itself displays and copies everywhere else
+ * (InterviewsPage's Meet Recording/Transcript/AI Report actions, the Academy
+ * Nexus push). This function never generates or discovers a new one; a
+ * blank cell means that field genuinely isn't populated on the interview
+ * yet. The AI Report column has no separately-hosted report page, so its
+ * "canonical URL" is a deep link into this same app
+ * (/admin/interviews?aiReport=<id>) that auto-opens the existing AI Report
+ * modal for that interview — stable across downloads, only ever written
+ * when iv.aiReport already exists.
  */
 export function exportFeedbackToExcel(interviews, templates, programs, candidates = [], filenamePrefix = "interview_feedback", integrityDomainFields = null) {
   const templateById    = new Map(templates.map(t => [t.id, withIntegrityDomain(t, integrityDomainFields)]));
   const programNameById = new Map(programs.map(p => [p.id, p.name]));
   const uidByCandidateId = new Map(candidates.map(c => [c.id, c.uid || ""]));
 
-  const domainLabels = [];
+  // One entry per distinct section/domain across all involved templates,
+  // in first-seen order — isIntegrity controls whether it gets a paired
+  // Domain Rating column.
+  const domainDefs = [];
   const seenLabels = new Set();
   interviews.forEach(iv => {
     const t = templateById.get(iv.templateId);
@@ -99,17 +106,32 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       .filter(d => d.enabled !== false)
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
       .forEach(d => {
-        if (!seenLabels.has(d.label)) { seenLabels.add(d.label); domainLabels.push(d.label); }
+        if (!seenLabels.has(d.label)) {
+          seenLabels.add(d.label);
+          domainDefs.push({ label: d.label, isIntegrity: d.type === "integrity" });
+        }
       });
   });
 
-  // Separate from the domainLabels text-dump columns above — those hold the
-  // full card-by-card breakdown per section; these hold just that section's
-  // numeric Domain Rating on its own, one column per section, so it can be
-  // read/aggregated without parsing the text-dump column.
-  const ratingHeaders = domainLabels.map(label => `${label} – Domain Rating`);
+  const sectionHeaders = [];
+  const sectionColWidths = [];
+  domainDefs.forEach(d => {
+    sectionHeaders.push(d.label);
+    sectionColWidths.push({ wch: 45 });
+    if (!d.isIntegrity) {
+      sectionHeaders.push(`${d.label} – Domain Rating`);
+      sectionColWidths.push({ wch: 16 });
+    }
+  });
 
-  const headers = [...BASE_HEADERS, ...domainLabels, ...TAIL_HEADERS, ...ratingHeaders];
+  const headers = [
+    "UID", "Recording Link", "Transcript Link", "AI Report",
+    "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
+    "Date", "Time", "Status",
+    "Overall Recommendation", "Final Verdict", "Integrity Score", "Comments", "Feedback Submitted At",
+    "Meet Link",
+    ...sectionHeaders,
+  ];
 
   const rows = interviews.map(iv => {
     const fb = iv.feedback || null;
@@ -117,19 +139,15 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
     const programName = template?.program ? (programNameById.get(template.program) || "") : "";
     const isDynamic = !!(fb && fb.domains);
 
-    const domainCells = domainLabels.map(label => {
-      if (!isDynamic) return "";
-      const domain = (template?.domains || []).find(d => d.label === label);
-      if (!domain) return "";
-      return buildDomainText(domain, fb.domains[domain.id]);
-    });
-
-    const ratingCells = domainLabels.map(label => {
-      if (!isDynamic) return "";
-      const domain = (template?.domains || []).find(d => d.label === label);
-      if (!domain) return ""; // this interview's template doesn't have this section at all
-      const rating = fb.domains[domain.id]?.domain_rating;
-      return rating != null ? rating : "";
+    const sectionCells = [];
+    domainDefs.forEach(d => {
+      const domain = (template?.domains || []).find(x => x.label === d.label);
+      const domainData = isDynamic && domain ? fb.domains[domain.id] : null;
+      sectionCells.push(domain && domainData ? buildDomainText(domain, domainData) : "");
+      if (!d.isIntegrity) {
+        const rating = domainData?.domain_rating;
+        sectionCells.push(rating != null ? rating : "");
+      }
     });
 
     // Legacy (pre-template) feedback stored plain question->answer pairs
@@ -145,6 +163,9 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
 
     return [
       uidByCandidateId.get(iv.candidateId) || "",
+      iv.meetingRecordingUrl || "",
+      iv.transcriptUrl || "",
+      iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
       iv.candidateName || "",
       iv.candidateEmail || "",
       iv.interviewerName || iv.interviewerEmail || "",
@@ -154,28 +175,24 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
       iv.scheduledTime || "",
       iv.status || "",
-      ...domainCells,
       fb?.overallRecommendation || "",
       fb?.finalVerdict != null ? fb.finalVerdict : "",
       fb?.integrityScore != null ? fb.integrityScore : "",
       comments,
       fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
       iv.meetLink || "",
-      iv.meetingRecordingUrl || "",
-      iv.transcriptUrl || "",
-      iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
-      ...ratingCells,
+      ...sectionCells,
     ];
   });
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [
-    { wch: 24 }, { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
+    { wch: 24 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
+    { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
     { wch: 12 }, { wch: 10 }, { wch: 12 },
-    ...domainLabels.map(() => ({ wch: 45 })),
     { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 45 }, { wch: 18 },
-    { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
-    ...domainLabels.map(() => ({ wch: 16 })),
+    { wch: 40 },
+    ...sectionColWidths,
   ];
 
   // Turn every URL-bearing cell in a LINK_HEADERS column into an actual
