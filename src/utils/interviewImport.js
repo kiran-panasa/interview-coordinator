@@ -111,16 +111,23 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
       const hasDomainFeedback = Object.values(domainData).some(Boolean);
 
       // Upsert match — an existing interview for this candidate + template,
-      // preferring an exact date match but falling back to the sole existing
-      // interview for that pairing if the date wasn't matched. Rows that hit
-      // this get UPDATED (links + optional feedback) instead of creating a
-      // duplicate — this is what lets meeting/recording links be uploaded
+      // preferring an exact date match; only falls back to the sole existing
+      // interview for that pairing when the row supplied NO date at all (a
+      // links-only upload where the date column was left blank). Rows that
+      // hit this get UPDATED (links + optional feedback) instead of creating
+      // a duplicate — this is what lets meeting/recording links be uploaded
       // for interviews that already exist (completed or still scheduled).
+      //
+      // Deliberately does NOT fall back to the sole match when a date WAS
+      // given but didn't match anything — a candidate re-attempting the same
+      // template on a new date must create a new interview, not silently
+      // overwrite their first attempt just because it's the only existing
+      // record for that candidate+template pairing.
       let existingInterview = null;
       if (candidate && template) {
         const candidateTemplateIvs = existing.filter(iv => iv.candidateId === candidate.id && iv.templateId === template.id);
         existingInterview = (scheduledDate && candidateTemplateIvs.find(iv => iv.scheduledDate === scheduledDate))
-          || (candidateTemplateIvs.length === 1 ? candidateTemplateIvs[0] : null);
+          || (!scheduledDate && candidateTemplateIvs.length === 1 ? candidateTemplateIvs[0] : null);
       }
       if (existingInterview) {
         const willAddFeedback = !!(verdict || hasDomainFeedback);
@@ -200,12 +207,21 @@ export function parseLinksCSV(text, candidates, templates, existing) {
       let existingInterview = null;
       if (candidate && template) {
         const matches = existing.filter(iv => iv.candidateId === candidate.id && iv.templateId === template.id);
+        // Same rule as parseImportCSV above — only fall back to the sole
+        // match when no date was given at all; a date that was given but
+        // didn't match anything is a real mismatch, not "assume they meant
+        // the only one," so a candidate's other attempts on other dates are
+        // never silently overwritten.
         existingInterview = (scheduledDate && matches.find(iv => iv.scheduledDate === scheduledDate))
-          || (matches.length === 1 ? matches[0] : null);
+          || (!scheduledDate && matches.length === 1 ? matches[0] : null);
         if (!existingInterview) {
-          errors.push(matches.length === 0
-            ? "No existing interview found for this candidate + template."
-            : `${matches.length} interviews found for this candidate + template — add a date column to disambiguate.`);
+          errors.push(
+            scheduledDate
+              ? "No existing interview found for this candidate + template on that date."
+              : matches.length === 0
+                ? "No existing interview found for this candidate + template."
+                : `${matches.length} interviews found for this candidate + template — add a date column to disambiguate.`
+          );
         }
       }
 
