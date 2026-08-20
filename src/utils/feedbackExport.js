@@ -48,7 +48,7 @@ function buildDomainText(domain, domainData) {
 }
 
 const BASE_HEADERS = [
-  "Candidate Name", "UID", "Candidate Email", "Interviewer", "Template", "Program", "Round",
+  "UID", "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
   "Date", "Time", "Status",
 ];
 const TAIL_HEADERS = [
@@ -103,7 +103,13 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       });
   });
 
-  const headers = [...BASE_HEADERS, ...domainLabels, ...TAIL_HEADERS];
+  // Separate from the domainLabels text-dump columns above — those hold the
+  // full card-by-card breakdown per section; these hold just that section's
+  // numeric Domain Rating on its own, one column per section, so it can be
+  // read/aggregated without parsing the text-dump column.
+  const ratingHeaders = domainLabels.map(label => `${label} – Domain Rating`);
+
+  const headers = [...BASE_HEADERS, ...domainLabels, ...TAIL_HEADERS, ...ratingHeaders];
 
   const rows = interviews.map(iv => {
     const fb = iv.feedback || null;
@@ -118,6 +124,14 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       return buildDomainText(domain, fb.domains[domain.id]);
     });
 
+    const ratingCells = domainLabels.map(label => {
+      if (!isDynamic) return "";
+      const domain = (template?.domains || []).find(d => d.label === label);
+      if (!domain) return ""; // this interview's template doesn't have this section at all
+      const rating = fb.domains[domain.id]?.domain_rating;
+      return rating != null ? rating : "";
+    });
+
     // Legacy (pre-template) feedback stored plain question->answer pairs
     // instead of domains — fold those into the Comments column so nothing
     // from older records is dropped either.
@@ -130,8 +144,8 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
     }
 
     return [
-      iv.candidateName || "",
       uidByCandidateId.get(iv.candidateId) || "",
+      iv.candidateName || "",
       iv.candidateEmail || "",
       iv.interviewerName || iv.interviewerEmail || "",
       iv.templateName || "",
@@ -150,16 +164,18 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       iv.meetingRecordingUrl || "",
       iv.transcriptUrl || "",
       iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
+      ...ratingCells,
     ];
   });
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [
-    { wch: 20 }, { wch: 24 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
+    { wch: 24 }, { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
     { wch: 12 }, { wch: 10 }, { wch: 12 },
     ...domainLabels.map(() => ({ wch: 45 })),
     { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 45 }, { wch: 18 },
     { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
+    ...domainLabels.map(() => ({ wch: 16 })),
   ];
 
   // Turn every URL-bearing cell in a LINK_HEADERS column into an actual
