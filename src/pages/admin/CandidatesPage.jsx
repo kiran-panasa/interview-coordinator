@@ -109,6 +109,14 @@ export default function CandidatesPage() {
   const [saving,     setSaving]     = useState(false);
   const [toast,      setToast]      = useState(null);
 
+  // Add/Edit Candidate modal — only templates belonging to the selected
+  // Program are selectable, so a candidate can't end up assigned a template
+  // from an unrelated program.
+  const programTemplates = useMemo(
+    () => templates.filter(t => t.program === form.program),
+    [templates, form.program]
+  );
+
   // Bulk edit
   const [selected,      setSelected]      = useState(new Set());
   const [showBulk,      setShowBulk]      = useState(false);
@@ -473,22 +481,22 @@ export default function CandidatesPage() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Full Name *</label>
-              <input value={form.name} onChange={e => setField("name", e.target.value)} placeholder="John Doe" className={inputCls} />
-            </div>
-            <div>
               <label className={labelCls}>UID</label>
               <input value={form.uid} onChange={e => setField("uid", e.target.value)} placeholder="e.g. STU-2024-001" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Full Name *</label>
+              <input value={form.name} onChange={e => setField("name", e.target.value)} placeholder="John Doe" className={inputCls} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Email</label>
-              <input type="email" value={form.email} onChange={e => setField("email", e.target.value)} placeholder="john@example.com" className={inputCls} />
-            </div>
-            <div>
               <label className={labelCls}>Phone</label>
               <input value={form.phone} onChange={e => setField("phone", e.target.value)} placeholder="+91 98765 43210" className={inputCls} />
+            </div>
+            <div>
+              <label className={labelCls}>Email</label>
+              <input type="email" value={form.email} onChange={e => setField("email", e.target.value)} placeholder="john@example.com" className={inputCls} />
             </div>
           </div>
           <div>
@@ -504,7 +512,11 @@ export default function CandidatesPage() {
           <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Program</label>
-              <select value={form.program} onChange={e => setField("program", e.target.value)} className={inputCls}>
+              <select
+                value={form.program}
+                onChange={e => setForm(f => ({ ...f, program: e.target.value, templateIds: [] }))}
+                className={inputCls}
+              >
                 <option value="">— None —</option>
                 {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -512,9 +524,11 @@ export default function CandidatesPage() {
             <div>
               <label className={labelCls}>Templates ({form.templateIds.length} selected)</label>
               <div className="border border-gray-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
-                {templates.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-3">No templates</p>
-                ) : templates.map(t => (
+                {!form.program ? (
+                  <p className="text-xs text-gray-400 text-center py-3">Select a program first</p>
+                ) : programTemplates.length === 0 ? (
+                  <p className="text-xs text-gray-400 text-center py-3">No templates for this program</p>
+                ) : programTemplates.map(t => (
                   <label key={t.id} className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer border-b border-gray-50 last:border-0 text-xs transition-colors ${form.templateIds.includes(t.id) ? "bg-brand-50" : "hover:bg-gray-50"}`}>
                     <input type="checkbox" checked={form.templateIds.includes(t.id)} onChange={() => toggleFormTemplate(t.id)} className="accent-brand-600" />
                     <span className="font-medium text-gray-800">{t.name}</span>
