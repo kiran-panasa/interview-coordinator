@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet,
@@ -87,6 +88,7 @@ export default function InterviewsPage() {
     [usersAll]
   );
   const interviews = useInterviews();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [blockedDates, setBlockedDates] = useState([]);
   useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
   const [activeProgram, setActiveProgram] = useState("all");
@@ -636,6 +638,23 @@ export default function InterviewsPage() {
     handleViewAiReport(latest);
   };
 
+  // Backs the "AI Report" link column in the Download Feedback export — a
+  // deep link of the form /admin/interviews?aiReport=<id> opens this page
+  // and auto-opens that interview's AI Report modal, instead of the export
+  // needing some separately-hosted report page that doesn't exist.
+  useEffect(() => {
+    const targetId = searchParams.get("aiReport");
+    if (!targetId || interviews.length === 0) return;
+    const iv = interviews.find(x => x.id === targetId);
+    if (iv) handleViewAiReport(iv);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete("aiReport");
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, interviews]);
+
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
 
   const handleCancel = async (iv) => {
@@ -1000,13 +1019,13 @@ export default function InterviewsPage() {
       return;
     }
     const integrity = await getInterviewIntegrity().catch(() => null);
-    exportFeedbackToExcel(filtered, templates, programs, undefined, integrity?.domainFields);
+    exportFeedbackToExcel(filtered, templates, programs, candidates, undefined, integrity?.domainFields);
   };
 
   const handleDownloadSingleFeedback = async (iv) => {
     const slug = (iv.candidateName || "candidate").replace(/[^\w\s-]/g, "").trim().replace(/\s+/g, "_");
     const integrity = await getInterviewIntegrity().catch(() => null);
-    exportFeedbackToExcel([iv], templates, programs, `feedback_${slug}`, integrity?.domainFields);
+    exportFeedbackToExcel([iv], templates, programs, candidates, `feedback_${slug}`, integrity?.domainFields);
   };
 
   return (

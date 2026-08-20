@@ -48,13 +48,17 @@ function buildDomainText(domain, domainData) {
 }
 
 const BASE_HEADERS = [
-  "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
+  "Candidate Name", "UID", "Candidate Email", "Interviewer", "Template", "Program", "Round",
   "Date", "Time", "Status",
 ];
 const TAIL_HEADERS = [
   "Overall Recommendation", "Final Verdict", "Integrity Score", "Comments", "Feedback Submitted At",
-  "Meet Link", "Recording Link", "Transcript Link",
+  "Meet Link", "Recording Link", "Transcript Link", "AI Report",
 ];
+// Columns whose value should be written as an actual clickable hyperlink
+// (not just URL-looking text) — matched by header name so the position stays
+// robust if BASE_HEADERS/TAIL_HEADERS/domain columns are ever reordered.
+const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", "AI Report"]);
 
 /**
  * Exports feedback for the given interviews (already filtered by the
@@ -72,10 +76,20 @@ const TAIL_HEADERS = [
  * templateEngine.js), so callers should fetch it once via
  * getInterviewIntegrity() and pass it in; omitted, it falls back to the
  * built-in default checklist.
+ *
+ * `candidates` supplies the UID column (Candidate.uid, the candidate's
+ * Firebase Auth uid — blank for legacy/CSV-imported candidates that never
+ * had one). The AI Report column reuses the interview's own record — there's
+ * no separately-hosted report page, so the link is a deep link into this
+ * same app (/admin/interviews?aiReport=<id>) that auto-opens the existing AI
+ * Report modal for that interview; InterviewsPage.jsx reads that query param
+ * on load. Only written when iv.aiReport already exists — never generates
+ * one just for the export.
  */
-export function exportFeedbackToExcel(interviews, templates, programs, filenamePrefix = "interview_feedback", integrityDomainFields = null) {
+export function exportFeedbackToExcel(interviews, templates, programs, candidates = [], filenamePrefix = "interview_feedback", integrityDomainFields = null) {
   const templateById    = new Map(templates.map(t => [t.id, withIntegrityDomain(t, integrityDomainFields)]));
   const programNameById = new Map(programs.map(p => [p.id, p.name]));
+  const uidByCandidateId = new Map(candidates.map(c => [c.id, c.uid || ""]));
 
   const domainLabels = [];
   const seenLabels = new Set();
@@ -117,6 +131,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, filenameP
 
     return [
       iv.candidateName || "",
+      uidByCandidateId.get(iv.candidateId) || "",
       iv.candidateEmail || "",
       iv.interviewerName || iv.interviewerEmail || "",
       iv.templateName || "",
@@ -134,17 +149,33 @@ export function exportFeedbackToExcel(interviews, templates, programs, filenameP
       iv.meetLink || "",
       iv.meetingRecordingUrl || "",
       iv.transcriptUrl || "",
+      iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
     ];
   });
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
   ws["!cols"] = [
-    { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
+    { wch: 20 }, { wch: 24 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
     { wch: 12 }, { wch: 10 }, { wch: 12 },
     ...domainLabels.map(() => ({ wch: 45 })),
     { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 45 }, { wch: 18 },
-    { wch: 40 }, { wch: 40 }, { wch: 40 },
+    { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
   ];
+
+  // Turn every URL-bearing cell in a LINK_HEADERS column into an actual
+  // clickable hyperlink (not just URL-looking text) — Excel/Sheets only
+  // auto-linkify those on manual edit, not from a value written by a
+  // generator like this.
+  headers.forEach((header, colIdx) => {
+    if (!LINK_HEADERS.has(header)) return;
+    for (let r = 0; r < rows.length; r++) {
+      const url = rows[r][colIdx];
+      if (!url) continue;
+      const cellRef = XLSX.utils.encode_cell({ r: r + 1, c: colIdx }); // +1 skips the header row
+      if (ws[cellRef]) ws[cellRef].l = { Target: url };
+    }
+  });
+
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Feedback");
 
