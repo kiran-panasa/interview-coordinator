@@ -10,7 +10,8 @@ import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, markInterviewCompleted, backfillAiReportPendingOnce, deleteInterview,
+  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled,
+  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
@@ -99,6 +100,10 @@ export default function InterviewsPage() {
   // Only ever does real work the first time any admin loads this page after
   // deploy; every load after that is a single cheap marker-doc read.
   useEffect(() => { backfillAiReportPendingOnce().catch(err => console.error("aiReportPending backfill failed:", err)); }, []);
+  // Self-guarding — see clearCancelledInterviewScoringOnce in src/api/interviews.ts.
+  // One-time cleanup for cancelled interviews that carried stale feedback/
+  // scoring from before markInterviewCancelled existed.
+  useEffect(() => { clearCancelledInterviewScoringOnce().catch(err => console.error("Cancelled-interview scoring cleanup failed:", err)); }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");
@@ -672,7 +677,7 @@ export default function InterviewsPage() {
       if (iv.eventId) {
         await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
       }
-      await updateInterview(iv.id, { status: "cancelled", eventId: null, meetLink: "" });
+      await markInterviewCancelled(iv.id);
       const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
       await markSlotFree(iv.interviewerId, slotId).catch(() => {});
 
@@ -967,6 +972,10 @@ export default function InterviewsPage() {
 
   async function handleSaveFeedbackEdit() {
     if (!feedbackEditModal) return;
+    if (feedbackEditModal.status === "cancelled") {
+      setToast({ message: "This interview is cancelled — feedback can't be added.", type: "error" });
+      return;
+    }
     setFeedbackEditSaving(true);
     try {
       const feedback = {

@@ -98,6 +98,30 @@ export async function deleteInterview(id: string): Promise<void> {
   await deleteDoc(doc(db, "interviews", id));
 }
 
+// Cancelled = no interview conducted = no scoring. Clears every
+// feedback/scoring/attendance/recording field along with flipping status,
+// so a cancelled interview can never carry stale ratings, a verdict, an AI
+// report, or a completion timestamp into admin views, exports, or payment
+// reconciliation — regardless of what it held before being cancelled.
+export async function markInterviewCancelled(id: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", id), {
+    status: "cancelled",
+    eventId: null,
+    meetLink: "",
+    feedback: deleteField(),
+    feedbackDraft: deleteField(),
+    aiReport: deleteField(),
+    aiReportPending: false,
+    aiReportPendingSince: deleteField(),
+    meetingRecordingUrl: deleteField(),
+    transcriptUrl: deleteField(),
+    candidateJoined: deleteField(),
+    attendanceMarkedAt: deleteField(),
+    partialCompletionReason: deleteField(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function markCandidateAttendance(
   interviewId: string,
   joined: boolean
@@ -231,6 +255,47 @@ export async function backfillAiReportPendingOnce(): Promise<void> {
       batch.update(d.ref, {
         aiReportPending: true,
         aiReportPendingSince: data.createdAt || now,
+      });
+    });
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: now, count: targets.length });
+}
+
+// One-time, self-guarding cleanup for cancelled interviews that were
+// carrying stale scoring data from BEFORE markInterviewCancelled existed
+// (the old Cancel action only cleared eventId/meetLink, so an interview
+// completed-and-scored and then later cancelled kept its feedback/aiReport/
+// verdict). Same settings-marker-doc guard as backfillAiReportPendingOnce —
+// runs the status=="cancelled" query exactly once total, not per session.
+export async function clearCancelledInterviewScoringOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "cancelledScoringCleanup");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const snap = await getDocs(query(collection(db, "interviews"), where("status", "==", "cancelled")));
+  const now = new Date().toISOString();
+  const targets = snap.docs.filter(d => {
+    const data = d.data() as Interview;
+    return !!(data.feedback || data.aiReport || data.meetingRecordingUrl || data.transcriptUrl || data.candidateJoined != null);
+  });
+
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    targets.slice(i, i + 450).forEach(d => {
+      batch.update(d.ref, {
+        feedback: deleteField(),
+        feedbackDraft: deleteField(),
+        aiReport: deleteField(),
+        aiReportPending: false,
+        aiReportPendingSince: deleteField(),
+        meetingRecordingUrl: deleteField(),
+        transcriptUrl: deleteField(),
+        candidateJoined: deleteField(),
+        attendanceMarkedAt: deleteField(),
+        partialCompletionReason: deleteField(),
+        updatedAt: now,
       });
     });
     await batch.commit();

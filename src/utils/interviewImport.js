@@ -130,8 +130,14 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
           || (!scheduledDate && candidateTemplateIvs.length === 1 ? candidateTemplateIvs[0] : null);
       }
       if (existingInterview) {
-        const willAddFeedback = !!(verdict || hasDomainFeedback);
-        warnings.push(`Matches an existing ${existingInterview.status} interview — will update it${willAddFeedback ? " (links + feedback)" : " (links only)"} instead of creating a new one.`);
+        if (existingInterview.status === "cancelled") {
+          // Cancelled = no interview conducted — never resurrect it with
+          // feedback/scoring or attach links via a CSV re-import.
+          errors.push("Matches an existing CANCELLED interview — cancelled interviews can't receive feedback or links. Skip this row.");
+        } else {
+          const willAddFeedback = !!(verdict || hasDomainFeedback);
+          warnings.push(`Matches an existing ${existingInterview.status} interview — will update it${willAddFeedback ? " (links + feedback)" : " (links only)"} instead of creating a new one.`);
+        }
       }
 
       return {

@@ -146,17 +146,23 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   }
 
   const rows = interviews.map(iv => {
-    const fb = iv.feedback || null;
+    // Cancelled = no interview conducted = no scoring, regardless of what
+    // stale data the doc might still carry (see markInterviewCancelled /
+    // clearCancelledInterviewScoringOnce in api/interviews.ts, which clear
+    // this at the source going forward — this is the export-side backstop).
+    const isCancelled = iv.status === "cancelled";
+    const fb = isCancelled ? null : (iv.feedback || null);
     const template = templateById.get(iv.templateId);
     const programName = template?.program ? (programNameById.get(template.program) || "") : "";
     const isDynamic = !!(fb && fb.domains);
 
-    const integrityText = integrityDef
+    const integrityText = (!isCancelled && integrityDef)
       ? (() => { const { domain, data } = domainDataFor(template, fb, isDynamic, integrityDef.label); return domain && data ? buildDomainText(domain, data) : ""; })()
       : "";
 
     const sectionCells = [];
     scoredDefs.forEach(d => {
+      if (isCancelled) { sectionCells.push("", ""); return; }
       const { domain, data } = domainDataFor(template, fb, isDynamic, d.label);
       sectionCells.push(domain && data ? buildDomainText(domain, data) : "");
       const rating = data?.domain_rating;
@@ -185,7 +191,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
       iv.scheduledTime || "",
       iv.status || "",
-      iv.partialCompletionReason || "",
+      isCancelled ? "" : (iv.partialCompletionReason || ""),
       integrityText,
       fb?.integrityScore != null ? fb.integrityScore : "",
       ...sectionCells,
@@ -193,9 +199,9 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       fb?.finalVerdict != null ? fb.finalVerdict : "",
       comments,
       iv.meetLink || "",
-      iv.meetingRecordingUrl || "",
-      iv.transcriptUrl || "",
-      iv.aiReport ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
+      isCancelled ? "" : (iv.meetingRecordingUrl || ""),
+      isCancelled ? "" : (iv.transcriptUrl || ""),
+      (!isCancelled && iv.aiReport) ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
       fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
     ];
   });
