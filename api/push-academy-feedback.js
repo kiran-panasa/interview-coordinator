@@ -83,7 +83,7 @@ export default async function handler(req, res) {
         interviewId,
         candidateName: iv.candidateName || "",
         candidateEmail: iv.candidateEmail || "",
-        interviewerEmail: iv.interviewerEmail || "",
+        interviewerName: iv.interviewerName || "",
         templateName: iv.templateName || "",
         round: iv.round || "",
         status: iv.status || "",
