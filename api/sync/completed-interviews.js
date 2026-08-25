@@ -37,7 +37,7 @@ function decodeCursor(token) {
 // they were scheduled from. Build a lookup once per request rather than
 // per document.
 async function loadTemplateIndex(db) {
-  const snap = await db.collection("templates").get();
+  const snap = await db.collection("interviewTemplates").get();
   const byId = new Map();
   snap.forEach(doc => {
     const data = doc.data();
