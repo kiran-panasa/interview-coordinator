@@ -1,3 +1,5 @@
+import { splitCSVLines } from "./csv";
+
 export const SAMPLE_CSV = `text,domainType,difficulty,topic,skills,templates,suggestedAnswer
 "What is a closure in JavaScript?",coding,medium,Closures,JavaScript,,"A closure is a function that retains access to its outer scope even after the outer function has returned."
 "Explain React's reconciliation algorithm.",react_coding|coding,hard,React Internals,ReactJS|JavaScript,,"React uses a diffing algorithm to compare virtual DOM trees and update only the changed nodes."
@@ -24,7 +26,11 @@ export function parseCSVLine(line) {
 }
 
 export function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  // splitCSVLines (not a naive text.split("\n")) keeps a quoted field's
+  // embedded newlines intact instead of splitting it into extra bogus rows —
+  // needed for multi-line question text/code snippets pasted straight from
+  // an editor, where the cell was properly quoted but spans several lines.
+  const lines = splitCSVLines(text);
   if (lines.length < 2) return { rows: [], errors: ["Need a header row plus at least one data row."] };
 
   const rawHeaders = parseCSVLine(lines[0]).map(h => h.trim().replace(/^"|"$/g, "").toLowerCase().replace(/\s+/g, ""));
