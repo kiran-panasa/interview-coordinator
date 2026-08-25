@@ -6,6 +6,9 @@ import {
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
+import { getTemplates } from "./templates";
+import { getInterviewIntegrity } from "./interviewIntegrity";
+import { withIntegrityDomain, attachDescriptors } from "../utils/templateEngine";
 import type { Interview, InterviewStatus, InterviewHistoryEntry } from "../types";
 
 export const DEFAULT_ROUNDS = [
@@ -302,6 +305,69 @@ export async function clearCancelledInterviewScoringOnce(): Promise<void> {
   }
 
   await setDoc(markerRef, { completedAt: now, count: targets.length });
+}
+
+// One-time, self-guarding backfill so interviews whose feedback was saved
+// BEFORE materializeFeedback started baking descriptor text onto
+// feedback.domains (see attachDescriptors in templateEngine.js) get it too.
+// Needed because at least one downstream consumer (Academy Nexus) reads
+// feedback.domains straight off Firestore via its own service account,
+// bypassing our API entirely — descriptors have to live on the document
+// itself for every interview, not just ones submitted after this shipped.
+// Same settings-marker-doc guard as the backfills above — runs its
+// (potentially large) completed/partially_completed query exactly once
+// total, not once per admin session. Only rewrites feedback.domains (via
+// attachDescriptors, which is purely additive) — leaves every other
+// feedback field, and any interview whose template can no longer be found
+// (deleted/renamed since), untouched.
+export async function backfillFeedbackDescriptorsOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "feedbackDescriptorsBackfill");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const [templates, integrity] = await Promise.all([getTemplates(), getInterviewIntegrity()]);
+  const templateById = new Map(
+    templates.map(t => [t.id, withIntegrityDomain(t, integrity.domainFields)])
+  );
+
+  const snap = await getDocs(
+    query(collection(db, "interviews"), where("status", "in", ["completed", "partially_completed"]))
+  );
+  const targets = snap.docs.filter(d => !!(d.data() as Interview).feedback?.domains);
+
+  let updated = 0;
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    let batchHasWrites = false;
+
+    for (const d of targets.slice(i, i + 450)) {
+      const data = d.data() as Interview;
+      const template = templateById.get(data.templateId || "");
+      if (!template) continue;
+
+      const domains = data.feedback!.domains!;
+      const merged = { ...domains };
+      let changed = false;
+      for (const domain of template.domains) {
+        const domainData = domains[domain.id];
+        if (!domainData) continue;
+        const withDescriptors = attachDescriptors(domainData, domain);
+        if (withDescriptors !== domainData) {
+          merged[domain.id] = withDescriptors;
+          changed = true;
+        }
+      }
+      if (!changed) continue;
+
+      batch.update(d.ref, { "feedback.domains": merged });
+      batchHasWrites = true;
+      updated++;
+    }
+
+    if (batchHasWrites) await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: new Date().toISOString(), count: updated });
 }
 
 export async function importScheduledInterview(

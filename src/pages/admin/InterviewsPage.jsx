@@ -11,7 +11,7 @@ import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled,
-  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, deleteInterview,
+  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
@@ -104,6 +104,11 @@ export default function InterviewsPage() {
   // One-time cleanup for cancelled interviews that carried stale feedback/
   // scoring from before markInterviewCancelled existed.
   useEffect(() => { clearCancelledInterviewScoringOnce().catch(err => console.error("Cancelled-interview scoring cleanup failed:", err)); }, []);
+  // Self-guarding — see backfillFeedbackDescriptorsOnce in src/api/interviews.ts.
+  // One-time backfill so historical feedback (saved before descriptor text
+  // was baked into feedback.domains) gets it too — needed for consumers that
+  // read Firestore directly rather than through our own API.
+  useEffect(() => { backfillFeedbackDescriptorsOnce().catch(err => console.error("Feedback descriptors backfill failed:", err)); }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");

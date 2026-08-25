@@ -373,7 +373,11 @@ function buildScoreLabelMap(fields) {
   return map;
 }
 
-function attachDescriptors(domainData, domain) {
+// Exported separately from materializeFeedback so the one-time historical
+// backfill (backfillFeedbackDescriptorsOnce in src/api/interviews.ts) can
+// add descriptors to feedback that was saved before this existed, without
+// recomputing/touching domain_rating or anything else already stored.
+export function attachDescriptors(domainData, domain) {
   const cardScoreMap = buildScoreLabelMap(domain.cardFields);
   const domainScoreMap = buildScoreLabelMap(domain.domainFields);
   if (!cardScoreMap.size && !domainScoreMap.size) return domainData;
