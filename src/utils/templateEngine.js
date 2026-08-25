@@ -352,6 +352,57 @@ export function computeFinalVerdict(template, feedbackData) {
   return totalWeight ? Math.round((weightedSum / totalWeight) * 10) / 10 : null;
 }
 
+// Every scored_dropdown option is defined on the template as { score, label }
+// (e.g. score: 0, label: "Weak in communication"), but a raw answer only
+// records the score. Consumers that read the interview doc directly out of
+// Firestore (bypassing our own API layer entirely) need the label text
+// persisted onto the document itself — computing it only at API-read time
+// isn't enough for them. So it's baked in here, at save time, using
+// whichever template wording was live when the interviewer actually scored
+// the field.
+function buildScoreLabelMap(fields) {
+  const map = new Map();
+  for (const f of fields || []) {
+    if (f.type !== "scored_dropdown") continue;
+    const byScore = new Map();
+    for (const opt of f.options || []) {
+      byScore.set(String(opt.score), opt.label);
+    }
+    map.set(f.id, byScore);
+  }
+  return map;
+}
+
+function attachDescriptors(domainData, domain) {
+  const cardScoreMap = buildScoreLabelMap(domain.cardFields);
+  const domainScoreMap = buildScoreLabelMap(domain.domainFields);
+  if (!cardScoreMap.size && !domainScoreMap.size) return domainData;
+
+  const descriptors = {};
+
+  if (cardScoreMap.size && domainData.cards?.length) {
+    descriptors.cards = domainData.cards.map(card => {
+      const out = {};
+      for (const [fieldId, byScore] of cardScoreMap) {
+        const raw = card?.[fieldId];
+        if (raw == null) continue;
+        const label = byScore.get(String(raw));
+        if (label != null) out[fieldId] = label;
+      }
+      return out;
+    });
+  }
+
+  for (const [fieldId, byScore] of domainScoreMap) {
+    const raw = domainData[fieldId];
+    if (raw == null) continue;
+    const label = byScore.get(String(raw));
+    if (label != null) descriptors[fieldId] = label;
+  }
+
+  return Object.keys(descriptors).length ? { ...domainData, descriptors } : domainData;
+}
+
 // Materialise all computed values into the feedback object before saving
 export function materializeFeedback(template, feedbackData) {
   if (!template?.domains || !feedbackData?.domains) return feedbackData;
@@ -361,7 +412,7 @@ export function materializeFeedback(template, feedbackData) {
     const domainData = feedbackData.domains[domain.id] || {};
     const cards = domainData.cards || [];
     const domainRating = computeDomainRating(domain, domainData);
-    domains[domain.id] = { ...domainData, cards, domain_rating: domainRating };
+    domains[domain.id] = attachDescriptors({ ...domainData, cards, domain_rating: domainRating }, domain);
   }
 
   return {
