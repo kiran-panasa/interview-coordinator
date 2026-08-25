@@ -50,7 +50,16 @@ Only interviews with `status == "completed"` are ever returned — this isn't a 
         "overallRecommendation": "Proceed",
         "finalVerdict": 4.3,
         "comments": "...",
-        "domains": { "coding": { "cards": [...], "domain_rating": 4.5 }, "...": "..." },
+        "domains": {
+          "coding": {
+            "cards": [{ "question": "...", "ps_rating": "4", "ci_rating": "5" }],
+            "domain_rating": 4.5,
+            "descriptors": {
+              "cards": [{ "ps_rating": "Solved with 1 minor nudge, reached optimal approach with good reasoning", "ci_rating": "Clean, optimal, well-structured implementation with clear explanation" }]
+            }
+          },
+          "...": "..."
+        },
         "submittedAt": "2026-06-15T11:05:00.000Z"
       },
       "aiReport": { "decision": "move_forward", "summary": "...", "...": "..." },
@@ -66,6 +75,8 @@ Only interviews with `status == "completed"` are ever returned — this isn't a 
 ```
 
 `aiReport` and `links.recordingUrl`/`transcriptUrl` are `null` when not yet generated/uploaded for that interview — don't assume they're always populated.
+
+Each domain's raw scored fields (in `cards[i]` and at the domain level, e.g. `ps_rating: "4"`) are always just the number the interviewer picked. A sibling `descriptors` object, same shape (`descriptors.cards[i].<fieldId>` / `descriptors.<fieldId>`), carries the matching option's label text (e.g. `"4"` → `"Clean code with minor issues, good structure and readability"`) looked up from the template at read time. A field is omitted from `descriptors` if it wasn't answered or isn't a scored field — don't assume every scored key has a matching descriptor key.
 
 ## Paging through everything
 

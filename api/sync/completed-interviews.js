@@ -1,5 +1,6 @@
 import { getDb } from "../_lib/firebaseAdmin.js";
 import { checkBearerAuth } from "../_lib/auth.js";
+import { attachDescriptorsToDomains, loadIntegrityDomainFields } from "../_lib/feedbackDescriptors.js";
 
 // Firestore reads per internal batch while hunting for `pageSize` results
 // that also satisfy the (non-indexable) programId join filter — see below.
@@ -40,12 +41,18 @@ async function loadTemplateIndex(db) {
   const byId = new Map();
   snap.forEach(doc => {
     const data = doc.data();
-    byId.set(doc.id, { id: doc.id, name: data.name || "", programId: data.program || null });
+    const domains = Array.isArray(data.domains) ? data.domains : [];
+    byId.set(doc.id, {
+      id: doc.id,
+      name: data.name || "",
+      programId: data.program || null,
+      domainDefsById: new Map(domains.map(dom => [dom.id, dom])),
+    });
   });
   return byId;
 }
 
-function mapInterview(doc, templateById) {
+function mapInterview(doc, templateById, integrityDomainFields) {
   const d = doc.data();
   const template = templateById.get(d.templateId) || null;
   const fb = d.feedback || null;
@@ -74,7 +81,11 @@ function mapInterview(doc, templateById) {
       overallRecommendation: fb.overallRecommendation ?? null,
       finalVerdict: fb.finalVerdict ?? null,
       comments: fb.comments ?? null,
-      domains: fb.domains ?? null,
+      // Each card/domain field's raw score is left as-is; a sibling
+      // `descriptors` object (same shape) carries the option's label text
+      // (e.g. score 0 → "Weak in communication") looked up from the
+      // interview's own template — see api/_lib/feedbackDescriptors.js.
+      domains: fb.domains ? attachDescriptorsToDomains(fb.domains, template?.domainDefsById, integrityDomainFields) : null,
       submittedAt: fb.submittedAt ?? null,
     } : null,
     aiReport: d.aiReport || null,
@@ -143,7 +154,10 @@ export default async function handler(req, res) {
 
   try {
     const db = getDb();
-    const templateById = await loadTemplateIndex(db);
+    const [templateById, integrityDomainFields] = await Promise.all([
+      loadTemplateIndex(db),
+      loadIntegrityDomainFields(db),
+    ]);
 
     const templateIdsForProgram = programId
       ? new Set([...templateById.values()].filter(t => t.programId === programId).map(t => t.id))
@@ -179,7 +193,7 @@ export default async function handler(req, res) {
         cursorPos = { orderValue: doc.get(orderField), docId: doc.id };
         const data = doc.data();
         if (!templateIdsForProgram || templateIdsForProgram.has(data.templateId)) {
-          results.push(mapInterview(doc, templateById));
+          results.push(mapInterview(doc, templateById, integrityDomainFields));
           if (results.length >= pageSize) break;
         }
       }
