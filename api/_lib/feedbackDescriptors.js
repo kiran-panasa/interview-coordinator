@@ -20,6 +20,25 @@ function buildScoreLabelMap(fields) {
   return map;
 }
 
+// Shared by the sync-pull endpoint and the one-time backfill script — both
+// need the same interviewId -> template lookup. NOTE: the collection is
+// "interviewTemplates" (see src/api/templates.ts), not "templates".
+export async function loadTemplateIndex(db) {
+  const snap = await db.collection("interviewTemplates").get();
+  const byId = new Map();
+  snap.forEach(doc => {
+    const data = doc.data();
+    const domains = Array.isArray(data.domains) ? data.domains : [];
+    byId.set(doc.id, {
+      id: doc.id,
+      name: data.name || "",
+      programId: data.program || null,
+      domainDefsById: new Map(domains.map(dom => [dom.id, dom])),
+    });
+  });
+  return byId;
+}
+
 // Interview Integrity is merged live into every template from a single
 // global settings doc rather than stored per-template (see
 // withIntegrityDomain in src/utils/templateEngine.js), so its field
@@ -64,7 +83,15 @@ export function attachDescriptors(domainData, domain) {
     if (label != null) descriptors[fieldId] = label;
   }
 
-  return Object.keys(descriptors).length ? { ...domainData, descriptors } : domainData;
+  if (!Object.keys(descriptors).length) return domainData;
+  // Re-running the backfill should be a true no-op on already-enriched
+  // domains, not just equivalent content re-written every time — field
+  // order is stable across runs (it follows the template's own field
+  // order), so a plain JSON comparison is reliable here.
+  if (domainData.descriptors && JSON.stringify(domainData.descriptors) === JSON.stringify(descriptors)) {
+    return domainData;
+  }
+  return { ...domainData, descriptors };
 }
 
 // domainDefsById: Map<domainId, Domain> for the interview's own template.

@@ -404,7 +404,16 @@ export function attachDescriptors(domainData, domain) {
     if (label != null) descriptors[fieldId] = label;
   }
 
-  return Object.keys(descriptors).length ? { ...domainData, descriptors } : domainData;
+  if (!Object.keys(descriptors).length) return domainData;
+  // A true no-op when re-run on already-enriched domains (e.g. the
+  // historical backfill retried, or an interviewer re-saving unchanged
+  // feedback) rather than an equivalent-content object recreated every
+  // time — field order is stable across calls (it follows the template's
+  // own field order), so a plain JSON comparison is reliable here.
+  if (domainData.descriptors && JSON.stringify(domainData.descriptors) === JSON.stringify(descriptors)) {
+    return domainData;
+  }
+  return { ...domainData, descriptors };
 }
 
 // Materialise all computed values into the feedback object before saving

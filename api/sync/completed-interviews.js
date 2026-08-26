@@ -1,6 +1,6 @@
 import { getDb } from "../_lib/firebaseAdmin.js";
 import { checkBearerAuth } from "../_lib/auth.js";
-import { attachDescriptorsToDomains, loadIntegrityDomainFields } from "../_lib/feedbackDescriptors.js";
+import { attachDescriptorsToDomains, loadIntegrityDomainFields, loadTemplateIndex } from "../_lib/feedbackDescriptors.js";
 
 // Firestore reads per internal batch while hunting for `pageSize` results
 // that also satisfy the (non-indexable) programId join filter — see below.
@@ -31,25 +31,6 @@ function decodeCursor(token) {
   } catch {
     return null;
   }
-}
-
-// Interviews don't store programId directly — it lives on the template
-// they were scheduled from. Build a lookup once per request rather than
-// per document.
-async function loadTemplateIndex(db) {
-  const snap = await db.collection("interviewTemplates").get();
-  const byId = new Map();
-  snap.forEach(doc => {
-    const data = doc.data();
-    const domains = Array.isArray(data.domains) ? data.domains : [];
-    byId.set(doc.id, {
-      id: doc.id,
-      name: data.name || "",
-      programId: data.program || null,
-      domainDefsById: new Map(domains.map(dom => [dom.id, dom])),
-    });
-  });
-  return byId;
 }
 
 function mapInterview(doc, templateById, integrityDomainFields) {
