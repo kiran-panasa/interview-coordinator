@@ -120,7 +120,7 @@ export default function QuestionBankTab({
                         />
                       </td>
                       <td className="px-4 py-3 max-w-[220px]">
-                        <p className="text-gray-900 text-sm leading-snug line-clamp-2">{q.text}</p>
+                        <p className="text-gray-900 text-sm leading-snug line-clamp-2 whitespace-pre-wrap">{q.text}</p>
                         <p className="text-[10px] font-mono text-gray-300 mt-0.5">#{q.id.slice(0, 8)}</p>
                       </td>
                       <td className="px-4 py-3 max-w-[160px]">
