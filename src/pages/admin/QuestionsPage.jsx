@@ -599,7 +599,7 @@ export default function QuestionsPage() {
           <div className="space-y-4">
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
               <p className="text-xs font-semibold text-amber-700 mb-1">Submitted question</p>
-              <p className="text-sm text-gray-800">{approveTarget.text}</p>
+              <p className="text-sm text-gray-800 whitespace-pre-wrap">{approveTarget.text}</p>
             </div>
             <QuestionForm
               form={approveForm} setForm={setApproveForm}

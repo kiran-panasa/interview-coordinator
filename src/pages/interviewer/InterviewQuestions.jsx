@@ -251,7 +251,7 @@ export default function InterviewQuestions() {
                               className="mt-0.5 w-4 h-4 flex-shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                           )}
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
+                            <p className="text-sm text-gray-800 leading-snug whitespace-pre-wrap">{q.text}</p>
                             <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                               {q.difficulty && (
                                 <span className={`text-xs font-semibold px-1.5 py-0.5 rounded capitalize ${DIFF_BADGE[q.difficulty] || "bg-gray-100 text-gray-600"}`}>

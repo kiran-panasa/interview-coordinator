@@ -32,7 +32,7 @@ export default function AdhocReviewTab({ adhocQs, pendingAdhoc, openApprove, han
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 leading-snug">{q.text}</p>
+                    <p className="text-sm font-medium text-gray-800 leading-snug whitespace-pre-wrap">{q.text}</p>
                     <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-400">
                       {q.interviewId && <span>Interview: <span className="font-mono text-gray-500">#{q.interviewId.slice(0, 8)}</span></span>}
                       {q.templateId  && <span>Template: <span className="font-mono text-gray-500">#{q.templateId.slice(0, 8)}</span></span>}
