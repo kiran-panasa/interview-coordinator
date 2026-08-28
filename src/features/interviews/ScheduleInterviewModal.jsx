@@ -3,6 +3,7 @@ import { CalendarDays, AlertTriangle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
+import SearchableSelect from "../../components/SearchableSelect";
 import { formatDate } from "../../utils/dates";
 
 const OTHER_VALUE = "__other__";
@@ -33,18 +34,24 @@ export default function ScheduleInterviewModal({
       <div className="space-y-4">
         <div>
           <label className={labelCls}>Candidate *</label>
-          <select value={form.candidateId} onChange={e => setField("candidateId", e.target.value)} className={inputCls}>
-            <option value="">— Select candidate —</option>
-            {candidates.map(c => <option key={c.id} value={c.id}>{c.name}{c.uid ? ` · ${c.uid}` : ""}</option>)}
-          </select>
+          <SearchableSelect
+            options={candidates.map(c => ({ id: c.id, label: `${c.name}${c.uid ? ` · ${c.uid}` : ""}` }))}
+            value={form.candidateId}
+            onChange={id => setField("candidateId", id)}
+            placeholder="— Select candidate —"
+            searchPlaceholder="Search by name or UID…"
+          />
         </div>
 
         <div>
           <label className={labelCls}>Interviewer *</label>
-          <select value={form.interviewerId} onChange={e => setField("interviewerId", e.target.value)} className={inputCls}>
-            <option value="">— Select interviewer —</option>
-            {interviewers.map(u => <option key={u.id} value={u.id}>{u.displayName || u.email}</option>)}
-          </select>
+          <SearchableSelect
+            options={interviewers.map(u => ({ id: u.id, label: u.displayName || u.email }))}
+            value={form.interviewerId}
+            onChange={id => setField("interviewerId", id)}
+            placeholder="— Select interviewer —"
+            searchPlaceholder="Search by name…"
+          />
         </div>
 
         <div className="grid grid-cols-3 gap-3">
