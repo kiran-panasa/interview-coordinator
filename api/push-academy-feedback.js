@@ -75,12 +75,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, skipped: true });
     }
 
+    // Candidate UserID (e.g. "STU-2024-001") lives on the candidate's own
+    // doc as `uid` (src/types.ts Candidate.uid) — Academy's own student
+    // identifier, distinct from candidateId (our internal Firestore doc
+    // id). The interview doc never carries it directly, so it has to be
+    // looked up here rather than read straight off `iv`.
+    let candidateUid = "";
+    if (iv.candidateId) {
+      const candidateSnap = await db.collection("candidates").doc(iv.candidateId).get();
+      candidateUid = candidateSnap.exists ? (candidateSnap.data().uid || "") : "";
+    }
+
     const feedback = iv.feedback || {};
     const resp = await fetch(targetUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": targetKey },
       body: JSON.stringify({
-        interviewId,
+        candidateUid,
         candidateName: iv.candidateName || "",
         candidateEmail: iv.candidateEmail || "",
         interviewerName: iv.interviewerName || "",
