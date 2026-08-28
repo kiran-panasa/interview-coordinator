@@ -328,6 +328,10 @@ export interface Interview {
   templateName?: string;
   scheduledDate: string;
   scheduledTime: string;
+  // Minutes. Absent on interviews created before this field existed —
+  // every read site falls back to 60 (iv.duration || 60), which matches
+  // what those interviews were actually run at.
+  duration?: number;
   round?: string;
   status: InterviewStatus;
   // Mandatory whenever status is "partially_completed" (see
@@ -439,6 +443,11 @@ export interface ScheduleInvite {
   programName?: string;
   dateRangeStart?: string;
   dateRangeEnd?: string;
+  // Minutes — chosen by the admin when sending the nudge (30/60/90/custom),
+  // carried into the invite email, and applied to the Interview created once
+  // the candidate's booking is confirmed. Absent on invites sent before this
+  // field existed; every read site falls back to 60.
+  duration?: number;
   inviteToken: string;
   expiryHours?: number;
   status: ScheduleInviteStatus;

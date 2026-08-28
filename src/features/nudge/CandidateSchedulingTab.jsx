@@ -65,6 +65,8 @@ export default function CandidateSchedulingTab({
   const [filterTemplate, setFilterTemplate] = useState("");
   const [round,          setRound]          = useState("");
   const [roundCustomMode, setRoundCustomMode] = useState(false);
+  const [duration,        setDuration]        = useState(60);
+  const [durationCustomMode, setDurationCustomMode] = useState(false);
   const [selCandidates,  setSelCandidates]  = useState(new Set());
   const [sendingInvites, setSendingInvites] = useState(false);
   const [confirmingId,   setConfirmingId]   = useState(null);
@@ -163,6 +165,9 @@ export default function CandidateSchedulingTab({
     if (!round) {
       setToast({ message: "Please select a round before sending invites.", type: "error" }); return;
     }
+    if (!duration || duration <= 0) {
+      setToast({ message: "Please enter a valid interview duration.", type: "error" }); return;
+    }
     const tmpl = templates.find(t => t.id === filterTemplate);
     setSendingInvites(true);
     try {
@@ -182,6 +187,7 @@ export default function CandidateSchedulingTab({
           templateId:     filterTemplate,
           templateName:   tmpl?.name || "",
           round,
+          duration,
           program:        c.program || "",
           programName:    candidateProgramLabel,
           dateRangeStart: dateStart,
@@ -216,7 +222,8 @@ export default function CandidateSchedulingTab({
             recipients: [{ email: c.email, name: c.name }],
             body:
               `Hi ${c.name},\n\nYou've been invited to schedule your interview.\n\n` +
-              `${candidateProgramLabel ? `Program: ${candidateProgramLabel}\n` : ""}Round: ${round}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n\n` +
+              `${candidateProgramLabel ? `Program: ${candidateProgramLabel}\n` : ""}Round: ${round}\nDate Range: ${formatDate(dateStart)} – ${formatDate(dateEnd)}\n` +
+              `Duration: ${duration} minutes\n\n` +
               `Click below to pick your slot (link valid for ${expiryHours} hours):\n${link}?invite=${inviteToken}\n\n` +
               `NxtWave Interview Team`,
           });
@@ -251,6 +258,7 @@ export default function CandidateSchedulingTab({
       }
       // Must succeed before we create the interview record or mark the invite
       // confirmed — otherwise the admin sees "confirmed" with no Meet link sent.
+      const durationMinutes = inv.duration || 60;
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action:           "schedule",
         candidateEmail:   inv.candidateEmail,
@@ -260,7 +268,7 @@ export default function CandidateSchedulingTab({
         round:            roundLabel,
         date:             inv.bookedDate,
         startTime:        inv.bookedTime,
-        durationMinutes:  60,
+        durationMinutes,
       });
       const id = await createInterview({
         candidateId:      inv.candidateId,
@@ -271,7 +279,7 @@ export default function CandidateSchedulingTab({
         interviewerEmail: ivr?.email || "",
         scheduledDate:    inv.bookedDate,
         scheduledTime:    inv.bookedTime,
-        duration:         60,
+        duration:         durationMinutes,
         round:            roundLabel,
         templateId:       inv.templateId || "",
         templateName:     inv.templateName || "",
@@ -307,7 +315,7 @@ export default function CandidateSchedulingTab({
           body:
             `Hi ${ivr.displayName || ivr.email},\n\nYou have a new interview scheduled:\n\n` +
             `Candidate: ${inv.candidateName || "—"}\nRound: ${roundLabel}\n` +
-            `Date: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\n` +
+            `Date: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\nDuration: ${durationMinutes} minutes\n` +
             (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
             `\nThank you.`,
           recipients: [{ email: ivr.email, name: ivr.displayName || ivr.email }],
@@ -344,6 +352,7 @@ export default function CandidateSchedulingTab({
           body:
             `Hi ${inv.candidateName},\n\nYour interview has been confirmed:\n\n` +
             `Round: ${roundLabel}\nDate: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\n` +
+            `Your interview has been scheduled for ${durationMinutes} minutes.\n` +
             (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
             instructionsBlock + referenceBlock +
             `\nNxtWave Interview Team`,
@@ -506,6 +515,27 @@ export default function CandidateSchedulingTab({
             {roundCustomMode && (
               <input type="text" value={round} onChange={e => setRound(e.target.value)}
                 placeholder="Enter custom round name…" autoFocus
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            )}
+          </div>
+          <div className="flex-1 min-w-[160px]">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Interview Duration</label>
+            <select
+              value={durationCustomMode ? "custom" : duration}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === "custom") { setDurationCustomMode(true); }
+                else { setDurationCustomMode(false); setDuration(Number(v)); }
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value={30}>30 minutes</option>
+              <option value={60}>60 minutes</option>
+              <option value={90}>90 minutes</option>
+              <option value="custom">Custom…</option>
+            </select>
+            {durationCustomMode && (
+              <input type="number" min={1} value={duration} onChange={e => setDuration(Number(e.target.value))}
+                placeholder="Minutes" autoFocus
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mt-2 focus:outline-none focus:ring-2 focus:ring-brand-500" />
             )}
           </div>

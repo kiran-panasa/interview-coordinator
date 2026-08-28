@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { formatDate, formatDateShort, parseInterviewStart } from "../../utils/dates";
+import { formatDate, formatDateShort, parseInterviewStart, addMinutesToTimeLabel } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -341,7 +341,14 @@ export default function InterviewDetail() {
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Time</p>
-            <p className="text-sm font-semibold text-gray-800">{interview.scheduledTime}</p>
+            <p className="text-sm font-semibold text-gray-800">
+              {interview.scheduledTime}
+              {interview.scheduledTime && ` – ${addMinutesToTimeLabel(interview.scheduledTime, interview.duration || 60)}`}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 mb-0.5">Duration</p>
+            <p className="text-sm font-semibold text-gray-800">{interview.duration || 60} minutes</p>
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Round</p>

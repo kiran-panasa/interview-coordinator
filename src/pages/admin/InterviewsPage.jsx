@@ -1294,7 +1294,7 @@ export default function InterviewsPage() {
                 <td className="px-4 py-3 text-gray-600">{iv.round}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <p className="text-gray-700">{formatDate(iv.scheduledDate)}</p>
-                  <p className="text-xs text-gray-400">{iv.scheduledTime}{iv.duration ? ` · ${iv.duration}m` : ""}</p>
+                  <p className="text-xs text-gray-400">{iv.scheduledTime} · {iv.duration || 60}m</p>
                 </td>
                 <td className="px-4 py-3">
                   {iv.meetLink ? (

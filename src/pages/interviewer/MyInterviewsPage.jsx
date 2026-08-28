@@ -100,7 +100,7 @@ export default function MyInterviewsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
-                  {["Candidate", "Role", "Round", "Date", "Time", "Status", ""].map(h => (
+                  {["Candidate", "Role", "Round", "Date", "Time", "Duration", "Status", ""].map(h => (
                     <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -108,7 +108,7 @@ export default function MyInterviewsPage() {
               <tbody className="divide-y divide-gray-50">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center text-gray-400 py-14">
+                    <td colSpan={8} className="text-center text-gray-400 py-14">
                       <div className="flex flex-col items-center gap-2">
                         <CalendarClock className="w-6 h-6 text-gray-300" />
                         No interviews found
@@ -126,6 +126,7 @@ export default function MyInterviewsPage() {
                     <td className="px-4 py-3 text-gray-600">{i.round || "—"}</td>
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(i.scheduledDate)}</td>
                     <td className="px-4 py-3 text-gray-600">{i.scheduledTime || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{i.duration || 60} min</td>
                     <td className="px-4 py-3">
                       <Badge value={i.status} />
                       {i.status === "scheduled" && isPastStart(i.scheduledDate, i.scheduledTime) && i.candidateJoined == null && (

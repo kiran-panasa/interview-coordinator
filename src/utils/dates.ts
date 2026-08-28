@@ -56,6 +56,18 @@ export function compareTimeLabels(a: string, b: string): number {
   return timeToMinutes(a) - timeToMinutes(b);
 }
 
+// "3:00 PM" + 90 -> "4:30 PM" — used to show an interview's end time
+// alongside its start time and duration.
+export function addMinutesToTimeLabel(label: string, minutesToAdd: number): string {
+  const total = timeToMinutes(label) + minutesToAdd;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  let h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 export function parseInterviewStart(scheduledDate: string, scheduledTime: string): Date | null {
   if (!scheduledDate || !scheduledTime) return null;
   try {
