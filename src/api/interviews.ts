@@ -7,9 +7,10 @@ import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 import { getTemplates } from "./templates";
+import { getCandidates } from "./candidates";
 import { getInterviewIntegrity } from "./interviewIntegrity";
 import { withIntegrityDomain, attachDescriptors } from "../utils/templateEngine";
-import type { Interview, InterviewStatus, InterviewHistoryEntry } from "../types";
+import type { Interview, InterviewStatus, InterviewHistoryEntry, Candidate } from "../types";
 
 export const DEFAULT_ROUNDS = [
   "HR Round", "Technical Round 1", "Technical Round 2", "Final Round",
@@ -54,6 +55,22 @@ export async function getInterview(id: string): Promise<Interview | null> {
   return snap.exists() ? { id: snap.id, ...snap.data() } as Interview : null;
 }
 
+// Denormalizes the candidate's own external UserID (Candidate.uid, e.g.
+// "STU-2024-001") onto the interview at creation time — same pattern as
+// candidateName/candidateEmail already being snapshotted by callers, done
+// centrally here so every creation path (direct scheduling, CSV/Sheet
+// import) gets it consistently instead of relying on each call site to
+// remember. A caller-supplied candidateUid (e.g. an import that already
+// resolved the candidate) is left as-is, no extra read.
+async function withCandidateUid<T extends { candidateId?: string; candidateUid?: string }>(
+  data: T
+): Promise<T> {
+  if (data.candidateUid || !data.candidateId) return data;
+  const candidateSnap = await getDoc(doc(db, "candidates", data.candidateId));
+  const uid = candidateSnap.exists() ? (candidateSnap.data() as Candidate).uid : undefined;
+  return uid ? { ...data, candidateUid: uid } : data;
+}
+
 export async function createInterview(
   data: Omit<Interview, "id" | "status" | "createdAt"> & { status?: InterviewStatus }
 ): Promise<string> {
@@ -72,7 +89,7 @@ export async function createInterview(
     }
   }
   const ref = await addDoc(collection(db, "interviews"), {
-    ...rest,
+    ...(await withCandidateUid(rest)),
     status: status || "pending_acceptance",
     createdAt: new Date().toISOString(),
   });
@@ -370,11 +387,46 @@ export async function backfillFeedbackDescriptorsOnce(): Promise<void> {
   await setDoc(markerRef, { completedAt: new Date().toISOString(), count: updated });
 }
 
+// One-time, self-guarding backfill so interviews created BEFORE
+// withCandidateUid (above) started snapshotting Candidate.uid onto the
+// interview doc get it too — same reasoning as
+// backfillFeedbackDescriptorsOnce just above: Academy Nexus reads
+// interview docs straight off Firestore via its own service account, so a
+// field only present on newly-created interviews never reaches historical
+// ones on its own. Same settings-marker-doc guard, runs once total.
+export async function backfillCandidateUidOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "candidateUidBackfill");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const candidates = await getCandidates();
+  const uidByCandidateId = new Map<string, string>(
+    candidates.filter(c => !!c.uid).map(c => [c.id, c.uid as string])
+  );
+
+  const snap = await getDocs(collection(db, "interviews"));
+  const targets = snap.docs.filter(d => {
+    const data = d.data() as Interview;
+    return !data.candidateUid && !!data.candidateId && uidByCandidateId.has(data.candidateId);
+  });
+
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const d of targets.slice(i, i + 450)) {
+      const data = d.data() as Interview;
+      batch.update(d.ref, { candidateUid: uidByCandidateId.get(data.candidateId) });
+    }
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: new Date().toISOString(), count: targets.length });
+}
+
 export async function importScheduledInterview(
   data: Omit<Interview, "id" | "status" | "feedback" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
-    ...data,
+    ...(await withCandidateUid(data)),
     status: "pending_acceptance",
     candidateJoined: false,
     questionsAsked: [],
@@ -390,7 +442,7 @@ export async function importCompletedInterview(
   data: Omit<Interview, "id" | "status" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
-    ...data,
+    ...(await withCandidateUid(data)),
     status: "completed",
     candidateJoined: true,
     attendanceMarkedAt: new Date().toISOString(),

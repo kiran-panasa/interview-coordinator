@@ -316,6 +316,12 @@ export interface Interview {
   candidateId: string;
   candidateName: string;
   candidateEmail: string;
+  // Snapshotted from Candidate.uid (Academy's own student identifier, e.g.
+  // "STU-2024-001") at creation time — same denormalization as
+  // candidateName/candidateEmail above, added later so it's absent on
+  // interviews created before this existed. See withCandidateUid in
+  // api/interviews.ts and backfillCandidateUidOnce for historical rows.
+  candidateUid?: string;
   interviewerId: string;
   interviewerEmail: string;
   templateId?: string;

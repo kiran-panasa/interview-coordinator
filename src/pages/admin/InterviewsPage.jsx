@@ -11,7 +11,7 @@ import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled,
-  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, deleteInterview,
+  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
@@ -109,6 +109,10 @@ export default function InterviewsPage() {
   // was baked into feedback.domains) gets it too — needed for consumers that
   // read Firestore directly rather than through our own API.
   useEffect(() => { backfillFeedbackDescriptorsOnce().catch(err => console.error("Feedback descriptors backfill failed:", err)); }, []);
+  // Self-guarding — see backfillCandidateUidOnce in src/api/interviews.ts.
+  // One-time backfill so historical interviews (created before
+  // candidateUid was snapshotted at creation time) get it too.
+  useEffect(() => { backfillCandidateUidOnce().catch(err => console.error("candidateUid backfill failed:", err)); }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");
