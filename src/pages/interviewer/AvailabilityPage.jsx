@@ -42,11 +42,6 @@ const MONTH_NAMES = [
   "January","February","March","April","May","June",
   "July","August","September","October","November","December",
 ];
-const PRESET_TIMES = [
-  "09:00 AM","10:00 AM","11:00 AM","12:00 PM",
-  "01:00 PM","02:00 PM","03:00 PM","04:00 PM","05:00 PM","06:00 PM",
-];
-const DURATION_OPTIONS = [15, 30, 45, 60];
 const BUFFER_OPTIONS   = [0, 5, 10, 15];
 const WEEKDAY_SET      = new Set([1, 2, 3, 4, 5]);
 const STATUS_ORDER = { free: 0, booked: 1, completed: 2 };
@@ -71,6 +66,15 @@ function minutesToAmPm(mins) {
   const h12 = h24 % 12 || 12;
   return `${String(h12).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
 }
+
+// 9:00 AM through 9:00 PM in 30-minute steps.
+const PRESET_TIMES = (() => {
+  const out = [];
+  for (let m = 9 * 60; m <= 21 * 60; m += 30) out.push(minutesToAmPm(m));
+  return out;
+})();
+const DURATION_OPTIONS = [30, 60, 90];
+const CUSTOM_DURATION = "custom";
 // Sort key so AM/PM chip labels order chronologically, not alphabetically
 function timeSortKey(label) {
   const m = label.match(/^(\d{2}):(\d{2})\s*(AM|PM)$/);
@@ -166,6 +170,7 @@ export default function AvailabilityPage() {
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd,   setRangeEnd]   = useState("");
   const [duration,   setDuration]   = useState(30);
+  const [durationCustomMode, setDurationCustomMode] = useState(false);
   const [buffer,     setBuffer]     = useState(0);
   const [rangeError, setRangeError] = useState("");
 
@@ -923,10 +928,23 @@ export default function AvailabilityPage() {
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-1">Duration</label>
-                      <select value={duration} onChange={e => setDuration(Number(e.target.value))}
+                      <select
+                        value={durationCustomMode ? CUSTOM_DURATION : duration}
+                        onChange={e => {
+                          const v = e.target.value;
+                          if (v === CUSTOM_DURATION) { setDurationCustomMode(true); }
+                          else { setDurationCustomMode(false); setDuration(Number(v)); }
+                        }}
                         className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
                         {DURATION_OPTIONS.map(m => <option key={m} value={m}>{m} min</option>)}
+                        <option value={CUSTOM_DURATION}>Custom…</option>
                       </select>
+                      {durationCustomMode && (
+                        <input type="number" min={5} step={5} value={duration}
+                          onChange={e => setDuration(Number(e.target.value))}
+                          placeholder="Minutes"
+                          className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm mt-1.5 w-24 focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+                      )}
                     </div>
                     <div>
                       <label className="block text-[10px] text-gray-400 mb-1">Buffer</label>
