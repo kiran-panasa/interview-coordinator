@@ -50,6 +50,8 @@ export default function InterviewerNudgeTab({
   const [nudgeDateEnd,    setNudgeDateEnd]    = useState(inDays(7));
   const [nudgeTimeStart,  setNudgeTimeStart]  = useState("09:00");
   const [nudgeTimeEnd,    setNudgeTimeEnd]    = useState("18:00");
+  const [nudgeDuration,        setNudgeDuration]        = useState(60);
+  const [nudgeDurationCustom,  setNudgeDurationCustom]  = useState(false);
   const [nudgeTarget,     setNudgeTarget]     = useState(null);
   const [selectedIvrs,    setSelectedIvrs]    = useState(new Set());
   const [manuallyAdded,   setManuallyAdded]   = useState(new Set());
@@ -84,11 +86,12 @@ export default function InterviewerNudgeTab({
     return (
       `Hi {{name}},\n\nWe need interviewers${programLine} for "${sessionLabel}" sessions between ` +
       `${formatDate(nudgeDateStart)} and ${formatDate(nudgeDateEnd)}${timeRange}.\n\n` +
+      `Each interview will be ${nudgeDuration} minutes long — please add available slots of at least that length.\n\n` +
       `Please add your available time slots for this period so we can schedule candidates.\n\n` +
       `Click here to respond and add your slots:\n${portal}\n\n` +
       `Thank you,\n${userProfile?.displayName || "Admin"} · NxtWave`
     );
-  }, [sessionLabel, nudgeProgramName, nudgeDateStart, nudgeDateEnd, nudgeTimeStart, nudgeTimeEnd, userProfile]);
+  }, [sessionLabel, nudgeProgramName, nudgeDateStart, nudgeDateEnd, nudgeTimeStart, nudgeTimeEnd, nudgeDuration, userProfile]);
 
   const templateOptionIds = templateOptions.map(t => t.id);
   const matchedInterviewers = nudgeTemplateId
@@ -191,6 +194,7 @@ export default function InterviewerNudgeTab({
           program: nudgeProgramName || "",
           dateRangeStart: nudgeDateStart, dateRangeEnd: nudgeDateEnd,
           timeRangeStart: nudgeTimeStart, timeRangeEnd: nudgeTimeEnd,
+          duration: nudgeDuration,
           message: message.replace(/\{\{name\}\}/g, r.displayName || r.email),
           status: "unread",
         });
@@ -291,6 +295,29 @@ export default function InterviewerNudgeTab({
             {nudgeTimeStart && nudgeTimeEnd && (
               <p className="text-xs text-gray-400 pb-2.5">{formatTime(nudgeTimeStart)} – {formatTime(nudgeTimeEnd)}</p>
             )}
+          </div>
+          <div className="mt-3">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Interview Duration</label>
+            <div className="flex items-center gap-2">
+              <select
+                value={nudgeDurationCustom ? "custom" : nudgeDuration}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === "custom") { setNudgeDurationCustom(true); }
+                  else { setNudgeDurationCustom(false); setNudgeDuration(Number(v)); }
+                }}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value={30}>30 minutes</option>
+                <option value={60}>60 minutes</option>
+                <option value={90}>90 minutes</option>
+                <option value="custom">Custom…</option>
+              </select>
+              {nudgeDurationCustom && (
+                <input type="number" min={1} value={nudgeDuration} onChange={e => setNudgeDuration(Number(e.target.value))}
+                  placeholder="Minutes"
+                  className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
