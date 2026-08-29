@@ -174,7 +174,15 @@ export default function TemplatesPage() {
       guidelinesDocUrl: source.guidelinesDocUrl || "", guidelinesDocLabel: source.guidelinesDocLabel || "",
     });
     setQbTexts(toTexts(source.questionBank || source.questions));
-    setAssignedQIds(source.questionIds || []);
+    // Deliberately NOT source.questionIds — cloning a template copies its
+    // structural configuration (domains, skills, guidelines) so the new
+    // template starts from a known-good shape, but its Question Bank pool
+    // is content, not configuration. Carrying the source's questionIds over
+    // silently cross-tagged every one of the source template's existing
+    // questions onto the new template too, well past just a starting point —
+    // e.g. cloning "Frontend Development" to start a new "DSA" template left
+    // every Frontend question also assigned to DSA.
+    setAssignedQIds([]);
     setShowNewPicker(false);
     setShowModal(true);
   };
