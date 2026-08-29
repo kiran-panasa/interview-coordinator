@@ -455,6 +455,10 @@ export interface ScheduleInvite {
   // to have late-evening slots on file). Unset means no restriction.
   timeRangeStart?: string;
   timeRangeEnd?: string;
+  // Set once an admin has been emailed that this candidate had zero
+  // bookable slots after duration/time-window filtering — guards against
+  // re-notifying every time the candidate reloads the scheduling page.
+  noSlotsNotifiedAt?: string | null;
   inviteToken: string;
   expiryHours?: number;
   status: ScheduleInviteStatus;

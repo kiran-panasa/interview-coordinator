@@ -28,6 +28,19 @@ function generateOtp() {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
+// Shared by the render path and the post-load "zero slots" admin-notify
+// check below, so they can never drift out of sync with each other.
+function computeBookableSlots(invite, rawSlots) {
+  const windowStartMin = hhmmToMinutes(invite?.timeRangeStart);
+  const windowEndMin   = hhmmToMinutes(invite?.timeRangeEnd);
+  const withinTimeWindow = (slot) => {
+    if (windowStartMin == null || windowEndMin == null) return true;
+    const startMin = timeToMinutes(slot.time);
+    return startMin >= windowStartMin && startMin <= windowEndMin;
+  };
+  return collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60);
+}
+
 
 
 // ── Step components ───────────────────────────────────────────────────────────
@@ -109,6 +122,41 @@ export default function SchedulePage() {
     })();
   }, [token]);
 
+  // Fires once per invite (guarded by noSlotsNotifiedAt on the invite doc,
+  // not local state, so it stays suppressed across page reloads) — lets an
+  // admin catch "this candidate has nothing to book" instead of only
+  // finding out when the invite quietly expires unbooked.
+  const notifyAdminsNoSlotsAvailable = async (inv) => {
+    if (inv.noSlotsNotifiedAt) return;
+    updateScheduleInvite(inv.id, { noSlotsNotifiedAt: new Date().toISOString() }).catch(() => {});
+    try {
+      const allUsers = await getAllUsers();
+      const admins = resolveActionAdminRecipients(allUsers, inv.sentBy);
+      if (!admins.length || !APPS_SCRIPT_URL) return;
+      const round = inv.round || inv.templateName || "Interview";
+      const windowLine = inv.timeRangeStart && inv.timeRangeEnd
+        ? `\n• Slot Time Window: ${inv.timeRangeStart} – ${inv.timeRangeEnd}`
+        : "";
+      const subject = `No available slots for ${inv.candidateName} — ${round}`;
+      const body =
+        "Hi {{name}},\n\n" +
+        `${inv.candidateName} opened their scheduling link but there are currently no bookable interview slots for them:\n\n` +
+        `• Round:       ${round}\n` +
+        `• Date Range:  ${formatDate(inv.dateRangeStart)} – ${formatDate(inv.dateRangeEnd)}\n` +
+        `• Duration:    ${inv.duration || 60} minutes${windowLine}\n\n` +
+        `Please add more interviewer availability for this window (or widen the campaign's date range/time window) so ${inv.candidateName} can book.\n\n` +
+        "— NxtWave Interview Coordinator";
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail",
+        subject,
+        body,
+        recipients: admins.map(a => ({ email: a.email, name: a.displayName || "" })),
+      });
+    } catch (e) {
+      console.error("Failed to notify admins of zero available slots:", e);
+    }
+  };
+
   const loadSlots = async (inv) => {
     setStep("loading_slots");
     try {
@@ -117,6 +165,7 @@ export default function SchedulePage() {
       );
       setSlots(s);
       setStep("slots");
+      if (computeBookableSlots(inv, s).length === 0) notifyAdminsNoSlotsAvailable(inv);
     } catch (e) {
       console.error(e);
       setStep("slots");
@@ -229,23 +278,10 @@ export default function SchedulePage() {
     setBusy(false);
   };
 
-  // Optional admin-set time-of-day window (e.g. business hours only) — a
-  // panelist's slot outside it is never offered to the candidate, even if
-  // the panelist actually submitted availability there.
-  const windowStartMin = hhmmToMinutes(invite?.timeRangeStart);
-  const windowEndMin   = hhmmToMinutes(invite?.timeRangeEnd);
-  const withinTimeWindow = (slot) => {
-    if (windowStartMin == null || windowEndMin == null) return true;
-    const startMin = timeToMinutes(slot.time);
-    return startMin >= windowStartMin && startMin <= windowEndMin;
-  };
-
-  // Collapse raw 30-min-granularity slots down to the ones actually
-  // bookable for this invite's interview duration (per interviewer/date) —
-  // e.g. 6:30/7:00/7:30/8:00 PM raw slots at a 90-minute duration only
-  // offer 6:30 PM and 8:00 PM, since booking 6:30 PM occupies the
-  // interviewer through 8:00. See collapseSlotsByDurationGrouped.
-  const bookableSlots = collapseSlotsByDurationGrouped(slots.filter(withinTimeWindow), invite?.duration || 60);
+  // Raw 30-min-granularity slots collapsed down to the ones actually
+  // bookable for this invite (duration + optional time-window) — see
+  // computeBookableSlots above.
+  const bookableSlots = computeBookableSlots(invite, slots);
 
   // Group slots by date
   const slotsByDate = bookableSlots.reduce((acc, s) => {
