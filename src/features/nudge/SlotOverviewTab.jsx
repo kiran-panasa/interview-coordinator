@@ -41,13 +41,15 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
 
   const datesSelected = !!(fromDate && toDate);
 
-  // date → [{ ivrId, ivrName, slots[] }]
+  // date → [{ ivrId, ivrName, slots[] }] — includes booked slots too (not
+  // just free ones), so a filled slot stays visible instead of silently
+  // disappearing once someone books it.
   const byDate = useMemo(() => {
     if (!datesSelected) return [];
     const map = {};
     for (const ivr of templateInterviewers) {
       const slots = (ivrSlots[ivr.id] || []).filter(s =>
-        !s.isBooked && s.date >= fromDate && s.date <= toDate
+        s.date >= fromDate && s.date <= toDate
       );
       for (const slot of slots) {
         if (!map[slot.date]) map[slot.date] = {};
@@ -64,7 +66,8 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
       }));
   }, [templateInterviewers, ivrSlots, fromDate, toDate]);
 
-  const totalFreeSlots      = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.length, 0), 0), [byDate]);
+  const totalFreeSlots      = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => !s.isBooked).length, 0), 0), [byDate]);
+  const totalBookedSlots    = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => s.isBooked).length, 0), 0), [byDate]);
   const interviewersWithSlots = useMemo(() => { const s = new Set(); byDate.forEach(d => d.entries.forEach(e => s.add(e.ivrId))); return s.size; }, [byDate]);
 
   const datePagination = usePagination(byDate);
@@ -120,6 +123,10 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
           <div>
             <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Free Slots</p>
             <p className="text-2xl font-bold text-gray-900 mt-0.5">{totalFreeSlots}</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Booked Slots</p>
+            <p className="text-2xl font-bold text-gray-900 mt-0.5">{totalBookedSlots}</p>
           </div>
           <div>
             <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Interviewers with Slots</p>
@@ -183,17 +190,27 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
         <>
         <div className="space-y-3">
           {datePagination.paged.map(({ date, entries }) => {
-            const totalOnDate = entries.reduce((a, e) => a + e.slots.length, 0);
+            const freeOnDate   = entries.reduce((a, e) => a + e.slots.filter(s => !s.isBooked).length, 0);
+            const bookedOnDate = entries.reduce((a, e) => a + e.slots.filter(s => s.isBooked).length, 0);
             const dateLabel = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
               weekday: "long", day: "numeric", month: "long", year: "numeric",
             });
             return (
               <div key={date} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+                <div className="px-5 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-2">
                   <p className="text-sm font-bold text-gray-800">{dateLabel}</p>
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                    {totalOnDate} slot{totalOnDate !== 1 ? "s" : ""}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {freeOnDate > 0 && (
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        {freeOnDate} free
+                      </span>
+                    )}
+                    {bookedOnDate > 0 && (
+                      <span className="text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+                        {bookedOnDate} booked
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="divide-y divide-gray-50">
                   {entries.map(entry => (
@@ -203,8 +220,13 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
                         {entry.slots
                           .slice().sort((a, b) => compareTimeLabels(a.time, b.time))
                           .map(s => (
-                            <span key={s.id} className="text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full">
-                              {s.time}
+                            <span key={s.id} title={s.isBooked ? "Booked — filled by an interview" : "Free"}
+                              className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                                s.isBooked
+                                  ? "bg-orange-50 text-orange-700 border-orange-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              }`}>
+                              {s.time}{s.isBooked ? " · Booked" : ""}
                             </span>
                           ))}
                       </div>

@@ -18,6 +18,7 @@ import StudentLayout from "../../components/StudentLayout";
 import Button from "../../components/Button";
 import { callAppsScript } from "../../lib/appsScript";
 import { maskEmail } from "../../utils/strings";
+import { collapseSlotsByDurationGrouped } from "../../utils/slotAvailability";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -228,8 +229,15 @@ export default function SchedulePage() {
     setBusy(false);
   };
 
+  // Collapse raw 30-min-granularity slots down to the ones actually
+  // bookable for this invite's interview duration (per interviewer/date) —
+  // e.g. 6:30/7:00/7:30/8:00 PM raw slots at a 90-minute duration only
+  // offer 6:30 PM and 8:00 PM, since booking 6:30 PM occupies the
+  // interviewer through 8:00. See collapseSlotsByDurationGrouped.
+  const bookableSlots = collapseSlotsByDurationGrouped(slots, invite?.duration || 60);
+
   // Group slots by date
-  const slotsByDate = slots.reduce((acc, s) => {
+  const slotsByDate = bookableSlots.reduce((acc, s) => {
     if (!acc[s.date]) acc[s.date] = [];
     acc[s.date].push(s);
     return acc;
