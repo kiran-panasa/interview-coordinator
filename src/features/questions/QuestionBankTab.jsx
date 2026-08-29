@@ -25,7 +25,7 @@ export default function QuestionBankTab({
   hasActiveFilters, onClearFilters,
   selected, toggleSelect, toggleSelectAll, filtered,
   paged, page, setPage, totalPages, total, pageSize,
-  openCreate, openEdit, handleArchive, handleUnarchive,
+  openCreate, openEdit, handleArchive, handleUnarchive, handleDelete,
   setShowBulkEdit, setShowBulkModal,
 }) {
   return (
@@ -192,7 +192,8 @@ export default function QuestionBankTab({
                           { label: "Edit",    onClick: () => openEdit(q) },
                           q.status === "archived"
                             ? { label: "Restore", onClick: () => handleUnarchive(q) }
-                            : { label: "Archive", onClick: () => handleArchive(q), danger: true },
+                            : { label: "Archive", onClick: () => handleArchive(q) },
+                          { label: "Delete",  onClick: () => handleDelete(q), danger: true },
                         ]} />
                       </td>
                     </tr>

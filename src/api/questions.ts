@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDocs, addDoc, updateDoc,
+  collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, increment,
 } from "firebase/firestore";
 import type { Question, AdhocQuestion, QuestionFilters } from "../types";
@@ -94,6 +94,14 @@ export async function updateQuestion(
 
 export async function archiveQuestion(id: string): Promise<void> {
   await updateDoc(doc(db, "questions", id), { status: "archived", updatedAt: new Date().toISOString() });
+}
+
+// Hard delete — permanent, unlike archiveQuestion. Callers are responsible
+// for first removing this question's id from any template's questionIds
+// (see removeQuestionFromTemplate in api/templates.ts) so no template is
+// left pointing at a document that no longer exists.
+export async function deleteQuestion(id: string): Promise<void> {
+  await deleteDoc(doc(db, "questions", id));
 }
 
 export function subscribeToQuestions(callback: (questions: Question[]) => void): () => void {

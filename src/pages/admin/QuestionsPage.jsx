@@ -3,10 +3,10 @@ import { useOutletContext } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, Pencil, Download,
+  Plus, Upload, Pencil, Download, Trash2,
 } from "lucide-react";
 import {
-  subscribeToQuestions, createQuestion, updateQuestion, archiveQuestion,
+  subscribeToQuestions, createQuestion, updateQuestion, archiveQuestion, deleteQuestion,
   approveAdhocQuestion, rejectAdhocQuestion,
   addQuestionToTemplate, removeQuestionFromTemplate,
 } from "../../api/firestore";
@@ -76,6 +76,7 @@ export default function QuestionsPage() {
   const [bulkForm,      setBulkForm]      = useState(BLANK_BULK);
   const [bulkSaving,    setBulkSaving]    = useState(false);
   const [bulkProgress,  setBulkProgress]  = useState(null);
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToQuestions(qs => { setQuestions(qs); setLoading(false); });
@@ -260,6 +261,40 @@ export default function QuestionsPage() {
       await updateQuestion(q.id, { status: "active" });
       setToast({ message: "Question restored." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
+  };
+
+  // Permanent — unlike Archive, this can't be undone. Detaches from every
+  // template it's currently assigned to first, so no template is left
+  // pointing at a deleted question.
+  const handleDelete = async (q) => {
+    if (!confirm(`Permanently delete "${q.text.slice(0, 60)}…"?\n\nThis can't be undone. If you might want it back later, use Archive instead.`)) return;
+    try {
+      const tids = templateIdsForQuestion(q.id);
+      await Promise.all(tids.map(tid => removeQuestionFromTemplate(tid, q.id)));
+      await deleteQuestion(q.id);
+      if (tids.length) queryClient.invalidateQueries({ queryKey: QK.templates });
+      setToast({ message: "Question deleted." });
+    } catch (e) { setToast({ message: e.message, type: "error" }); }
+  };
+
+  const handleDeleteSelected = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!confirm(`Permanently delete ${ids.length} question${ids.length !== 1 ? "s" : ""}?\n\nThis can't be undone. If you might want them back later, archive instead (one at a time, or filter to just these and archive each).`)) return;
+    setDeletingSelected(true);
+    try {
+      for (const qid of ids) {
+        const tids = templateIdsForQuestion(qid);
+        await Promise.all(tids.map(tid => removeQuestionFromTemplate(tid, qid)));
+        await deleteQuestion(qid);
+      }
+      queryClient.invalidateQueries({ queryKey: QK.templates });
+      setSelected(new Set());
+      setToast({ message: `${ids.length} question${ids.length !== 1 ? "s" : ""} deleted.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setDeletingSelected(false);
   };
 
   // ── Bulk select / edit ──────────────────────────────────────────────────────
@@ -505,11 +540,18 @@ export default function QuestionsPage() {
         {activeTab === "bank" && (
           <div className="flex gap-2">
             {selected.size > 0 && (
-              <button onClick={() => setShowBulkEdit(true)}
-                className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-amber-100 transition-colors">
-                <Pencil className="w-4 h-4" />
-                Edit selected ({selected.size})
-              </button>
+              <>
+                <button onClick={() => setShowBulkEdit(true)}
+                  className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-amber-100 transition-colors">
+                  <Pencil className="w-4 h-4" />
+                  Edit selected ({selected.size})
+                </button>
+                <button onClick={handleDeleteSelected} disabled={deletingSelected}
+                  className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                  {deletingSelected ? "Deleting…" : `Delete selected (${selected.size})`}
+                </button>
+              </>
             )}
             <Button variant="secondary" icon={Upload} onClick={() => setShowBulkModal(true)}>
               Bulk Upload
@@ -568,7 +610,7 @@ export default function QuestionsPage() {
           selected={selected} toggleSelect={toggleSelect} toggleSelectAll={toggleSelectAll} filtered={filtered}
           paged={paged} page={page} setPage={setPage} totalPages={totalPages} total={total} pageSize={pageSize}
           openCreate={openCreate} openEdit={openEdit}
-          handleArchive={handleArchive} handleUnarchive={handleUnarchive}
+          handleArchive={handleArchive} handleUnarchive={handleUnarchive} handleDelete={handleDelete}
           setShowBulkEdit={setShowBulkEdit} setShowBulkModal={setShowBulkModal}
         />
       )}
