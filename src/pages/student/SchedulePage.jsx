@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { formatDate, formatDateLong, parseInterviewStart } from "../../utils/dates";
+import { formatDate, formatDateLong, parseInterviewStart, timeToMinutes, hhmmToMinutes } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -229,12 +229,23 @@ export default function SchedulePage() {
     setBusy(false);
   };
 
+  // Optional admin-set time-of-day window (e.g. business hours only) — a
+  // panelist's slot outside it is never offered to the candidate, even if
+  // the panelist actually submitted availability there.
+  const windowStartMin = hhmmToMinutes(invite?.timeRangeStart);
+  const windowEndMin   = hhmmToMinutes(invite?.timeRangeEnd);
+  const withinTimeWindow = (slot) => {
+    if (windowStartMin == null || windowEndMin == null) return true;
+    const startMin = timeToMinutes(slot.time);
+    return startMin >= windowStartMin && startMin <= windowEndMin;
+  };
+
   // Collapse raw 30-min-granularity slots down to the ones actually
   // bookable for this invite's interview duration (per interviewer/date) —
   // e.g. 6:30/7:00/7:30/8:00 PM raw slots at a 90-minute duration only
   // offer 6:30 PM and 8:00 PM, since booking 6:30 PM occupies the
   // interviewer through 8:00. See collapseSlotsByDurationGrouped.
-  const bookableSlots = collapseSlotsByDurationGrouped(slots, invite?.duration || 60);
+  const bookableSlots = collapseSlotsByDurationGrouped(slots.filter(withinTimeWindow), invite?.duration || 60);
 
   // Group slots by date
   const slotsByDate = bookableSlots.reduce((acc, s) => {

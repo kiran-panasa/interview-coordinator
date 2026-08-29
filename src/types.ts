@@ -448,6 +448,13 @@ export interface ScheduleInvite {
   // the candidate's booking is confirmed. Absent on invites sent before this
   // field existed; every read site falls back to 60.
   duration?: number;
+  // Optional "HH:MM" (24-hour) bounds — when set, the candidate scheduling
+  // page only offers a panelist's slots whose start time falls within this
+  // window, even if the panelist submitted availability outside it (e.g. an
+  // admin restricting bookings to business hours while a panelist happens
+  // to have late-evening slots on file). Unset means no restriction.
+  timeRangeStart?: string;
+  timeRangeEnd?: string;
   inviteToken: string;
   expiryHours?: number;
   status: ScheduleInviteStatus;

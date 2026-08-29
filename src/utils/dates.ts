@@ -56,6 +56,15 @@ export function compareTimeLabels(a: string, b: string): number {
   return timeToMinutes(a) - timeToMinutes(b);
 }
 
+// "18:00" -> 1080 — for 24-hour "HH:MM" <input type="time"> values (as
+// opposed to timeToMinutes above, which parses "3:00 PM" style labels).
+export function hhmmToMinutes(hhmm: string | null | undefined): number | null {
+  if (!hhmm) return null;
+  const m = hhmm.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+}
+
 // "3:00 PM" + 90 -> "4:30 PM" — used to show an interview's end time
 // alongside its start time and duration.
 export function addMinutesToTimeLabel(label: string, minutesToAdd: number): string {

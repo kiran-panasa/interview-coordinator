@@ -67,6 +67,11 @@ export default function CandidateSchedulingTab({
   const [roundCustomMode, setRoundCustomMode] = useState(false);
   const [duration,        setDuration]        = useState(60);
   const [durationCustomMode, setDurationCustomMode] = useState(false);
+  // Optional — restricts which of a panelist's slots are offered to the
+  // candidate to this time-of-day window (e.g. business hours only), even
+  // if the panelist submitted availability outside it. Empty = no restriction.
+  const [timeWindowStart, setTimeWindowStart] = useState("");
+  const [timeWindowEnd,   setTimeWindowEnd]   = useState("");
   const [selCandidates,  setSelCandidates]  = useState(new Set());
   const [sendingInvites, setSendingInvites] = useState(false);
   const [confirmingId,   setConfirmingId]   = useState(null);
@@ -168,6 +173,12 @@ export default function CandidateSchedulingTab({
     if (!duration || duration <= 0) {
       setToast({ message: "Please enter a valid interview duration.", type: "error" }); return;
     }
+    if ((timeWindowStart && !timeWindowEnd) || (!timeWindowStart && timeWindowEnd)) {
+      setToast({ message: "Set both a start and end time for the slot time window, or leave both blank.", type: "error" }); return;
+    }
+    if (timeWindowStart && timeWindowEnd && timeWindowEnd <= timeWindowStart) {
+      setToast({ message: "The time window's end must be after its start.", type: "error" }); return;
+    }
     const tmpl = templates.find(t => t.id === filterTemplate);
     setSendingInvites(true);
     try {
@@ -188,6 +199,7 @@ export default function CandidateSchedulingTab({
           templateName:   tmpl?.name || "",
           round,
           duration,
+          ...(timeWindowStart && timeWindowEnd ? { timeRangeStart: timeWindowStart, timeRangeEnd: timeWindowEnd } : {}),
           program:        c.program || "",
           programName:    candidateProgramLabel,
           dateRangeStart: dateStart,
@@ -547,6 +559,31 @@ export default function CandidateSchedulingTab({
             >
               {sendingInvites ? "Sending…" : `Send Invites (${selCandidates.size})`}
             </Button>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 mb-2">
+            Restrict Slot Times <span className="text-gray-400 font-normal">— optional; only offer a panelist's slots that fall within this window, even if they submitted slots outside it</span>
+          </p>
+          <div className="flex items-end gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Start Time</label>
+              <input type="time" value={timeWindowStart} onChange={e => setTimeWindowStart(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            <span className="text-gray-400 pb-2.5">—</span>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">End Time</label>
+              <input type="time" value={timeWindowEnd} onChange={e => setTimeWindowEnd(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            </div>
+            {(timeWindowStart || timeWindowEnd) && (
+              <button type="button" onClick={() => { setTimeWindowStart(""); setTimeWindowEnd(""); }}
+                className="text-xs text-gray-400 hover:text-gray-600 pb-2.5 transition-colors">
+                Clear
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
