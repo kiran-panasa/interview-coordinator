@@ -37,6 +37,7 @@ import AssignmentLinksModal from "../../features/interviews/AssignmentLinksModal
 import InterviewHistoryModal from "../../features/interviews/InterviewHistoryModal";
 import CopyButton from "../../components/CopyButton";
 import AiReportModal from "../../features/interviews/AiReportModal";
+import SearchableSelect from "../../components/SearchableSelect";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -1231,11 +1232,14 @@ export default function InterviewsPage() {
           <option value="All">All Templates</option>
           {uniqueTemplates.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select value={filterIvr} onChange={e => { setFilterIvr(e.target.value); setIvrPage(1); }}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-          <option value="All">All Interviewers</option>
-          {uniqueIvrs.map(e => <option key={e} value={e}>{ivrNameByEmail[e] || e}</option>)}
-        </select>
+        <SearchableSelect
+          className="w-48"
+          options={[{ id: "All", label: "All Interviewers" }, ...uniqueIvrs.map(e => ({ id: e, label: ivrNameByEmail[e] || e }))]}
+          value={filterIvr}
+          onChange={id => { setFilterIvr(id); setIvrPage(1); }}
+          placeholder="All Interviewers"
+          searchPlaceholder="Search interviewer…"
+        />
         {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All" || candSearch) && (
           <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1); }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
