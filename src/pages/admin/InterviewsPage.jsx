@@ -939,19 +939,27 @@ export default function InterviewsPage() {
     return true;
   }), [workingSet, activeProgram, templateProgram]);
 
-  const filtered = useMemo(() => programWorkingSet.filter(i => {
-    if (filterStatus !== "All" && i.status !== filterStatus) return false;
-    if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
-    if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
-    if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
-    if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
-    if (candSearch) {
-      const q = candSearch.trim().toLowerCase();
-      const hay = [i.candidateName, i.candidateEmail].filter(Boolean).join(" ").toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  }), [programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterTemplate, candSearch]);
+  // A search query bypasses the active Program tab (searches workingSet,
+  // not the tab-scoped programWorkingSet) — otherwise a candidate on a
+  // different tab than the one you happen to be viewing silently returns
+  // zero results, which reads as "search is broken" rather than "search
+  // worked, but you're on the wrong tab."
+  const filtered = useMemo(() => {
+    const base = candSearch.trim() ? workingSet : programWorkingSet;
+    return base.filter(i => {
+      if (filterStatus !== "All" && i.status !== filterStatus) return false;
+      if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
+      if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
+      if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
+      if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
+      if (candSearch) {
+        const q = candSearch.trim().toLowerCase();
+        const hay = [i.candidateName, i.candidateEmail, i.candidateUid].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterTemplate, candSearch]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 

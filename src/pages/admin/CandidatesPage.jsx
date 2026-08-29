@@ -308,16 +308,23 @@ export default function CandidatesPage() {
     [candidates, showArchived]
   );
 
+  // A search query bypasses the active Program tab — otherwise a candidate
+  // on a different tab than the one you're viewing silently returns zero
+  // results, which reads as "search is broken" rather than "search worked,
+  // but you're on the wrong tab."
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.trim().toLowerCase();
     return workingSet.filter(c => {
+      if (q) {
+        return (
+          c.name?.toLowerCase().includes(q) ||
+          c.uid?.toLowerCase().includes(q) ||
+          c.email?.toLowerCase().includes(q)
+        );
+      }
       if (activeProgram === "unassigned" && c.program) return false;
       if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
-      return (
-        c.name?.toLowerCase().includes(q) ||
-        c.uid?.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q)
-      );
+      return true;
     });
   }, [workingSet, activeProgram, search]);
 
