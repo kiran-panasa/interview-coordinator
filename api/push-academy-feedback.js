@@ -1,11 +1,14 @@
 import { getDb } from "./_lib/firebaseAdmin.js";
 import { getAuth } from "firebase-admin/auth";
+import { resolveAcademyProgramId, isTemplateInAcademyProgram } from "./_lib/academyProgram.js";
 
 // Called BY our own frontend right after an Academy interview's status/
 // feedback changes (see markInterviewCompleted in src/api/interviews.ts).
 // Looks the interview up server-side — so the client only ever sends an id,
 // never the feedback content itself — and forwards it to Academy Nexus if
-// it belongs to an Academy-prefixed template. Keeps ACADEMY_FEEDBACK_API_KEY
+// its template belongs to the Academy Program (see api/_lib/academyProgram.js
+// — deliberately NOT a templateName-prefix guess, which missed real Academy
+// templates like "Frontend Development"). Keeps ACADEMY_FEEDBACK_API_KEY
 // out of the browser bundle entirely (mirrors how Academy Nexus's own
 // api/send-to-interview.js keeps ITS outbound key server-side).
 //
@@ -71,7 +74,8 @@ export default async function handler(req, res) {
       return res.status(404).json({ success: false, error: "not_found" });
     }
     const iv = snap.data();
-    if (!(iv.templateName || "").startsWith("Academy")) {
+    const academyProgramId = await resolveAcademyProgramId(db);
+    if (!(await isTemplateInAcademyProgram(db, iv.templateId, academyProgramId))) {
       return res.status(200).json({ success: true, skipped: true });
     }
 
