@@ -129,6 +129,12 @@ export default function InterviewsPage() {
   const [availTimes,    setAvailTimes]    = useState([]);
   const [saving,        setSaving]        = useState(false);
   const [inviting,      setInviting]      = useState({});  // { [interviewId]: true }
+  // Tracks an interview whose last Send Invite attempt reported failure —
+  // the Calendar event/Meet space can still have been created server-side
+  // even when the client-side call times out or the connection drops (Apps
+  // Script keeps running after the browser gives up waiting), so a bare
+  // retry risks creating a duplicate. See sendInvite below.
+  const [sendInviteFailed, setSendInviteFailed] = useState({}); // { [interviewId]: true }
   const [feedbackModal,     setFeedbackModal]     = useState(null); // { interview, template }
   const [feedbackEditModal, setFeedbackEditModal] = useState(null); // interview
   const [feedbackEditForm,  setFeedbackEditForm]  = useState({ overallRecommendation: "", comments: "", markCompleted: true });
@@ -425,7 +431,17 @@ export default function InterviewsPage() {
 
   const sendInvite = async (iv) => {
     setInviting(s => ({ ...s, [iv.id]: true }));
+    setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
     try {
+      // Longer than callAppsScript's 25s default — "schedule" does several
+      // sequential Google API calls server-side (Meet space creation, two
+      // member adds, the Calendar insert itself) that can legitimately run
+      // past 25s under load. A client-side timeout here does NOT stop the
+      // Apps Script execution, which keeps running to completion regardless
+      // — so a short timeout mainly just makes the browser give up on a
+      // request that's actually going to succeed a few seconds later,
+      // which is exactly what produced the "created in Calendar but no
+      // Meet link saved" reports.
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action:          "schedule",
         candidateEmail:  iv.candidateEmail,
@@ -436,7 +452,7 @@ export default function InterviewsPage() {
         date:            iv.scheduledDate,
         startTime:       iv.scheduledTime,
         durationMinutes: iv.duration || 60,
-      });
+      }, 60000);
       await updateInterview(iv.id, {
         meetLink: result.meetLink,
         eventId:  result.eventId,
@@ -500,7 +516,11 @@ export default function InterviewsPage() {
         setToast({ message: "Calendar invite sent! Meet link saved." });
       }
     } catch (e) {
-      setToast({ message: "Failed to send invite: " + e.message, type: "error" });
+      setSendInviteFailed(s => ({ ...s, [iv.id]: true }));
+      setToast({
+        message: `Couldn't confirm the invite went through (${e.message}). The Calendar event may still have been created despite this error — check the calendar or this interview's Meet column before sending again, to avoid creating a duplicate.`,
+        type: "error",
+      });
     }
     setInviting(s => ({ ...s, [iv.id]: false }));
   };
@@ -1340,8 +1360,19 @@ export default function InterviewsPage() {
                       highlight: true,
                     },
                     {
-                      label: inviting[iv.id] ? "Sending…" : iv.eventId ? "✓ Invite Sent" : "Send Invite",
-                      onClick: () => { if (!iv.eventId && !inviting[iv.id]) sendInvite(iv); },
+                      label: inviting[iv.id]
+                        ? "Sending…"
+                        : iv.eventId
+                          ? "✓ Invite Sent"
+                          : sendInviteFailed[iv.id] ? "Retry Send Invite" : "Send Invite",
+                      onClick: () => {
+                        if (iv.eventId || inviting[iv.id]) return;
+                        if (sendInviteFailed[iv.id] && !confirm(
+                          "The last attempt for this interview couldn't confirm it worked, but the Calendar event/Meet may have already been created. " +
+                          "Please check the interview in Google Calendar first. Send again anyway? This may create a duplicate Meet link."
+                        )) return;
+                        sendInvite(iv);
+                      },
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
                     },
                     {
