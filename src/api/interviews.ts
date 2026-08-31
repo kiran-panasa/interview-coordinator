@@ -8,9 +8,10 @@ import { findBlockedDateFor } from "./blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 import { getTemplates } from "./templates";
 import { getCandidates } from "./candidates";
+import { getPrograms } from "./programs";
 import { getInterviewIntegrity } from "./interviewIntegrity";
 import { withIntegrityDomain, attachDescriptors } from "../utils/templateEngine";
-import type { Interview, InterviewStatus, InterviewHistoryEntry, Candidate } from "../types";
+import type { Interview, InterviewStatus, InterviewHistoryEntry, Candidate, Program } from "../types";
 
 export const DEFAULT_ROUNDS = [
   "HR Round", "Technical Round 1", "Technical Round 2", "Final Round",
@@ -71,6 +72,26 @@ async function withCandidateUid<T extends { candidateId?: string; candidateUid?:
   return uid ? { ...data, candidateUid: uid } : data;
 }
 
+// Denormalizes the template's own Program assignment (Template.program ->
+// Program.id/name) onto the interview at creation time, same reasoning as
+// withCandidateUid above — a direct-Firestore reader can then filter on an
+// exact programName instead of guessing from the template's own display
+// name, which isn't required to match its Program (see the "Frontend
+// Development" / "Programming with Problem Solving (DSA)" case: both
+// belong to the Academy program without being named "Academy ..."). A
+// caller-supplied programId/programName is left as-is, no extra reads.
+async function withProgramInfo<T extends {
+  templateId?: string; programId?: string; programName?: string;
+}>(data: T): Promise<T> {
+  if (data.programId || data.programName || !data.templateId) return data;
+  const templates = await getTemplates();
+  const template = templates.find(t => t.id === data.templateId);
+  if (!template?.program) return data;
+  const programs = await getPrograms();
+  const program = programs.find((p: Program) => p.id === template.program);
+  return program ? { ...data, programId: program.id, programName: program.name } : { ...data, programId: template.program };
+}
+
 export async function createInterview(
   data: Omit<Interview, "id" | "status" | "createdAt"> & { status?: InterviewStatus }
 ): Promise<string> {
@@ -89,7 +110,7 @@ export async function createInterview(
     }
   }
   const ref = await addDoc(collection(db, "interviews"), {
-    ...(await withCandidateUid(rest)),
+    ...(await withProgramInfo(await withCandidateUid(rest))),
     status: status || "pending_acceptance",
     createdAt: new Date().toISOString(),
   });
@@ -422,11 +443,47 @@ export async function backfillCandidateUidOnce(): Promise<void> {
   await setDoc(markerRef, { completedAt: new Date().toISOString(), count: targets.length });
 }
 
+// One-time, self-guarding backfill so interviews created BEFORE
+// withProgramInfo (above) started snapshotting the template's Program
+// assignment onto the interview doc get it too — same reasoning as the two
+// backfills above. Same settings-marker-doc guard, runs once total.
+export async function backfillProgramInfoOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "programInfoBackfill");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const [templates, programs] = await Promise.all([getTemplates(), getPrograms()]);
+  const programById = new Map(programs.map(p => [p.id, p]));
+  const programByTemplateId = new Map(
+    templates
+      .filter(t => t.program && programById.has(t.program))
+      .map(t => [t.id, programById.get(t.program as string) as Program])
+  );
+
+  const snap = await getDocs(collection(db, "interviews"));
+  const targets = snap.docs.filter(d => {
+    const data = d.data() as Interview;
+    return !data.programId && !!data.templateId && programByTemplateId.has(data.templateId);
+  });
+
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const d of targets.slice(i, i + 450)) {
+      const data = d.data() as Interview;
+      const program = programByTemplateId.get(data.templateId as string) as Program;
+      batch.update(d.ref, { programId: program.id, programName: program.name });
+    }
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: new Date().toISOString(), count: targets.length });
+}
+
 export async function importScheduledInterview(
   data: Omit<Interview, "id" | "status" | "feedback" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
-    ...(await withCandidateUid(data)),
+    ...(await withProgramInfo(await withCandidateUid(data))),
     status: "pending_acceptance",
     candidateJoined: false,
     questionsAsked: [],
@@ -442,7 +499,7 @@ export async function importCompletedInterview(
   data: Omit<Interview, "id" | "status" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
-    ...(await withCandidateUid(data)),
+    ...(await withProgramInfo(await withCandidateUid(data))),
     status: "completed",
     candidateJoined: true,
     attendanceMarkedAt: new Date().toISOString(),

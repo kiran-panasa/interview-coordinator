@@ -99,6 +99,11 @@ export default async function handler(req, res) {
         candidateName: iv.candidateName || "",
         candidateEmail: iv.candidateEmail || "",
         interviewerName: iv.interviewerName || "",
+        // Reaching here already confirmed this interview's template belongs
+        // to the Academy program (see the isTemplateInAcademyProgram check
+        // above), so "Academy" is accurate even for interviews from before
+        // programName was denormalized onto the doc (withProgramInfo).
+        programName: iv.programName || "Academy",
         templateName: iv.templateName || "",
         round: iv.round || "",
         status: iv.status || "",

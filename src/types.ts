@@ -326,6 +326,16 @@ export interface Interview {
   interviewerEmail: string;
   templateId?: string;
   templateName?: string;
+  // Snapshotted from the template's own Program assignment (Template.program
+  // -> Program.id/name, see src/api/programs.ts) at creation time — lets a
+  // direct-Firestore reader (e.g. Academy Nexus) filter on an exact program
+  // name instead of guessing "is this an Academy interview" from the
+  // template's own display name, which templates aren't required to match
+  // (e.g. "Frontend Development" belongs to the Academy program without
+  // being named "Academy ..."). See withProgramInfo in api/interviews.ts
+  // and backfillProgramInfoOnce for historical rows.
+  programId?: string;
+  programName?: string;
   scheduledDate: string;
   scheduledTime: string;
   // Minutes. Absent on interviews created before this field existed —

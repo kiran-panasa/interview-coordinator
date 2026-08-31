@@ -11,7 +11,7 @@ import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled,
-  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, deleteInterview,
+  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
@@ -114,6 +114,10 @@ export default function InterviewsPage() {
   // One-time backfill so historical interviews (created before
   // candidateUid was snapshotted at creation time) get it too.
   useEffect(() => { backfillCandidateUidOnce().catch(err => console.error("candidateUid backfill failed:", err)); }, []);
+  // Self-guarding — see backfillProgramInfoOnce in src/api/interviews.ts.
+  // One-time backfill so historical interviews (created before
+  // programId/programName was snapshotted at creation time) get it too.
+  useEffect(() => { backfillProgramInfoOnce().catch(err => console.error("Program info backfill failed:", err)); }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterDateFrom, setFilterDateFrom] = useState("");
