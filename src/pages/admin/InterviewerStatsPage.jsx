@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Download, X, BarChart3 } from "lucide-react";
 import { useInterviews } from "../../hooks/subscriptions";
@@ -25,11 +25,12 @@ export default function InterviewerStatsPage() {
   const { data: programs  = [] } = usePrograms();
   const { data: usersAll  = [] } = useUsers();
 
-  const [dateFrom,   setDateFrom]   = useState("");
-  const [dateTo,     setDateTo]     = useState("");
-  const [programIds, setProgramIds] = useState([]);
-  const [statuses,   setStatuses]   = useState([]);
-  const [rounds,     setRounds]     = useState([]);
+  const [dateFrom,     setDateFrom]     = useState("");
+  const [dateTo,       setDateTo]       = useState("");
+  const [programIds,   setProgramIds]   = useState([]);
+  const [statuses,     setStatuses]     = useState([]);
+  const [templateIds,  setTemplateIds]  = useState([]);
+  const [interviewerEmails, setInterviewerEmails] = useState([]);
 
   const templateProgramById = useMemo(
     () => new Map(templates.map(t => [t.id, t.program || ""])),
@@ -37,13 +38,31 @@ export default function InterviewerStatsPage() {
   );
   const usersByEmail = useMemo(() => new Map(usersAll.map(u => [u.email, u])), [usersAll]);
 
-  const roundOptions = useMemo(
-    () => [...new Set(interviews.map(iv => iv.round).filter(Boolean))].sort().map(r => ({ id: r, name: r })),
-    [interviews]
-  );
   const programOptions = useMemo(
     () => programs.map(p => ({ id: p.id, name: p.name })),
     [programs]
+  );
+  // Scoped to the selected Program(s) — same "pick a program first to
+  // narrow the template list" pattern as the Add Candidate form. Templates
+  // with no program set are always included so nothing becomes unreachable.
+  const templateOptions = useMemo(
+    () => templates
+      .filter(t => !programIds.length || !t.program || programIds.includes(t.program))
+      .map(t => ({ id: t.id, name: t.name })),
+    [templates, programIds]
+  );
+  // Clear any selected template that no longer applies once the Program
+  // filter narrows (mirrors the Add Candidate form's Program->Template reset).
+  useEffect(() => {
+    setTemplateIds(prev => prev.filter(tid => templateOptions.some(t => t.id === tid)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programIds]);
+  const interviewerOptions = useMemo(
+    () => usersAll
+      .filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active")
+      .map(u => ({ id: u.email, name: u.displayName || u.email }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    [usersAll]
   );
 
   const filtered = useMemo(() => {
@@ -53,10 +72,11 @@ export default function InterviewerStatsPage() {
       if (dateFrom && iv.scheduledDate < dateFrom) return false;
       if (dateTo   && iv.scheduledDate > dateTo)   return false;
       if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return false;
-      if (rounds.length     && !rounds.includes(iv.round)) return false;
+      if (templateIds.length && !templateIds.includes(iv.templateId)) return false;
+      if (interviewerEmails.length && !interviewerEmails.includes(iv.interviewerEmail)) return false;
       return true;
     });
-  }, [interviews, dateFrom, dateTo, programIds, statuses, rounds, templateProgramById]);
+  }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, templateProgramById]);
 
   const interviewerStats = useMemo(() => {
     const map = new Map();
@@ -87,8 +107,10 @@ export default function InterviewerStatsPage() {
   }), { completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0 }),
   [interviewerStats]);
 
-  const hasFilters = dateFrom || dateTo || programIds.length || statuses.length || rounds.length;
-  const clearFilters = () => { setDateFrom(""); setDateTo(""); setProgramIds([]); setStatuses([]); setRounds([]); };
+  const hasFilters = dateFrom || dateTo || programIds.length || statuses.length || templateIds.length || interviewerEmails.length;
+  const clearFilters = () => {
+    setDateFrom(""); setDateTo(""); setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]);
+  };
 
   return (
     <div className="p-8">
@@ -121,8 +143,12 @@ export default function InterviewerStatsPage() {
             <SkillsSelect skills={programOptions} value={programIds} onChange={setProgramIds} placeholder="All Programs" />
           </div>
           <div className="w-56">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Interview Stage / Round</label>
-            <SkillsSelect skills={roundOptions} value={rounds} onChange={setRounds} placeholder="All Stages" />
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Template</label>
+            <SkillsSelect skills={templateOptions} value={templateIds} onChange={setTemplateIds} placeholder="All Templates" />
+          </div>
+          <div className="w-56">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer</label>
+            <SkillsSelect skills={interviewerOptions} value={interviewerEmails} onChange={setInterviewerEmails} placeholder="All Interviewers" />
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer Status</label>
