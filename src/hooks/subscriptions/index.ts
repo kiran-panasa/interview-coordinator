@@ -1,4 +1,5 @@
 export { useInterviews } from "./useInterviews";
+export { useInterviewsInDateRange } from "./useInterviewsInDateRange";
 export { useInterviewerInterviews } from "./useInterviewerInterviews";
 export { useUserNotifications } from "./useUserNotifications";
 export { useAdhocQuestions } from "./useAdhocQuestions";

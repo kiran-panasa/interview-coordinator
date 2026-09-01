@@ -18,8 +18,9 @@ import {
   createNotification, subscribeToBlockedDates, getInterviewIntegrity, getPreInterviewResources,
   logInterviewHistory, getInterviewHistory,
   getScheduleInviteByInterviewId, updateScheduleInvite,
+  getAllInterviews, getInterview,
 } from "../../api/firestore";
-import { useInterviews } from "../../hooks/subscriptions";
+import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -41,6 +42,9 @@ import SearchableSelect from "../../components/SearchableSelect";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
+
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+function yesterdayIso() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
 
 const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"];
 // A partially completed interview is "done" for the same purposes a fully
@@ -93,7 +97,13 @@ export default function InterviewsPage() {
     usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"),
     [usersAll]
   );
-  const interviews = useInterviews();
+  // Interviews page now only ever reads the currently-selected date window
+  // (defaults to yesterday+today) instead of the whole collection — see
+  // useInterviewsInDateRange / subscribeToInterviewsInDateRange. Declared
+  // ahead of the subscription itself since the hook needs these as args.
+  const [filterDateFrom, setFilterDateFrom] = useState(yesterdayIso());
+  const [filterDateTo,   setFilterDateTo]   = useState(todayIso());
+  const interviews = useInterviewsInDateRange(filterDateFrom, filterDateTo);
   const [searchParams, setSearchParams] = useSearchParams();
   const [blockedDates, setBlockedDates] = useState([]);
   useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
@@ -120,8 +130,6 @@ export default function InterviewsPage() {
   useEffect(() => { backfillProgramInfoOnce().catch(err => console.error("Program info backfill failed:", err)); }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
-  const [filterDateFrom, setFilterDateFrom] = useState("");
-  const [filterDateTo,   setFilterDateTo]   = useState("");
   const [filterIvr,      setFilterIvr]      = useState("All");
   const [filterTemplate, setFilterTemplate] = useState("All");
   const [candSearch,     setCandSearch]     = useState("");
@@ -689,12 +697,22 @@ export default function InterviewsPage() {
   // Backs the "AI Report" link column in the Download Feedback export — a
   // deep link of the form /admin/interviews?aiReport=<id> opens this page
   // and auto-opens that interview's AI Report modal, instead of the export
-  // needing some separately-hosted report page that doesn't exist.
+  // needing some separately-hosted report page that doesn't exist. Falls
+  // back to a single-doc fetch when the target isn't in the currently-
+  // loaded date window (interviews is now date-scoped — see
+  // useInterviewsInDateRange above — so an older report's interview won't
+  // always be in this array).
   useEffect(() => {
     const targetId = searchParams.get("aiReport");
-    if (!targetId || interviews.length === 0) return;
+    if (!targetId) return;
     const iv = interviews.find(x => x.id === targetId);
-    if (iv) handleViewAiReport(iv);
+    if (iv) {
+      handleViewAiReport(iv);
+    } else {
+      getInterview(targetId)
+        .then(fetched => { if (fetched) handleViewAiReport(fetched); })
+        .catch(err => console.error("Failed to load interview for aiReport deep link:", err));
+    }
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.delete("aiReport");
@@ -824,8 +842,19 @@ export default function InterviewsPage() {
     setFeedbackModal({ interview: iv, template: tmpl });
   };
 
-  const handleParseCSV = () => {
-    const result = parseImportCSV(csvText, candidates, interviewers, templates, interviews);
+  // CSV import needs to detect an EXISTING interview for a candidate+
+  // template regardless of when it happened, to update it instead of
+  // creating a duplicate (see interviewImport.js) — the page's own
+  // `interviews` is now date-scoped (see useInterviewsInDateRange above),
+  // so this does its own one-off full fetch instead, rather than widening
+  // the page's continuous subscription just for this occasional action.
+  const handleParseCSV = async () => {
+    const allInterviews = await getAllInterviews().catch(err => {
+      setToast({ message: "Couldn't check existing interviews: " + err.message, type: "error" });
+      return null;
+    });
+    if (!allInterviews) return;
+    const result = parseImportCSV(csvText, candidates, interviewers, templates, allInterviews);
     if (result.globalError) { setToast({ message: result.globalError, type: "error" }); return; }
     setParsedRows(result.rows);
   };
@@ -903,8 +932,15 @@ export default function InterviewsPage() {
 
   // ── Upload meeting/recording links for existing interviews ─────────────────
 
-  const handleParseLinksCSV = () => {
-    const result = parseLinksCSV(linksCsvText, candidates, templates, interviews);
+  const handleParseLinksCSV = async () => {
+    // Same reasoning as handleParseCSV above — needs full history to match
+    // existing interviews, not just the page's currently-loaded date window.
+    const allInterviews = await getAllInterviews().catch(err => {
+      setToast({ message: "Couldn't check existing interviews: " + err.message, type: "error" });
+      return null;
+    });
+    if (!allInterviews) return;
+    const result = parseLinksCSV(linksCsvText, candidates, templates, allInterviews);
     if (result.globalError) { setToast({ message: result.globalError, type: "error" }); return; }
     setLinksParsedRows(result.rows);
   };
@@ -1191,6 +1227,7 @@ export default function InterviewsPage() {
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviews</h1>
           <p className="text-sm text-gray-500 mt-1">
             {interviews.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
+            {" "}<span className="text-gray-400">({formatDate(filterDateFrom)} – {formatDate(filterDateTo)})</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1245,10 +1282,17 @@ export default function InterviewsPage() {
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
         </select>
         <div className="flex items-center gap-1.5">
-          <DatePicker value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setIvrPage(1); }} blockedDates={blockedDates}
+          {/* Drives the actual Firestore query (see useInterviewsInDateRange) —
+              never left empty/unbounded, so clearing snaps back to the
+              yesterday+today default instead of re-loading everything. */}
+          <DatePicker value={filterDateFrom}
+            onChange={e => { setFilterDateFrom(e.target.value || yesterdayIso()); setIvrPage(1); }}
+            blockedDates={blockedDates}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
           <span className="text-gray-400 text-sm">–</span>
-          <DatePicker value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setIvrPage(1); }} blockedDates={blockedDates}
+          <DatePicker value={filterDateTo} min={filterDateFrom || undefined}
+            onChange={e => { setFilterDateTo(e.target.value || todayIso()); setIvrPage(1); }}
+            blockedDates={blockedDates}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
         <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}
@@ -1264,8 +1308,11 @@ export default function InterviewsPage() {
           placeholder="All Interviewers"
           searchPlaceholder="Search interviewer…"
         />
-        {(filterStatus !== "All" || filterDateFrom || filterDateTo || filterIvr !== "All" || filterTemplate !== "All" || candSearch) && (
-          <button onClick={() => { setFilterStatus("All"); setFilterDateFrom(""); setFilterDateTo(""); setFilterIvr("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1); }}
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterTemplate !== "All" || candSearch) && (
+          <button onClick={() => {
+            setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
+            setFilterIvr("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1);
+          }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
           </button>

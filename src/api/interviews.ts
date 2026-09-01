@@ -525,6 +525,32 @@ export function subscribeToInterviews(callback: (interviews: Interview[]) => voi
   );
 }
 
+// Scoped to [dateFrom, dateTo] (inclusive, "YYYY-MM-DD") — the admin
+// Interviews page's default live subscription, so it only ever reads the
+// selected date window instead of the whole collection. scheduledDate is a
+// plain string field, so a range query on it needs no composite index (a
+// single inequality/orderBy on the SAME field is covered by the automatic
+// single-field index). Callers needing full history for something specific
+// (e.g. CSV-import duplicate detection) should use a one-off getAllInterviews()
+// call instead of widening this subscription.
+export function subscribeToInterviewsInDateRange(
+  dateFrom: string,
+  dateTo: string,
+  callback: (interviews: Interview[]) => void
+): () => void {
+  const q = query(
+    collection(db, "interviews"),
+    where("scheduledDate", ">=", dateFrom),
+    where("scheduledDate", "<=", dateTo),
+    orderBy("scheduledDate", "desc")
+  );
+  return onSnapshot(
+    q,
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview))),
+    err => reportFirestoreListenerError("interviews", err)
+  );
+}
+
 // Live single-interview subscription — used by the Interviewer Portal's
 // interview-detail page so an admin's edit (reschedule, panelist swap, etc.)
 // shows up immediately instead of only on the next page load.
