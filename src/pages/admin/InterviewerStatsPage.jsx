@@ -1,10 +1,18 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Download, X, BarChart3 } from "lucide-react";
-import { useInterviews } from "../../hooks/subscriptions";
+import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useUsers } from "../../hooks/queries";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
 import SkillsSelect from "../../components/SkillsSelect";
+
+// Defaults the report to the current month instead of reading the entire
+// interviews collection on every visit — same "scope by default" pattern as
+// the admin Interviews page. Widen the Start/End Date fields for a longer
+// report; clearing them snaps back to this default rather than going
+// unbounded.
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+function firstOfMonthIso() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
 
 // The only statuses this report counts — a candidate's still-pending/
 // scheduled/declined interviews aren't meaningful here, so they're excluded
@@ -20,13 +28,13 @@ const RELEVANT_STATUSES = STATUS_OPTIONS.map(s => s.id);
 const inputCls = "border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500";
 
 export default function InterviewerStatsPage() {
-  const interviews       = useInterviews();
+  const [dateFrom,     setDateFrom]     = useState(firstOfMonthIso());
+  const [dateTo,       setDateTo]       = useState(todayIso());
+  const interviews       = useInterviewsInDateRange(dateFrom, dateTo);
   const { data: templates = [] } = useTemplates();
   const { data: programs  = [] } = usePrograms();
   const { data: usersAll  = [] } = useUsers();
 
-  const [dateFrom,     setDateFrom]     = useState("");
-  const [dateTo,       setDateTo]       = useState("");
   const [programIds,   setProgramIds]   = useState([]);
   const [statuses,     setStatuses]     = useState([]);
   const [templateIds,  setTemplateIds]  = useState([]);
@@ -107,9 +115,11 @@ export default function InterviewerStatsPage() {
   }), { completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0 }),
   [interviewerStats]);
 
-  const hasFilters = dateFrom || dateTo || programIds.length || statuses.length || templateIds.length || interviewerEmails.length;
+  const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
+    programIds.length || statuses.length || templateIds.length || interviewerEmails.length;
   const clearFilters = () => {
-    setDateFrom(""); setDateTo(""); setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]);
+    setDateFrom(firstOfMonthIso()); setDateTo(todayIso());
+    setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]);
   };
 
   return (
@@ -118,7 +128,9 @@ export default function InterviewerStatsPage() {
         className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviewer Statistics</h1>
-          <p className="text-sm text-gray-500 mt-1">Interviewer-wise interview counts by status</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Interviewer-wise interview counts by status ({dateFrom} – {dateTo}) — widen the date range below for a longer report
+          </p>
         </div>
         <button onClick={() => exportInterviewerStats(interviewerStats, totals)} disabled={interviewerStats.length === 0}
           className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
@@ -132,11 +144,11 @@ export default function InterviewerStatsPage() {
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={inputCls} />
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value || firstOfMonthIso())} className={inputCls} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">End Date</label>
-            <input type="date" value={dateTo} min={dateFrom || undefined} onChange={e => setDateTo(e.target.value)} className={inputCls} />
+            <input type="date" value={dateTo} min={dateFrom || undefined} onChange={e => setDateTo(e.target.value || todayIso())} className={inputCls} />
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Program</label>

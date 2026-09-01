@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Users, UserPlus, CalendarClock, LayoutGrid, BarChart3 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { getSlotsForInterviewers, subscribeToSlotsForInterviewers, subscribeToBlockedDates } from "../../api/firestore";
-import { useUserNotifications, useScheduleInvites, useInterviews } from "../../hooks/subscriptions";
+import { useUserNotifications, useScheduleInvites, useInterviews, usePendingScheduleInvites } from "../../hooks/subscriptions";
 import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Toast from "../../components/Toast";
 import InterviewerNudgeTab from "../../features/nudge/InterviewerNudgeTab";
@@ -30,8 +30,17 @@ export default function NudgePage() {
   const { data: programs   = [] } = usePrograms();
   const { data: candidates = [] } = useCandidates();
   const responses = useUserNotifications(currentUser.uid);
-  const invites   = useScheduleInvites();
-  const interviews = useInterviews();
+  // The full (unscoped, whole-collection) live listeners are expensive, so
+  // they're only actually subscribed while a tab that needs them is active
+  // — reads the entire scheduleInvites/interviews collections only when an
+  // admin is genuinely on Pending/Candidates/Analytics, not on every visit
+  // to Nudge regardless of tab. The tab badges below use the already-scoped
+  // usePendingScheduleInvites() instead, so they stay accurate either way.
+  const needsInvites   = activeTab === "pending" || activeTab === "candidates" || activeTab === "analytics";
+  const needsInterviews = activeTab === "analytics";
+  const invites   = useScheduleInvites(needsInvites);
+  const interviews = useInterviews(needsInterviews);
+  const pendingInvites = usePendingScheduleInvites();
 
   const activeInterviewers = usersAll.filter(
     u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
@@ -63,7 +72,7 @@ export default function NudgePage() {
   }, [ivrIdsKey]); // eslint-disable-line
 
   const unreadResponses  = responses.filter(n => n.type === "response" && n.status === "unread").length;
-  const pendingBookings  = invites.filter(i => i.status === "pending_confirmation").length;
+  const pendingBookings  = pendingInvites.length;
   const pendingNudgeCount = candidates.filter(c => c.nudgeStatus === "pending_nudge").length;
 
   const badgeFor = (id) => id === "interviewers" ? unreadResponses : id === "candidates" ? pendingBookings : id === "pending" ? pendingNudgeCount : 0;
