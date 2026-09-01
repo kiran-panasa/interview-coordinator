@@ -142,7 +142,14 @@ export default function InterviewQuestions() {
         interviewId: id,
         candidateId: interview.candidateId,
         interviewerId: interview.interviewerId,
+        // Snapshotted so the Review Queue can show who submitted this and
+        // which template/round it's from without an extra lookup — same
+        // denormalization pattern used for candidateName/templateName on
+        // Interview docs elsewhere in this app.
+        interviewerName: interview.interviewerName || null,
         templateId: interview.templateId || null,
+        templateName: interview.templateName || template?.name || null,
+        round: interview.round || null,
       });
       setAdhocText("");
       setToast({ message: "Question submitted for review — content team will be notified." });

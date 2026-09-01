@@ -9,6 +9,7 @@ import {
   getQuestions, getQuestionsPage, createQuestion, updateQuestion, archiveQuestion, deleteQuestion,
   approveAdhocQuestion, rejectAdhocQuestion,
   addQuestionToTemplate, removeQuestionFromTemplate,
+  getUsersByIds,
 } from "../../api/firestore";
 import { useSkills, useTemplates, useQuestionCounts, QK } from "../../hooks/queries";
 import { parseCSV as parseQuestionCSV, downloadSampleCSV } from "../../utils/questionCSV";
@@ -40,6 +41,28 @@ export default function QuestionsPage() {
   const queryClient = useQueryClient();
   const { adhocQs = [] } = useOutletContext() || {};
   const [activeTab,    setActiveTab]    = useState("bank");
+
+  // Resolves the submitting interviewer's name for the Review Queue —
+  // only for ad-hoc questions that predate interviewerName being
+  // snapshotted at submission time (see InterviewQuestions.jsx). Batches a
+  // targeted fetch of just those few user ids instead of reading the whole
+  // users collection, and never re-fetches an id once resolved.
+  const [interviewerNameById, setInterviewerNameById] = useState({});
+  const fetchedInterviewerIdsRef = useRef(new Set());
+  useEffect(() => {
+    const missingIds = [...new Set(
+      adhocQs.filter(q => !q.interviewerName && q.interviewerId).map(q => q.interviewerId)
+    )].filter(id => !fetchedInterviewerIdsRef.current.has(id));
+    if (missingIds.length === 0) return;
+    missingIds.forEach(id => fetchedInterviewerIdsRef.current.add(id));
+    getUsersByIds(missingIds).then(users => {
+      setInterviewerNameById(prev => {
+        const next = { ...prev };
+        users.forEach(u => { next[u.id] = u.displayName || u.email; });
+        return next;
+      });
+    }).catch(err => console.error("Failed to resolve ad-hoc question submitters:", err));
+  }, [adhocQs]);
   const { data: skills    = [] } = useSkills();
   const { data: templates = [] } = useTemplates();
   const { data: counts    = null } = useQuestionCounts();
@@ -296,6 +319,13 @@ export default function QuestionsPage() {
   const templateIdsForQuestion = useCallback(
     (qid) => (qToTemplatesMap.get(qid) || []).map(t => t.id),
     [qToTemplatesMap]
+  );
+
+  // For the Review Queue — resolves an ad-hoc question's templateId to a
+  // name for anything submitted before templateName was snapshotted onto it.
+  const templateNameById = useMemo(
+    () => new Map(templates.map(t => [t.id, t.name])),
+    [templates]
   );
 
   // ── Question Bank actions ────────────────────────────────────────────────────
@@ -732,6 +762,7 @@ export default function QuestionsPage() {
       {activeTab === "review" && (
         <AdhocReviewTab
           adhocQs={adhocQs} pendingAdhoc={pendingAdhoc}
+          interviewerNameById={interviewerNameById} templateNameById={templateNameById}
           openApprove={openApprove} handleReject={handleReject}
         />
       )}

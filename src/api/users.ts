@@ -86,6 +86,20 @@ export async function getUsersByStatus(status: string): Promise<User[]> {
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
 }
 
+// Targeted batch fetch by id (chunked at Firestore's 10-value `in` limit) —
+// for resolving a small, known set of user ids (e.g. the handful of
+// interviewers referenced by the ad-hoc question review queue) without
+// reading the whole users collection.
+export async function getUsersByIds(ids: string[]): Promise<User[]> {
+  if (!ids || ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 10) chunks.push(ids.slice(i, i + 10));
+  const results = await Promise.all(chunks.map(chunk =>
+    getDocs(query(collection(db, "users"), where("__name__", "in", chunk)))
+  ));
+  return results.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
+}
+
 export function subscribeToUsers(callback: (users: User[]) => void): () => void {
   return onSnapshot(
     collection(db, "users"),

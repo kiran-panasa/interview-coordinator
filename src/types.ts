@@ -253,6 +253,16 @@ export interface AdhocQuestion {
   reviewedAt?: string;
   reviewedBy?: string;
   createdAt: string;
+  interviewId?: string;
+  candidateId?: string;
+  interviewerId?: string;
+  // Snapshotted from the source interview at submission time — see
+  // createAdhocQuestion's caller in InterviewQuestions.jsx. Absent on
+  // ad-hoc questions submitted before this existed.
+  interviewerName?: string | null;
+  templateId?: string | null;
+  templateName?: string | null;
+  round?: string | null;
 }
 
 export interface QuestionFilters {
