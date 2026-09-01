@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate, getCandidatesPage } from "../../api/firestore";
+import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate, getCandidatesPage, getCandidates } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -137,8 +137,29 @@ export default function CandidatesPage() {
     getCandidatesPage(programId, null, 10).then(res => {
       if (cancelled) return;
       setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
-    }).catch(err => {
+    }).catch(async (err) => {
       if (cancelled) return;
+      // The composite index (program + createdAt) may still be building —
+      // that's a one-time, self-resolving state, not a real failure. Fall
+      // back to a full fetch filtered client-side so the tab still shows
+      // correct data immediately; once the index finishes building, the
+      // next tab switch/reload picks the fast scoped query back up.
+      const isIndexError = /index/i.test(err?.message || "");
+      if (isIndexError && programId) {
+        try {
+          const all = await getCandidates();
+          if (cancelled) return;
+          const activeForProgram = all.filter(c => c.program === programId && c.archived !== true);
+          setPageItems(activeForProgram.slice(0, 10));
+          setPageDone(true); // fallback mode has no cursor — "Load more" stays hidden
+          return;
+        } catch (fallbackErr) {
+          if (cancelled) return;
+          console.error("Candidates fallback fetch failed:", fallbackErr);
+          setPageError(fallbackErr.message || String(fallbackErr));
+          return;
+        }
+      }
       console.error("getCandidatesPage failed:", err);
       setPageError(err.message || String(err));
     }).finally(() => { if (!cancelled) setPageLoading(false); });
