@@ -17,6 +17,15 @@
         { "fieldPath": "scheduledDate", "order": "ASCENDING" },
         { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "candidates",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "program", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

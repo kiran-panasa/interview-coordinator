@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useCallback } from "react";
+import { useState, useRef, useMemo, useCallback, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { motion } from "framer-motion";
 import {
@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate } from "../../api/firestore";
-import { usePrograms, useTemplates, useCandidates, QK } from "../../hooks/queries";
+import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate, getCandidatesPage } from "../../api/firestore";
+import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
@@ -97,7 +97,6 @@ function downloadSampleExcel() {
 export default function CandidatesPage() {
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
-  const { data: candidates = [], isLoading } = useCandidates();
   const { data: programs   = [] } = usePrograms();
   const { data: templates  = [] } = useTemplates();
   const [activeProgram,  setActiveProgram]  = useState("all");
@@ -108,6 +107,65 @@ export default function CandidatesPage() {
   const [form,       setForm]       = useState(EMPTY);
   const [saving,     setSaving]     = useState(false);
   const [toast,      setToast]      = useState(null);
+  const [showCSV,    setShowCSV]    = useState(false);
+
+  // The default view only ever reads a handful of "fresh" candidates per
+  // Program (see the pageItems state below) instead of the whole
+  // collection. Searching, the Unassigned tab (no clean server-side query
+  // for "no program"), the Archived toggle, and CSV-import duplicate
+  // detection all genuinely need the full list, so only those trigger the
+  // real full-collection fetch — see useCandidates's `enabled` param.
+  const needsFullList = showArchived || activeProgram === "unassigned" || search.trim() !== "" || showCSV;
+  const { data: candidates = [], isLoading } = useCandidates(needsFullList);
+  const programIds = useMemo(() => programs.map(p => p.id), [programs]);
+  const { data: counts } = useCandidateCounts(programIds);
+
+  // Server-scoped "fresh 10 per Program" page — see getCandidatesPage.
+  const [pageItems,       setPageItems]       = useState([]);
+  const [pageCursor,      setPageCursor]      = useState(null);
+  const [pageDone,        setPageDone]        = useState(false);
+  const [pageLoading,     setPageLoading]     = useState(false);
+  const [pageLoadingMore, setPageLoadingMore] = useState(false);
+
+  useEffect(() => {
+    if (needsFullList) return;
+    let cancelled = false;
+    setPageLoading(true);
+    setPageItems([]); setPageCursor(null); setPageDone(false);
+    const programId = activeProgram === "all" ? null : activeProgram;
+    getCandidatesPage(programId, null, 10).then(res => {
+      if (cancelled) return;
+      setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
+    }).finally(() => { if (!cancelled) setPageLoading(false); });
+    return () => { cancelled = true; };
+  }, [needsFullList, activeProgram]);
+
+  const loadMorePage = async () => {
+    if (pageDone || pageLoadingMore) return;
+    setPageLoadingMore(true);
+    const programId = activeProgram === "all" ? null : activeProgram;
+    const res = await getCandidatesPage(programId, pageCursor, 10);
+    setPageItems(prev => [...prev, ...res.items]);
+    setPageCursor(res.cursor); setPageDone(res.done);
+    setPageLoadingMore(false);
+  };
+
+  // Any create/archive/unarchive/delete/bulk-edit needs to update whichever
+  // list is actually driving the current view — plus refresh the (cheap,
+  // aggregation-based) tab counts. When the full candidates cache isn't
+  // the active view, DON'T patch it with a partial update: React Query
+  // would treat that write as "fresh" and skip refetching, so a later
+  // search could silently miss real data. Invalidate instead, so it does
+  // a real refetch the next time something (search, Archived, Unassigned,
+  // CSV import) actually needs it.
+  const patchFullList = (updater) => {
+    if (needsFullList) {
+      queryClient.setQueryData(QK.candidates, prev => updater(prev || []));
+    } else {
+      queryClient.invalidateQueries({ queryKey: QK.candidates });
+    }
+  };
+  const invalidateCounts = () => queryClient.invalidateQueries({ queryKey: QK.candidateCounts });
 
   // Add/Edit Candidate modal — only templates belonging to the selected
   // Program are selectable, so a candidate can't end up assigned a template
@@ -125,7 +183,6 @@ export default function CandidatesPage() {
   const [bulkSaving,    setBulkSaving]    = useState(false);
 
   // CSV import
-  const [showCSV,      setShowCSV]      = useState(false);
   const [csvPreview,   setCsvPreview]   = useState([]);
   const [csvErrors,    setCsvErrors]    = useState([]);
   const [csvImporting, setCsvImporting] = useState(false);
@@ -150,14 +207,23 @@ export default function CandidatesPage() {
     try {
       if (editTarget) {
         await updateCandidate(editTarget.id, form);
-        queryClient.setQueryData(QK.candidates, prev => (prev || []).map(c => c.id === editTarget.id ? { ...c, ...form } : c));
+        patchFullList(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...form } : c));
+        setPageItems(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...form } : c)
+          .filter(c => c.id !== editTarget.id || activeProgram === "all" || c.program === activeProgram));
         setToast({ message: "Candidate updated." });
       } else {
         const createdAt = new Date().toISOString();
         const id = await createCandidate({ ...form, createdBy: currentUser.uid });
-        queryClient.setQueryData(QK.candidates, prev => [{ id, ...form, createdAt, createdBy: currentUser.uid }, ...(prev || [])]);
+        const newCandidate = { id, ...form, createdAt, createdBy: currentUser.uid };
+        patchFullList(prev => [newCandidate, ...prev]);
+        // Only show it in the scoped page view if it actually belongs on
+        // the tab currently being viewed.
+        if (!needsFullList && (activeProgram === "all" || activeProgram === form.program)) {
+          setPageItems(prev => [newCandidate, ...prev]);
+        }
         setToast({ message: "Candidate added." });
       }
+      invalidateCounts();
       setShowModal(false);
     } catch (e) { setToast({ message: e.message, type: "error" }); }
     setSaving(false);
@@ -166,25 +232,32 @@ export default function CandidatesPage() {
   const handleDelete = async (c) => {
     if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
     await deleteCandidate(c.id);
-    queryClient.setQueryData(QK.candidates, prev => (prev || []).filter(x => x.id !== c.id));
+    patchFullList(prev => prev.filter(x => x.id !== c.id));
+    setPageItems(prev => prev.filter(x => x.id !== c.id));
+    invalidateCounts();
     setToast({ message: "Candidate deleted." });
   };
 
   const handleArchive = async (c) => {
     await archiveCandidate(c.id);
-    queryClient.setQueryData(QK.candidates, prev => (prev || []).map(x => x.id === c.id ? { ...x, archived: true, archivedAt: new Date().toISOString() } : x));
+    patchFullList(prev => prev.map(x => x.id === c.id ? { ...x, archived: true, archivedAt: new Date().toISOString() } : x));
+    // The scoped view is active-only, so an archived candidate drops out of it.
+    setPageItems(prev => prev.filter(x => x.id !== c.id));
+    invalidateCounts();
     setToast({ message: "Candidate archived." });
   };
 
   const handleUnarchive = async (c) => {
     await unarchiveCandidate(c.id);
-    queryClient.setQueryData(QK.candidates, prev => (prev || []).map(x => x.id === c.id ? { ...x, archived: false, archivedAt: null } : x));
+    patchFullList(prev => prev.map(x => x.id === c.id ? { ...x, archived: false, archivedAt: null } : x));
+    invalidateCounts();
     setToast({ message: "Candidate restored to active." });
   };
 
   const handleSwapNameUID = async (c) => {
     await updateCandidate(c.id, { name: c.uid, uid: c.name });
-    queryClient.setQueryData(QK.candidates, prev => (prev || []).map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
+    patchFullList(prev => prev.map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
+    setPageItems(prev => prev.map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
     setToast({ message: "Name and UID fixed." });
   };
 
@@ -198,7 +271,16 @@ export default function CandidatesPage() {
       if (bulkProgram)           updates.program     = bulkProgram;
       if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
       await Promise.all([...selected].map(id => updateCandidate(id, updates)));
-      queryClient.setQueryData(QK.candidates, prev => (prev || []).map(c => selected.has(c.id) ? { ...c, ...updates } : c));
+      patchFullList(prev => prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c));
+      setPageItems(prev => {
+        const mapped = prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c);
+        // Reassigning to a different Program means it no longer belongs
+        // on a Program-scoped tab.
+        return updates.program && activeProgram !== "all"
+          ? mapped.filter(c => c.program === activeProgram)
+          : mapped;
+      });
+      invalidateCounts();
       setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
       setShowBulk(false);
       setSelected(new Set());
@@ -213,9 +295,13 @@ export default function CandidatesPage() {
     return next;
   });
 
+  // "Select all" only ever selects what's currently loaded/visible — the
+  // scoped page items in the default view, or the full filtered list once
+  // search/Archived/Unassigned has pulled everything in.
   const toggleAll = () => {
-    if (selected.size === filtered.length) setSelected(new Set());
-    else setSelected(new Set(filtered.map(c => c.id)));
+    const target = needsFullList ? filtered : pageItems;
+    if (selected.size === target.length) setSelected(new Set());
+    else setSelected(new Set(target.map(c => c.id)));
   };
 
   const toggleBulkTemplate = (tid) => setBulkTemplates(prev =>
@@ -275,11 +361,15 @@ export default function CandidatesPage() {
     const updated = updatedRows.length;
     const skipped = results.filter(r => r.type === "skipped").length;
 
-    queryClient.setQueryData(QK.candidates, prev => {
+    patchFullList(prev => {
       const updatedMap = new Map(updatedRows.map(r => [r.id, r]));
-      const merged = (prev || []).map(c => updatedMap.has(c.id) ? { ...c, ...updatedMap.get(c.id) } : c);
+      const merged = prev.map(c => updatedMap.has(c.id) ? { ...c, ...updatedMap.get(c.id) } : c);
       return [...newRows, ...merged];
     });
+    invalidateCounts();
+    // Closing the modal (below) drops `showCSV` out of needsFullList, which
+    // re-triggers the scoped page fetch and naturally picks up any newly
+    // imported/updated rows for the active tab.
     setCsvImporting(false); setShowCSV(false); setCsvPreview([]); setCsvErrors([]); setCsvMode(null);
     const parts = [];
     if (created) parts.push(`${created} added`);
@@ -299,10 +389,26 @@ export default function CandidatesPage() {
     [programNameMap]
   );
 
-  const archivedCount = useMemo(
-    () => candidates.filter(c => c.archived === true).length,
-    [candidates]
-  );
+  // Header/tab counts come from the cheap aggregation query (useCandidateCounts)
+  // rather than the loaded `candidates` array, so they stay accurate even
+  // when only a handful of candidates have actually been fetched.
+  const archivedCount = counts?.archived ?? 0;
+  const tabCounts = useMemo(() => {
+    if (!counts) return null;
+    const sumTotal    = programs.reduce((s, p) => s + (counts.byProgram[p.id]?.total    || 0), 0);
+    const sumArchived = programs.reduce((s, p) => s + (counts.byProgram[p.id]?.archived || 0), 0);
+    const unassignedTotal    = counts.total    - sumTotal;
+    const unassignedArchived = counts.archived - sumArchived;
+    const pick = (total, archived) => showArchived ? archived : total - archived;
+    return {
+      all: pick(counts.total, counts.archived),
+      unassigned: pick(unassignedTotal, unassignedArchived),
+      byProgram: Object.fromEntries(programs.map(p => {
+        const pc = counts.byProgram[p.id] || { total: 0, archived: 0 };
+        return [p.id, pick(pc.total, pc.archived)];
+      })),
+    };
+  }, [counts, programs, showArchived]);
   const workingSet = useMemo(
     () => candidates.filter(c => (c.archived === true) === showArchived),
     [candidates, showArchived]
@@ -330,6 +436,12 @@ export default function CandidatesPage() {
 
   const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
 
+  // Which list actually drives the table: the fully-loaded+filtered list
+  // once search/Archived/Unassigned pulled everything in, or the scoped
+  // "fresh 10 per Program" page otherwise.
+  const rows = needsFullList ? pagedCandidates : pageItems;
+  const selectAllTarget = needsFullList ? filtered : pageItems;
+
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";
   const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -343,7 +455,7 @@ export default function CandidatesPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Candidates</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {candidates.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
+            {counts ? `${counts.total - counts.archived} active` : "…"}{archivedCount > 0 && ` · ${archivedCount} archived`}
           </p>
         </div>
         <div className="flex gap-2">
@@ -365,9 +477,9 @@ export default function CandidatesPage() {
       {programs.length > 0 && (
         <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="flex border-b border-gray-200 mb-5">
           {[
-            { id: "all",        label: "All",        count: workingSet.length },
-            ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(c => c.program === p.id).length })),
-            { id: "unassigned", label: "Unassigned", count: workingSet.filter(c => !c.program).length },
+            { id: "all",        label: "All",        count: tabCounts ? tabCounts.all : "…" },
+            ...programs.map(p => ({ id: p.id, label: p.name, count: tabCounts ? tabCounts.byProgram[p.id] : "…" })),
+            { id: "unassigned", label: "Unassigned", count: tabCounts ? tabCounts.unassigned : "…" },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
@@ -406,8 +518,14 @@ export default function CandidatesPage() {
         </button>
       </motion.div>
 
+      {!needsFullList && (
+        <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2.5} className="text-xs text-gray-400 mb-2">
+          Showing the {pageItems.length} most recent {activeProgram === "all" ? "" : "candidates for this Program"} — search by name, UID, or email to find anyone else.
+        </motion.p>
+      )}
+
       <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3} className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-        {isLoading ? (
+        {(needsFullList ? isLoading : pageLoading) ? (
           <div className="p-4"><SkeletonRows count={6} /></div>
         ) : (
           <table className="w-full text-sm">
@@ -415,7 +533,7 @@ export default function CandidatesPage() {
               <tr className="border-b border-gray-100">
                 <th className="px-4 py-3 w-8">
                   <input type="checkbox"
-                    checked={filtered.length > 0 && selected.size === filtered.length}
+                    checked={selectAllTarget.length > 0 && selected.size === selectAllTarget.length}
                     onChange={toggleAll}
                     className="accent-brand-600 w-4 h-4 cursor-pointer" />
                 </th>
@@ -425,9 +543,9 @@ export default function CandidatesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.length === 0 ? (
+              {rows.length === 0 ? (
                 <tr><td colSpan={7} className="text-center text-gray-400 py-12">No candidates found</td></tr>
-              ) : pagedCandidates.map((c, idx) => (
+              ) : rows.map((c, idx) => (
                 <motion.tr
                   key={c.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(idx, 10) * 0.02, duration: 0.2 }}
@@ -480,7 +598,15 @@ export default function CandidatesPage() {
             </tbody>
           </table>
         )}
-        <Pagination page={candPage} totalPages={candTotalPages} total={candTotal} pageSize={candPageSize} onPageChange={setCandPage} />
+        {needsFullList ? (
+          <Pagination page={candPage} totalPages={candTotalPages} total={candTotal} pageSize={candPageSize} onPageChange={setCandPage} />
+        ) : !pageLoading && !pageDone && (
+          <div className="flex justify-center py-4 border-t border-gray-50">
+            <Button variant="secondary" onClick={loadMorePage} disabled={pageLoadingMore}>
+              {pageLoadingMore ? "Loading…" : "Load 10 more"}
+            </Button>
+          </div>
+        )}
       </motion.div>
 
       {/* Add / Edit modal */}
@@ -616,13 +742,19 @@ export default function CandidatesPage() {
             </div>
           </div>
 
-          <div onClick={() => fileRef.current?.click()}
-            className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-colors">
-            <UploadCloud className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
-            <p className="text-sm font-semibold text-gray-600">Click to choose a CSV file</p>
-            <p className="text-xs text-gray-400">.csv files only</p>
-            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
-          </div>
+          {isLoading ? (
+            <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2">
+              <p className="text-sm font-semibold text-gray-500">Loading candidate list for duplicate checking…</p>
+            </div>
+          ) : (
+            <div onClick={() => fileRef.current?.click()}
+              className="border-2 border-dashed border-gray-200 rounded-xl p-8 flex flex-col items-center gap-2 cursor-pointer hover:border-brand-300 hover:bg-brand-50 transition-colors">
+              <UploadCloud className="w-8 h-8 text-gray-300" strokeWidth={1.5} />
+              <p className="text-sm font-semibold text-gray-600">Click to choose a CSV file</p>
+              <p className="text-xs text-gray-400">.csv files only</p>
+              <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVFile} />
+            </div>
+          )}
 
           {csvErrors.length > 0 && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 space-y-1">
