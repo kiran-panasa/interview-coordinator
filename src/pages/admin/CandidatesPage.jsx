@@ -126,16 +126,21 @@ export default function CandidatesPage() {
   const [pageDone,        setPageDone]        = useState(false);
   const [pageLoading,     setPageLoading]     = useState(false);
   const [pageLoadingMore, setPageLoadingMore] = useState(false);
+  const [pageError,       setPageError]       = useState(null);
 
   useEffect(() => {
     if (needsFullList) return;
     let cancelled = false;
     setPageLoading(true);
-    setPageItems([]); setPageCursor(null); setPageDone(false);
+    setPageItems([]); setPageCursor(null); setPageDone(false); setPageError(null);
     const programId = activeProgram === "all" ? null : activeProgram;
     getCandidatesPage(programId, null, 10).then(res => {
       if (cancelled) return;
       setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
+    }).catch(err => {
+      if (cancelled) return;
+      console.error("getCandidatesPage failed:", err);
+      setPageError(err.message || String(err));
     }).finally(() => { if (!cancelled) setPageLoading(false); });
     return () => { cancelled = true; };
   }, [needsFullList, activeProgram]);
@@ -143,10 +148,15 @@ export default function CandidatesPage() {
   const loadMorePage = async () => {
     if (pageDone || pageLoadingMore) return;
     setPageLoadingMore(true);
-    const programId = activeProgram === "all" ? null : activeProgram;
-    const res = await getCandidatesPage(programId, pageCursor, 10);
-    setPageItems(prev => [...prev, ...res.items]);
-    setPageCursor(res.cursor); setPageDone(res.done);
+    try {
+      const programId = activeProgram === "all" ? null : activeProgram;
+      const res = await getCandidatesPage(programId, pageCursor, 10);
+      setPageItems(prev => [...prev, ...res.items]);
+      setPageCursor(res.cursor); setPageDone(res.done);
+    } catch (err) {
+      console.error("getCandidatesPage (load more) failed:", err);
+      setPageError(err.message || String(err));
+    }
     setPageLoadingMore(false);
   };
 
@@ -522,6 +532,18 @@ export default function CandidatesPage() {
         <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2.5} className="text-xs text-gray-400 mb-2">
           Showing the {pageItems.length} most recent {activeProgram === "all" ? "" : "candidates for this Program"} — search by name, UID, or email to find anyone else.
         </motion.p>
+      )}
+
+      {!needsFullList && pageError && (
+        <motion.div initial="hidden" animate="visible" variants={fadeUp} className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          <p className="font-semibold">Couldn't load candidates for this Program.</p>
+          <p className="text-xs text-red-600 mt-1 break-all">{pageError}</p>
+          {pageError.includes("index") && (
+            <p className="text-xs text-red-600 mt-1">
+              This Firestore composite index hasn't been created yet — check the browser console (F12) for a link Firestore generates to create it automatically, or ask your developer to deploy it.
+            </p>
+          )}
+        </motion.div>
       )}
 
       <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3} className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
