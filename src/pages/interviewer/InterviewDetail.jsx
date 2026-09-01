@@ -11,7 +11,7 @@ import {
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
-  getAllUsers, getCandidate,
+  getActiveAdmins, getCandidate,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
@@ -119,8 +119,8 @@ export default function InterviewDetail() {
 
   const notifyAdminsInterviewAccepted = async (iv) => {
     try {
-      const allUsers = await getAllUsers();
-      const admins = resolveActionAdminRecipients(allUsers, iv.createdBy);
+      const activeAdmins = await getActiveAdmins();
+      const admins = resolveActionAdminRecipients(activeAdmins, iv.createdBy);
       if (!admins.length || !APPS_SCRIPT_URL) return;
       const round = iv.round || iv.templateName || "Interview";
       const subject = `${iv.interviewerName || "Interviewer"} accepted the interview with ${iv.candidateName}`;

@@ -14,7 +14,7 @@ import {
   removeAvailabilitySlot,
   removeAvailabilitySlots,
   flagAvailabilitySlot,
-  getAllUsers,
+  getActiveAdmins,
   createNotification,
   subscribeToBlockedDates,
 } from "../../api/firestore";
@@ -331,8 +331,7 @@ export default function AvailabilityPage() {
     const interviewerName = userProfile?.displayName || currentUser.email;
     const dateRange = nudgeFrom && nudgeTo ? ` (${formatDate(nudgeFrom)} – ${formatDate(nudgeTo)})` : "";
 
-    getAllUsers().then(allUsers => {
-      const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
+    getActiveAdmins().then(admins => {
       return Promise.all(admins.map(admin =>
         createNotification({
           type:        "slot_added",
@@ -431,8 +430,7 @@ export default function AvailabilityPage() {
       const slot = slots.find(s => s.id === slotId);
       await flagAvailabilitySlot(currentUser.uid, slotId, true);
 
-      const allUsers = await getAllUsers();
-      const admins = allUsers.filter(u => u.role === "admin" && u.status === "active");
+      const admins = await getActiveAdmins();
       const interviewerName = userProfile?.displayName || currentUser.email;
       await Promise.all(admins.map(admin =>
         createNotification({

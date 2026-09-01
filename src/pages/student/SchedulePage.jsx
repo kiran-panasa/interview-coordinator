@@ -12,7 +12,7 @@ import {
   getScheduleInviteByToken, updateScheduleInvite,
   createOtpVerification, getLatestOtpByToken, markOtpUsed,
   getAvailableSlotsForTemplate, bookSlotForCandidate,
-  getAllUsers,
+  getActiveAdmins,
 } from "../../api/firestore";
 import StudentLayout from "../../components/StudentLayout";
 import Button from "../../components/Button";
@@ -130,8 +130,8 @@ export default function SchedulePage() {
     if (inv.noSlotsNotifiedAt) return;
     updateScheduleInvite(inv.id, { noSlotsNotifiedAt: new Date().toISOString() }).catch(() => {});
     try {
-      const allUsers = await getAllUsers();
-      const admins = resolveActionAdminRecipients(allUsers, inv.sentBy);
+      const activeAdmins = await getActiveAdmins();
+      const admins = resolveActionAdminRecipients(activeAdmins, inv.sentBy);
       if (!admins.length || !APPS_SCRIPT_URL) return;
       const round = inv.round || inv.templateName || "Interview";
       const windowLine = inv.timeRangeStart && inv.timeRangeEnd
@@ -224,8 +224,8 @@ export default function SchedulePage() {
 
   const notifyAdminsBookingPending = async () => {
     try {
-      const allUsers = await getAllUsers();
-      const admins = resolveActionAdminRecipients(allUsers, invite.sentBy);
+      const activeAdmins = await getActiveAdmins();
+      const admins = resolveActionAdminRecipients(activeAdmins, invite.sentBy);
       if (!admins.length || !APPS_SCRIPT_URL) return;
       const round = invite.round || invite.templateName || "Interview";
       const subject = `Action needed: ${invite.candidateName} selected a slot for ${round}`;

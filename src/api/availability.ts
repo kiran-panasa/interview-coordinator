@@ -161,18 +161,40 @@ export async function getAvailableSlotsForTemplate(
     } catch { /* sessionStorage unavailable */ }
   }
 
-  const [usersSnap, blockedDates] = await Promise.all([
-    getDocs(collection(db, "users")),
+  type CandidateUser = { role: string; status: string; templateIds?: string[]; displayName?: string; email: string; id: string };
+
+  // Server-scoped to just the interviewers assigned this template, instead
+  // of reading the entire users collection on every candidate visit to a
+  // scheduling link — this page is public/unauthenticated and gets far more
+  // daily traffic than any admin page, so an unscoped read here was the
+  // single biggest Firestore-read cost in the app. Falls back to a full
+  // scan (old behavior) only if the composite index isn't ready yet.
+  async function fetchAssignedInterviewers(): Promise<CandidateUser[]> {
+    try {
+      const snap = await getDocs(query(
+        collection(db, "users"),
+        where("role", "in", ["interviewer", "interviewer_content"]),
+        where("status", "==", "active"),
+        where("templateIds", "array-contains", templateId)
+      ));
+      return snap.docs.map(d => ({ ...(d.data() as Omit<CandidateUser, "id">), id: d.id }));
+    } catch (err) {
+      console.error("Scoped interviewer query failed, falling back to full scan:", err);
+      const usersSnap = await getDocs(collection(db, "users"));
+      return usersSnap.docs
+        .map(d => ({ ...(d.data() as Omit<CandidateUser, "id">), id: d.id }))
+        .filter(u =>
+          (u.role === "interviewer" || u.role === "interviewer_content") &&
+          u.status === "active" &&
+          (u.templateIds || []).includes(templateId)
+        );
+    }
+  }
+
+  const [interviewers, blockedDates] = await Promise.all([
+    fetchAssignedInterviewers(),
     getBlockedDates(),
   ]);
-  const interviewers = usersSnap.docs
-    .map(d => d.data() as { role: string; status: string; templateIds?: string[]; displayName?: string; email: string } & { id: string })
-    .map((u, i) => ({ ...u, id: usersSnap.docs[i].id }))
-    .filter(u =>
-      (u.role === "interviewer" || u.role === "interviewer_content") &&
-      u.status === "active" &&
-      (u.templateIds || []).includes(templateId)
-    );
 
   const result: AvailableSlot[] = [];
   await Promise.all(interviewers.map(async ivr => {
