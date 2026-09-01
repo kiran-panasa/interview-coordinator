@@ -6,11 +6,11 @@ import {
   Plus, Upload, Pencil, Download, Trash2,
 } from "lucide-react";
 import {
-  subscribeToQuestions, createQuestion, updateQuestion, archiveQuestion, deleteQuestion,
+  getQuestions, getQuestionsPage, createQuestion, updateQuestion, archiveQuestion, deleteQuestion,
   approveAdhocQuestion, rejectAdhocQuestion,
   addQuestionToTemplate, removeQuestionFromTemplate,
 } from "../../api/firestore";
-import { useSkills, useTemplates, QK } from "../../hooks/queries";
+import { useSkills, useTemplates, useQuestionCounts, QK } from "../../hooks/queries";
 import { parseCSV as parseQuestionCSV, downloadSampleCSV } from "../../utils/questionCSV";
 import QuestionForm from "../../components/questions/QuestionForm";
 import Modal from "../../components/Modal";
@@ -40,10 +40,9 @@ export default function QuestionsPage() {
   const queryClient = useQueryClient();
   const { adhocQs = [] } = useOutletContext() || {};
   const [activeTab,    setActiveTab]    = useState("bank");
-  const [questions,    setQuestions]    = useState([]);
-  const [loading,      setLoading]      = useState(true);
   const { data: skills    = [] } = useSkills();
   const { data: templates = [] } = useTemplates();
+  const { data: counts    = null } = useQuestionCounts();
   const [toast,        setToast]        = useState(null);
   const [showModal,    setShowModal]    = useState(false);
   const [editTarget,   setEditTarget]   = useState(null);
@@ -78,10 +77,109 @@ export default function QuestionsPage() {
   const [bulkProgress,  setBulkProgress]  = useState(null);
   const [deletingSelected, setDeletingSelected] = useState(false);
 
+  // The default view only ever reads the 20 most recent questions for the
+  // active/archived tab instead of the whole questions collection. Search,
+  // any of the filter dropdowns, and the Bulk Upload/Bulk Edit modals (which
+  // need to check against the complete set) all trigger a full fetch — see
+  // getQuestionsPage / the pageItems state below.
+  const needsFullList = !!(search || filterDomain || filterDifficulty || filterSkill || filterTopic || filterTemplate || showBulkModal || showBulkEdit);
+
+  // Server-scoped "fresh 20" page for the default view.
+  const [pageItems,       setPageItems]       = useState([]);
+  const [pageCursor,      setPageCursor]      = useState(null);
+  const [pageDone,        setPageDone]        = useState(false);
+  const [pageLoading,     setPageLoading]     = useState(true);
+  const [pageLoadingMore, setPageLoadingMore] = useState(false);
+  const [pageError,       setPageError]       = useState(null);
+
+  const fetchFirstPage = useCallback(async () => {
+    setPageLoading(true);
+    setPageItems([]); setPageCursor(null); setPageDone(false); setPageError(null);
+    const status = showArchived ? "archived" : "active";
+    try {
+      const res = await getQuestionsPage(status, null, 20);
+      setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
+    } catch (err) {
+      // The composite index (status + createdAt) may still be building —
+      // fall back to a full fetch filtered server-side by status so the
+      // tab still shows correct data immediately; the fast scoped query
+      // takes back over automatically once the index is ready.
+      const isIndexError = /index/i.test(err?.message || "");
+      if (isIndexError) {
+        try {
+          const all = await getQuestions({ status });
+          setPageItems(all.slice(0, 20));
+          setPageDone(true); // fallback mode has no cursor — "Load more" stays hidden
+        } catch (fallbackErr) {
+          console.error("Questions fallback fetch failed:", fallbackErr);
+          setPageError(fallbackErr.message || String(fallbackErr));
+        }
+      } else {
+        console.error("getQuestionsPage failed:", err);
+        setPageError(err.message || String(err));
+      }
+    }
+    setPageLoading(false);
+  }, [showArchived]);
+
   useEffect(() => {
-    const unsub = subscribeToQuestions(qs => { setQuestions(qs); setLoading(false); });
-    return unsub;
-  }, []);
+    if (!needsFullList) fetchFirstPage();
+  }, [needsFullList, fetchFirstPage]);
+
+  const loadMorePage = async () => {
+    if (pageDone || pageLoadingMore) return;
+    setPageLoadingMore(true);
+    try {
+      const status = showArchived ? "archived" : "active";
+      const res = await getQuestionsPage(status, pageCursor, 20);
+      setPageItems(prev => [...prev, ...res.items]);
+      setPageCursor(res.cursor); setPageDone(res.done);
+    } catch (err) {
+      console.error("getQuestionsPage (load more) failed:", err);
+      setPageError(err.message || String(err));
+    }
+    setPageLoadingMore(false);
+  };
+
+  // On-demand full fetch (scoped by the active/archived tab server-side) —
+  // used whenever search/a filter/bulk modal needs to see everything, not
+  // just the fresh 20.
+  const [fullList,        setFullList]        = useState([]);
+  const [fullListLoading, setFullListLoading] = useState(false);
+
+  const fetchFullList = useCallback(async () => {
+    setFullListLoading(true);
+    try {
+      const status = showArchived ? "archived" : "active";
+      setFullList(await getQuestions({ status }));
+    } catch (err) {
+      console.error("getQuestions failed:", err);
+    }
+    setFullListLoading(false);
+  }, [showArchived]);
+
+  useEffect(() => {
+    if (needsFullList) fetchFullList();
+  }, [needsFullList, fetchFullList]);
+
+  const loading = needsFullList ? fullListLoading : pageLoading;
+
+  // Any create/archive/unarchive/delete/bulk-edit needs to refresh whichever
+  // data is actually driving the current view, plus the (cheap,
+  // aggregation-based) active/archived counts.
+  const refreshAfterMutation = () => {
+    queryClient.invalidateQueries({ queryKey: QK.questionCounts });
+    if (needsFullList) fetchFullList(); else fetchFirstPage();
+  };
+
+  // Currently-visible tab's question objects — the full, server-status-
+  // scoped list once search/a filter/bulk modal pulled everything in, or
+  // the scoped "fresh 20" page otherwise. Used to derive filter-dropdown
+  // options and to resolve full objects for selected row ids. Note: filter
+  // dropdown options are therefore best-effort in the default scoped view
+  // (fill in fully once a search/filter has triggered a full fetch this
+  // session) — the same trade-off made for Interviewers' Company filter.
+  const currentPool = needsFullList ? fullList : pageItems;
 
   const allDomainTypes = useMemo(() => {
     const map = new Map();
@@ -91,14 +189,14 @@ export default function QuestionsPage() {
         if (val && !map.has(val)) map.set(val, d.label || val);
       })
     );
-    questions.forEach(q => {
+    currentPool.forEach(q => {
       const types = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
       types.forEach(val => { if (val && !map.has(val)) map.set(val, val); });
     });
     return [...map.entries()]
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [templates, questions]);
+  }, [templates, currentPool]);
 
   // Scope of questions the filter dropdowns should draw their options from —
   // narrowed to the selected template's own questions, or every question when
@@ -108,18 +206,18 @@ export default function QuestionsPage() {
     [filterTemplate, templates]
   );
   const scopedQuestions = useMemo(
-    () => templateQuestionSet ? questions.filter(q => templateQuestionSet.has(q.id)) : questions,
-    [questions, templateQuestionSet]
+    () => templateQuestionSet ? currentPool.filter(q => templateQuestionSet.has(q.id)) : currentPool,
+    [currentPool, templateQuestionSet]
   );
 
-  // Domain filter options: only domains actually used by a non-archived
-  // question in scope, grouped by display label — different templates
+  // Domain filter options, grouped by display label — different templates
   // sometimes define the "same" domain under a different slug, which
   // otherwise shows up as duplicate entries with an identical name.
+  // (currentPool is already status-scoped to the active/archived tab, so no
+  // extra archived check is needed here.)
   const domainFilterOptions = useMemo(() => {
     const byLabel = new Map(); // labelKey -> { label, values: Set }
     scopedQuestions.forEach(q => {
-      if (q.status === "archived") return;
       const types = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
       types.forEach(val => {
         if (!val) return;
@@ -136,7 +234,7 @@ export default function QuestionsPage() {
 
   const skillFilterOptions = useMemo(() => {
     const ids = new Set();
-    scopedQuestions.forEach(q => { if (q.status !== "archived") (q.skills || []).forEach(sid => ids.add(sid)); });
+    scopedQuestions.forEach(q => (q.skills || []).forEach(sid => ids.add(sid)));
     return skills.filter(s => ids.has(s.id)).sort((a, b) => a.name.localeCompare(b.name));
   }, [scopedQuestions, skills]);
 
@@ -153,7 +251,7 @@ export default function QuestionsPage() {
   }, [scopedQuestions, filterDomain, domainFilterOptions]);
 
   const allTopics = useMemo(
-    () => [...new Set(domainScopedQuestions.filter(q => q.status !== "archived" && q.topic).map(q => q.topic))].sort(),
+    () => [...new Set(domainScopedQuestions.filter(q => q.topic).map(q => q.topic))].sort(),
     [domainScopedQuestions]
   );
 
@@ -243,6 +341,7 @@ export default function QuestionsPage() {
         await syncTemplates(qid, templateIds, []);
         setToast({ message: "Question added to the bank." });
       }
+      refreshAfterMutation();
       setShowModal(false);
     } catch (e) { setToast({ message: e.message, type: "error" }); }
     setSaving(false);
@@ -252,6 +351,7 @@ export default function QuestionsPage() {
     if (!confirm(`Archive "${q.text.slice(0, 60)}…"?\n\nIt won't appear in templates but history is preserved.`)) return;
     try {
       await archiveQuestion(q.id);
+      refreshAfterMutation();
       setToast({ message: "Question archived." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
@@ -259,6 +359,7 @@ export default function QuestionsPage() {
   const handleUnarchive = async (q) => {
     try {
       await updateQuestion(q.id, { status: "active" });
+      refreshAfterMutation();
       setToast({ message: "Question restored." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
@@ -273,6 +374,7 @@ export default function QuestionsPage() {
       await Promise.all(tids.map(tid => removeQuestionFromTemplate(tid, q.id)));
       await deleteQuestion(q.id);
       if (tids.length) queryClient.invalidateQueries({ queryKey: QK.templates });
+      refreshAfterMutation();
       setToast({ message: "Question deleted." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
@@ -289,6 +391,7 @@ export default function QuestionsPage() {
         await deleteQuestion(qid);
       }
       queryClient.invalidateQueries({ queryKey: QK.templates });
+      refreshAfterMutation();
       setSelected(new Set());
       setToast({ message: `${ids.length} question${ids.length !== 1 ? "s" : ""} deleted.` });
     } catch (e) {
@@ -331,7 +434,7 @@ export default function QuestionsPage() {
     try {
       for (let i = 0; i < ids.length; i++) {
         const qid = ids[i];
-        const q = questions.find(x => x.id === qid);
+        const q = filtered.find(x => x.id === qid);
         const updates = {};
 
         if (bulkForm.difficulty) updates.difficulty = bulkForm.difficulty;
@@ -372,6 +475,7 @@ export default function QuestionsPage() {
       }
 
       if (bulkForm.templateIds.length > 0) queryClient.invalidateQueries({ queryKey: QK.templates });
+      refreshAfterMutation();
       setShowBulkEdit(false);
       setSelected(new Set());
       setBulkForm(BLANK_BULK);
@@ -425,6 +529,7 @@ export default function QuestionsPage() {
         }
       }));
       if (bulkPreview.rows.some(r => r.templates.length > 0)) queryClient.invalidateQueries({ queryKey: QK.templates });
+      refreshAfterMutation();
       setShowBulkModal(false);
       setBulkPreview(null);
       setBulkText("");
@@ -474,6 +579,7 @@ export default function QuestionsPage() {
       const { templateIds, ...questionData } = approveForm;
       const qid = await approveAdhocQuestion(approveTarget.id, questionData);
       await syncTemplates(qid, templateIds, []);
+      refreshAfterMutation();
       setApproveTarget(null);
       setToast({ message: "Question approved and added to the bank." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
@@ -490,9 +596,9 @@ export default function QuestionsPage() {
 
   // ── Filtered list ────────────────────────────────────────────────────────────
 
-  const filtered = useMemo(() => questions.filter(q => {
-    if (!showArchived && q.status === "archived") return false;
-    if (showArchived  && q.status !== "archived") return false;
+  // currentPool is already status-scoped to the active/archived tab (see
+  // above), so no archived check is needed here.
+  const filtered = useMemo(() => currentPool.filter(q => {
     const qDomains = Array.isArray(q.domainTypes) ? q.domainTypes : (q.domainType ? [q.domainType] : []);
     if (filterDomain) {
       const matchValues = domainFilterOptions.find(d => d.label === filterDomain)?.values || [filterDomain];
@@ -511,15 +617,21 @@ export default function QuestionsPage() {
       );
     }
     return true;
-  }), [questions, showArchived, filterDomain, filterDifficulty, filterSkill, filterTopic, templateQuestionSet, domainFilterOptions, search]);
+  }), [currentPool, filterDomain, filterDifficulty, filterSkill, filterTopic, templateQuestionSet, domainFilterOptions, search]);
 
-  const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered, 20);
+  const { paged: fullPaged, page, setPage, totalPages, total, pageSize } = usePagination(filtered, 20);
 
-  const { activeCount, archivedCount } = useMemo(() => {
-    let active = 0, archived = 0;
-    questions.forEach(q => { if (q.status === "archived") archived++; else active++; });
-    return { activeCount: active, archivedCount: archived };
-  }, [questions]);
+  // Which list actually renders: the fully-loaded+filtered list (client-
+  // paginated) once search/a filter pulled everything in, or every
+  // currently-loaded item of the scoped "fresh 20" page otherwise (no
+  // double-pagination — pageItems already IS the current page).
+  const rows = needsFullList ? fullPaged : filtered;
+
+  const activeCount   = counts?.active ?? 0;
+  const archivedCount = counts?.archived ?? 0;
+  const emptyMessage = counts && counts.active === 0 && counts.archived === 0
+    ? "No questions yet. Click 'Add Question' to get started."
+    : "No questions match your filters.";
 
   const pendingAdhoc  = adhocQs.filter(q => q.status === "pending");
 
@@ -595,7 +707,7 @@ export default function QuestionsPage() {
       {/* ── Question Bank tab ── */}
       {activeTab === "bank" && (
         <QuestionBankTab
-          questions={questions} loading={loading}
+          loading={loading} emptyMessage={emptyMessage} pageError={!needsFullList ? pageError : null}
           templates={templates} skills={skills}
           allDomainTypes={allDomainTypes} allTopics={allTopics} qToTemplatesMap={qToTemplatesMap}
           domainFilterOptions={domainFilterOptions} skillFilterOptions={skillFilterOptions}
@@ -608,7 +720,8 @@ export default function QuestionsPage() {
           showArchived={showArchived} setShowArchived={setShowArchived}
           hasActiveFilters={hasActiveFilters} onClearFilters={handleClearFilters}
           selected={selected} toggleSelect={toggleSelect} toggleSelectAll={toggleSelectAll} filtered={filtered}
-          paged={paged} page={page} setPage={setPage} totalPages={totalPages} total={total} pageSize={pageSize}
+          paged={rows} page={page} setPage={setPage} totalPages={totalPages} total={total} pageSize={pageSize}
+          scopedMode={!needsFullList} pageDone={pageDone} pageLoadingMore={pageLoadingMore} onLoadMore={loadMorePage}
           openCreate={openCreate} openEdit={openEdit}
           handleArchive={handleArchive} handleUnarchive={handleUnarchive} handleDelete={handleDelete}
           setShowBulkEdit={setShowBulkEdit} setShowBulkModal={setShowBulkModal}

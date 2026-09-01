@@ -1,8 +1,9 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot,
+  query, where, orderBy, onSnapshot, limit, startAfter, getCountFromServer,
 } from "firebase/firestore";
+import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { User, Invite } from "../types";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
@@ -21,6 +22,67 @@ export async function createUserProfile(uid: string, data: Omit<User, "id">): Pr
 
 export async function getAllUsers(): Promise<User[]> {
   const snap = await getDocs(collection(db, "users"));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+}
+
+const INTERVIEWER_ROLES = ["interviewer", "interviewer_content"];
+
+export interface UsersPageResult {
+  items: User[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  done: boolean;
+}
+
+// Server-scoped "fresh N" fetch for the default Interviewers view — mirrors
+// getCandidatesPage. Some legacy user docs may not have `createdAt` (it's
+// optional on the User type, unlike Candidate.createdAt) — such docs are
+// excluded from this ordered query entirely, so they'd only ever be found
+// via a full-list search, never via "Load more". Acceptable for a default
+// "browse recent" view, but worth knowing if an old interviewer seems
+// to have vanished from the default list.
+export async function getInterviewersPage(
+  status: "active" | "archived",
+  cursor: QueryDocumentSnapshot<DocumentData> | null = null,
+  take = 10
+): Promise<UsersPageResult> {
+  const constraints = [
+    where("role", "in", INTERVIEWER_ROLES),
+    where("status", "==", status),
+    orderBy("createdAt", "desc"),
+  ] as import("firebase/firestore").QueryConstraint[];
+  if (cursor) constraints.push(startAfter(cursor));
+  constraints.push(limit(take));
+
+  const snap = await getDocs(query(collection(db, "users"), ...constraints));
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+  return {
+    items,
+    cursor: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : cursor,
+    done: snap.docs.length < take,
+  };
+}
+
+// Cheap aggregation counts for the Active/Archived tab badges — equality/`in`
+// filters only, so no composite index is needed for these.
+export async function getInterviewerCounts(): Promise<{ active: number; archived: number }> {
+  const col = collection(db, "users");
+  const [activeSnap, archivedSnap] = await Promise.all([
+    getCountFromServer(query(col, where("role", "in", INTERVIEWER_ROLES), where("status", "==", "active"))),
+    getCountFromServer(query(col, where("role", "in", INTERVIEWER_ROLES), where("status", "==", "archived"))),
+  ]);
+  return { active: activeSnap.data().count, archived: archivedSnap.data().count };
+}
+
+// Targeted equality-only fetch (no composite index needed) — used where
+// only admins are needed (e.g. AdminLayout's inbound-request notification
+// loop) instead of reading the entire users collection on every admin page.
+export async function getActiveAdmins(): Promise<User[]> {
+  const snap = await getDocs(query(collection(db, "users"), where("role", "==", "admin"), where("status", "==", "active")));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
+}
+
+export async function getUsersByStatus(status: string): Promise<User[]> {
+  const snap = await getDocs(query(collection(db, "users"), where("status", "==", status)));
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
 }
 

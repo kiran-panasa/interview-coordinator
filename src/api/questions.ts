@@ -1,8 +1,9 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, increment,
+  query, where, orderBy, onSnapshot, increment, limit, startAfter, getCountFromServer,
 } from "firebase/firestore";
+import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { Question, AdhocQuestion, QuestionFilters } from "../types";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
@@ -61,6 +62,49 @@ export async function getQuestions(filters: QuestionFilters = {}): Promise<Quest
   if (filters.status)      docs = docs.filter(d => d.status === filters.status);
   else                     docs = docs.filter(d => d.status !== "archived");
   return docs;
+}
+
+export interface QuestionsPageResult {
+  items: Question[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  done: boolean;
+}
+
+// Server-scoped "fresh N" fetch for the default Question Bank view — mirrors
+// getCandidatesPage/getInterviewersPage. Question.status and Question.createdAt
+// are both required fields (unlike Candidate.archived/User.createdAt), so
+// this query is reliable for every doc — nothing can silently fall outside it.
+export async function getQuestionsPage(
+  status: "active" | "archived",
+  cursor: QueryDocumentSnapshot<DocumentData> | null = null,
+  take = 20
+): Promise<QuestionsPageResult> {
+  const constraints = [
+    where("status", "==", status),
+    orderBy("createdAt", "desc"),
+  ] as import("firebase/firestore").QueryConstraint[];
+  if (cursor) constraints.push(startAfter(cursor));
+  constraints.push(limit(take));
+
+  const snap = await getDocs(query(collection(db, "questions"), ...constraints));
+  const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as Question));
+  return {
+    items,
+    cursor: snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : cursor,
+    done: snap.docs.length < take,
+  };
+}
+
+export interface QuestionCounts { active: number; archived: number; }
+
+// Cheap aggregation counts for the active/archived header text.
+export async function getQuestionCounts(): Promise<QuestionCounts> {
+  const col = collection(db, "questions");
+  const [activeSnap, archivedSnap] = await Promise.all([
+    getCountFromServer(query(col, where("status", "==", "active"))),
+    getCountFromServer(query(col, where("status", "==", "archived"))),
+  ]);
+  return { active: activeSnap.data().count, archived: archivedSnap.data().count };
 }
 
 export async function getQuestionsByIds(ids: string[]): Promise<Question[]> {

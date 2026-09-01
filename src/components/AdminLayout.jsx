@@ -4,7 +4,7 @@ import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useMemo, useEffect, useRef } from "react";
 import { useUserNotifications, useAdhocQuestions, usePendingScheduleInvites, useInboundRequests } from "../hooks/subscriptions";
-import { useUsers } from "../hooks/queries";
+import { useActiveAdmins } from "../hooks/queries";
 import { createNotification, markInboundRequestNotified } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
@@ -37,7 +37,9 @@ export default function AdminLayout() {
   const adhocQs           = useAdhocQuestions();
   const pendingInvites    = usePendingScheduleInvites();
   const inboundRequests   = useInboundRequests();
-  const { data: usersAll = [] } = useUsers();
+  // Targeted equality-only fetch — avoids reading the entire users
+  // collection just to find who to notify below.
+  const { data: activeAdmins = [] } = useActiveAdmins();
   const unreadResponses  = notifications.filter(n => n.type === "response" && n.status === "unread").length;
   const pendingBookings  = pendingInvites.length;
   const pendingAdhoc     = adhocQs.filter(q => q.status === "pending").length;
@@ -54,7 +56,7 @@ export default function AdminLayout() {
   useEffect(() => {
     const toNotify = inboundRequests.filter(r => r.status === "pending" && !r.notifiedAt && !notifiedRef.current.has(r.id));
     if (!toNotify.length) return;
-    const admins = usersAll.filter(u => u.role === "admin" && u.status === "active");
+    const admins = activeAdmins;
     toNotify.forEach(r => {
       notifiedRef.current.add(r.id);
       admins.forEach(a => {
@@ -69,7 +71,7 @@ export default function AdminLayout() {
       });
       markInboundRequestNotified(r.id).catch(() => {});
     });
-  }, [inboundRequests, usersAll]);
+  }, [inboundRequests, activeAdmins]);
 
   const initials = (userProfile?.displayName || userProfile?.email || "?").trim().charAt(0).toUpperCase();
 

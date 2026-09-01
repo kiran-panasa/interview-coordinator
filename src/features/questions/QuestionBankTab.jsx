@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { HelpCircle, Archive, X } from "lucide-react";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
+import Button from "../../components/Button";
 import { SkeletonRows } from "../../components/Skeleton";
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
@@ -12,7 +13,7 @@ const DIFF_BADGE = {
 };
 
 export default function QuestionBankTab({
-  questions, loading,
+  loading, emptyMessage, pageError,
   templates, skills, allDomainTypes, allTopics, qToTemplatesMap,
   domainFilterOptions, skillFilterOptions,
   search, setSearch,
@@ -25,6 +26,7 @@ export default function QuestionBankTab({
   hasActiveFilters, onClearFilters,
   selected, toggleSelect, toggleSelectAll, filtered,
   paged, page, setPage, totalPages, total, pageSize,
+  scopedMode, pageDone, pageLoadingMore, onLoadMore,
   openCreate, openEdit, handleArchive, handleUnarchive, handleDelete,
   setShowBulkEdit, setShowBulkModal,
 }) {
@@ -77,6 +79,19 @@ export default function QuestionBankTab({
         )}
       </motion.div>
 
+      {scopedMode && (
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-gray-400 mb-2">
+          Showing the {filtered.length} most recent {showArchived ? "archived" : "active"} questions — search or use a filter to find anyone else.
+        </motion.p>
+      )}
+
+      {pageError && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          <p className="font-semibold">Couldn't load questions for this tab.</p>
+          <p className="text-xs text-red-600 mt-1 break-all">{pageError}</p>
+        </motion.div>
+      )}
+
       {/* Table */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
@@ -87,9 +102,7 @@ export default function QuestionBankTab({
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <HelpCircle className="w-10 h-10 text-gray-200" strokeWidth={1.5} />
-            <p className="text-sm text-gray-400">
-              {questions.length === 0 ? "No questions yet. Click 'Add Question' to get started." : "No questions match your filters."}
-            </p>
+            <p className="text-sm text-gray-400">{emptyMessage}</p>
           </div>
         ) : (
           <>
@@ -201,7 +214,17 @@ export default function QuestionBankTab({
                 })}
               </tbody>
             </table>
-            <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+            {scopedMode ? (
+              !pageDone && (
+                <div className="flex justify-center py-4 border-t border-gray-50">
+                  <Button variant="secondary" onClick={onLoadMore} disabled={pageLoadingMore}>
+                    {pageLoadingMore ? "Loading…" : "Load 20 more"}
+                  </Button>
+                </div>
+              )
+            ) : (
+              <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+            )}
           </>
         )}
       </motion.div>

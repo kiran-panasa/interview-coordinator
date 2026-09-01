@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -6,9 +6,9 @@ import {
   Search, Download, ChevronDown, FileSpreadsheet, FileText,
   RotateCcw, Tag, Users, Check, AlertTriangle, ExternalLink,
 } from "lucide-react";
-import { getInterviewerAvailability, updateUser } from "../../api/firestore";
+import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers } from "../../api/firestore";
 import { compareTimeLabels } from "../../utils/dates";
-import { useSkills, useTemplates, useUsers, QK } from "../../hooks/queries";
+import { useSkills, useTemplates, useUsers, useInterviewerCounts, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 import Modal from "../../components/Modal";
@@ -52,27 +52,110 @@ export default function InterviewersPage() {
   const queryClient = useQueryClient();
   const { currentUser } = useAuth();
   const canDelete = currentUser?.email?.toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
-  const { data: usersAll = [], isLoading } = useUsers();
   const [showArchived, setShowArchived] = useState(false);
+  const [search,         setSearch]         = useState("");
+  const [filterSkill,    setFilterSkill]    = useState("");
+  const [filterTemplate, setFilterTemplate] = useState("");
+  const [filterCompany,  setFilterCompany]  = useState("");
+  const [filterExp,      setFilterExp]      = useState("");
+  const [showExport,     setShowExport]     = useState(false);
+
+  // The default view only ever reads the 10 most recent interviewers for
+  // the active/archived tab instead of the whole users collection. Search,
+  // any of the filter dropdowns, and opening the Export menu (which needs
+  // the complete active roster) all genuinely need the full list — see
+  // getInterviewersPage / the pageItems state below.
+  const needsFullList = search.trim() !== "" || !!filterSkill || !!filterTemplate || !!filterCompany || !!filterExp || showExport;
+  const { data: usersAll = [], isLoading } = useUsers(needsFullList);
+  const { data: counts } = useInterviewerCounts();
   const interviewers = usersAll.filter(u =>
     (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"
   );
   const archivedInterviewers = usersAll.filter(u =>
     (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "archived"
   );
-  const displayInterviewers = showArchived ? archivedInterviewers : interviewers;
+
+  // Server-scoped "fresh 10" page — see getInterviewersPage.
+  const [pageItems,       setPageItems]       = useState([]);
+  const [pageCursor,      setPageCursor]      = useState(null);
+  const [pageDone,        setPageDone]        = useState(false);
+  const [pageLoading,     setPageLoading]     = useState(false);
+  const [pageLoadingMore, setPageLoadingMore] = useState(false);
+  const [pageError,       setPageError]       = useState(null);
+
+  const fetchFirstPage = useCallback(async () => {
+    setPageLoading(true);
+    setPageItems([]); setPageCursor(null); setPageDone(false); setPageError(null);
+    const status = showArchived ? "archived" : "active";
+    try {
+      const res = await getInterviewersPage(status, null, 10);
+      setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
+    } catch (err) {
+      // The composite index (role + status + createdAt) may still be
+      // building — fall back to a full fetch filtered client-side so the
+      // tab still shows correct data immediately; the fast scoped query
+      // takes back over automatically once the index is ready.
+      const isIndexError = /index/i.test(err?.message || "");
+      if (isIndexError) {
+        try {
+          const all = await getAllUsers();
+          const scoped = all.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === status);
+          setPageItems(scoped.slice(0, 10));
+          setPageDone(true); // fallback mode has no cursor — "Load more" stays hidden
+        } catch (fallbackErr) {
+          console.error("Interviewers fallback fetch failed:", fallbackErr);
+          setPageError(fallbackErr.message || String(fallbackErr));
+        }
+      } else {
+        console.error("getInterviewersPage failed:", err);
+        setPageError(err.message || String(err));
+      }
+    }
+    setPageLoading(false);
+  }, [showArchived]);
+
+  useEffect(() => {
+    if (needsFullList) return;
+    let cancelled = false;
+    (async () => { await fetchFirstPage(); if (cancelled) return; })();
+    return () => { cancelled = true; };
+  }, [needsFullList, fetchFirstPage]);
+
+  const loadMorePage = async () => {
+    if (pageDone || pageLoadingMore) return;
+    setPageLoadingMore(true);
+    try {
+      const status = showArchived ? "archived" : "active";
+      const res = await getInterviewersPage(status, pageCursor, 10);
+      setPageItems(prev => [...prev, ...res.items]);
+      setPageCursor(res.cursor); setPageDone(res.done);
+    } catch (err) {
+      console.error("getInterviewersPage (load more) failed:", err);
+      setPageError(err.message || String(err));
+    }
+    setPageLoadingMore(false);
+  };
+
+  // Any archive/restore/edit needs to refresh whichever data is actually
+  // driving the current view, plus the (cheap, aggregation-based) tab counts.
+  const refreshAfterMutation = () => {
+    queryClient.invalidateQueries({ queryKey: QK.users });
+    queryClient.invalidateQueries({ queryKey: QK.interviewerCounts });
+    if (!needsFullList) fetchFirstPage();
+  };
+
+  // Currently-visible tab's interviewer objects — the full-fetched+filtered
+  // list once search/filters/Export pulled everything in, the scoped page
+  // otherwise. Used for the Company filter's options and for resolving
+  // which full objects correspond to selected row ids.
+  const currentTabPool = needsFullList ? (showArchived ? archivedInterviewers : interviewers) : pageItems;
+
   const { data: skills    = [] } = useSkills();
   const { data: templates = [] } = useTemplates();
   const [viewAvail,    setViewAvail]    = useState(null);
   const [editModal,    setEditModal]    = useState(null); // { user, draftSkills, draftTemplates }
   const [saving,       setSaving]       = useState(false);
-  const [search,         setSearch]         = useState("");
-  const [filterSkill,    setFilterSkill]    = useState("");
-  const [filterTemplate, setFilterTemplate] = useState("");
-  const [filterCompany,  setFilterCompany]  = useState("");
-  const [filterExp,      setFilterExp]      = useState("");
   const [toast,          setToast]          = useState(null);
-  const [showExport,     setShowExport]     = useState(false);
   const exportRef = useRef(null);
   const [selectedIds,         setSelectedIds]         = useState(new Set());
   const [bulkModal,           setBulkModal]           = useState(false);
@@ -102,7 +185,7 @@ export default function InterviewersPage() {
         templateIds: editModal.draftTemplates,
         paymentRatePerInterview: editModal.draftPaymentRate === "" ? null : Number(editModal.draftPaymentRate),
       });
-      queryClient.invalidateQueries({ queryKey: QK.users });
+      refreshAfterMutation();
       setToast({ message: "Interviewer updated." });
       setEditModal(null);
     } catch (e) {
@@ -128,7 +211,7 @@ export default function InterviewersPage() {
     if (!confirm(`Archive interviewer "${name}"?\n\nThey will be hidden from the platform and lose access. All their data (past interviews, availability, profile) is preserved and can be restored anytime.`)) return;
     try {
       await updateUser(u.id, { status: "archived", archivedAt: new Date().toISOString() });
-      queryClient.invalidateQueries({ queryKey: QK.users });
+      refreshAfterMutation();
       setToast({ message: `${name} archived.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -139,7 +222,7 @@ export default function InterviewersPage() {
     const name = u.displayName || u.email;
     try {
       await updateUser(u.id, { status: "active", archivedAt: null });
-      queryClient.invalidateQueries({ queryKey: QK.users });
+      refreshAfterMutation();
       setToast({ message: `${name} restored.` });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
@@ -149,7 +232,7 @@ export default function InterviewersPage() {
   const handleBulkRestore = async () => {
     try {
       await Promise.all([...selectedIds].map(id => updateUser(id, { status: "active", archivedAt: null })));
-      queryClient.invalidateQueries({ queryKey: QK.users });
+      refreshAfterMutation();
       setToast({ message: `${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""} restored.` });
       setSelectedIds(new Set());
     } catch (e) {
@@ -173,7 +256,7 @@ export default function InterviewersPage() {
   };
 
   const openBulkModal = () => {
-    const selectedIvrs = interviewers.filter(u => selectedIds.has(u.id));
+    const selectedIvrs = currentTabPool.filter(u => selectedIds.has(u.id));
     const commonTemplates = templates
       .filter(t => selectedIvrs.every(u => (u.templateIds || []).includes(t.id)))
       .map(t => t.id);
@@ -185,7 +268,7 @@ export default function InterviewersPage() {
     setBulkSaving(true);
     try {
       await Promise.all([...selectedIds].map(id => updateUser(id, { templateIds: bulkDraftTemplates })));
-      queryClient.invalidateQueries({ queryKey: QK.users });
+      refreshAfterMutation();
       setToast({ message: `Templates updated for ${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""}.` });
       setBulkModal(false);
       setSelectedIds(new Set());
@@ -240,9 +323,12 @@ export default function InterviewersPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const uniqueCompanies = [...new Set(displayInterviewers.map(u => u.company).filter(Boolean))].sort();
+  // Companies filter dropdown is populated from whatever's currently
+  // loaded — best-effort in the default scoped view (fills in fully once
+  // search/a filter/Export has triggered a full fetch this session).
+  const uniqueCompanies = [...new Set(currentTabPool.map(u => u.company).filter(Boolean))].sort();
 
-  const filtered = displayInterviewers.filter(u => {
+  const filtered = currentTabPool.filter(u => {
     if (filterSkill    && !(u.skills      || []).includes(filterSkill))    return false;
     if (filterTemplate && !(u.templateIds || []).includes(filterTemplate)) return false;
     if (filterCompany  && u.company !== filterCompany)                     return false;
@@ -264,6 +350,11 @@ export default function InterviewersPage() {
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
 
+  // Which list actually drives the table: the fully-loaded+filtered list
+  // once search/a filter/Export pulled everything in, or the scoped
+  // "fresh 10" page otherwise.
+  const rows = needsFullList ? paged : pageItems;
+
   return (
     <div className="p-8">
       <motion.div
@@ -279,14 +370,14 @@ export default function InterviewersPage() {
               className={`text-xs font-semibold px-3 py-1 rounded-md transition-colors ${
                 !showArchived ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
               }`}>
-              Active · {interviewers.length}
+              Active{counts ? ` · ${counts.active}` : ""}
             </button>
             <button
               onClick={() => { setShowArchived(true); setSelectedIds(new Set()); }}
               className={`text-xs font-semibold px-3 py-1 rounded-md transition-colors ${
                 showArchived ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
               }`}>
-              Archived{archivedInterviewers.length > 0 ? ` · ${archivedInterviewers.length}` : ""}
+              Archived{counts && counts.archived > 0 ? ` · ${counts.archived}` : ""}
             </button>
           </div>
         </div>
@@ -297,20 +388,23 @@ export default function InterviewersPage() {
               variant="secondary"
               icon={Download}
               onClick={() => setShowExport(v => !v)}
-              disabled={interviewers.length === 0}
+              disabled={counts?.active === 0}
             >
               Export
               <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
             </Button>
             {showExport && (
               <div className="absolute right-0 mt-1 w-52 bg-white border border-gray-100 rounded-xl shadow-popover z-20 overflow-hidden animate-scale-in origin-top-right">
-                <button onClick={downloadExcel}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                {isLoading && (
+                  <p className="px-4 py-2.5 text-xs text-gray-400">Loading full roster…</p>
+                )}
+                <button onClick={downloadExcel} disabled={isLoading}
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                   <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
                   Download Excel (.xlsx)
                 </button>
-                <button onClick={downloadCSV}
-                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-100 transition-colors">
+                <button onClick={downloadCSV} disabled={isLoading}
+                  className="flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                   <FileText className="w-4 h-4 text-brand-500" />
                   Download CSV
                 </button>
@@ -381,16 +475,29 @@ export default function InterviewersPage() {
         )}
       </motion.div>
 
+      {!needsFullList && (
+        <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-gray-400 mb-2">
+          Showing the {pageItems.length} most recent {showArchived ? "archived" : "active"} interviewers — search or use a filter to find anyone else.
+        </motion.p>
+      )}
+
+      {!needsFullList && pageError && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+          <p className="font-semibold">Couldn't load interviewers for this tab.</p>
+          <p className="text-xs text-red-600 mt-1 break-all">{pageError}</p>
+        </motion.div>
+      )}
+
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
         className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
       >
-        {isLoading ? (
+        {(needsFullList ? isLoading : pageLoading) ? (
           <div className="p-4"><SkeletonRows count={6} /></div>
-        ) : filtered.length === 0 ? (
+        ) : rows.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <Users className="w-10 h-10 text-gray-200" strokeWidth={1.5} />
-            <p className="text-sm text-gray-400">{displayInterviewers.length === 0 ? (showArchived ? "No archived interviewers." : "No interviewers yet.") : "No results match your search."}</p>
+            <p className="text-sm text-gray-400">{needsFullList && currentTabPool.length > 0 ? "No results match your search." : showArchived ? "No archived interviewers." : "No interviewers yet."}</p>
           </div>
         ) : (
           <>
@@ -400,9 +507,9 @@ export default function InterviewersPage() {
                 <th className="px-4 py-3 w-10">
                   <input
                     type="checkbox"
-                    ref={el => { if (el) el.indeterminate = somePageSelected(paged) && !allPageSelected(paged); }}
-                    checked={allPageSelected(paged)}
-                    onChange={() => toggleSelectAll(paged)}
+                    ref={el => { if (el) el.indeterminate = somePageSelected(rows) && !allPageSelected(rows); }}
+                    checked={allPageSelected(rows)}
+                    onChange={() => toggleSelectAll(rows)}
                     className="w-4 h-4 accent-brand-600 cursor-pointer"
                   />
                 </th>
@@ -412,7 +519,7 @@ export default function InterviewersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {paged.map((u, idx) => (
+              {rows.map((u, idx) => (
                 <motion.tr
                   key={u.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.02, duration: 0.2 }}
@@ -535,7 +642,15 @@ export default function InterviewersPage() {
               ))}
             </tbody>
           </table>
-          <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+          {needsFullList ? (
+            <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
+          ) : !pageLoading && !pageDone && (
+            <div className="flex justify-center py-4 border-t border-gray-50">
+              <Button variant="secondary" onClick={loadMorePage} disabled={pageLoadingMore}>
+                {pageLoadingMore ? "Loading…" : "Load 10 more"}
+              </Button>
+            </div>
+          )}
           </>
         )}
       </motion.div>

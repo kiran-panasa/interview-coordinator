@@ -4,7 +4,7 @@ import {
   BarChart3, TrendingUp, Clock, CheckCircle2,
   ArrowRight, CalendarClock, UserPlus,
 } from "lucide-react";
-import { useAllInterviews, useUsers } from "../../hooks/queries";
+import { useAllInterviews, usePendingUsers } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
 import { SkeletonStatCards, SkeletonRows } from "../../components/Skeleton";
@@ -24,9 +24,8 @@ const fadeUp = {
 };
 
 export default function AdminDashboard() {
-  const { data: interviews = [], isLoading: interviewsLoading } = useAllInterviews();
-  const { data: users      = [], isLoading: usersLoading      } = useUsers();
-  const pendingUsers = users.filter(u => u.status === "pending");
+  const { data: interviews   = [], isLoading: interviewsLoading } = useAllInterviews();
+  const { data: pendingUsers = [], isLoading: usersLoading      } = usePendingUsers();
   const loaded = !interviewsLoading && !usersLoading;
 
   const today = new Date().toISOString().slice(0, 10);
