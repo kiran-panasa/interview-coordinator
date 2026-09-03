@@ -14,9 +14,41 @@ function resolveFieldValue(field, rawValue) {
   return String(rawValue);
 }
 
+// The domain-level remarks box is a free-text domainField — its id/label
+// vary per template ("Machine Coding Remarks", "Resume Remarks",
+// "domain_remarks", a custom id, …) but it's always the `type === "text"`
+// domainField, exactly like DynamicFeedbackForm.jsx renders it ("text
+// remarks for all"). If a domain has no domain-level text field at all
+// (some templates only collect remarks per card, e.g. "Remarks on Problem
+// Solving"), fall back to joining any card-level field whose label reads
+// as a remarks field, so a domain never silently ends up with no remarks
+// column just because of how a particular template happened to be built.
+function findDomainRemarksField(domain) {
+  return (domain?.domainFields || []).find(f => f.type === "text") || null;
+}
+
+function domainRemarksValue(domain, domainData) {
+  if (!domainData) return "";
+  const field = findDomainRemarksField(domain);
+  if (field) return resolveFieldValue(field, domainData[field.id]);
+
+  const cardRemarkFields = (domain?.cardFields || []).filter(f => f.type === "text" && /remark/i.test(f.label || ""));
+  if (cardRemarkFields.length && Array.isArray(domainData.cards)) {
+    const parts = domainData.cards.flatMap((card, i) =>
+      cardRemarkFields
+        .map(f => { const v = resolveFieldValue(f, card[f.id]); return v ? `Card ${i + 1} ${f.label}: ${v}` : null; })
+        .filter(Boolean)
+    );
+    if (parts.length) return parts.join(" | ");
+  }
+  return "";
+}
+
 // Full text dump of everything View Feedback shows for one domain: every
 // card's fields (with resolved labels, not raw scores), every domain-level
-// field, and the computed domain rating.
+// field except the overall remarks box (that gets its own dedicated
+// column — see domainRemarksValue — so it isn't duplicated here), and the
+// computed domain rating.
 function buildDomainText(domain, domainData) {
   if (!domainData) return "";
   const lines = [];
@@ -34,7 +66,9 @@ function buildDomainText(domain, domainData) {
     });
   }
 
+  const remarksField = findDomainRemarksField(domain);
   const domainFieldParts = (domain.domainFields || [])
+    .filter(f => f !== remarksField)
     .map(f => {
       const v = resolveFieldValue(f, domainData[f.id]);
       return v ? `${f.label}: ${v}` : null;
@@ -45,19 +79,6 @@ function buildDomainText(domain, domainData) {
   if (domainData.domain_rating != null) lines.push(`Domain Rating: ${domainData.domain_rating}`);
 
   return lines.join("\n");
-}
-
-// Every scored domain's overall remarks box is a free-text domainField —
-// its id/label vary per template ("Machine Coding Remarks", "Resume
-// Remarks", "domain_remarks", a custom id, …) but it's always the
-// `type === "text"` domainField, exactly like DynamicFeedbackForm.jsx
-// renders it ("text remarks for all"). Pulled out into its own column
-// (instead of buried in the combined text dump) so it reads/filters like
-// the rest of the sheet.
-function domainRemarksValue(domain, domainData) {
-  if (!domainData) return "";
-  const field = (domain?.domainFields || []).find(f => f.type === "text");
-  return field ? resolveFieldValue(field, domainData[field.id]) : "";
 }
 
 // Columns whose value should be written as an actual clickable hyperlink
@@ -72,17 +93,22 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
  *
  *   UID, Candidate Name, Candidate Email, Interviewer, Template, Program,
  *   Round, Date, Time, Status, Interview Integrity, Integrity Score,
+ *   Interview Integrity – Remarks,
  *   [<Section>, <Section> – Domain Rating, <Section> – Remarks] per
  *   non-Integrity section (dynamic per the templates involved), Overall Recommendation,
  *   Final Verdict, Comments, Meet Link, Recording Link, Transcript Link,
  *   AI Report, Feedback Submitted At.
  *
- * Interview Integrity gets its own text-dump column (like every other
- * section) but never a "– Domain Rating" column of its own — it's a
+ * Interview Integrity gets its own text-dump + Remarks columns (like every
+ * other section) but never a "– Domain Rating" column of its own — it's a
  * compliance checklist, not a scored section; Integrity Score (a distinct,
- * separately-computed field) covers that role instead. Interviews using
- * different templates merge into the same sheet; a section's columns are
- * just blank for interviews whose template doesn't have that section.
+ * separately-computed field) covers that role instead. A section whose
+ * entire content is its remarks field and nothing else (no cards, no other
+ * domain-level fields — e.g. the default "Overall Feedback" wrap-up
+ * section) collapses to a single <Section> column instead of three, since
+ * there's nothing else to show alongside it. Interviews using different
+ * templates merge into the same sheet; a section's columns are just blank
+ * for interviews whose template doesn't have that section.
  *
  * `integrityDomainFields` is the live content of the global Interview
  * Integrity checklist (settings/interviewIntegrity) — that domain isn't
@@ -116,6 +142,12 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   // One entry per distinct section/domain across all involved templates, in
   // first-seen order. Integrity always sorts first (order: -1, see
   // withIntegrityDomain) so it naturally ends up separated from the rest.
+  // isRemarksOnly flags a domain whose entire content, once its remarks
+  // field is accounted for, is that remarks field and nothing else (no
+  // cards, no other domain-level fields) — e.g. the default "Overall
+  // Feedback" wrap-up domain. Such a domain gets a single column instead of
+  // the usual three, since a separate text-dump/Domain Rating column would
+  // just repeat (or sit blank next to) the one thing it actually holds.
   const domainDefs = [];
   const seenLabels = new Set();
   interviews.forEach(iv => {
@@ -126,7 +158,11 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       .forEach(d => {
         if (!seenLabels.has(d.label)) {
           seenLabels.add(d.label);
-          domainDefs.push({ label: d.label, isIntegrity: d.type === "integrity" });
+          const hasCards = (d.cardFields || []).length > 0;
+          const remarksField = findDomainRemarksField(d);
+          const otherDomainFields = (d.domainFields || []).filter(f => f !== remarksField);
+          const isRemarksOnly = !hasCards && !!remarksField && otherDomainFields.length === 0;
+          domainDefs.push({ label: d.label, isIntegrity: d.type === "integrity", isRemarksOnly });
         }
       });
   });
@@ -136,14 +172,19 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   const sectionHeaders = [];
   const sectionColWidths = [];
   scoredDefs.forEach(d => {
-    sectionHeaders.push(d.label, `${d.label} – Domain Rating`, `${d.label} – Remarks`);
-    sectionColWidths.push({ wch: 45 }, { wch: 16 }, { wch: 40 });
+    if (d.isRemarksOnly) {
+      sectionHeaders.push(d.label);
+      sectionColWidths.push({ wch: 45 });
+    } else {
+      sectionHeaders.push(d.label, `${d.label} – Domain Rating`, `${d.label} – Remarks`);
+      sectionColWidths.push({ wch: 45 }, { wch: 16 }, { wch: 40 });
+    }
   });
 
   const headers = [
     "UID", "Candidate Name", "Candidate Email", "Interviewer", "Template", "Program", "Round",
     "Date", "Time", "Status", "Partial Completion Reason",
-    "Interview Integrity", "Integrity Score",
+    "Interview Integrity", "Integrity Score", "Interview Integrity – Remarks",
     ...sectionHeaders,
     "Overall Recommendation", "Final Verdict", "Comments",
     "Meet Link", "Recording Link", "Transcript Link", "AI Report",
@@ -169,14 +210,22 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
     const programName = template?.program ? (programNameById.get(template.program) || "") : "";
     const isDynamic = !!(fb && fb.domains);
 
-    const integrityText = (!isCancelled && integrityDef)
-      ? (() => { const { domain, data } = domainDataFor(template, fb, isDynamic, integrityDef.label); return domain && data ? buildDomainText(domain, data) : ""; })()
-      : "";
+    const integrityDomainData = (!isCancelled && integrityDef)
+      ? domainDataFor(template, fb, isDynamic, integrityDef.label)
+      : { domain: null, data: null };
+    const integrityText = integrityDomainData.domain && integrityDomainData.data
+      ? buildDomainText(integrityDomainData.domain, integrityDomainData.data) : "";
+    const integrityRemarksText = integrityDomainData.domain && integrityDomainData.data
+      ? domainRemarksValue(integrityDomainData.domain, integrityDomainData.data) : "";
 
     const sectionCells = [];
     scoredDefs.forEach(d => {
-      if (isCancelled) { sectionCells.push("", "", ""); return; }
+      if (isCancelled) { sectionCells.push(...(d.isRemarksOnly ? [""] : ["", "", ""])); return; }
       const { domain, data } = domainDataFor(template, fb, isDynamic, d.label);
+      if (d.isRemarksOnly) {
+        sectionCells.push(domain && data ? domainRemarksValue(domain, data) : "");
+        return;
+      }
       sectionCells.push(domain && data ? buildDomainText(domain, data) : "");
       const rating = data?.domain_rating;
       sectionCells.push(rating != null ? rating : "");
@@ -208,6 +257,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       isCancelled ? "" : (iv.partialCompletionReason || ""),
       integrityText,
       fb?.integrityScore != null ? fb.integrityScore : "",
+      integrityRemarksText,
       ...sectionCells,
       fb?.overallRecommendation || "",
       fb?.finalVerdict != null ? fb.finalVerdict : "",
@@ -224,7 +274,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   ws["!cols"] = [
     { wch: 24 }, { wch: 20 }, { wch: 26 }, { wch: 20 }, { wch: 26 }, { wch: 16 }, { wch: 14 },
     { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 30 },
-    { wch: 45 }, { wch: 14 },
+    { wch: 45 }, { wch: 14 }, { wch: 40 },
     ...sectionColWidths,
     { wch: 20 }, { wch: 12 }, { wch: 45 },
     { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
