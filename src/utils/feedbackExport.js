@@ -47,15 +47,16 @@ function buildDomainText(domain, domainData) {
   return lines.join("\n");
 }
 
-// Every scored domain's overall remarks field is conventionally id'd
-// "domain_remarks" regardless of its per-template display label ("Machine
-// Coding Remarks", "Resume Remarks", "Overall Remarks", …) — see the
-// default domain definitions in templateEngine.js. Pulled out into its own
-// column (instead of buried in the combined text dump) so it reads/filters
-// like the rest of the sheet.
+// Every scored domain's overall remarks box is a free-text domainField —
+// its id/label vary per template ("Machine Coding Remarks", "Resume
+// Remarks", "domain_remarks", a custom id, …) but it's always the
+// `type === "text"` domainField, exactly like DynamicFeedbackForm.jsx
+// renders it ("text remarks for all"). Pulled out into its own column
+// (instead of buried in the combined text dump) so it reads/filters like
+// the rest of the sheet.
 function domainRemarksValue(domain, domainData) {
   if (!domainData) return "";
-  const field = (domain?.domainFields || []).find(f => f.id === "domain_remarks");
+  const field = (domain?.domainFields || []).find(f => f.type === "text");
   return field ? resolveFieldValue(field, domainData[field.id]) : "";
 }
 
