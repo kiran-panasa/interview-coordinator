@@ -47,6 +47,18 @@ function buildDomainText(domain, domainData) {
   return lines.join("\n");
 }
 
+// Every scored domain's overall remarks field is conventionally id'd
+// "domain_remarks" regardless of its per-template display label ("Machine
+// Coding Remarks", "Resume Remarks", "Overall Remarks", …) — see the
+// default domain definitions in templateEngine.js. Pulled out into its own
+// column (instead of buried in the combined text dump) so it reads/filters
+// like the rest of the sheet.
+function domainRemarksValue(domain, domainData) {
+  if (!domainData) return "";
+  const field = (domain?.domainFields || []).find(f => f.id === "domain_remarks");
+  return field ? resolveFieldValue(field, domainData[field.id]) : "";
+}
+
 // Columns whose value should be written as an actual clickable hyperlink
 // (not just URL-looking text) — matched by header name so this stays robust
 // to reordering.
@@ -59,8 +71,8 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
  *
  *   UID, Candidate Name, Candidate Email, Interviewer, Template, Program,
  *   Round, Date, Time, Status, Interview Integrity, Integrity Score,
- *   [<Section>, <Section> – Domain Rating] per non-Integrity section
- *   (dynamic per the templates involved), Overall Recommendation,
+ *   [<Section>, <Section> – Domain Rating, <Section> – Remarks] per
+ *   non-Integrity section (dynamic per the templates involved), Overall Recommendation,
  *   Final Verdict, Comments, Meet Link, Recording Link, Transcript Link,
  *   AI Report, Feedback Submitted At.
  *
@@ -123,8 +135,8 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
   const sectionHeaders = [];
   const sectionColWidths = [];
   scoredDefs.forEach(d => {
-    sectionHeaders.push(d.label, `${d.label} – Domain Rating`);
-    sectionColWidths.push({ wch: 45 }, { wch: 16 });
+    sectionHeaders.push(d.label, `${d.label} – Domain Rating`, `${d.label} – Remarks`);
+    sectionColWidths.push({ wch: 45 }, { wch: 16 }, { wch: 40 });
   });
 
   const headers = [
@@ -162,11 +174,12 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
 
     const sectionCells = [];
     scoredDefs.forEach(d => {
-      if (isCancelled) { sectionCells.push("", ""); return; }
+      if (isCancelled) { sectionCells.push("", "", ""); return; }
       const { domain, data } = domainDataFor(template, fb, isDynamic, d.label);
       sectionCells.push(domain && data ? buildDomainText(domain, data) : "");
       const rating = data?.domain_rating;
       sectionCells.push(rating != null ? rating : "");
+      sectionCells.push(domain && data ? domainRemarksValue(domain, data) : "");
     });
 
     // Legacy (pre-template) feedback stored plain question->answer pairs
