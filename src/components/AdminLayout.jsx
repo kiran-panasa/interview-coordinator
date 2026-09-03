@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useMemo, useEffect, useRef } from "react";
-import { useUserNotifications, useAdhocQuestions, usePendingScheduleInvites, useInboundRequests } from "../hooks/subscriptions";
+import { useUnreadUserNotifications, useAdhocQuestions, usePendingScheduleInvites, usePendingInboundRequests } from "../hooks/subscriptions";
 import { useActiveAdmins } from "../hooks/queries";
 import { createNotification, markInboundRequestNotified } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
@@ -33,10 +33,10 @@ export default function AdminLayout() {
   const role = userProfile?.role || "admin";
   const nav = useMemo(() => ALL_NAV.filter(item => item.roles.includes(role)), [role]);
 
-  const notifications     = useUserNotifications(currentUser?.uid);
+  const notifications     = useUnreadUserNotifications(currentUser?.uid);
   const adhocQs           = useAdhocQuestions();
   const pendingInvites    = usePendingScheduleInvites();
-  const inboundRequests   = useInboundRequests();
+  const inboundRequests   = usePendingInboundRequests();
   // Targeted equality-only fetch — avoids reading the entire users
   // collection just to find who to notify below.
   const { data: activeAdmins = [] } = useActiveAdmins();

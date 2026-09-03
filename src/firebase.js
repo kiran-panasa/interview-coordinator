@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,4 +13,11 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db   = getFirestore(app);
+// Persistent IndexedDB cache: repeat reads of documents already seen (page
+// revisits, reloads, re-navigation) are served from the local cache instead
+// of billing a fresh server read; onSnapshot listeners still get live server
+// updates as normal. persistentMultipleTabManager lets several tabs of the
+// app share one cache instead of each falling back to memory-only.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+});

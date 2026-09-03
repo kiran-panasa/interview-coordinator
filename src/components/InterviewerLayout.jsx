@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useEffect } from "react";
-import { useUserNotifications } from "../hooks/subscriptions";
+import { useUnreadUserNotifications } from "../hooks/subscriptions";
 import { checkAndSendFeedbackNudges } from "../services/nudge.service";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
@@ -28,7 +28,7 @@ export default function InterviewerLayout() {
   const role = userProfile?.role || "interviewer";
   const nav = role === "interviewer_content" ? [...NAV, TEMPLATES_NAV] : NAV;
 
-  const notifications = useUserNotifications(currentUser?.uid);
+  const notifications = useUnreadUserNotifications(currentUser?.uid);
   const unread = notifications.filter(n =>
     (n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval") && n.status === "unread"
   ).length;

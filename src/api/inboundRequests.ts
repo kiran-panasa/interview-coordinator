@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, updateDoc, query, orderBy, onSnapshot,
+  collection, doc, updateDoc, query, where, orderBy, onSnapshot,
 } from "firebase/firestore";
 import type { InboundRequest } from "../types";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
@@ -18,6 +18,21 @@ export function subscribeToInboundRequests(
     query(collection(db, COLLECTION), orderBy("requestedAt", "desc")),
     snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as InboundRequest))),
     err => reportFirestoreListenerError(COLLECTION, err)
+  );
+}
+
+// Narrower sibling of subscribeToInboundRequests() for AdminLayout's sidebar
+// badge (and its "notify admins of new pending request" effect) — both only
+// ever look at status="pending" requests, so scoping server-side cuts reads
+// without changing what the badge shows. InboundPage keeps the full,
+// all-statuses listener since its own status filter can show "All".
+export function subscribeToPendingInboundRequests(
+  callback: (requests: InboundRequest[]) => void
+): () => void {
+  return onSnapshot(
+    query(collection(db, COLLECTION), where("status", "==", "pending")),
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as InboundRequest))),
+    err => reportFirestoreListenerError(`${COLLECTION}:pending`, err)
   );
 }
 
