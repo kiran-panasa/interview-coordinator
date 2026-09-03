@@ -14,11 +14,11 @@ import { auth } from "../../firebase";
 import {
   updateUser,
   createInvite, deleteInvite,
-  subscribeToUsers, subscribeToInvites,
-  subscribeToSkills, createSkill, updateSkill, deleteSkill,
-  subscribeToPrograms, createProgram, updateProgram, deleteProgram,
+  getAllUsers, getInvites,
+  getSkills, createSkill, updateSkill, deleteSkill,
+  getPrograms, createProgram, updateProgram, deleteProgram,
   getTemplates, updateTemplate, getCandidates, updateCandidate,
-  subscribeToBlockedDates, createBlockedDate, updateBlockedDate, deleteBlockedDate,
+  getBlockedDates, createBlockedDate, updateBlockedDate, deleteBlockedDate,
 } from "../../api/firestore";
 import { useAuth } from "../../AuthContext";
 import Modal from "../../components/Modal";
@@ -115,15 +115,26 @@ export default function SettingsPage() {
   const [blockForm,       setBlockForm]       = useState(BLANK_BLOCK);
   const [blockSaving,     setBlockSaving]     = useState(false);
 
+  // One-time fetches instead of live listeners — this page reads its own
+  // 5 collections in full, so each mutation handler below re-fetches just
+  // the list it touched afterward to keep this admin's own view in sync.
+  // The one tradeoff: a second admin with Settings open at the same time
+  // won't see your change until they reload, unlike the old live listeners.
+  const refetchUsers        = () => getAllUsers().then(setUsers);
+  const refetchInvites      = () => getInvites().then(setInvites);
+  const refetchSkills       = () => getSkills().then(setSkills);
+  const refetchPrograms     = () => getPrograms().then(setPrograms);
+  const refetchBlockedDates = () => getBlockedDates().then(setBlockedDates);
+
   useEffect(() => {
-    let usersReady = false, invitesReady = false;
-    const checkReady = () => { if (usersReady && invitesReady) setLoading(false); };
-    const unsubUsers   = subscribeToUsers(u   => { setUsers(u);   usersReady   = true; checkReady(); });
-    const unsubInvites = subscribeToInvites(i => { setInvites(i); invitesReady = true; checkReady(); });
-    const unsubSkills  = subscribeToSkills(setSkills);
-    const unsubPrograms = subscribeToPrograms(setPrograms);
-    const unsubBlocked  = subscribeToBlockedDates(setBlockedDates);
-    return () => { unsubUsers(); unsubInvites(); unsubSkills(); unsubPrograms(); unsubBlocked(); };
+    Promise.all([getAllUsers(), getInvites()]).then(([u, i]) => {
+      setUsers(u);
+      setInvites(i);
+      setLoading(false);
+    });
+    getSkills().then(setSkills);
+    getPrograms().then(setPrograms);
+    getBlockedDates().then(setBlockedDates);
   }, []);
 
   // ── User Management handlers ──────────────────────────────────────────────
@@ -172,6 +183,7 @@ export default function SettingsPage() {
     const label = ALL_ROLES.find(r => r.value === role)?.label || role;
     setSavingFor(u.id, true);
     await updateUser(u.id, { role, status: "active" });
+    await refetchUsers();
     setToast({ message: `${u.email} approved as ${label}.` });
     setSavingFor(u.id, false);
   };
@@ -179,6 +191,7 @@ export default function SettingsPage() {
   const reject = async (u) => {
     if (!confirm(`Reject and archive ${u.email}'s account?\n\nThey will lose access but their record is preserved.`)) return;
     await updateUser(u.id, { status: "archived", archivedAt: new Date().toISOString() });
+    await refetchUsers();
     setToast({ message: "Account rejected and archived." });
   };
 
@@ -188,6 +201,7 @@ export default function SettingsPage() {
     if (!confirm(`Change ${u.displayName || u.email}'s role to "${label}"?`)) return;
     setSavingFor(u.id, true);
     await updateUser(u.id, { role: newRole });
+    await refetchUsers();
     setToast({ message: `${u.displayName || u.email} is now ${label}.` });
     setSavingFor(u.id, false);
   };
@@ -195,6 +209,7 @@ export default function SettingsPage() {
   const revoke = async (u) => {
     if (!confirm(`Revoke access for ${u.email}? They will be moved to pending.`)) return;
     await updateUser(u.id, { status: "pending", role: null });
+    await refetchUsers();
     setToast({ message: "Access revoked." });
   };
 
@@ -213,6 +228,7 @@ export default function SettingsPage() {
     setPhoneSaving(true);
     try {
       await updateUser(phoneModal.id, { phone: phoneInput.trim() || null });
+      await refetchUsers();
       setToast({ message: `Phone updated for ${phoneModal.displayName || phoneModal.email}.` });
       setPhoneModal(null);
     } catch {
@@ -234,6 +250,7 @@ export default function SettingsPage() {
     try {
       const id = await createInvite(inviteForm);
       const created = { id, ...inviteForm, email: inviteForm.email.toLowerCase().trim(), status: "pending", createdAt: new Date().toISOString() };
+      await refetchInvites();
       setSavedInvite(created);
       setInviteForm(BLANK_INVITE);
     } catch {
@@ -246,6 +263,7 @@ export default function SettingsPage() {
   const handleRemoveInvite = async (invite) => {
     if (!confirm(`Remove invite for ${invite.email}?`)) return;
     await deleteInvite(invite.id);
+    await refetchInvites();
     setToast({ message: "Invite removed." });
   };
 
@@ -273,6 +291,7 @@ export default function SettingsPage() {
     setCsvImporting(true);
     const results = await Promise.allSettled(csvPreview.map(row => createInvite(row)));
     const imported = results.filter(r => r.status === "fulfilled").length;
+    if (imported > 0) await refetchInvites();
     setCsvImporting(false);
     setShowCSV(false);
     setCsvPreview([]);
@@ -286,6 +305,7 @@ export default function SettingsPage() {
     const name = newSkillName.trim();
     if (!name) return;
     await createSkill(name);
+    await refetchSkills();
     setNewSkillName("");
     setAddingSkill(false);
   };
@@ -293,12 +313,14 @@ export default function SettingsPage() {
   const handleRenameSkill = async () => {
     if (!editingSkill?.name?.trim()) return;
     await updateSkill(editingSkill.id, editingSkill.name.trim());
+    await refetchSkills();
     setEditingSkill(null);
   };
 
   const handleDeleteSkill = async (s) => {
     if (!confirm(`Delete skill "${s.name}"?`)) return;
     await deleteSkill(s.id);
+    await refetchSkills();
     setToast({ message: `"${s.name}" removed.` });
   };
 
@@ -307,6 +329,7 @@ export default function SettingsPage() {
     const name = newProgramName.trim();
     if (!name) return;
     await createProgram(name, programs.length);
+    await refetchPrograms();
     setNewProgramName("");
     setAddingProgram(false);
   };
@@ -314,6 +337,7 @@ export default function SettingsPage() {
   const handleRenameProgram = async () => {
     if (!editingProgram?.name?.trim()) return;
     await updateProgram(editingProgram.id, { name: editingProgram.name.trim() });
+    await refetchPrograms();
     setEditingProgram(null);
   };
 
@@ -340,6 +364,7 @@ export default function SettingsPage() {
       ...affectedCandidates.map(c => updateCandidate(c.id, { program: "" })),
       deleteProgram(p.id),
     ]);
+    await refetchPrograms();
 
     setToast({ message: `"${p.name}" deleted.` });
   };
@@ -365,9 +390,11 @@ export default function SettingsPage() {
       const data = { startDate: blockForm.startDate, endDate, reason: blockForm.reason.trim() };
       if (blockEditTarget) {
         await updateBlockedDate(blockEditTarget.id, data);
+        await refetchBlockedDates();
         setToast({ message: "Blocked dates updated." });
       } else {
         await createBlockedDate({ ...data, createdBy: currentUser.uid });
+        await refetchBlockedDates();
         setToast({ message: "Dates blocked." });
       }
       setShowBlockModal(false);
@@ -381,6 +408,7 @@ export default function SettingsPage() {
     if (!confirm(`Unblock ${label}? Interviewers and candidates will be able to use these dates again.`)) return;
     try {
       await deleteBlockedDate(b.id);
+      await refetchBlockedDates();
       setToast({ message: "Dates unblocked." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });

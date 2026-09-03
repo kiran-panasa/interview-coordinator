@@ -1,11 +1,10 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, limit, startAfter, getCountFromServer,
+  query, where, orderBy, limit, startAfter, getCountFromServer,
 } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { User, Invite } from "../types";
-import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
@@ -100,14 +99,6 @@ export async function getUsersByIds(ids: string[]): Promise<User[]> {
   return results.flatMap(snap => snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
 }
 
-export function subscribeToUsers(callback: (users: User[]) => void): () => void {
-  return onSnapshot(
-    collection(db, "users"),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as User))),
-    err => reportFirestoreListenerError("users", err)
-  );
-}
-
 export async function updateUser(id: string, data: Partial<Omit<User, "id">>): Promise<void> {
   await updateDoc(doc(db, "users", id), data);
 }
@@ -166,12 +157,4 @@ export async function getAnyInviteByEmail(email: string): Promise<Invite | null>
     where("email", "==", email.toLowerCase().trim()),
   ));
   return snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() } as Invite;
-}
-
-export function subscribeToInvites(callback: (invites: Invite[]) => void): () => void {
-  return onSnapshot(
-    query(collection(db, "invites"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Invite))),
-    err => reportFirestoreListenerError("invites", err)
-  );
 }

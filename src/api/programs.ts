@@ -1,18 +1,9 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, orderBy, onSnapshot,
+  query, orderBy,
 } from "firebase/firestore";
 import type { Program } from "../types";
-import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
-
-export function subscribeToPrograms(callback: (programs: Program[]) => void): () => void {
-  return onSnapshot(
-    query(collection(db, "programs"), orderBy("order", "asc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Program))),
-    err => reportFirestoreListenerError("programs", err)
-  );
-}
 
 export async function getPrograms(): Promise<Program[]> {
   const snap = await getDocs(query(collection(db, "programs"), orderBy("order", "asc")));
