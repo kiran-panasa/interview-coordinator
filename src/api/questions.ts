@@ -148,14 +148,6 @@ export async function deleteQuestion(id: string): Promise<void> {
   await deleteDoc(doc(db, "questions", id));
 }
 
-export function subscribeToQuestions(callback: (questions: Question[]) => void): () => void {
-  return onSnapshot(
-    query(collection(db, "questions"), orderBy("createdAt", "desc")),
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Question))),
-    err => reportFirestoreListenerError("questions", err)
-  );
-}
-
 export async function incrementQuestionUsage(questionIds: string[]): Promise<void> {
   await Promise.all(
     questionIds.map(id => updateDoc(doc(db, "questions", id), { usageCount: increment(1) }))
@@ -164,11 +156,15 @@ export async function incrementQuestionUsage(questionIds: string[]): Promise<voi
 
 // ── Ad-hoc Question Review Queue ──────────────────────────────────────────────
 
+// Its only caller (AdminLayout's sidebar badge) only ever needs the pending
+// count, so the query is scoped server-side to "pending" instead of
+// streaming the whole (ever-growing) adhocQuestions collection for every
+// admin, on every page, for the entire session.
 export function subscribeToAdhocQuestions(
   callback: (questions: AdhocQuestion[]) => void
 ): () => void {
   return onSnapshot(
-    query(collection(db, "adhocQuestions"), orderBy("createdAt", "desc")),
+    query(collection(db, "adhocQuestions"), where("status", "==", "pending")),
     snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AdhocQuestion))),
     err => reportFirestoreListenerError("adhocQuestions", err)
   );
