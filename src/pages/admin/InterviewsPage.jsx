@@ -1199,7 +1199,7 @@ export default function InterviewsPage() {
     try {
       const integrity = await getInterviewIntegrity().catch(() => null);
       const resolved = await withResolvedLinks(filtered);
-      exportFeedbackToExcel(resolved, templates, programs, candidates, undefined, integrity?.domainFields);
+      await exportFeedbackToExcel(resolved, templates, programs, candidates, undefined, integrity?.domainFields);
     } finally {
       setDownloadingFeedback(false);
     }
@@ -1211,7 +1211,7 @@ export default function InterviewsPage() {
     try {
       const integrity = await getInterviewIntegrity().catch(() => null);
       const [resolved] = await withResolvedLinks([iv]);
-      exportFeedbackToExcel([resolved], templates, programs, candidates, `feedback_${slug}`, integrity?.domainFields);
+      await exportFeedbackToExcel([resolved], templates, programs, candidates, `feedback_${slug}`, integrity?.domainFields);
     } finally {
       setDownloadingFeedback(false);
     }

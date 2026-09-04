@@ -1,6 +1,13 @@
 import * as XLSX from "xlsx";
 import { formatDate } from "./dates";
 import { withIntegrityDomain } from "./templateEngine";
+import { getQuestionsByIds } from "../api/questions";
+
+// questionsAsked entries are normally plain question-id strings, but the
+// type also allows a legacy { questionId } shape — normalize both to an id.
+function questionIdOf(entry) {
+  return typeof entry === "string" ? entry : entry?.questionId || null;
+}
 
 // Resolves a stored field value to what "View Feedback" actually displays —
 // scored_dropdown stores just the numeric score, so it needs its option's
@@ -96,8 +103,8 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
  *   Interview Integrity – Remarks,
  *   [<Section>, <Section> – Domain Rating, <Section> – Remarks] per
  *   non-Integrity section (dynamic per the templates involved), Overall Recommendation,
- *   Final Verdict, Comments, Meet Link, Recording Link, Transcript Link,
- *   AI Report, Feedback Submitted At.
+ *   Final Verdict, Comments, Questions Asked, Meet Link, Recording Link,
+ *   Transcript Link, AI Report, Feedback Submitted At.
  *
  * Interview Integrity gets its own text-dump + Remarks columns (like every
  * other section) but never a "– Domain Rating" column of its own — it's a
@@ -133,11 +140,24 @@ const LINK_HEADERS = new Set(["Meet Link", "Recording Link", "Transcript Link", 
  * (/admin/interviews?aiReport=<id>) that auto-opens the existing AI Report
  * modal for that interview — stable across downloads, only ever written
  * when iv.aiReport already exists.
+ *
+ * Questions Asked is built from iv.questionsAsked (an array of question ids
+ * the panelist checked off on the "Questions Asked" page, see
+ * InterviewQuestions.jsx) resolved against the questions collection, one
+ * line per question, with that question's iv.questionRemarks entry appended
+ * when present. This is an async export (a Firestore lookup of every
+ * distinct question id across the batch) — callers must await it.
  */
-export function exportFeedbackToExcel(interviews, templates, programs, candidates = [], filenamePrefix = "interview_feedback", integrityDomainFields = null) {
+export async function exportFeedbackToExcel(interviews, templates, programs, candidates = [], filenamePrefix = "interview_feedback", integrityDomainFields = null) {
   const templateById    = new Map(templates.map(t => [t.id, withIntegrityDomain(t, integrityDomainFields)]));
   const programNameById = new Map(programs.map(p => [p.id, p.name]));
   const uidByCandidateId = new Map(candidates.map(c => [c.id, c.uid || ""]));
+
+  const allQuestionIds = [...new Set(
+    interviews.flatMap(iv => (iv.questionsAsked || []).map(questionIdOf).filter(Boolean))
+  )];
+  const questions = allQuestionIds.length ? await getQuestionsByIds(allQuestionIds) : [];
+  const questionTextById = new Map(questions.map(q => [q.id, q.text]));
 
   // One entry per distinct section/domain across all involved templates, in
   // first-seen order. Integrity always sorts first (order: -1, see
@@ -186,7 +206,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
     "Date", "Time", "Status", "Partial Completion Reason",
     "Interview Integrity", "Integrity Score", "Interview Integrity – Remarks",
     ...sectionHeaders,
-    "Overall Recommendation", "Final Verdict", "Comments",
+    "Overall Recommendation", "Final Verdict", "Comments", "Questions Asked",
     "Meet Link", "Recording Link", "Transcript Link", "AI Report",
     "Feedback Submitted At",
   ];
@@ -243,6 +263,16 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       comments = [legacyText, comments].filter(Boolean).join(" — ");
     }
 
+    const questionsAsked = isCancelled ? "" : (iv.questionsAsked || [])
+      .map(questionIdOf)
+      .filter(Boolean)
+      .map((qid, i) => {
+        const text = questionTextById.get(qid) || "(question no longer in bank)";
+        const remark = iv.questionRemarks?.[qid];
+        return remark ? `${i + 1}. ${text} — Remark: ${remark}` : `${i + 1}. ${text}`;
+      })
+      .join("\n");
+
     return [
       uidByCandidateId.get(iv.candidateId) || "",
       iv.candidateName || "",
@@ -262,6 +292,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
       fb?.overallRecommendation || "",
       fb?.finalVerdict != null ? fb.finalVerdict : "",
       comments,
+      questionsAsked,
       iv.meetLink || "",
       isCancelled ? "" : (iv.meetingRecordingUrl || ""),
       isCancelled ? "" : (iv.transcriptUrl || ""),
@@ -276,7 +307,7 @@ export function exportFeedbackToExcel(interviews, templates, programs, candidate
     { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 30 },
     { wch: 45 }, { wch: 14 }, { wch: 40 },
     ...sectionColWidths,
-    { wch: 20 }, { wch: 12 }, { wch: 45 },
+    { wch: 20 }, { wch: 12 }, { wch: 45 }, { wch: 50 },
     { wch: 40 }, { wch: 40 }, { wch: 40 }, { wch: 45 },
     { wch: 18 },
   ];
