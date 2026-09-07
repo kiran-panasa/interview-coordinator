@@ -4,7 +4,7 @@ import { Users, UserPlus, CalendarClock, LayoutGrid, BarChart3 } from "lucide-re
 import { useAuth } from "../../AuthContext";
 import { getSlotsForInterviewers, subscribeToSlotsForInterviewers, subscribeToBlockedDates } from "../../api/firestore";
 import { useUserNotifications, useScheduleInvites, useInterviews, usePendingScheduleInvites } from "../../hooks/subscriptions";
-import { useSkills, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
+import { useSkills, useRounds, useTemplates, useUsers, useCandidates, usePrograms } from "../../hooks/queries";
 import Toast from "../../components/Toast";
 import InterviewerNudgeTab from "../../features/nudge/InterviewerNudgeTab";
 import CandidateSchedulingTab from "../../features/nudge/CandidateSchedulingTab";
@@ -27,6 +27,7 @@ export default function NudgePage() {
   const { data: templates  = [] } = useTemplates();
   const { data: usersAll   = [] } = useUsers();
   const { data: skills     = [] } = useSkills();
+  const { data: rounds     = [] } = useRounds();
   const { data: programs   = [] } = usePrograms();
   const { data: candidates = [] } = useCandidates();
   const responses = useUserNotifications(currentUser.uid);
@@ -154,7 +155,7 @@ export default function NudgePage() {
             <CandidateSchedulingTab
               currentUser={currentUser}
               templates={templates} programs={programs} candidates={candidates}
-              users={usersAll} activeInterviewers={activeInterviewers}
+              users={usersAll} activeInterviewers={activeInterviewers} rounds={rounds}
               invites={invites} ivrSlots={ivrSlots}
               setToast={setToast}
               blockedDates={blockedDates}
@@ -166,7 +167,7 @@ export default function NudgePage() {
             <CandidateSchedulingTab
               currentUser={currentUser}
               templates={templates} programs={programs} candidates={candidates}
-              users={usersAll} activeInterviewers={activeInterviewers}
+              users={usersAll} activeInterviewers={activeInterviewers} rounds={rounds}
               invites={invites} ivrSlots={ivrSlots}
               setToast={setToast}
               blockedDates={blockedDates}

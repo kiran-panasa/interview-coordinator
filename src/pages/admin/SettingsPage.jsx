@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Users, SlidersHorizontal, Shield, BookOpen, Sparkles, User as UserIcon,
@@ -16,6 +17,7 @@ import {
   createInvite, deleteInvite,
   getAllUsers, getInvites,
   getSkills, createSkill, updateSkill, deleteSkill,
+  getRounds, createRound, updateRound, deleteRound,
   getPrograms, createProgram, updateProgram, deleteProgram,
   getTemplates, updateTemplate, getCandidates, updateCandidate,
   getBlockedDates, createBlockedDate, updateBlockedDate, deleteBlockedDate,
@@ -62,7 +64,11 @@ const ROLE_GROUPS = [
 
 export default function SettingsPage() {
   const { currentUser } = useAuth();
-  const [activeSection, setActiveSection] = useState("User Management");
+  const [searchParams] = useSearchParams();
+  const sectionParam = searchParams.get("section");
+  const [activeSection, setActiveSection] = useState(
+    SECTIONS.some(s => s.value === sectionParam) ? sectionParam : "User Management"
+  );
 
   // ── User Management state ─────────────────────────────────────────────────
   const [users,   setUsers]   = useState([]);
@@ -82,6 +88,11 @@ export default function SettingsPage() {
   const [newSkillName, setNewSkillName] = useState("");
   const [editingSkill, setEditingSkill] = useState(null);
   const [addingSkill,  setAddingSkill]  = useState(false);
+
+  const [rounds,       setRounds]       = useState([]);
+  const [newRoundName, setNewRoundName] = useState("");
+  const [editingRound, setEditingRound] = useState(null);
+  const [addingRound,  setAddingRound]  = useState(false);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm,      setInviteForm]      = useState(BLANK_INVITE);
@@ -123,6 +134,7 @@ export default function SettingsPage() {
   const refetchUsers        = () => getAllUsers().then(setUsers);
   const refetchInvites      = () => getInvites().then(setInvites);
   const refetchSkills       = () => getSkills().then(setSkills);
+  const refetchRounds       = () => getRounds().then(setRounds);
   const refetchPrograms     = () => getPrograms().then(setPrograms);
   const refetchBlockedDates = () => getBlockedDates().then(setBlockedDates);
 
@@ -133,6 +145,7 @@ export default function SettingsPage() {
       setLoading(false);
     });
     getSkills().then(setSkills);
+    getRounds().then(setRounds);
     getPrograms().then(setPrograms);
     getBlockedDates().then(setBlockedDates);
   }, []);
@@ -324,6 +337,30 @@ export default function SettingsPage() {
     setToast({ message: `"${s.name}" removed.` });
   };
 
+  // ── Rounds handlers ────────────────────────────────────────────────────────
+  const handleAddRound = async () => {
+    const name = newRoundName.trim();
+    if (!name) return;
+    await createRound(name);
+    await refetchRounds();
+    setNewRoundName("");
+    setAddingRound(false);
+  };
+
+  const handleRenameRound = async () => {
+    if (!editingRound?.name?.trim()) return;
+    await updateRound(editingRound.id, editingRound.name.trim());
+    await refetchRounds();
+    setEditingRound(null);
+  };
+
+  const handleDeleteRound = async (r) => {
+    if (!confirm(`Delete round "${r.name}"?\n\nInterviews/invites that already use this round name are unaffected — this only removes it from the dropdown.`)) return;
+    await deleteRound(r.id);
+    await refetchRounds();
+    setToast({ message: `"${r.name}" removed.` });
+  };
+
   // ── Programs handlers ─────────────────────────────────────────────────────
   const handleAddProgram = async () => {
     const name = newProgramName.trim();
@@ -496,12 +533,17 @@ export default function SettingsPage() {
 
       {activeSection === "General" && (
         <GeneralTab
-          skills={skills} programs={programs}
+          skills={skills} rounds={rounds} programs={programs}
           addingSkill={addingSkill} setAddingSkill={setAddingSkill}
           newSkillName={newSkillName} setNewSkillName={setNewSkillName}
           editingSkill={editingSkill} setEditingSkill={setEditingSkill}
           handleAddSkill={handleAddSkill} handleRenameSkill={handleRenameSkill}
           handleDeleteSkill={handleDeleteSkill}
+          addingRound={addingRound} setAddingRound={setAddingRound}
+          newRoundName={newRoundName} setNewRoundName={setNewRoundName}
+          editingRound={editingRound} setEditingRound={setEditingRound}
+          handleAddRound={handleAddRound} handleRenameRound={handleRenameRound}
+          handleDeleteRound={handleDeleteRound}
           addingProgram={addingProgram} setAddingProgram={setAddingProgram}
           newProgramName={newProgramName} setNewProgramName={setNewProgramName}
           editingProgram={editingProgram} setEditingProgram={setEditingProgram}

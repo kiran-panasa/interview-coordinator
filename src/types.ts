@@ -89,6 +89,17 @@ export interface Skill {
   createdAt?: string;
 }
 
+// Admin-managed round names offered wherever a round is picked (Schedule
+// Interview, Nudge → Candidates, a Program's default round) — replaces the
+// old hardcoded DEFAULT_ROUNDS / NUDGE_ROUND_OPTIONS constant lists so a
+// name saved once (or typed as "Other…" and used) shows up everywhere,
+// with no per-page rework needed to keep multiple lists in sync.
+export interface Round {
+  id: string;
+  name: string;
+  createdAt?: string;
+}
+
 export interface Program {
   id: string;
   name: string;

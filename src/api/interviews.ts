@@ -13,10 +13,6 @@ import { getInterviewIntegrity } from "./interviewIntegrity";
 import { withIntegrityDomain, attachDescriptors } from "../utils/templateEngine";
 import type { Interview, InterviewStatus, InterviewHistoryEntry, Candidate, Program } from "../types";
 
-export const DEFAULT_ROUNDS = [
-  "HR Round", "Technical Round 1", "Technical Round 2", "Final Round",
-];
-
 interface FeedbackQuestion {
   id: string;
   label: string;

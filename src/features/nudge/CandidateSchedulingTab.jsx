@@ -8,6 +8,7 @@ import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, createInterview, getTemplate, createNotification,
   logInviteHistory, getPreInterviewResources, updateCandidate,
+  ensureRoundExists,
 } from "../../api/firestore";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
@@ -15,7 +16,8 @@ import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
-import { NUDGE_ROUND_OPTIONS, NUDGE_ROUND_OTHER } from "../../constants/nudgeRounds";
+
+const NUDGE_ROUND_OTHER = "__other__";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -46,7 +48,7 @@ const STATUS_LABEL = {
 
 export default function CandidateSchedulingTab({
   currentUser,
-  templates, programs, candidates, users,
+  templates, programs, candidates, users, rounds = [],
   invites,
   setToast,
   blockedDates = [],
@@ -182,6 +184,7 @@ export default function CandidateSchedulingTab({
     const tmpl = templates.find(t => t.id === filterTemplate);
     setSendingInvites(true);
     try {
+      await ensureRoundExists(round, rounds);
       const chosen = candidates.filter(c => selCandidates.has(c.id));
       const expiresAt = new Date(Date.now() + expiryHours * 3600 * 1000).toISOString();
       const link = `${window.location.origin}/student/schedule`;
@@ -511,7 +514,13 @@ export default function CandidateSchedulingTab({
             </select>
           </div>
           <div className="flex-1 min-w-[220px]">
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Round (required)</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-semibold text-gray-600">Round (required)</label>
+              <a href="/admin/settings?section=General" target="_blank" rel="noreferrer"
+                className="text-[11px] font-semibold text-brand-600 hover:underline">
+                Manage rounds
+              </a>
+            </div>
             <select
               value={roundCustomMode ? NUDGE_ROUND_OTHER : round}
               onChange={e => {
@@ -521,7 +530,7 @@ export default function CandidateSchedulingTab({
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— Select round —</option>
-              {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+              {rounds.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
               <option value={NUDGE_ROUND_OTHER}>Other…</option>
             </select>
             {roundCustomMode && (

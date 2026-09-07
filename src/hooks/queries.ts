@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { getSkills } from "../api/skills";
+import { getRounds } from "../api/rounds";
 import { getPrograms } from "../api/programs";
 import { getTemplates } from "../api/templates";
 import { getAllUsers, getActiveAdmins, getUsersByStatus, getInterviewerCounts } from "../api/users";
@@ -9,10 +10,11 @@ import type { CandidateCounts } from "../api/candidates";
 import { getQuestions, getQuestionCounts } from "../api/questions";
 import type { QuestionCounts } from "../api/questions";
 import { getAllInterviews } from "../api/interviews";
-import type { Skill, Program, Template, User, Candidate, Question, Interview } from "../types";
+import type { Skill, Round, Program, Template, User, Candidate, Question, Interview } from "../types";
 
 export const QK = {
   skills:           ["skills"],
+  rounds:           ["rounds"],
   programs:         ["programs"],
   templates:        ["templates"],
   users:            ["users"],
@@ -29,6 +31,7 @@ export const QK = {
 const MIN = 60 * 1000;
 
 export function useSkills():     UseQueryResult<Skill[]>     { return useQuery({ queryKey: QK.skills,    queryFn: getSkills,    staleTime: 30 * MIN }); }
+export function useRounds():     UseQueryResult<Round[]>     { return useQuery({ queryKey: QK.rounds,    queryFn: getRounds,    staleTime: 10 * MIN }); }
 export function usePrograms():   UseQueryResult<Program[]>   { return useQuery({ queryKey: QK.programs,  queryFn: getPrograms,  staleTime: 30 * MIN }); }
 export function useTemplates():  UseQueryResult<Template[]>  { return useQuery({ queryKey: QK.templates, queryFn: getTemplates, staleTime: 10 * MIN }); }
 // `enabled` defaults to true for existing callers that need the full roster

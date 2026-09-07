@@ -1,9 +1,8 @@
 import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Tag, Layers, Plus, Pencil, Trash2, X, FolderKanban, BellRing } from "lucide-react";
+import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing } from "lucide-react";
 import { subscribeToNudgeReminderSettings, updateNudgeReminderSettings, updateProgram } from "../../api/firestore";
 import { useTemplates } from "../../hooks/queries";
-import { NUDGE_ROUND_OPTIONS } from "../../constants/nudgeRounds";
 import { useAuth } from "../../AuthContext";
 import Button from "../../components/Button";
 
@@ -20,10 +19,13 @@ function SectionTitle({ icon: Icon, label, count }) {
 }
 
 export default function GeneralTab({
-  skills, programs,
+  skills, rounds, programs,
   addingSkill, setAddingSkill, newSkillName, setNewSkillName,
   editingSkill, setEditingSkill,
   handleAddSkill, handleRenameSkill, handleDeleteSkill,
+  addingRound, setAddingRound, newRoundName, setNewRoundName,
+  editingRound, setEditingRound,
+  handleAddRound, handleRenameRound, handleDeleteRound,
   addingProgram, setAddingProgram, newProgramName, setNewProgramName,
   editingProgram, setEditingProgram,
   handleAddProgram, handleRenameProgram, handleDeleteProgram, deletingProgram,
@@ -169,6 +171,68 @@ export default function GeneralTab({
         </div>
       </motion.div>
 
+      {/* Rounds */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.03 }}
+        className="mb-8"
+      >
+        <SectionTitle icon={ListChecks} label="Rounds" />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+          <p className="text-xs text-gray-400 mb-4">
+            These round names show up in Schedule Interview, Nudge → Candidates, and each Program's default round
+            below. Picking "Other…" there and typing a new name also saves it here automatically.
+          </p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {rounds.map(r => (
+              <div key={r.id} className="group flex items-center gap-1 bg-brand-50 border border-brand-200 rounded-full pl-3 pr-1 py-0.5">
+                {editingRound?.id === r.id ? (
+                  <input
+                    autoFocus
+                    value={editingRound.name}
+                    onChange={e => setEditingRound(x => ({ ...x, name: e.target.value }))}
+                    onKeyDown={e => { if (e.key === "Enter") handleRenameRound(); if (e.key === "Escape") setEditingRound(null); }}
+                    onBlur={handleRenameRound}
+                    className="text-xs font-semibold text-brand-700 bg-transparent border-b border-brand-400 focus:outline-none w-32"
+                  />
+                ) : (
+                  <span className="text-xs font-semibold text-brand-700">{r.name}</span>
+                )}
+                <div className="flex items-center gap-0.5 ml-1">
+                  <button onClick={() => setEditingRound({ id: r.id, name: r.name })}
+                    className="p-0.5 text-brand-300 hover:text-brand-600 transition-colors opacity-0 group-hover:opacity-100">
+                    <Pencil className="w-2.5 h-2.5" />
+                  </button>
+                  <button onClick={() => handleDeleteRound(r)}
+                    className="p-0.5 text-brand-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                    <X className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {addingRound ? (
+              <input
+                autoFocus
+                value={newRoundName}
+                onChange={e => setNewRoundName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleAddRound(); if (e.key === "Escape") { setAddingRound(false); setNewRoundName(""); } }}
+                onBlur={() => { if (!newRoundName.trim()) { setAddingRound(false); setNewRoundName(""); } }}
+                placeholder="Round name…"
+                className="text-xs border border-brand-400 rounded-full px-3 py-1 focus:outline-none focus:ring-2 focus:ring-brand-400 w-40"
+              />
+            ) : (
+              <button onClick={() => setAddingRound(true)}
+                className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-dashed border-brand-300 rounded-full px-3 py-1 hover:bg-brand-50 transition-colors">
+                <Plus className="w-3 h-3" />
+                Add Round
+              </button>
+            )}
+          </div>
+          {rounds.length === 0 && !addingRound && (
+            <p className="text-xs text-gray-400">No rounds defined yet. Click "Add Round" to create the first one.</p>
+          )}
+        </div>
+      </motion.div>
+
       {/* Programs */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
@@ -248,7 +312,7 @@ export default function GeneralTab({
                         onChange={e => handleSetProgramDefault(p.id, { defaultRound: e.target.value })}
                         className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
                         <option value="">— None —</option>
-                        {NUDGE_ROUND_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                        {rounds.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
                       </select>
                     </div>
                   </div>

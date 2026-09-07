@@ -16,15 +16,16 @@ export default function ScheduleInterviewModal({
   editTarget, form, setField, handleSave, saving,
   candidates, interviewers, templates,
   availDates, availTimes,
-  DEFAULT_ROUNDS, DURATIONS,
+  rounds = [], DURATIONS,
   blockedDates = [],
 }) {
-  const [customRound, setCustomRound] = useState(() => !!form.round && !DEFAULT_ROUNDS.includes(form.round));
+  const roundNames = rounds.map(r => r.name);
+  const [customRound, setCustomRound] = useState(() => !!form.round && !roundNames.includes(form.round));
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // Re-derive whenever the modal is (re)opened, e.g. for a different edit target
   useEffect(() => {
-    if (open) setCustomRound(!!form.round && !DEFAULT_ROUNDS.includes(form.round));
+    if (open) setCustomRound(!!form.round && !roundNames.includes(form.round));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editTarget]);
 
@@ -94,7 +95,13 @@ export default function ScheduleInterviewModal({
         </div>
 
         <div>
-          <label className={labelCls}>Round *</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className={labelCls}>Round *</label>
+            <a href="/admin/settings?section=General" target="_blank" rel="noreferrer"
+              className="text-[11px] font-semibold text-brand-600 hover:underline">
+              Manage rounds
+            </a>
+          </div>
           <select
             value={customRound ? OTHER_VALUE : form.round}
             onChange={e => {
@@ -109,7 +116,7 @@ export default function ScheduleInterviewModal({
             }}
             className={inputCls}>
             <option value="">— Select round —</option>
-            {DEFAULT_ROUNDS.map(r => <option key={r} value={r}>{r}</option>)}
+            {roundNames.map(r => <option key={r} value={r}>{r}</option>)}
             <option value={OTHER_VALUE}>Other…</option>
           </select>
           {customRound && (
@@ -117,7 +124,7 @@ export default function ScheduleInterviewModal({
               type="text"
               value={form.round}
               onChange={e => setField("round", e.target.value)}
-              placeholder="Enter custom round name — e.g. Managerial Round, Technical Discussion…"
+              placeholder="Enter custom round name — e.g. Managerial Round, Technical Discussion… (saved for next time)"
               autoFocus
               className={`${inputCls} mt-2`}
             />

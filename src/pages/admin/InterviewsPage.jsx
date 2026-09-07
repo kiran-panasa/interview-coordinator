@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2,
@@ -14,14 +15,15 @@ import {
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
-  getTemplate, DEFAULT_ROUNDS, importCompletedInterview, importScheduledInterview,
+  getTemplate, importCompletedInterview, importScheduledInterview,
   createNotification, subscribeToBlockedDates, getInterviewIntegrity, getPreInterviewResources,
   logInterviewHistory, getInterviewHistory,
   getScheduleInviteByInterviewId, updateScheduleInvite,
   getAllInterviews, getInterview,
+  ensureRoundExists, seedDefaultRoundsOnce,
 } from "../../api/firestore";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
-import { useTemplates, usePrograms, useCandidates, useUsers } from "../../hooks/queries";
+import { useTemplates, usePrograms, useCandidates, useUsers, useRounds, QK } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
@@ -89,10 +91,12 @@ function buildInterviewChanges(before, after) {
 
 export default function InterviewsPage() {
   const { currentUser, userProfile } = useAuth();
+  const queryClient = useQueryClient();
   const { data: candidates  = [] } = useCandidates();
   const { data: usersAll    = [] } = useUsers();
   const { data: templates   = [] } = useTemplates();
   const { data: programs    = [] } = usePrograms();
+  const { data: rounds      = [] } = useRounds();
   const interviewers = useMemo(() =>
     usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"),
     [usersAll]
@@ -128,6 +132,15 @@ export default function InterviewsPage() {
   // One-time backfill so historical interviews (created before
   // programId/programName was snapshotted at creation time) get it too.
   useEffect(() => { backfillProgramInfoOnce().catch(err => console.error("Program info backfill failed:", err)); }, []);
+  // Self-guarding — see seedDefaultRoundsOnce in src/api/rounds.ts. Seeds
+  // the new admin-managed rounds collection with the old hardcoded round
+  // lists once, so nothing existing admins relied on disappears.
+  useEffect(() => {
+    seedDefaultRoundsOnce()
+      .then(seeded => { if (seeded) queryClient.invalidateQueries({ queryKey: QK.rounds }); })
+      .catch(err => console.error("Rounds seed failed:", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterIvr,      setFilterIvr]      = useState("All");
@@ -226,6 +239,7 @@ export default function InterviewsPage() {
       return setToast({ message: "Cannot schedule an interview in the past — please pick a future date and time.", type: "error" });
     setSaving(true);
     try {
+      await ensureRoundExists(form.round, rounds);
       const candidate   = candidates.find(c => c.id === form.candidateId);
       const interviewer = interviewers.find(u => u.id === form.interviewerId);
       const template    = templates.find(t => t.id === form.templateId);
@@ -1505,7 +1519,7 @@ export default function InterviewsPage() {
         handleSave={handleSave} saving={saving}
         candidates={candidates} interviewers={interviewers} templates={templates}
         availDates={availDates} availTimes={availTimes}
-        DEFAULT_ROUNDS={DEFAULT_ROUNDS} DURATIONS={DURATIONS}
+        rounds={rounds} DURATIONS={DURATIONS}
         blockedDates={blockedDates}
       />
 
