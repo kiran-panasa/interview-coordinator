@@ -8,6 +8,7 @@ import { compareTimeLabels } from "../utils/dates";
 import { getBlockedDates } from "./blockedDates";
 import { isDateBlocked } from "../utils/blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
+import { getUsersByIds } from "./users";
 
 export function slotIdFor(date: string, time: string): string {
   return `${date}_${time.replace(/[: ]/g, "")}`;
@@ -144,13 +145,23 @@ export async function getSlotsForInterviewers(
   return result;
 }
 
-export async function getAvailableSlotsForTemplate(
-  templateId: string,
+// `interviewerIds`, when given (non-empty), restricts the eligible pool to
+// exactly those interviewers — the explicit "Panelists" selection an admin
+// can make when launching a Nudge campaign (see ScheduleInvite.interviewerIds
+// in types.ts). When omitted/empty, every active interviewer is eligible.
+// templateId is no longer used to gate eligibility at all — the old model
+// (an interviewer's own profile-level templateIds silently determining
+// whether ANY candidate ever saw their availability) was replaced because it
+// was invisible and error-prone; template still matters for which
+// evaluation form the resulting interview uses, just not for this.
+export async function getAvailableSlots(
   dateStart: string,
   dateEnd: string,
+  interviewerIds: string[] | null = null,
   forceRefresh = false
 ): Promise<AvailableSlot[]> {
-  const cacheKey = `avail_${templateId}_${dateStart}_${dateEnd}`;
+  const poolKey = interviewerIds && interviewerIds.length ? [...interviewerIds].sort().join(",") : "all";
+  const cacheKey = `avail_${poolKey}_${dateStart}_${dateEnd}`;
   if (!forceRefresh) {
     try {
       const cached = sessionStorage.getItem(cacheKey);
@@ -161,38 +172,28 @@ export async function getAvailableSlotsForTemplate(
     } catch { /* sessionStorage unavailable */ }
   }
 
-  type CandidateUser = { role: string; status: string; templateIds?: string[]; displayName?: string; email: string; id: string };
+  type CandidateUser = { role: string; status: string; displayName?: string; email: string; id: string };
 
-  // Server-scoped to just the interviewers assigned this template, instead
-  // of reading the entire users collection on every candidate visit to a
-  // scheduling link — this page is public/unauthenticated and gets far more
-  // daily traffic than any admin page, so an unscoped read here was the
-  // single biggest Firestore-read cost in the app. Falls back to a full
-  // scan (old behavior) only if the composite index isn't ready yet.
-  async function fetchAssignedInterviewers(): Promise<CandidateUser[]> {
-    try {
-      const snap = await getDocs(query(
-        collection(db, "users"),
-        where("role", "in", ["interviewer", "interviewer_content"]),
-        where("status", "==", "active"),
-        where("templateIds", "array-contains", templateId)
-      ));
-      return snap.docs.map(d => ({ ...(d.data() as Omit<CandidateUser, "id">), id: d.id }));
-    } catch (err) {
-      console.error("Scoped interviewer query failed, falling back to full scan:", err);
-      const usersSnap = await getDocs(collection(db, "users"));
-      return usersSnap.docs
-        .map(d => ({ ...(d.data() as Omit<CandidateUser, "id">), id: d.id }))
-        .filter(u =>
-          (u.role === "interviewer" || u.role === "interviewer_content") &&
-          u.status === "active" &&
-          (u.templateIds || []).includes(templateId)
-        );
+  // Scoped queries only — never an unscoped full-collection read, since this
+  // page is public/unauthenticated and gets far more daily traffic than any
+  // admin page.
+  async function fetchEligibleInterviewers(): Promise<CandidateUser[]> {
+    if (interviewerIds && interviewerIds.length) {
+      const users = await getUsersByIds(interviewerIds);
+      return users
+        .filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active")
+        .map(u => ({ role: u.role, status: u.status, displayName: u.displayName, email: u.email, id: u.id }));
     }
+    const snap = await getDocs(query(
+      collection(db, "users"),
+      where("role", "in", ["interviewer", "interviewer_content"]),
+      where("status", "==", "active")
+    ));
+    return snap.docs.map(d => ({ ...(d.data() as Omit<CandidateUser, "id">), id: d.id }));
   }
 
   const [interviewers, blockedDates] = await Promise.all([
-    fetchAssignedInterviewers(),
+    fetchEligibleInterviewers(),
     getBlockedDates(),
   ]);
 

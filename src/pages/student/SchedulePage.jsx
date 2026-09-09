@@ -11,7 +11,7 @@ import {
 import {
   getScheduleInviteByToken, updateScheduleInvite,
   createOtpVerification, getLatestOtpByToken, markOtpUsed,
-  getAvailableSlotsForTemplate, bookSlotForCandidate,
+  getAvailableSlots, bookSlotForCandidate,
   getActiveAdmins,
 } from "../../api/firestore";
 import StudentLayout from "../../components/StudentLayout";
@@ -160,8 +160,8 @@ export default function SchedulePage() {
   const loadSlots = async (inv) => {
     setStep("loading_slots");
     try {
-      const s = await getAvailableSlotsForTemplate(
-        inv.templateId, inv.dateRangeStart, inv.dateRangeEnd
+      const s = await getAvailableSlots(
+        inv.dateRangeStart, inv.dateRangeEnd, inv.interviewerIds || null
       );
       setSlots(s);
       setStep("slots");
@@ -267,7 +267,7 @@ export default function SchedulePage() {
       if (e.message.includes("already booked") || e.message.includes("already passed")) {
         // Refresh slots (bypassing the cache) so the now-stale one shows as
         // booked/disabled instead of silently failing again on retry.
-        const fresh = await getAvailableSlotsForTemplate(invite.templateId, invite.dateRangeStart, invite.dateRangeEnd, true);
+        const fresh = await getAvailableSlots(invite.dateRangeStart, invite.dateRangeEnd, invite.interviewerIds || null, true);
         setSlots(fresh);
         setSelected(null);
         alert(e.message);

@@ -480,6 +480,15 @@ export interface ScheduleInvite {
   // to have late-evening slots on file). Unset means no restriction.
   timeRangeStart?: string;
   timeRangeEnd?: string;
+  // Optional explicit panelist restriction — when set (non-empty), the
+  // candidate scheduling page only ever shows slots from these interviewers,
+  // regardless of their profile's Skills or anything else. When absent, every
+  // active interviewer's slots are eligible. Replaces the old model where an
+  // interviewer's own templateIds field silently gated their eligibility per
+  // campaign — that was error-prone (an interviewer with no templates
+  // assigned meant zero candidates ever saw their availability, with no
+  // visible reason why) and is no longer consulted for this at all.
+  interviewerIds?: string[] | null;
   // Set once an admin has been emailed that this candidate had zero
   // bookable slots after duration/time-window filtering — guards against
   // re-notifying every time the candidate reloads the scheduling page.

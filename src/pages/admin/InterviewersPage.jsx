@@ -4,11 +4,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Search, Download, ChevronDown, FileSpreadsheet, FileText,
-  RotateCcw, Tag, Users, Check, AlertTriangle, ExternalLink,
+  RotateCcw, Users, AlertTriangle, ExternalLink,
 } from "lucide-react";
 import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers } from "../../api/firestore";
 import { compareTimeLabels } from "../../utils/dates";
-import { useSkills, useTemplates, useUsers, useInterviewerCounts, QK } from "../../hooks/queries";
+import { useSkills, useUsers, useInterviewerCounts, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 import Modal from "../../components/Modal";
@@ -55,7 +55,6 @@ export default function InterviewersPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search,         setSearch]         = useState("");
   const [filterSkill,    setFilterSkill]    = useState("");
-  const [filterTemplate, setFilterTemplate] = useState("");
   const [filterCompany,  setFilterCompany]  = useState("");
   const [filterExp,      setFilterExp]      = useState("");
   const [showExport,     setShowExport]     = useState(false);
@@ -65,7 +64,7 @@ export default function InterviewersPage() {
   // any of the filter dropdowns, and opening the Export menu (which needs
   // the complete active roster) all genuinely need the full list — see
   // getInterviewersPage / the pageItems state below.
-  const needsFullList = search.trim() !== "" || !!filterSkill || !!filterTemplate || !!filterCompany || !!filterExp || showExport;
+  const needsFullList = search.trim() !== "" || !!filterSkill || !!filterCompany || !!filterExp || showExport;
   const { data: usersAll = [], isLoading } = useUsers(needsFullList);
   const { data: counts } = useInterviewerCounts();
   const interviewers = usersAll.filter(u =>
@@ -151,16 +150,12 @@ export default function InterviewersPage() {
   const currentTabPool = needsFullList ? (showArchived ? archivedInterviewers : interviewers) : pageItems;
 
   const { data: skills    = [] } = useSkills();
-  const { data: templates = [] } = useTemplates();
   const [viewAvail,    setViewAvail]    = useState(null);
-  const [editModal,    setEditModal]    = useState(null); // { user, draftSkills, draftTemplates }
+  const [editModal,    setEditModal]    = useState(null); // { user, draftSkills }
   const [saving,       setSaving]       = useState(false);
   const [toast,          setToast]          = useState(null);
   const exportRef = useRef(null);
   const [selectedIds,         setSelectedIds]         = useState(new Set());
-  const [bulkModal,           setBulkModal]           = useState(false);
-  const [bulkDraftTemplates,  setBulkDraftTemplates]  = useState([]);
-  const [bulkSaving,          setBulkSaving]          = useState(false);
 
   useEffect(() => {
     const close = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false); };
@@ -171,8 +166,7 @@ export default function InterviewersPage() {
 
   const openEdit = (u) => setEditModal({
     user: u,
-    draftSkills:      u.skills      || [],
-    draftTemplates:   u.templateIds || [],
+    draftSkills: u.skills || [],
   });
 
   const handleSave = async () => {
@@ -180,8 +174,7 @@ export default function InterviewersPage() {
     setSaving(true);
     try {
       await updateUser(editModal.user.id, {
-        skills:      editModal.draftSkills,
-        templateIds: editModal.draftTemplates,
+        skills: editModal.draftSkills,
       });
       refreshAfterMutation();
       setToast({ message: "Interviewer updated." });
@@ -191,13 +184,6 @@ export default function InterviewersPage() {
     }
     setSaving(false);
   };
-
-  const toggleTemplate = (tid) => setEditModal(m => {
-    const next = m.draftTemplates.includes(tid)
-      ? m.draftTemplates.filter(id => id !== tid)
-      : [...m.draftTemplates, tid];
-    return { ...m, draftTemplates: next };
-  });
 
   const viewAvailability = async (u) => {
     const slots = await getInterviewerAvailability(u.id);
@@ -253,33 +239,6 @@ export default function InterviewersPage() {
     setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
 
-  const openBulkModal = () => {
-    const selectedIvrs = currentTabPool.filter(u => selectedIds.has(u.id));
-    const commonTemplates = templates
-      .filter(t => selectedIvrs.every(u => (u.templateIds || []).includes(t.id)))
-      .map(t => t.id);
-    setBulkDraftTemplates(commonTemplates);
-    setBulkModal(true);
-  };
-
-  const handleBulkSave = async () => {
-    setBulkSaving(true);
-    try {
-      await Promise.all([...selectedIds].map(id => updateUser(id, { templateIds: bulkDraftTemplates })));
-      refreshAfterMutation();
-      setToast({ message: `Templates updated for ${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""}.` });
-      setBulkModal(false);
-      setSelectedIds(new Set());
-    } catch (e) {
-      setToast({ message: e.message, type: "error" });
-    }
-    setBulkSaving(false);
-  };
-
-  const toggleBulkTemplate = (tid) => {
-    setBulkDraftTemplates(prev => prev.includes(tid) ? prev.filter(id => id !== tid) : [...prev, tid]);
-  };
-
   const buildExportRows = () =>
     interviewers.map(u => ({
       name:        u.displayName || "",
@@ -291,11 +250,10 @@ export default function InterviewersPage() {
       experience:  u.experience != null ? u.experience : "",
       linkedin:    u.linkedin || "",
       skills:      (u.skills || []).map(sid => skills.find(s => s.id === sid)?.name || sid).join(" | "),
-      templates:   (u.templateIds || []).map(tid => templates.find(t => t.id === tid)?.name || tid).join(" | "),
     }));
 
   const downloadCSV = () => {
-    const cols = ["name", "email", "phone", "role", "company", "title", "experience", "linkedin", "skills", "templates"];
+    const cols = ["name", "email", "phone", "role", "company", "title", "experience", "linkedin", "skills"];
     const header = cols.join(",");
     const rows = buildExportRows().map(r =>
       cols.map(c => {
@@ -310,9 +268,9 @@ export default function InterviewersPage() {
   };
 
   const downloadExcel = () => {
-    const cols = ["name", "email", "phone", "role", "company", "title", "experience", "linkedin", "skills", "templates"];
+    const cols = ["name", "email", "phone", "role", "company", "title", "experience", "linkedin", "skills"];
     const ws = XLSX.utils.json_to_sheet(buildExportRows(), { header: cols });
-    ws["!cols"] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 30 }, { wch: 30 }, { wch: 40 }];
+    ws["!cols"] = [{ wch: 22 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 20 }, { wch: 22 }, { wch: 10 }, { wch: 30 }, { wch: 30 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Interviewers");
     XLSX.writeFile(wb, "interviewers.xlsx");
@@ -328,7 +286,6 @@ export default function InterviewersPage() {
 
   const filtered = currentTabPool.filter(u => {
     if (filterSkill    && !(u.skills      || []).includes(filterSkill))    return false;
-    if (filterTemplate && !(u.templateIds || []).includes(filterTemplate)) return false;
     if (filterCompany  && u.company !== filterCompany)                     return false;
     if (filterExp) {
       const range = EXP_RANGES.find(r => r.label === filterExp);
@@ -343,8 +300,8 @@ export default function InterviewersPage() {
       u.companyRole?.toLowerCase().includes(q);
   });
 
-  const hasFilters = search || filterSkill || filterTemplate || filterCompany || filterExp;
-  const clearFilters = () => { setSearch(""); setFilterSkill(""); setFilterTemplate(""); setFilterCompany(""); setFilterExp(""); };
+  const hasFilters = search || filterSkill || filterCompany || filterExp;
+  const clearFilters = () => { setSearch(""); setFilterSkill(""); setFilterCompany(""); setFilterExp(""); };
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
 
@@ -361,7 +318,7 @@ export default function InterviewersPage() {
       >
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviewers</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage interviewer profiles, skills, and template assignments</p>
+          <p className="text-sm text-gray-500 mt-1">Manage interviewer profiles and skills</p>
           <div className="flex items-center gap-1 mt-3 bg-gray-100 rounded-lg p-0.5 w-fit">
             <button
               onClick={() => { setShowArchived(false); setSelectedIds(new Set()); }}
@@ -422,14 +379,10 @@ export default function InterviewersPage() {
           <span className="text-sm font-semibold text-brand-700">
             {selectedIds.size} interviewer{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
-          {showArchived ? (
+          {showArchived && (
             <Button variant="primary" size="sm" icon={RotateCcw} onClick={handleBulkRestore}
               className="!bg-emerald-600 hover:!bg-emerald-700">
               Restore Selected
-            </Button>
-          ) : (
-            <Button variant="primary" size="sm" icon={Tag} onClick={openBulkModal}>
-              Update Templates
             </Button>
           )}
           <button onClick={() => setSelectedIds(new Set())}
@@ -453,10 +406,6 @@ export default function InterviewersPage() {
         <select value={filterSkill} onChange={e => setFilterSkill(e.target.value)} className={SEL}>
           <option value="">All Skills</option>
           {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select value={filterTemplate} onChange={e => setFilterTemplate(e.target.value)} className={SEL}>
-          <option value="">All Templates</option>
-          {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} className={SEL}>
           <option value="">All Companies</option>
@@ -511,7 +460,7 @@ export default function InterviewersPage() {
                     className="w-4 h-4 accent-brand-600 cursor-pointer"
                   />
                 </th>
-                {["Interviewer", "Company", "Contact", "Skills", "Templates", ""].map((h, i) => (
+                {["Interviewer", "Company", "Contact", "Skills", ""].map((h, i) => (
                   <th key={i} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -606,24 +555,6 @@ export default function InterviewersPage() {
                     )}
                   </td>
 
-                  {/* Templates */}
-                  <td className="px-4 py-3">
-                    {(u.templateIds || []).length === 0 ? (
-                      <span className="text-xs text-gray-300">Not assigned</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-1">
-                        {(u.templateIds || []).map(tid => {
-                          const tmpl = templates.find(t => t.id === tid);
-                          return tmpl ? (
-                            <span key={tid} className="text-[10px] font-semibold bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200 px-1.5 py-0.5 rounded-full">
-                              {tmpl.name}
-                            </span>
-                          ) : null;
-                        })}
-                      </div>
-                    )}
-                  </td>
-
                   {/* Actions */}
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
@@ -653,7 +584,7 @@ export default function InterviewersPage() {
         )}
       </motion.div>
 
-      {/* Combined Edit modal — Skills + Templates */}
+      {/* Edit modal — Skills */}
       <Modal open={!!editModal} onClose={() => setEditModal(null)}
         title={`Edit — ${editModal?.user?.displayName || editModal?.user?.email || ""}`} wide>
         {editModal && (
@@ -670,40 +601,6 @@ export default function InterviewersPage() {
               />
             </div>
 
-            {/* Templates section */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Interview Templates</p>
-                <span className="text-xs text-gray-400">{editModal.draftTemplates.length} selected</span>
-              </div>
-              {templates.length === 0 ? (
-                <p className="text-sm text-gray-400 py-4 text-center">No templates found.</p>
-              ) : (
-                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
-                  {templates.map(t => (
-                    <label key={t.id}
-                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
-                        editModal.draftTemplates.includes(t.id) ? "bg-violet-50" : "hover:bg-gray-50"
-                      }`}>
-                      <input
-                        type="checkbox"
-                        checked={editModal.draftTemplates.includes(t.id)}
-                        onChange={() => toggleTemplate(t.id)}
-                        className="accent-violet-600 flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
-                        {t.program && <p className="text-xs text-gray-400">{t.program}</p>}
-                      </div>
-                      {editModal.draftTemplates.includes(t.id) && (
-                        <Check className="w-4 h-4 text-violet-600 flex-shrink-0" strokeWidth={2.5} />
-                      )}
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-
             <div className="flex gap-3 pt-1">
               <Button variant="primary" size="lg" onClick={handleSave} disabled={saving} className="flex-1">
                 {saving ? "Saving…" : "Save Changes"}
@@ -714,56 +611,6 @@ export default function InterviewersPage() {
             </div>
           </div>
         )}
-      </Modal>
-
-      {/* Bulk template modal */}
-      <Modal open={bulkModal} onClose={() => setBulkModal(false)}
-        title={`Update Templates — ${selectedIds.size} interviewer${selectedIds.size !== 1 ? "s" : ""}`} wide>
-        <div className="space-y-4">
-          <p className="text-sm text-gray-500">
-            Select the templates to assign. This will <span className="font-semibold text-gray-700">replace</span> existing template assignments for all selected interviewers.
-          </p>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Interview Templates</p>
-              <span className="text-xs text-gray-400">{bulkDraftTemplates.length} selected</span>
-            </div>
-            {templates.length === 0 ? (
-              <p className="text-sm text-gray-400 py-4 text-center">No templates found.</p>
-            ) : (
-              <div className="border border-gray-200 rounded-xl overflow-hidden max-h-56 overflow-y-auto">
-                {templates.map(t => (
-                  <label key={t.id}
-                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer border-b border-gray-50 last:border-0 transition-colors ${
-                      bulkDraftTemplates.includes(t.id) ? "bg-violet-50" : "hover:bg-gray-50"
-                    }`}>
-                    <input
-                      type="checkbox"
-                      checked={bulkDraftTemplates.includes(t.id)}
-                      onChange={() => toggleBulkTemplate(t.id)}
-                      className="accent-violet-600 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{t.name}</p>
-                      {t.program && <p className="text-xs text-gray-400">{t.program}</p>}
-                    </div>
-                    {bulkDraftTemplates.includes(t.id) && (
-                      <Check className="w-4 h-4 text-violet-600 flex-shrink-0" strokeWidth={2.5} />
-                    )}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="flex gap-3 pt-1">
-            <Button variant="primary" size="lg" onClick={handleBulkSave} disabled={bulkSaving} className="flex-1">
-              {bulkSaving ? "Saving…" : `Update ${selectedIds.size} Interviewer${selectedIds.size !== 1 ? "s" : ""}`}
-            </Button>
-            <Button variant="secondary" size="lg" onClick={() => setBulkModal(false)} className="px-5">
-              Cancel
-            </Button>
-          </div>
-        </div>
       </Modal>
 
       {/* Availability modal */}

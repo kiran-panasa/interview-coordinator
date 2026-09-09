@@ -15,6 +15,7 @@ import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
+import SkillsSelect from "../../components/SkillsSelect";
 import { usePagination } from "../../hooks/usePagination";
 
 const NUDGE_ROUND_OTHER = "__other__";
@@ -48,7 +49,7 @@ const STATUS_LABEL = {
 
 export default function CandidateSchedulingTab({
   currentUser,
-  templates, programs, candidates, users, rounds = [],
+  templates, programs, candidates, users, rounds = [], activeInterviewers = [],
   invites,
   setToast,
   blockedDates = [],
@@ -74,6 +75,10 @@ export default function CandidateSchedulingTab({
   // if the panelist submitted availability outside it. Empty = no restriction.
   const [timeWindowStart, setTimeWindowStart] = useState("");
   const [timeWindowEnd,   setTimeWindowEnd]   = useState("");
+  // Optional — when set, only these interviewers' slots are offered to the
+  // candidate, regardless of any other eligibility. Empty = every active
+  // interviewer is eligible (see getAvailableSlots in api/availability.ts).
+  const [panelistIds,     setPanelistIds]     = useState([]);
   const [selCandidates,  setSelCandidates]  = useState(new Set());
   const [sendingInvites, setSendingInvites] = useState(false);
   const [confirmingId,   setConfirmingId]   = useState(null);
@@ -203,6 +208,7 @@ export default function CandidateSchedulingTab({
           round,
           duration,
           ...(timeWindowStart && timeWindowEnd ? { timeRangeStart: timeWindowStart, timeRangeEnd: timeWindowEnd } : {}),
+          ...(panelistIds.length ? { interviewerIds: panelistIds } : {}),
           program:        c.program || "",
           programName:    candidateProgramLabel,
           dateRangeStart: dateStart,
@@ -593,6 +599,20 @@ export default function CandidateSchedulingTab({
                 Clear
               </button>
             )}
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 mb-2">
+            Panelists <span className="text-gray-400 font-normal">— optional; restrict this campaign to specific interviewers only. Leave empty to offer every active interviewer's availability.</span>
+          </p>
+          <div className="max-w-md">
+            <SkillsSelect
+              skills={activeInterviewers.map(u => ({ id: u.id, name: u.displayName || u.email }))}
+              value={panelistIds}
+              onChange={setPanelistIds}
+              placeholder="All active interviewers"
+            />
           </div>
         </div>
       </motion.div>
