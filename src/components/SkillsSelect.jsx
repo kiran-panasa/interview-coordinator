@@ -9,6 +9,7 @@ export default function SkillsSelect({
   onAddCustom = null,
   onRemoveCustom = null,
   placeholder = "Select skills…",
+  searchPlaceholder = "Search skills…",
   readOnly = false,
 }) {
   const [open,   setOpen]   = useState(false);
@@ -114,7 +115,7 @@ export default function SkillsSelect({
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter" && canAddCustom) handleAddCustom(); }}
-              placeholder={onAddCustom ? "Search or type to add a custom skill…" : "Search skills…"}
+              placeholder={onAddCustom ? "Search or type to add a custom skill…" : searchPlaceholder}
               className="w-full text-sm py-0.5 focus:outline-none placeholder:text-gray-400"
             />
           </div>

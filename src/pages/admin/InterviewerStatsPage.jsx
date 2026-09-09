@@ -152,19 +152,19 @@ export default function InterviewerStatsPage() {
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Program</label>
-            <SkillsSelect skills={programOptions} value={programIds} onChange={setProgramIds} placeholder="All Programs" />
+            <SkillsSelect skills={programOptions} value={programIds} onChange={setProgramIds} placeholder="All Programs" searchPlaceholder="Search programs…" />
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Template</label>
-            <SkillsSelect skills={templateOptions} value={templateIds} onChange={setTemplateIds} placeholder="All Templates" />
+            <SkillsSelect skills={templateOptions} value={templateIds} onChange={setTemplateIds} placeholder="All Templates" searchPlaceholder="Search templates…" />
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer</label>
-            <SkillsSelect skills={interviewerOptions} value={interviewerEmails} onChange={setInterviewerEmails} placeholder="All Interviewers" />
+            <SkillsSelect skills={interviewerOptions} value={interviewerEmails} onChange={setInterviewerEmails} placeholder="All Interviewers" searchPlaceholder="Search interviewers…" />
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer Status</label>
-            <SkillsSelect skills={STATUS_OPTIONS} value={statuses} onChange={setStatuses} placeholder="All (Completed, Partially Completed, Cancelled, No-show)" />
+            <SkillsSelect skills={STATUS_OPTIONS} value={statuses} onChange={setStatuses} placeholder="All (Completed, Partially Completed, Cancelled, No-show)" searchPlaceholder="Search statuses…" />
           </div>
           {hasFilters && (
             <button onClick={clearFilters}

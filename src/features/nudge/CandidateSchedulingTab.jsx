@@ -610,6 +610,7 @@ export default function CandidateSchedulingTab({
               value={panelistIds}
               onChange={setPanelistIds}
               placeholder="All active interviewers"
+              searchPlaceholder="Search interviewers…"
             />
           </div>
         </div>
