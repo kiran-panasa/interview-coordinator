@@ -603,7 +603,7 @@ export default function CandidateSchedulingTab({
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 mb-2">Panelists (optional)</p>
+          <p className="text-xs font-semibold text-gray-500 mb-2">Select Panelists</p>
           <div className="max-w-md">
             <SkillsSelect
               skills={activeInterviewers.map(u => ({ id: u.id, name: u.displayName || u.email }))}
