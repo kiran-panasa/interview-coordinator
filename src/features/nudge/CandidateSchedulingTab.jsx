@@ -603,9 +603,7 @@ export default function CandidateSchedulingTab({
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 mb-2">
-            Panelists <span className="text-gray-400 font-normal">— optional; restrict this campaign to specific interviewers only. Leave empty to offer every active interviewer's availability.</span>
-          </p>
+          <p className="text-xs font-semibold text-gray-500 mb-2">Panelists (optional)</p>
           <div className="max-w-md">
             <SkillsSelect
               skills={activeInterviewers.map(u => ({ id: u.id, name: u.displayName || u.email }))}
