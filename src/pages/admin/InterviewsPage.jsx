@@ -455,6 +455,61 @@ export default function InterviewsPage() {
 
   // ── Send calendar invite ────────────────────────────────────────────────────
 
+  // Shared by a normal successful send and by manually confirming a link
+  // that Apps Script already created (see handleManualMeetLink) — both
+  // cases should notify people identically.
+  const sendInviteEmails_ = async (iv, meetLink) => {
+    if (iv.interviewerEmail) {
+      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:  "sendEmail",
+        subject: "Action Required: Interview Assigned",
+        body:
+          `Hi ${iv.interviewerName || "there"},\n\nYour interview meeting link is ready:\n\n` +
+          `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
+          `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+          `Meeting Link: ${meetLink}\n\n` +
+          `Thank you.`,
+        recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || iv.interviewerEmail }],
+      }).catch(() => {});
+    }
+
+    // Candidate confirmation — separate from the interviewer email above,
+    // and (same as the Nudge confirm flow) the only place the admin-managed
+    // pre-interview resources get attached. Interviewers never see this.
+    if (iv.candidateEmail) {
+      const resources = await getPreInterviewResources().catch(() => null);
+      const instructionLines = [];
+      if (resources?.videoGuideUrl) {
+        instructionLines.push(`${resources.videoGuideLabel || "Video Setup Guide"}: ${resources.videoGuideUrl}`);
+      }
+      (resources?.documents || [])
+        .filter(d => d.type === "instruction" && d.url)
+        .forEach(d => instructionLines.push(`${d.label || "Interview Instructions"}: ${d.url}`));
+      const referenceLines = (resources?.documents || [])
+        .filter(d => d.type === "reference" && d.url)
+        .map(d => `${d.label || "Reference Document"}: ${d.url}`);
+
+      const instructionsBlock = instructionLines.length
+        ? `\nPlease review the following before joining your interview:\n${instructionLines.map(l => `• ${l}`).join("\n")}\n`
+        : "";
+      const referenceBlock = referenceLines.length
+        ? `\nAdditional Reference Documents:\n${referenceLines.map(l => `• ${l}`).join("\n")}\n`
+        : "";
+
+      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action:  "sendEmail",
+        subject: `Interview Confirmed — ${iv.round || iv.templateName || "Interview"}`,
+        body:
+          `Hi ${iv.candidateName || "there"},\n\nYour interview has been confirmed:\n\n` +
+          `Round: ${iv.round || iv.templateName || "Interview"}\nDate: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+          `Meeting Link: ${meetLink}\n` +
+          instructionsBlock + referenceBlock +
+          `\nNxtWave Interview Team`,
+        recipients: [{ email: iv.candidateEmail, name: iv.candidateName || iv.candidateEmail }],
+      }).catch(() => {});
+    }
+  };
+
   const sendInvite = async (iv) => {
     setInviting(s => ({ ...s, [iv.id]: true }));
     setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
@@ -485,54 +540,8 @@ export default function InterviewsPage() {
         recallBotId: result.recallBotId || "",
         inviteSentAt: new Date().toISOString(),
       });
-      if (result.meetLink && iv.interviewerEmail) {
-        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action:  "sendEmail",
-          subject: "Action Required: Interview Assigned",
-          body:
-            `Hi ${iv.interviewerName || "there"},\n\nYour interview meeting link is ready:\n\n` +
-            `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
-            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
-            `Meeting Link: ${result.meetLink}\n\n` +
-            `Thank you.`,
-          recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || iv.interviewerEmail }],
-        }).catch(() => {});
-      }
-
-      // Candidate confirmation — separate from the interviewer email above,
-      // and (same as the Nudge confirm flow) the only place the admin-managed
-      // pre-interview resources get attached. Interviewers never see this.
-      if (result.meetLink && iv.candidateEmail) {
-        const resources = await getPreInterviewResources().catch(() => null);
-        const instructionLines = [];
-        if (resources?.videoGuideUrl) {
-          instructionLines.push(`${resources.videoGuideLabel || "Video Setup Guide"}: ${resources.videoGuideUrl}`);
-        }
-        (resources?.documents || [])
-          .filter(d => d.type === "instruction" && d.url)
-          .forEach(d => instructionLines.push(`${d.label || "Interview Instructions"}: ${d.url}`));
-        const referenceLines = (resources?.documents || [])
-          .filter(d => d.type === "reference" && d.url)
-          .map(d => `${d.label || "Reference Document"}: ${d.url}`);
-
-        const instructionsBlock = instructionLines.length
-          ? `\nPlease review the following before joining your interview:\n${instructionLines.map(l => `• ${l}`).join("\n")}\n`
-          : "";
-        const referenceBlock = referenceLines.length
-          ? `\nAdditional Reference Documents:\n${referenceLines.map(l => `• ${l}`).join("\n")}\n`
-          : "";
-
-        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action:  "sendEmail",
-          subject: `Interview Confirmed — ${iv.round || iv.templateName || "Interview"}`,
-          body:
-            `Hi ${iv.candidateName || "there"},\n\nYour interview has been confirmed:\n\n` +
-            `Round: ${iv.round || iv.templateName || "Interview"}\nDate: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
-            `Meeting Link: ${result.meetLink}\n` +
-            instructionsBlock + referenceBlock +
-            `\nNxtWave Interview Team`,
-          recipients: [{ email: iv.candidateEmail, name: iv.candidateName || iv.candidateEmail }],
-        }).catch(() => {});
+      if (result.meetLink) {
+        await sendInviteEmails_(iv, result.meetLink);
       }
 
       if (result.hostManagementWarning) {
@@ -863,6 +872,34 @@ export default function InterviewsPage() {
     const c = candidates.find(c => c.id === iv.candidateId);
     if (!c) return iv.candidateName;
     return isUUID(c.name) && c.uid ? c.uid : c.name;
+  };
+
+  // Recovery path for when "Send Invite" reported an error but the Calendar
+  // event/Meet link was actually created server-side (see sendInvite's
+  // catch block) — lets the admin paste the link Apps Script already made
+  // instead of sending again and creating a duplicate Meet.
+  const handleManualMeetLink = async (iv) => {
+    const link = window.prompt(
+      "Paste the Meet link for this interview from Google Calendar:",
+      iv.meetLink || ""
+    );
+    if (!link) return;
+    const trimmed = link.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setToast({ message: "That doesn't look like a valid link (must start with http:// or https://).", type: "error" });
+      return;
+    }
+    try {
+      await updateInterview(iv.id, {
+        meetLink: trimmed,
+        inviteSentAt: new Date().toISOString(),
+      });
+      await sendInviteEmails_(iv, trimmed);
+      setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
+      setToast({ message: "Meet link saved and confirmation emails sent." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
   };
 
   const handleFixName = async (iv) => {
@@ -1452,11 +1489,11 @@ export default function InterviewsPage() {
                     {
                       label: inviting[iv.id]
                         ? "Sending…"
-                        : iv.eventId
+                        : (iv.eventId || iv.meetLink)
                           ? "✓ Invite Sent"
                           : sendInviteFailed[iv.id] ? "Retry Send Invite" : "Send Invite",
                       onClick: () => {
-                        if (iv.eventId || inviting[iv.id]) return;
+                        if (iv.eventId || iv.meetLink || inviting[iv.id]) return;
                         if (sendInviteFailed[iv.id] && !confirm(
                           "The last attempt for this interview couldn't confirm it worked, but the Calendar event/Meet may have already been created. " +
                           "Please check the interview in Google Calendar first. Send again anyway? This may create a duplicate Meet link."
@@ -1464,6 +1501,12 @@ export default function InterviewsPage() {
                         sendInvite(iv);
                       },
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
+                    },
+                    {
+                      label: "Add Meet Link Manually",
+                      onClick: () => handleManualMeetLink(iv),
+                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
+                        && !iv.eventId && !iv.meetLink && sendInviteFailed[iv.id],
                     },
                     {
                       label: iv.assignmentLinks?.length ? `Assignment Links (${iv.assignmentLinks.length})` : "Assignment Links",
