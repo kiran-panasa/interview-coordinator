@@ -47,6 +47,16 @@ const PARTIAL_COMPLETION_REASONS = [
   "Other",
 ];
 
+// Same preset+free-text pattern for declining an assignment — shown to
+// admins so a decline isn't just a silent status flip with no context.
+const DECLINE_REASONS = [
+  "Schedule conflict",
+  "Not familiar with this template/round",
+  "Personal/health reason",
+  "Assigned by mistake",
+  "Other",
+];
+
 export default function InterviewDetail() {
   const { id } = useParams();
   const [interview, setInterview] = useState(null);
@@ -61,6 +71,9 @@ export default function InterviewDetail() {
   const [partialModalOpen,   setPartialModalOpen]   = useState(false);
   const [partialReasonPreset, setPartialReasonPreset] = useState("");
   const [partialReasonText,  setPartialReasonText]  = useState("");
+  const [declineModalOpen,   setDeclineModalOpen]   = useState(false);
+  const [declineReasonPreset, setDeclineReasonPreset] = useState("");
+  const [declineReasonText,  setDeclineReasonText]  = useState("");
 
   // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
   useEffect(() => {
@@ -152,6 +165,36 @@ export default function InterviewDetail() {
     }
   };
 
+  // Reason is shown here too (not just persisted onto the interview doc as
+  // declineReason, see handleDecline) so an admin can act right from their
+  // inbox — the persisted field is what shows up on the Interviews page
+  // itself for anyone reviewing it later.
+  const notifyAdminsInterviewDeclined = async (iv, reason) => {
+    try {
+      const activeAdmins = await getActiveAdmins();
+      const admins = resolveActionAdminRecipients(activeAdmins, iv.createdBy);
+      if (!admins.length || !APPS_SCRIPT_URL) return;
+      const round = iv.round || iv.templateName || "Interview";
+      const subject = `${iv.interviewerName || "Interviewer"} declined the interview with ${iv.candidateName}`;
+      const body =
+        "Hi {{name}},\n\n" +
+        `${iv.interviewerName || "The interviewer"} has declined the interview with ${iv.candidateName}:\n\n` +
+        `• Candidate:   ${iv.candidateName}\n` +
+        `• Round:       ${round}\n` +
+        `• Date:        ${formatDate(iv.scheduledDate)}\n` +
+        `• Time:        ${iv.scheduledTime}\n` +
+        `• Reason:      ${reason}\n\n` +
+        `Reassign a different interviewer for this candidate from the Interviews page (kebab menu → "Reassign Interviewer"):\n${window.location.origin}/admin/interviews\n\n` +
+        "— NxtWave Interview Coordinator";
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail", subject, body,
+        recipients: admins.map(a => ({ email: a.email, name: a.displayName || "" })),
+      });
+    } catch (e) {
+      console.error("Failed to notify admins of interview decline:", e);
+    }
+  };
+
   const handleAccept = async () => {
     setSaving(true);
     await updateInterview(id, { status: "scheduled" });
@@ -204,14 +247,24 @@ export default function InterviewDetail() {
     setSaving(false);
   };
 
+  const openDeclineModal = () => {
+    setDeclineReasonPreset("");
+    setDeclineReasonText("");
+    setDeclineModalOpen(true);
+  };
+
+  const declineReason = declineReasonPreset === "Other" ? declineReasonText.trim() : declineReasonPreset;
+
   const handleDecline = async () => {
-    if (!confirm("Decline this interview?")) return;
+    if (!declineReason) return; // Confirm button is disabled without one, but guard anyway
     setSaving(true);
-    await updateInterview(id, { status: "declined" });
+    await updateInterview(id, { status: "declined", declineReason });
     const slotId = `${interview.scheduledDate}_${interview.scheduledTime.replace(/[: ]/g, "")}`;
     await markSlotFree(interview.interviewerId, slotId).catch(() => {});
-    setInterview(iv => ({ ...iv, status: "declined" }));
+    setInterview(iv => ({ ...iv, status: "declined", declineReason }));
     setToast({ message: "Interview declined." });
+    setDeclineModalOpen(false);
+    notifyAdminsInterviewDeclined(interview, declineReason);
     setSaving(false);
   };
 
@@ -457,7 +510,7 @@ export default function InterviewDetail() {
               className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
               <CheckCircle2 className="w-4 h-4" /> Accept
             </button>
-            <button onClick={handleDecline} disabled={saving}
+            <button onClick={openDeclineModal} disabled={saving}
               className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
               <XCircle className="w-4 h-4" /> Decline
             </button>
@@ -755,6 +808,57 @@ export default function InterviewDetail() {
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {saving ? "Saving…" : "Confirm Partially Completed"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Decline — reason is mandatory, either a preset pick or free text under "Other" */}
+      <Modal open={declineModalOpen} onClose={() => setDeclineModalOpen(false)} title="Decline Interview">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            This interview will be marked <span className="font-semibold text-red-700">Declined</span>.
+            A reason is required — it's shown to the admin so they can reassign a different interviewer for this candidate.
+          </p>
+          <div>
+            <label className={labelCls}>Reason</label>
+            <select
+              value={declineReasonPreset}
+              onChange={e => setDeclineReasonPreset(e.target.value)}
+              className={inputCls}
+            >
+              <option value="" disabled>Select a reason…</option>
+              {DECLINE_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          {declineReasonPreset === "Other" && (
+            <div>
+              <label className={labelCls}>Please specify</label>
+              <textarea
+                value={declineReasonText}
+                onChange={e => setDeclineReasonText(e.target.value)}
+                rows={3}
+                placeholder="Describe why you're declining this interview…"
+                className={inputCls}
+              />
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setDeclineModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleDecline}
+              disabled={!declineReason || saving}
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                declineReason
+                  ? "bg-red-600 text-white shadow-soft hover:bg-red-700"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? "Declining…" : "Confirm Decline"}
             </button>
           </div>
         </div>

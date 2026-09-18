@@ -286,10 +286,15 @@ export default function InterviewsPage() {
 
         // Reassigning the panelist restarts their Accept/Decline — they
         // shouldn't inherit the previous panelist's acceptance of a slot
-        // they never agreed to. Only for interviews still in flight; never
-        // touch the status of a completed/cancelled/no-show/declined record.
-        if (interviewerChanged && ["scheduled", "pending_acceptance"].includes(editTarget.status)) {
+        // they never agreed to. Also covers "declined": that's exactly how
+        // an admin reassigns after a decline — swap the interviewer here and
+        // it goes back to pending_acceptance for the new one, with the old
+        // decline reason cleared since it no longer applies to them. Only
+        // for interviews still reassignable; never touch the status of a
+        // completed/cancelled/no-show record.
+        if (interviewerChanged && ["scheduled", "pending_acceptance", "declined"].includes(editTarget.status)) {
           data.status = "pending_acceptance";
+          data.declineReason = null;
         }
 
         await updateInterview(editTarget.id, data);
@@ -1433,10 +1438,21 @@ export default function InterviewsPage() {
                       {iv.partialCompletionReason}
                     </p>
                   )}
+                  {iv.status === "declined" && iv.declineReason && (
+                    <p className="text-[11px] text-red-500 mt-1 max-w-[160px] truncate" title={iv.declineReason}>
+                      {iv.declineReason}
+                    </p>
+                  )}
                 </td>
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
+                    {
+                      label: "Reassign Interviewer",
+                      onClick: () => openEdit(iv),
+                      show: iv.status === "declined",
+                      highlight: true,
+                    },
                     {
                       label: "Fix: Correct Name",
                       onClick: () => handleFixName(iv),

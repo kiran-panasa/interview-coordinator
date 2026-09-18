@@ -301,7 +301,8 @@ export type InterviewStatus =
   | "completed"
   | "partially_completed"
   | "no_show"
-  | "cancelled";
+  | "cancelled"
+  | "declined";
 
 export interface AiReportCompetency {
   name: string;
@@ -365,6 +366,11 @@ export interface Interview {
   // carried through to admin views and the Download Feedback export for
   // payment reconciliation / audit purposes.
   partialCompletionReason?: string;
+  // Set whenever an interviewer declines an admin-scheduled interview (see
+  // handleDecline in InterviewDetail.jsx) — shown to admins on the
+  // Interviews page so a decline isn't just a silent status flip with no
+  // context, and to guide reassigning a different interviewer.
+  declineReason?: string;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];
