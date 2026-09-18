@@ -149,6 +149,14 @@ export default function InterviewsPage() {
   const [candSearch,     setCandSearch]     = useState("");
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
+  // Set only when the modal was opened via "Reassign Interviewer" on a
+  // declined interview (see openReassign) — routes handleSave's normal
+  // "create a brand-new interview" path (editTarget stays null) while also
+  // cross-linking the old and new docs, instead of mutating the declined
+  // interview in place. That keeps the original interviewer's own decline
+  // permanently visible on their side — reassigning to someone else is a
+  // new assignment for them, not a silent identity swap on the same record.
+  const [reassignFromId, setReassignFromId] = useState(null);
   const [form,          setForm]          = useState(EMPTY_FORM);
   const [slots,         setSlots]         = useState([]);
   const [availDates,    setAvailDates]    = useState([]);
@@ -215,9 +223,10 @@ export default function InterviewsPage() {
     setForm(f => ({ ...f, scheduledTime: "" }));
   }, [form.scheduledDate]);
 
-  const openNew  = () => { setEditTarget(null); setForm(EMPTY_FORM); setShowModal(true); };
+  const openNew  = () => { setEditTarget(null); setReassignFromId(null); setForm(EMPTY_FORM); setShowModal(true); };
   const openEdit = (iv) => {
     setEditTarget(iv);
+    setReassignFromId(null);
     setForm({
       candidateId:   iv.candidateId,
       interviewerId: iv.interviewerId,
@@ -225,6 +234,29 @@ export default function InterviewsPage() {
       scheduledTime: iv.scheduledTime,
       duration:      iv.duration || 60,
       meetLink:      iv.meetLink  || "",
+      round:         iv.round     || "",
+      notes:         iv.notes     || "",
+      templateId:    iv.templateId || "",
+    });
+    setShowModal(true);
+  };
+
+  // Reassigning a declined interview opens the SAME "Schedule Interview"
+  // form pre-filled from the declined one, but with editTarget left null —
+  // so Save takes the normal "create a brand-new interview" path (which
+  // already notifies whoever gets picked as interviewer to Accept/Decline)
+  // instead of mutating the declined record. reassignFromId is what
+  // handleSave uses afterward to cross-link the two docs.
+  const openReassign = (iv) => {
+    setEditTarget(null);
+    setReassignFromId(iv.id);
+    setForm({
+      candidateId:   iv.candidateId,
+      interviewerId: "", // force an explicit pick — never silently reuse who just declined
+      scheduledDate: iv.scheduledDate,
+      scheduledTime: iv.scheduledTime,
+      duration:      iv.duration || 60,
+      meetLink:      "",
       round:         iv.round     || "",
       notes:         iv.notes     || "",
       templateId:    iv.templateId || "",
@@ -286,15 +318,16 @@ export default function InterviewsPage() {
 
         // Reassigning the panelist restarts their Accept/Decline — they
         // shouldn't inherit the previous panelist's acceptance of a slot
-        // they never agreed to. Also covers "declined": that's exactly how
-        // an admin reassigns after a decline — swap the interviewer here and
-        // it goes back to pending_acceptance for the new one, with the old
-        // decline reason cleared since it no longer applies to them. Only
-        // for interviews still reassignable; never touch the status of a
-        // completed/cancelled/no-show record.
-        if (interviewerChanged && ["scheduled", "pending_acceptance", "declined"].includes(editTarget.status)) {
+        // they never agreed to. Only for interviews still in flight; never
+        // touch the status of a completed/cancelled/no-show/declined
+        // record via plain Edit — a declined interview's own status/
+        // declineReason are meant to stay exactly as the original
+        // interviewer left them (their own permanent record). To hand it
+        // to someone else, use the dedicated "Reassign Interviewer" action
+        // instead (openReassign), which creates a fresh interview for the
+        // new interviewer rather than mutating this one.
+        if (interviewerChanged && ["scheduled", "pending_acceptance"].includes(editTarget.status)) {
           data.status = "pending_acceptance";
-          data.declineReason = null;
         }
 
         await updateInterview(editTarget.id, data);
@@ -421,9 +454,22 @@ export default function InterviewsPage() {
           setToast({ message: "Interview updated." });
         }
       } else {
-        const id = await createInterview({ ...data, createdBy: currentUser.uid });
+        const id = await createInterview({
+          ...data, createdBy: currentUser.uid,
+          ...(reassignFromId ? { reassignedFrom: reassignFromId } : {}),
+        });
         const slotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
         await markSlotBooked(form.interviewerId, slotId, id).catch(() => {});
+
+        // Cross-link the declined interview to this new one — purely for
+        // admin visibility (see the note under its Declined badge). Its own
+        // status/declineReason are left completely untouched, so the
+        // original interviewer keeps a permanent, accurate record of their
+        // decline instead of it disappearing the moment someone else is
+        // assigned.
+        if (reassignFromId) {
+          await updateInterview(reassignFromId, { reassignedTo: id }).catch(() => {});
+        }
 
         // New interview needs the interviewer's Accept/Decline — notify them
         if (form.interviewerId) {
@@ -452,7 +498,8 @@ export default function InterviewsPage() {
           }
         }
 
-        setToast({ message: "Interview scheduled." });
+        setToast({ message: reassignFromId ? "Reassigned — the new interviewer has been notified." : "Interview scheduled." });
+        setReassignFromId(null);
       }
       setShowModal(false);
     } catch (e) { setToast({ message: e.message, type: "error" }); }
@@ -1443,13 +1490,23 @@ export default function InterviewsPage() {
                       {iv.declineReason}
                     </p>
                   )}
+                  {iv.status === "declined" && iv.reassignedTo && (() => {
+                    // Best-effort — only resolves a name if the new interview
+                    // also falls within the currently-loaded date range.
+                    const reassignedIv = interviews.find(x => x.id === iv.reassignedTo);
+                    return (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        → Reassigned to {reassignedIv?.interviewerName || "another interviewer"}
+                      </p>
+                    );
+                  })()}
                 </td>
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
                     {
                       label: "Reassign Interviewer",
-                      onClick: () => openEdit(iv),
+                      onClick: () => openReassign(iv),
                       show: iv.status === "declined",
                       highlight: true,
                     },
@@ -1561,13 +1618,14 @@ export default function InterviewsPage() {
       </motion.div>
 
       <ScheduleInterviewModal
-        open={showModal} onClose={() => setShowModal(false)}
+        open={showModal} onClose={() => { setShowModal(false); setReassignFromId(null); }}
         editTarget={editTarget} form={form} setField={setField}
         handleSave={handleSave} saving={saving}
         candidates={candidates} interviewers={interviewers} templates={templates}
         availDates={availDates} availTimes={availTimes}
         rounds={rounds} DURATIONS={DURATIONS}
         blockedDates={blockedDates}
+        reassignMode={!!reassignFromId}
       />
 
       <FeedbackViewModal

@@ -15,13 +15,16 @@ function todayIso() { return new Date().toISOString().slice(0, 10); }
 function firstOfMonthIso() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
 
 // The only statuses this report counts — a candidate's still-pending/
-// scheduled/declined interviews aren't meaningful here, so they're excluded
-// from the stats entirely (not just hidden behind an empty filter).
+// scheduled interviews aren't meaningful here, so they're excluded from
+// the stats entirely (not just hidden behind an empty filter). "declined"
+// IS counted (unlike pending/scheduled) since it's a real interviewer
+// action worth tracking per-interviewer, same as the other outcomes here.
 const STATUS_OPTIONS = [
   { id: "completed",           name: "Completed" },
   { id: "partially_completed", name: "Partially Completed" },
   { id: "cancelled",           name: "Cancelled" },
   { id: "no_show",             name: "Student No-show" },
+  { id: "declined",            name: "Declined" },
 ];
 const RELEVANT_STATUSES = STATUS_OPTIONS.map(s => s.id);
 
@@ -95,7 +98,7 @@ export default function InterviewerStatsPage() {
         map.set(key, {
           email: key,
           name: iv.interviewerName || userRec?.displayName || key,
-          completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0,
+          completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0,
         });
       }
       const row = map.get(key);
@@ -103,6 +106,7 @@ export default function InterviewerStatsPage() {
       else if (iv.status === "partially_completed") row.partiallyCompleted++;
       else if (iv.status === "cancelled") row.cancelled++;
       else if (iv.status === "no_show") row.noShow++;
+      else if (iv.status === "declined") row.declined++;
     });
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [filtered, usersByEmail]);
@@ -112,7 +116,8 @@ export default function InterviewerStatsPage() {
     partiallyCompleted: acc.partiallyCompleted + r.partiallyCompleted,
     cancelled:          acc.cancelled + r.cancelled,
     noShow:             acc.noShow + r.noShow,
-  }), { completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0 }),
+    declined:           acc.declined + r.declined,
+  }), { completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0 }),
   [interviewerStats]);
 
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
@@ -187,7 +192,7 @@ export default function InterviewerStatsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Interviewer", "Completed", "Partially Completed", "Cancelled", "Student No-show"].map((h, i) => (
+                {["Interviewer", "Completed", "Partially Completed", "Cancelled", "Student No-show", "Declined"].map((h, i) => (
                   <th key={i} className={`text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 ${i === 0 ? "text-left" : "text-right"}`}>
                     {h}
                   </th>
@@ -205,6 +210,7 @@ export default function InterviewerStatsPage() {
                   <td className="px-4 py-3 text-right text-amber-700 font-semibold">{r.partiallyCompleted}</td>
                   <td className="px-4 py-3 text-right text-gray-500">{r.cancelled}</td>
                   <td className="px-4 py-3 text-right text-orange-600">{r.noShow}</td>
+                  <td className="px-4 py-3 text-right text-red-600">{r.declined}</td>
                 </tr>
               ))}
             </tbody>
@@ -215,6 +221,7 @@ export default function InterviewerStatsPage() {
                 <td className="px-4 py-3 text-right font-bold text-amber-700">{totals.partiallyCompleted}</td>
                 <td className="px-4 py-3 text-right font-bold text-gray-500">{totals.cancelled}</td>
                 <td className="px-4 py-3 text-right font-bold text-orange-600">{totals.noShow}</td>
+                <td className="px-4 py-3 text-right font-bold text-red-600">{totals.declined}</td>
               </tr>
             </tfoot>
           </table>

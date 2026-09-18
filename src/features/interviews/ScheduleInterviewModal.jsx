@@ -18,6 +18,7 @@ export default function ScheduleInterviewModal({
   availDates, availTimes,
   rounds = [], DURATIONS,
   blockedDates = [],
+  reassignMode = false,
 }) {
   const roundNames = rounds.map(r => r.name);
   const [customRound, setCustomRound] = useState(() => !!form.round && !roundNames.includes(form.round));
@@ -31,7 +32,7 @@ export default function ScheduleInterviewModal({
 
   return (
     <Modal open={open} onClose={onClose}
-      title={editTarget ? "Edit Interview" : "Schedule Interview"} wide>
+      title={editTarget ? "Edit Interview" : reassignMode ? "Reassign Interviewer" : "Schedule Interview"} wide>
       <div className="space-y-4">
         <div>
           <label className={labelCls}>Candidate *</label>

@@ -371,6 +371,16 @@ export interface Interview {
   // Interviews page so a decline isn't just a silent status flip with no
   // context, and to guide reassigning a different interviewer.
   declineReason?: string;
+  // Set on a declined interview once an admin reassigns it to someone else
+  // via "Reassign Interviewer" (InterviewsPage.jsx) — points at the NEW
+  // interview doc created for the new interviewer. The declined doc itself
+  // is otherwise left untouched (status/declineReason stay exactly as the
+  // original interviewer left them), so their own decline stays a
+  // permanent, accurate record rather than being overwritten in place.
+  reassignedTo?: string;
+  // The inverse — set on the newly-created interview, pointing back at the
+  // declined one it was reassigned from.
+  reassignedFrom?: string;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];
