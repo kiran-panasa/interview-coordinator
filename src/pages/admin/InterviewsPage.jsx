@@ -525,6 +525,12 @@ export default function InterviewsPage() {
       // Meet link saved" reports.
       const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
         action:          "schedule",
+        // Lets the Apps Script write the Meet link straight to this
+        // interview's own Firestore doc server-side, the moment it's
+        // created — before it even tries to respond back to us. That way
+        // the link is saved (and shows up here live) even if this fetch
+        // times out or the tab gets closed before the response arrives.
+        interviewId:     iv.id,
         candidateEmail:  iv.candidateEmail,
         interviewerEmail: iv.interviewerEmail,
         candidateName:   iv.candidateName,
@@ -553,7 +559,7 @@ export default function InterviewsPage() {
     } catch (e) {
       setSendInviteFailed(s => ({ ...s, [iv.id]: true }));
       setToast({
-        message: `Couldn't confirm the invite went through (${e.message}). The Calendar event may still have been created despite this error — check the calendar or this interview's Meet column before sending again, to avoid creating a duplicate.`,
+        message: `Couldn't confirm the invite went through (${e.message}). The Calendar event may still be created behind the scenes — if so, the Meet link will appear here on its own within a minute or two. If it doesn't show up, check this interview's Meet column before sending again, to avoid creating a duplicate.`,
         type: "error",
       });
     }
