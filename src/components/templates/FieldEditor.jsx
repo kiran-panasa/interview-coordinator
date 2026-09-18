@@ -101,14 +101,16 @@ function PlainOptionList({ options, onChange }) {
 
 function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWeight, weightMode = "percent" }) {
   const [showOptions, setShowOptions] = useState(false);
-  const hasOptions = field.type === "scored_dropdown" || field.type === "dropdown";
+  const hasOptions = field.type === "scored_dropdown" || field.type === "dropdown" || field.type === "multi_dropdown";
 
   const handleTypeChange = (newType) => {
     const changes = { type: newType };
     if (newType === "scored_dropdown") {
       const existingScored = Array.isArray(field.options) && typeof field.options[0] === "object";
       changes.options = existingScored ? field.options : [];
-    } else if (newType === "dropdown") {
+    } else if (newType === "dropdown" || newType === "multi_dropdown") {
+      // Same raw-string options shape for both — switching between the two
+      // (single- vs multi-select) keeps whatever options are already there.
       const existingPlain = Array.isArray(field.options) && typeof field.options[0] === "string";
       changes.options = existingPlain ? field.options : [];
     }
@@ -160,6 +162,7 @@ function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWei
           <option value="text">Text</option>
           <option value="scored_dropdown">Scored Dropdown</option>
           <option value="dropdown">Plain Dropdown</option>
+          <option value="multi_dropdown">Multi-select Dropdown</option>
         </select>
 
         {hasOptions && (
@@ -191,7 +194,7 @@ function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWei
                   onChange={opts => onUpdate({ options: opts })}
                 />
               )}
-              {field.type === "dropdown" && (
+              {(field.type === "dropdown" || field.type === "multi_dropdown") && (
                 <PlainOptionList
                   options={field.options || []}
                   onChange={opts => onUpdate({ options: opts })}

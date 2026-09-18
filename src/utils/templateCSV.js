@@ -48,7 +48,7 @@ export function parseTemplateCSV(text) {
       if (fType === "scored_dropdown") {
         currentField.weight  = parseFloat(row[4]) || 0;
         currentField.options = [];
-      } else if (fType === "dropdown") {
+      } else if (fType === "dropdown" || fType === "multi_dropdown") {
         currentField.options = [];
       }
       if (type === "card_field") currentDomain.cardFields.push(currentField);
@@ -58,7 +58,7 @@ export function parseTemplateCSV(text) {
       if (!currentField) { errors.push(`Row ${i + 1}: "option" appears before any field row`); continue; }
       if (currentField.type === "scored_dropdown") {
         currentField.options.push({ score: parseFloat(row[1]) || 0, label: row[2] || "" });
-      } else if (currentField.type === "dropdown") {
+      } else if (currentField.type === "dropdown" || currentField.type === "multi_dropdown") {
         currentField.options.push(row[1] || "");
       }
 
@@ -183,7 +183,7 @@ export function exportTemplateToExcel(template) {
       rows.push(["card_field", field.id, field.label, field.type, field.type === "scored_dropdown" ? (field.weight ?? "") : ""]);
       if (field.type === "scored_dropdown" && Array.isArray(field.options)) {
         for (const opt of field.options) rows.push(["option", opt.score, opt.label, "", ""]);
-      } else if (field.type === "dropdown" && Array.isArray(field.options)) {
+      } else if ((field.type === "dropdown" || field.type === "multi_dropdown") && Array.isArray(field.options)) {
         for (const opt of field.options) rows.push(["option", opt, "", "", ""]);
       }
     }
@@ -192,7 +192,7 @@ export function exportTemplateToExcel(template) {
       rows.push(["domain_field", field.id, field.label, field.type, field.type === "scored_dropdown" ? (field.weight ?? "") : ""]);
       if (field.type === "scored_dropdown" && Array.isArray(field.options)) {
         for (const opt of field.options) rows.push(["option", opt.score, opt.label, "", ""]);
-      } else if (field.type === "dropdown" && Array.isArray(field.options)) {
+      } else if ((field.type === "dropdown" || field.type === "multi_dropdown") && Array.isArray(field.options)) {
         for (const opt of field.options) rows.push(["option", opt, "", "", ""]);
       }
     }

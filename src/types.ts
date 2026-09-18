@@ -169,7 +169,10 @@ export interface PreInterviewResourcesSettings {
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
-export type FieldType = "text" | "scored_dropdown" | "dropdown" | "number" | "boolean";
+// "multi_dropdown" is a checkbox-list variant of "dropdown" — same raw
+// string[] `options` shape, but the stored/submitted value is a string[]
+// (the picked options) instead of a single string.
+export type FieldType = "text" | "scored_dropdown" | "dropdown" | "multi_dropdown" | "number" | "boolean";
 
 export interface FieldOption {
   value: string | number;

@@ -18,6 +18,13 @@ function resolveFieldValue(field, rawValue) {
     const opt = (field.options || []).find(o => String(o.score) === String(rawValue));
     return opt ? `${opt.score} - ${opt.label}` : String(rawValue);
   }
+  // multi_dropdown stores an array of picked options — join explicitly
+  // instead of relying on Array.prototype.toString()'s bare comma join
+  // (no space), which reads worse and is inconsistent with every other
+  // multi-value join in this file (" | ").
+  if (Array.isArray(rawValue)) {
+    return rawValue.length ? rawValue.join(", ") : "";
+  }
   return String(rawValue);
 }
 

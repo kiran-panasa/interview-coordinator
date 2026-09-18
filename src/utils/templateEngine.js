@@ -209,7 +209,7 @@ export function initFeedbackState(template, existing = {}) {
 
     const emptyCard = {};
     for (const f of domain.cardFields || []) {
-      emptyCard[f.id] = f.type === "text" ? "" : null;
+      emptyCard[f.id] = f.type === "text" ? "" : f.type === "multi_dropdown" ? [] : null;
     }
 
     const cardCount = Math.max(prev.cards?.length || 0, domain.defaultCardCount || 0);
@@ -219,7 +219,7 @@ export function initFeedbackState(template, existing = {}) {
 
     const domainState = { cards };
     for (const f of domain.domainFields || []) {
-      domainState[f.id] = prev[f.id] ?? (f.type === "text" ? "" : null);
+      domainState[f.id] = prev[f.id] ?? (f.type === "text" ? "" : f.type === "multi_dropdown" ? [] : null);
     }
 
     domains[domain.id] = domainState;

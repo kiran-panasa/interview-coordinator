@@ -112,6 +112,61 @@ function DropdownField({ field, value, onChange, disabled, questionBank }) {
   );
 }
 
+// Checkbox-list variant of DropdownField — same raw-string `options` shape,
+// but lets more than one be picked. Value is a string[] (order = pick
+// order). Normalizes a legacy plain-string value (from before a field was
+// switched from "dropdown" to "multi_dropdown") into a single-item array so
+// old submitted feedback still displays/edits correctly instead of breaking.
+function MultiDropdownField({ field, value, onChange, disabled, questionBank }) {
+  const options = (field.options?.length > 0)
+    ? field.options
+    : field.optionsSource
+      ? (questionBank?.[field.optionsSource.replace("questionBank.", "")] || [])
+      : [];
+  const selected = Array.isArray(value) ? value : (value ? [value] : []);
+
+  const toggle = (opt) => {
+    if (disabled) return;
+    onChange(selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt]);
+  };
+
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+        {field.label}
+      </label>
+      {disabled ? (
+        <div className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 bg-gray-50 min-h-[38px]">
+          {selected.length > 0 ? selected.join(", ") : <span className="text-gray-400">—</span>}
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2 border border-gray-200 rounded-xl p-2.5">
+          {options.length === 0 && <span className="text-xs text-gray-400 px-1 py-1">No options configured.</span>}
+          {options.map(opt => {
+            const isSelected = selected.includes(opt);
+            return (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => toggle(opt)}
+                className={cls(
+                  "flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors",
+                  isSelected
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-brand-300"
+                )}
+              >
+                {isSelected && <Check className="w-3 h-3" strokeWidth={2.5} />}
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Scored dropdown: options are {label, score} objects
 function ScoredDropdownField({ field, value, onChange, disabled }) {
   const options = [...(field.options || [])].sort((a, b) => b.score - a.score);
@@ -188,7 +243,12 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
   const cardLabel = `${typeLabels[domain.type] || "Card"} ${index + 1}`;
 
   const inputFields = (domain.cardFields || []);
-  const filledCount = inputFields.filter(f => cardData[f.id] != null && cardData[f.id] !== "").length;
+  const isFieldFilled = (f) => {
+    const v = cardData[f.id];
+    if (f.type === "multi_dropdown") return Array.isArray(v) && v.length > 0;
+    return v != null && v !== "";
+  };
+  const filledCount = inputFields.filter(isFieldFilled).length;
   const complete = filledCount === inputFields.length && inputFields.length > 0;
 
   const cardRating = computeCardRating(domain.cardFields, cardData);
@@ -240,6 +300,9 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
             if (field.type === "dropdown") {
               return <DropdownField key={field.id} field={field} value={cardData[field.id]} onChange={v => update(field.id, v)} disabled={disabled} questionBank={questionBank} />;
             }
+            if (field.type === "multi_dropdown") {
+              return <MultiDropdownField key={field.id} field={field} value={cardData[field.id]} onChange={v => update(field.id, v)} disabled={disabled} questionBank={questionBank} />;
+            }
             if (field.type === "scored_dropdown") {
               return <ScoredDropdownField key={field.id} field={field} value={cardData[field.id]} onChange={v => update(field.id, v)} disabled={disabled} />;
             }
@@ -268,7 +331,9 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
 
   const addCard = useCallback(() => {
     const emptyCard = {};
-    for (const f of domain.cardFields || []) emptyCard[f.id] = f.type === "text" ? "" : null;
+    for (const f of domain.cardFields || []) {
+      emptyCard[f.id] = f.type === "text" ? "" : f.type === "multi_dropdown" ? [] : null;
+    }
     onChange({ ...domainData, cards: [...(domainData.cards || []), emptyCard] });
   }, [domain, domainData, onChange]);
 
@@ -364,6 +429,9 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
             }
             if (field.type === "dropdown") {
               return <DropdownField key={field.id} field={field} value={domainData[field.id]} onChange={v => updateField(field.id, v)} disabled={disabled} questionBank={questionBank} />;
+            }
+            if (field.type === "multi_dropdown") {
+              return <MultiDropdownField key={field.id} field={field} value={domainData[field.id]} onChange={v => updateField(field.id, v)} disabled={disabled} questionBank={questionBank} />;
             }
             return null;
           })}
