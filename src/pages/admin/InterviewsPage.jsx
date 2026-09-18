@@ -8,6 +8,7 @@ import {
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
+import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -16,7 +17,7 @@ import {
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
   getTemplate, importCompletedInterview, importScheduledInterview,
-  createNotification, subscribeToBlockedDates, getInterviewIntegrity, getPreInterviewResources,
+  createNotification, subscribeToBlockedDates, getInterviewIntegrity,
   logInterviewHistory, getInterviewHistory,
   getScheduleInviteByInterviewId, updateScheduleInvite,
   getAllInterviews, getInterview,
@@ -455,61 +456,6 @@ export default function InterviewsPage() {
 
   // ── Send calendar invite ────────────────────────────────────────────────────
 
-  // Shared by a normal successful send and by manually confirming a link
-  // that Apps Script already created (see handleManualMeetLink) — both
-  // cases should notify people identically.
-  const sendInviteEmails_ = async (iv, meetLink) => {
-    if (iv.interviewerEmail) {
-      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:  "sendEmail",
-        subject: "Action Required: Interview Assigned",
-        body:
-          `Hi ${iv.interviewerName || "there"},\n\nYour interview meeting link is ready:\n\n` +
-          `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
-          `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
-          `Meeting Link: ${meetLink}\n\n` +
-          `Thank you.`,
-        recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || iv.interviewerEmail }],
-      }).catch(() => {});
-    }
-
-    // Candidate confirmation — separate from the interviewer email above,
-    // and (same as the Nudge confirm flow) the only place the admin-managed
-    // pre-interview resources get attached. Interviewers never see this.
-    if (iv.candidateEmail) {
-      const resources = await getPreInterviewResources().catch(() => null);
-      const instructionLines = [];
-      if (resources?.videoGuideUrl) {
-        instructionLines.push(`${resources.videoGuideLabel || "Video Setup Guide"}: ${resources.videoGuideUrl}`);
-      }
-      (resources?.documents || [])
-        .filter(d => d.type === "instruction" && d.url)
-        .forEach(d => instructionLines.push(`${d.label || "Interview Instructions"}: ${d.url}`));
-      const referenceLines = (resources?.documents || [])
-        .filter(d => d.type === "reference" && d.url)
-        .map(d => `${d.label || "Reference Document"}: ${d.url}`);
-
-      const instructionsBlock = instructionLines.length
-        ? `\nPlease review the following before joining your interview:\n${instructionLines.map(l => `• ${l}`).join("\n")}\n`
-        : "";
-      const referenceBlock = referenceLines.length
-        ? `\nAdditional Reference Documents:\n${referenceLines.map(l => `• ${l}`).join("\n")}\n`
-        : "";
-
-      callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:  "sendEmail",
-        subject: `Interview Confirmed — ${iv.round || iv.templateName || "Interview"}`,
-        body:
-          `Hi ${iv.candidateName || "there"},\n\nYour interview has been confirmed:\n\n` +
-          `Round: ${iv.round || iv.templateName || "Interview"}\nDate: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
-          `Meeting Link: ${meetLink}\n` +
-          instructionsBlock + referenceBlock +
-          `\nNxtWave Interview Team`,
-        recipients: [{ email: iv.candidateEmail, name: iv.candidateName || iv.candidateEmail }],
-      }).catch(() => {});
-    }
-  };
-
   const sendInvite = async (iv) => {
     setInviting(s => ({ ...s, [iv.id]: true }));
     setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
@@ -547,7 +493,7 @@ export default function InterviewsPage() {
         inviteSentAt: new Date().toISOString(),
       });
       if (result.meetLink) {
-        await sendInviteEmails_(iv, result.meetLink);
+        await sendInviteConfirmationEmails(iv, result.meetLink);
       }
 
       if (result.hostManagementWarning) {
@@ -900,7 +846,7 @@ export default function InterviewsPage() {
         meetLink: trimmed,
         inviteSentAt: new Date().toISOString(),
       });
-      await sendInviteEmails_(iv, trimmed);
+      await sendInviteConfirmationEmails(iv, trimmed);
       setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
       setToast({ message: "Meet link saved and confirmation emails sent." });
     } catch (e) {
