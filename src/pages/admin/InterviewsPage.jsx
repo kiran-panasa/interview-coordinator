@@ -11,7 +11,7 @@ import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled,
+  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, reopenNoShowInterview,
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, markSlotBooked, markSlotFree,
@@ -817,6 +817,31 @@ export default function InterviewsPage() {
     }
   };
 
+  // Recovery for "marked no-show, but the candidate actually joined late" —
+  // resets status back to scheduled so the interviewer's own attendance
+  // gate reappears and they can proceed through the normal feedback flow.
+  // See reopenNoShowInterview in api/interviews.ts.
+  const handleReopenNoShow = async (iv) => {
+    if (!confirm(`Reopen "${iv.candidateName}"'s interview?\n\nThis clears the no-show mark so ${iv.interviewerName || "the panelist"} can confirm attendance and submit feedback.`)) return;
+    try {
+      await reopenNoShowInterview(iv.id);
+      if (iv.interviewerId) {
+        createNotification({
+          type:           "feedback_reminder",
+          recipientId:    iv.interviewerId,
+          recipientEmail: iv.interviewerEmail,
+          interviewId:    iv.id,
+          candidateName:  iv.candidateName,
+          message:        `${iv.candidateName}'s interview on ${formatDate(iv.scheduledDate)} was reopened — they joined after being marked no-show. Please confirm attendance and submit your feedback.`,
+          status:         "unread",
+        }).catch(() => {});
+      }
+      setToast({ message: "Interview reopened — the panelist can now confirm attendance and submit feedback." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   const handleArchive = async (iv) => {
     try {
       await archiveInterview(iv.id);
@@ -1450,6 +1475,12 @@ export default function InterviewsPage() {
                       label: "Mark No-show",
                       onClick: () => handleMarkNoShow(iv),
                       show: iv.status === "scheduled" || iv.status === "pending_acceptance",
+                    },
+                    {
+                      label: "Reopen (Candidate Joined Late)",
+                      onClick: () => handleReopenNoShow(iv),
+                      show: iv.status === "no_show",
+                      highlight: true,
                     },
                     {
                       label: "View Feedback",

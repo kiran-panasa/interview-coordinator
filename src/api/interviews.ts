@@ -175,6 +175,22 @@ export async function markCandidateAttendance(
   await updateDoc(doc(db, "interviews", interviewId), update);
 }
 
+// Admin-only recovery for the "candidate was marked no-show but then
+// actually joined late" edge case. Resets status back to "scheduled" and
+// clears the attendance fields so the interviewer's own "Did the candidate
+// join?" gate reappears exactly as if it had never been answered — the
+// interviewer then confirms attendance and proceeds through the normal
+// feedback flow themselves, with no separate interviewer-facing undo UI
+// needed. See handleReopenNoShow in InterviewsPage.jsx.
+export async function reopenNoShowInterview(interviewId: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", interviewId), {
+    status:              "scheduled",
+    candidateJoined:     null,
+    attendanceMarkedAt:  null,
+    updatedAt:           new Date().toISOString(),
+  });
+}
+
 export async function saveFeedbackDraft(id: string, feedback: Record<string, unknown>): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
