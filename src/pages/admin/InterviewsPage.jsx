@@ -1251,7 +1251,12 @@ export default function InterviewsPage() {
   // else — never a fake link.
   async function withResolvedLinks(list) {
     return mapWithConcurrency(list, 8, async (iv) => {
-      if (iv.status !== "completed" || (!iv.eventId && !iv.meetLink)) return iv;
+      // Was `iv.status !== "completed"` — silently skipped partially
+      // completed interviews, which have a real recording/transcript too
+      // (the interview did happen, just wasn't fully finished). They'd
+      // only ever get backfilled by the 15-min sweep, same stale-download
+      // risk this function exists to close for "completed" ones.
+      if (!isDoneStatus(iv.status) || (!iv.eventId && !iv.meetLink)) return iv;
       const patch = {};
       if (!iv.meetingRecordingUrl) {
         try { patch.meetingRecordingUrl = await resolveRecordingUrl_(iv); }
