@@ -314,16 +314,58 @@ export async function scheduleInterviewMeet(interviewId: string): Promise<Schedu
     throw err;
   }
 
+  let meetLink: string = result.meetLink || "";
+  // Google creates a Calendar event's Meet room asynchronously, so the
+  // insert response can come back with an event id but no link yet — the
+  // "invite went out, link never showed up" case. Ask for it again before
+  // saving, so the interview isn't left as "invite sent" with an empty link.
+  if (!meetLink && result.eventId) {
+    meetLink = await fetchMeetLinkForEvent(interviewId, result.eventId);
+  }
+
   await updateDoc(ref, {
-    meetLink: result.meetLink || "",
+    meetLink,
     eventId: result.eventId || "",
     recallBotId: result.recallBotId || "",
     inviteSentAt: new Date().toISOString(),
     scheduleStartedAt: deleteField(),
     updatedAt: new Date().toISOString(),
   });
-  if (result.meetLink) await sendInviteConfirmationEmails(iv, result.meetLink);
-  return { meetLink: result.meetLink || "", eventId: result.eventId || "", hostManagementWarning: result.hostManagementWarning };
+  if (meetLink) await sendInviteConfirmationEmails(iv, meetLink);
+  return { meetLink, eventId: result.eventId || "", hostManagementWarning: result.hostManagementWarning };
+}
+
+// Looks up the Meet link of an already-created Calendar event via Apps
+// Script's "getMeetLink" action (which waits for Google to finish creating
+// it), retrying a few times. Returns "" if it still isn't there — or if the
+// deployed script predates that action — rather than throwing, so callers
+// can decide how to tell the user.
+export async function fetchMeetLinkForEvent(interviewId: string, eventId: string, attempts = 3): Promise<string> {
+  const { callAppsScript } = await import("../lib/appsScript");
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res: any = await callAppsScript(
+        import.meta.env.VITE_APPS_SCRIPT_URL,
+        import.meta.env.VITE_APPS_SCRIPT_SECRET,
+        { action: "getMeetLink", eventId, interviewId },
+        30000,
+      );
+      if (res.meetLink) return res.meetLink as string;
+    } catch (err) {
+      console.error("getMeetLink failed:", err);
+      if (err instanceof Error && err.message.includes("Unknown action")) return "";
+    }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  return "";
+}
+
+// Admin "Refresh Meet Link": saves the link onto an interview whose invite
+// exists but whose link never got stored.
+export async function refreshMeetLink(interviewId: string, eventId: string): Promise<string> {
+  const link = await fetchMeetLinkForEvent(interviewId, eventId, 2);
+  if (link) await updateDoc(doc(db, "interviews", interviewId), { meetLink: link, updatedAt: new Date().toISOString() });
+  return link;
 }
 
 // Shared choke point behind both markInterviewCompleted and

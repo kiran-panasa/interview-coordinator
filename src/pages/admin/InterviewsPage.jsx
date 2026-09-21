@@ -9,7 +9,7 @@ import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
-import { scheduleInterviewMeet } from "../../api/interviews";
+import { scheduleInterviewMeet, refreshMeetLink } from "../../api/interviews";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -528,6 +528,8 @@ export default function InterviewsPage() {
         setToast({ message: "An invite is already being created for this interview — the Meet link will appear here within a minute.", type: "info" });
       } else if (result.alreadyScheduled) {
         setToast({ message: "This interview already has an invite — nothing new was created.", type: "info" });
+      } else if (!result.meetLink) {
+        setToast({ message: "Calendar invite created, but Google hasn't finished creating its Meet link yet. Use \"Refresh Meet Link\" from this row's menu in a minute.", type: "info" });
       } else if (result.hostManagementWarning) {
         console.error("Host management warning:", result.hostManagementWarning);
         setToast({ message: "Invite sent, but couldn't enable panelist recording access — see browser console for details.", type: "info" });
@@ -814,6 +816,19 @@ export default function InterviewsPage() {
   // resets status back to scheduled so the interviewer's own attendance
   // gate reappears and they can proceed through the normal feedback flow.
   // See reopenNoShowInterview in api/interviews.ts.
+  // Invite exists (eventId) but its Meet link never got saved — Google
+  // creates the room a little after the event, so ask for it again.
+  const handleRefreshMeetLink = async (iv) => {
+    try {
+      const link = await refreshMeetLink(iv.id, iv.eventId);
+      setToast(link
+        ? { message: "Meet link found and saved." }
+        : { message: "Google hasn't produced a Meet link for this event yet — try again in a minute, or use \"Add Meet Link Manually\".", type: "info" });
+    } catch (e) {
+      setToast({ message: `Couldn't refresh the Meet link: ${e.message}`, type: "error" });
+    }
+  };
+
   const handleReopenNoShow = async (iv) => {
     if (!confirm(`Reopen "${iv.candidateName}"'s interview?\n\nThis clears the no-show mark so ${iv.interviewerName || "the panelist"} can confirm attendance and submit feedback.`)) return;
     try {
@@ -1499,9 +1514,11 @@ export default function InterviewsPage() {
                     {
                       label: (inviting[iv.id] || isScheduleInFlight(iv))
                         ? "Creating invite…"
-                        : (iv.eventId || iv.meetLink)
+                        : iv.meetLink
                           ? "✓ Invite Sent"
-                          : sendInviteFailed[iv.id] ? "Retry Send Invite" : "Send Invite",
+                          : iv.eventId
+                            ? "Invite created — link pending"
+                            : sendInviteFailed[iv.id] ? "Retry Send Invite" : "Send Invite",
                       onClick: () => {
                         if (iv.eventId || iv.meetLink || inviting[iv.id] || isScheduleInFlight(iv)) return;
                         if (sendInviteFailed[iv.id] && !confirm(
@@ -1516,11 +1533,19 @@ export default function InterviewsPage() {
                         && iv.status !== "pending_acceptance" && iv.status !== "declined",
                     },
                     {
+                      label: "Refresh Meet Link",
+                      onClick: () => handleRefreshMeetLink(iv),
+                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
+                        && iv.status !== "pending_acceptance" && iv.status !== "declined"
+                        && !!iv.eventId && !iv.meetLink,
+                      highlight: true,
+                    },
+                    {
                       label: "Add Meet Link Manually",
                       onClick: () => handleManualMeetLink(iv),
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
                         && iv.status !== "pending_acceptance" && iv.status !== "declined"
-                        && !iv.eventId && !iv.meetLink,
+                        && !iv.meetLink,
                     },
                     {
                       label: iv.assignmentLinks?.length ? `Assignment Links (${iv.assignmentLinks.length})` : "Assignment Links",

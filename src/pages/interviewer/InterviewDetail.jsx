@@ -211,6 +211,9 @@ export default function InterviewDetail() {
         if (result.inProgress) {
           setToast({ message: "Interview accepted — the Meet link is being created and will appear here shortly." });
           notifyAdminsInterviewAccepted({ ...interview, autoScheduled: true });
+        } else if (!result.meetLink) {
+          setToast({ message: "Interview accepted — the calendar invite was sent and the Meet link will appear here shortly." });
+          notifyAdminsInterviewAccepted({ ...interview, autoScheduled: true });
         } else {
           setInterview(iv => ({ ...iv, meetLink: result.meetLink, eventId: result.eventId }));
           setToast({ message: "Interview accepted — Meet link created and sent to the candidate." });
