@@ -120,7 +120,20 @@ export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "method_not_allowed" });
   }
+  try {
+    return await scheduleHandler(req, res);
+  } catch (err) {
+    // Anything thrown before/outside the scheduling step itself (most
+    // likely FIREBASE_SERVICE_ACCOUNT_KEY missing or malformed on the
+    // server). Nothing has been created at this point, so the client is
+    // told it's safe to fall back — and the real reason is returned instead
+    // of Vercel's opaque HTML 500 page.
+    console.error("schedule-interview crashed before scheduling:", err);
+    return res.status(500).json({ success: false, error: "server_error", message: err?.message || String(err) });
+  }
+}
 
+async function scheduleHandler(req, res) {
   const db = getDb(); // must run before getAuth() — initializes the Admin app
 
   const header = req.headers.authorization || "";

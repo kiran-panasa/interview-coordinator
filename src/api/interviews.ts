@@ -250,10 +250,55 @@ export async function scheduleInterviewMeet(interviewId: string): Promise<Schedu
   });
   let json: any = null;
   try { json = await res.json(); } catch { /* non-JSON body, e.g. a gateway timeout page */ }
+  // A 500 means the server function failed BEFORE it created anything (bad
+  // server config, crashed on start) — so, unlike a timeout, it's safe to
+  // fall back to doing the same call from this browser instead of leaving
+  // the interview without a Meet link.
+  if (res.status === 500) {
+    console.error("api/schedule-interview failed, falling back to browser scheduling:", json?.message || json?.error);
+    return scheduleInterviewMeetFromBrowser(interviewId);
+  }
   if (!res.ok || !json?.success) {
     throw new Error(json?.message || json?.error || `Server error (${res.status})`);
   }
   return json as ScheduleInterviewResult;
+}
+
+async function scheduleInterviewMeetFromBrowser(interviewId: string): Promise<ScheduleInterviewResult> {
+  const iv: any = await getInterview(interviewId);
+  if (!iv) throw new Error("Interview not found.");
+  if (iv.eventId || iv.meetLink) {
+    return { meetLink: iv.meetLink || "", eventId: iv.eventId || "", alreadyScheduled: true };
+  }
+  const [{ callAppsScript }, { sendInviteConfirmationEmails }] = await Promise.all([
+    import("../lib/appsScript"),
+    import("../utils/inviteEmails"),
+  ]);
+  const result: any = await callAppsScript(
+    import.meta.env.VITE_APPS_SCRIPT_URL,
+    import.meta.env.VITE_APPS_SCRIPT_SECRET,
+    {
+      action:           "schedule",
+      interviewId,
+      candidateEmail:   iv.candidateEmail,
+      interviewerEmail: iv.interviewerEmail,
+      candidateName:    iv.candidateName,
+      interviewerName:  iv.interviewerName,
+      round:            iv.round,
+      date:             iv.scheduledDate,
+      startTime:        iv.scheduledTime,
+      durationMinutes:  iv.duration || 60,
+    },
+    60000,
+  );
+  await updateInterview(interviewId, {
+    meetLink: result.meetLink,
+    eventId: result.eventId,
+    recallBotId: result.recallBotId || "",
+    inviteSentAt: new Date().toISOString(),
+  } as Partial<Omit<Interview, "id">>);
+  if (result.meetLink) await sendInviteConfirmationEmails(iv, result.meetLink);
+  return { meetLink: result.meetLink, eventId: result.eventId, hostManagementWarning: result.hostManagementWarning };
 }
 
 // Shared choke point behind both markInterviewCompleted and
