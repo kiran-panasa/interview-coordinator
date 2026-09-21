@@ -1,7 +1,7 @@
 import { db, auth } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, deleteField,
-  query, where, orderBy, onSnapshot, writeBatch, setDoc,
+  query, where, orderBy, onSnapshot, writeBatch, setDoc, runTransaction,
 } from "firebase/firestore";
 import { parseInterviewStart } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
@@ -234,74 +234,96 @@ export interface ScheduleInterviewResult {
   hostManagementWarning?: string;
 }
 
-// Creates the Calendar event + Meet link for an interview on the server
-// (api/schedule-interview.js), which also saves the link onto the interview
-// doc and sends the confirmation emails. Running it there instead of in the
-// browser means the result is saved even if this tab closes mid-request, and
-// its lock stops a second click (or an Accept racing an admin) from creating
-// a duplicate Calendar event.
-export async function scheduleInterviewMeet(interviewId: string): Promise<ScheduleInterviewResult> {
-  const idToken = await auth.currentUser?.getIdToken();
-  if (!idToken) throw new Error("Not signed in.");
-  const res = await fetch("/api/schedule-interview", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-    body: JSON.stringify({ interviewId }),
-  });
-  let json: any = null;
-  try { json = await res.json(); } catch { /* non-JSON body, e.g. a gateway timeout page */ }
-  // A 500 means the server function failed BEFORE it created anything (bad
-  // server config, crashed on start) — so, unlike a timeout, it's safe to
-  // fall back to doing the same call from this browser instead of leaving
-  // the interview without a Meet link.
-  // Same for 401/403/404/405 (auth/permission/deploy problems on the
-  // function itself). Only 502 (Apps Script itself reported failure) and
-  // 504 (no answer — the event may exist) are NOT retried from here.
-  if ([400, 401, 403, 404, 405, 500].includes(res.status)) {
-    console.error(`api/schedule-interview returned ${res.status}, falling back to browser scheduling:`, json?.message || json?.error);
-    return scheduleInterviewMeetFromBrowser(interviewId);
-  }
-  if (!res.ok || !json?.success) {
-    throw new Error(json?.message || json?.error || `Server error (${res.status})`);
-  }
-  return json as ScheduleInterviewResult;
+const SCHEDULE_LOCK_TTL_MS = 3 * 60 * 1000;
+
+// True when the failure means "we don't know whether the Calendar event got
+// created" (timeout / dropped connection) rather than "Apps Script said it
+// failed". Only in the second case is it safe to release the lock for an
+// immediate retry.
+function isAmbiguousScheduleError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return err instanceof TypeError || msg.includes("timed out");
 }
 
-async function scheduleInterviewMeetFromBrowser(interviewId: string): Promise<ScheduleInterviewResult> {
-  const iv: any = await getInterview(interviewId);
-  if (!iv) throw new Error("Interview not found.");
-  if (iv.eventId || iv.meetLink) {
-    return { meetLink: iv.meetLink || "", eventId: iv.eventId || "", alreadyScheduled: true };
+// Creates the Calendar event + Meet link for an interview and saves it onto
+// the interview doc, from the browser via the Apps Script web app. Used by
+// the interviewer's Accept click and the admin's Send Invite/retry.
+//
+// Two things keep it from producing the "event exists but no link" and
+// "two invites" problems it used to:
+//  - a Firestore-transaction lock (scheduleStartedAt) taken BEFORE calling
+//    Apps Script, so a double-click, or an Accept racing an admin's Send
+//    Invite, can never both create an event;
+//  - the interviewId goes to Apps Script, whose schedule action writes the
+//    link straight to this interview itself — so the link is saved even if
+//    this tab closes or the response never makes it back here.
+export async function scheduleInterviewMeet(interviewId: string): Promise<ScheduleInterviewResult> {
+  const ref = doc(db, "interviews", interviewId);
+
+  const claim = await runTransaction(db, async (txn) => {
+    const snap = await txn.get(ref);
+    if (!snap.exists()) throw new Error("Interview not found.");
+    const data: any = { id: snap.id, ...snap.data() };
+    if (data.eventId || data.meetLink) return { kind: "already" as const, iv: data };
+    const startedAt = data.scheduleStartedAt ? new Date(data.scheduleStartedAt).getTime() : 0;
+    if (startedAt && Date.now() - startedAt < SCHEDULE_LOCK_TTL_MS) return { kind: "in_progress" as const, iv: data };
+    txn.update(ref, { scheduleStartedAt: new Date().toISOString() });
+    return { kind: "claimed" as const, iv: data };
+  });
+
+  if (claim.kind === "already") {
+    return { meetLink: claim.iv.meetLink || "", eventId: claim.iv.eventId || "", alreadyScheduled: true };
   }
+  if (claim.kind === "in_progress") {
+    return { meetLink: "", eventId: "", inProgress: true };
+  }
+  const iv = claim.iv;
+
   const [{ callAppsScript }, { sendInviteConfirmationEmails }] = await Promise.all([
     import("../lib/appsScript"),
     import("../utils/inviteEmails"),
   ]);
-  const result: any = await callAppsScript(
-    import.meta.env.VITE_APPS_SCRIPT_URL,
-    import.meta.env.VITE_APPS_SCRIPT_SECRET,
-    {
-      action:           "schedule",
-      interviewId,
-      candidateEmail:   iv.candidateEmail,
-      interviewerEmail: iv.interviewerEmail,
-      candidateName:    iv.candidateName,
-      interviewerName:  iv.interviewerName,
-      round:            iv.round,
-      date:             iv.scheduledDate,
-      startTime:        iv.scheduledTime,
-      durationMinutes:  iv.duration || 60,
-    },
-    60000,
-  );
-  await updateInterview(interviewId, {
-    meetLink: result.meetLink,
-    eventId: result.eventId,
+
+  let result: any;
+  try {
+    result = await callAppsScript(
+      import.meta.env.VITE_APPS_SCRIPT_URL,
+      import.meta.env.VITE_APPS_SCRIPT_SECRET,
+      {
+        action:           "schedule",
+        interviewId,
+        candidateEmail:   iv.candidateEmail,
+        interviewerEmail: iv.interviewerEmail,
+        candidateName:    iv.candidateName,
+        interviewerName:  iv.interviewerName,
+        round:            iv.round,
+        date:             iv.scheduledDate,
+        startTime:        iv.scheduledTime,
+        durationMinutes:  iv.duration || 60,
+      },
+      60000,
+    );
+  } catch (err) {
+    // Definite failure → nothing was created, free the lock so a retry works
+    // right away. Ambiguous (timeout/network) → the event may exist and
+    // Apps Script may still be about to save its link, so keep the lock; it
+    // expires on its own.
+    if (!isAmbiguousScheduleError(err)) {
+      await updateDoc(ref, { scheduleStartedAt: deleteField() }).catch(() => {});
+    }
+    throw err;
+  }
+
+  await updateDoc(ref, {
+    meetLink: result.meetLink || "",
+    eventId: result.eventId || "",
     recallBotId: result.recallBotId || "",
     inviteSentAt: new Date().toISOString(),
-  } as Partial<Omit<Interview, "id">>);
+    scheduleStartedAt: deleteField(),
+    updatedAt: new Date().toISOString(),
+  });
   if (result.meetLink) await sendInviteConfirmationEmails(iv, result.meetLink);
-  return { meetLink: result.meetLink, eventId: result.eventId, hostManagementWarning: result.hostManagementWarning };
+  return { meetLink: result.meetLink || "", eventId: result.eventId || "", hostManagementWarning: result.hostManagementWarning };
 }
 
 // Shared choke point behind both markInterviewCompleted and

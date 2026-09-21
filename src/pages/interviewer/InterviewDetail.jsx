@@ -201,12 +201,10 @@ export default function InterviewDetail() {
     setInterview(iv => ({ ...iv, status: "scheduled" }));
 
     // Auto-create the Calendar event/Meet link the moment the interviewer
-    // accepts. The work happens on the server (api/schedule-interview.js),
-    // which saves the link onto this interview itself and sends the emails —
-    // so it lands even if this tab closes mid-request, and its lock means
-    // this can never create a second Calendar event for the same interview
-    // (e.g. alongside an admin's manual invite). The live listener on this
-    // page picks up the saved link on its own.
+    // accepts. scheduleInterviewMeet takes a lock first, so this can never
+    // create a second Calendar event for the same interview (e.g. alongside
+    // an admin retry), and Apps Script saves the link onto the interview
+    // itself — the live listener on this page then shows it.
     if (!interview.eventId && !interview.meetLink) {
       try {
         const result = await scheduleInterviewMeet(id);

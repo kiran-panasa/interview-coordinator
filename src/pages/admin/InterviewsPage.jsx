@@ -509,8 +509,8 @@ export default function InterviewsPage() {
 
   // ── Send calendar invite ────────────────────────────────────────────────────
 
-  // The server stamps scheduleStartedAt while it's creating the event and
-  // clears it when done; older than its 3-minute lock means it gave up.
+  // scheduleStartedAt is stamped while an event is being created and cleared
+  // when done; older than the 3-minute lock means it gave up.
   const isScheduleInFlight = (iv) =>
     !!iv.scheduleStartedAt && !iv.eventId && !iv.meetLink
     && Date.now() - new Date(iv.scheduleStartedAt).getTime() < 3 * 60 * 1000;
@@ -519,11 +519,9 @@ export default function InterviewsPage() {
     setInviting(s => ({ ...s, [iv.id]: true }));
     setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
     try {
-      // Runs on the server (api/schedule-interview.js): it creates the
-      // Calendar event, saves the Meet link onto this interview and sends
-      // the confirmation emails itself, so the result is kept even if this
-      // tab closes, and its lock refuses a second event while one is
-      // already being created (or was, via the interviewer's Accept).
+      // Locked so it refuses a second event while one is already being
+      // created (or was, via the interviewer's Accept); Apps Script saves
+      // the link onto the interview itself, so it shows up here live.
       const result = await scheduleInterviewMeet(iv.id);
 
       if (result.inProgress) {
