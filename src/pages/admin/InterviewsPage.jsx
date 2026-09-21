@@ -816,6 +816,22 @@ export default function InterviewsPage() {
   // resets status back to scheduled so the interviewer's own attendance
   // gate reappears and they can proceed through the normal feedback flow.
   // See reopenNoShowInterview in api/interviews.ts.
+  // For when the panelist confirmed outside the portal (email link, chat,
+  // already conducted the interview) and never clicked Accept themselves —
+  // moves it to Scheduled on their behalf. Creates the invite too only if
+  // none exists yet, so an interview that already has a Meet link never
+  // gets a second Calendar event.
+  const handleMarkAccepted = async (iv) => {
+    if (!confirm(`Mark "${iv.candidateName}"'s interview as accepted by ${iv.interviewerName || "the panelist"}?\n\nIts status changes to Scheduled.${iv.eventId || iv.meetLink ? "" : " A calendar invite / Meet link will be created and sent."}`)) return;
+    try {
+      await updateInterview(iv.id, { status: "scheduled" });
+      if (!iv.eventId && !iv.meetLink) await scheduleInterviewMeet(iv.id);
+      setToast({ message: "Marked as accepted — status is now Scheduled." });
+    } catch (e) {
+      setToast({ message: `Couldn't complete this: ${e.message}`, type: "error" });
+    }
+  };
+
   const handleReopenNoShow = async (iv) => {
     if (!confirm(`Reopen "${iv.candidateName}"'s interview?\n\nThis clears the no-show mark so ${iv.interviewerName || "the panelist"} can confirm attendance and submit feedback.`)) return;
     try {
@@ -1490,6 +1506,12 @@ export default function InterviewsPage() {
                       label: "Reassign Interviewer",
                       onClick: () => openReassign(iv),
                       show: iv.status === "declined",
+                      highlight: true,
+                    },
+                    {
+                      label: "Mark as Accepted",
+                      onClick: () => handleMarkAccepted(iv),
+                      show: iv.status === "pending_acceptance",
                       highlight: true,
                     },
                     {
