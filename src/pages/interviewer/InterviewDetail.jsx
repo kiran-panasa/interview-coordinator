@@ -221,7 +221,7 @@ export default function InterviewDetail() {
       } catch (e) {
         console.error("Auto-schedule on accept failed:", e);
         setToast({
-          message: "Interview accepted, but the Meet link couldn't be created automatically — an admin will need to send it from the Interviews page.",
+          message: `Interview accepted, but the Meet link couldn't be created automatically (${e.message}) — an admin will need to send it from the Interviews page.`,
           type: "error",
         });
         notifyAdminsInterviewAccepted({ ...interview, autoScheduleFailed: true, autoScheduleError: e.message });

@@ -162,7 +162,12 @@ async function scheduleHandler(req, res) {
       if (!snap.exists) return { kind: "not_found" };
       const data = snap.data();
 
-      let allowed = data.interviewerId === decoded.uid;
+      // Interviews are looked up by interviewerEmail across the app, and
+      // older ones may carry no (or a stale) interviewerId — so match on
+      // email as well, or the interviewer's own Accept gets a 403.
+      const sameEmail = !!decoded.email && !!data.interviewerEmail
+        && decoded.email.toLowerCase() === String(data.interviewerEmail).toLowerCase();
+      let allowed = data.interviewerId === decoded.uid || sameEmail;
       if (!allowed) {
         const userSnap = await txn.get(db.collection("users").doc(decoded.uid));
         allowed = userSnap.exists && userSnap.data().role === "admin";

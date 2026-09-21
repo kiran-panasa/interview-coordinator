@@ -254,8 +254,11 @@ export async function scheduleInterviewMeet(interviewId: string): Promise<Schedu
   // server config, crashed on start) — so, unlike a timeout, it's safe to
   // fall back to doing the same call from this browser instead of leaving
   // the interview without a Meet link.
-  if (res.status === 500) {
-    console.error("api/schedule-interview failed, falling back to browser scheduling:", json?.message || json?.error);
+  // Same for 401/403/404/405 (auth/permission/deploy problems on the
+  // function itself). Only 502 (Apps Script itself reported failure) and
+  // 504 (no answer — the event may exist) are NOT retried from here.
+  if ([400, 401, 403, 404, 405, 500].includes(res.status)) {
+    console.error(`api/schedule-interview returned ${res.status}, falling back to browser scheduling:`, json?.message || json?.error);
     return scheduleInterviewMeetFromBrowser(interviewId);
   }
   if (!res.ok || !json?.success) {
