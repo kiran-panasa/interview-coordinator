@@ -13,9 +13,9 @@ import {
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
   getActiveAdmins, getCandidate,
 } from "../../api/firestore";
+import { scheduleInterviewMeet } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
-import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -201,37 +201,23 @@ export default function InterviewDetail() {
     setInterview(iv => ({ ...iv, status: "scheduled" }));
 
     // Auto-create the Calendar event/Meet link the moment the interviewer
-    // accepts — same Apps Script "schedule" call the admin's own "Send
-    // Invite" action makes on InterviewsPage.jsx, just triggered from here
-    // instead, so an admin no longer has to separately notice the
-    // acceptance and click it themselves. Skipped if an admin already sent
-    // the invite manually before this interviewer got around to accepting
-    // (same eventId/meetLink idempotency guard Send Invite itself uses) —
-    // never create a second Meet space for the same interview.
-    if (!interview.eventId && !interview.meetLink && APPS_SCRIPT_URL) {
+    // accepts. The work happens on the server (api/schedule-interview.js),
+    // which saves the link onto this interview itself and sends the emails —
+    // so it lands even if this tab closes mid-request, and its lock means
+    // this can never create a second Calendar event for the same interview
+    // (e.g. alongside an admin's manual invite). The live listener on this
+    // page picks up the saved link on its own.
+    if (!interview.eventId && !interview.meetLink) {
       try {
-        const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action:           "schedule",
-          interviewId:      id,
-          candidateEmail:   interview.candidateEmail,
-          interviewerEmail: interview.interviewerEmail,
-          candidateName:    interview.candidateName,
-          interviewerName:  interview.interviewerName,
-          round:            interview.round,
-          date:             interview.scheduledDate,
-          startTime:        interview.scheduledTime,
-          durationMinutes:  interview.duration || 60,
-        }, 60000);
-        await updateInterview(id, {
-          meetLink:     result.meetLink,
-          eventId:      result.eventId,
-          recallBotId:  result.recallBotId || "",
-          inviteSentAt: new Date().toISOString(),
-        });
-        setInterview(iv => ({ ...iv, meetLink: result.meetLink, eventId: result.eventId }));
-        if (result.meetLink) await sendInviteConfirmationEmails(interview, result.meetLink);
-        setToast({ message: "Interview accepted — Meet link created and sent to the candidate." });
-        notifyAdminsInterviewAccepted({ ...interview, autoScheduled: true });
+        const result = await scheduleInterviewMeet(id);
+        if (result.inProgress) {
+          setToast({ message: "Interview accepted — the Meet link is being created and will appear here shortly." });
+          notifyAdminsInterviewAccepted({ ...interview, autoScheduled: true });
+        } else {
+          setInterview(iv => ({ ...iv, meetLink: result.meetLink, eventId: result.eventId }));
+          setToast({ message: "Interview accepted — Meet link created and sent to the candidate." });
+          notifyAdminsInterviewAccepted({ ...interview, autoScheduled: true });
+        }
       } catch (e) {
         console.error("Auto-schedule on accept failed:", e);
         setToast({

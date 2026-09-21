@@ -226,6 +226,36 @@ async function pushToAcademyIfApplicable(interviewId: string) {
   }
 }
 
+export interface ScheduleInterviewResult {
+  meetLink: string;
+  eventId: string;
+  alreadyScheduled?: boolean;
+  inProgress?: boolean;
+  hostManagementWarning?: string;
+}
+
+// Creates the Calendar event + Meet link for an interview on the server
+// (api/schedule-interview.js), which also saves the link onto the interview
+// doc and sends the confirmation emails. Running it there instead of in the
+// browser means the result is saved even if this tab closes mid-request, and
+// its lock stops a second click (or an Accept racing an admin) from creating
+// a duplicate Calendar event.
+export async function scheduleInterviewMeet(interviewId: string): Promise<ScheduleInterviewResult> {
+  const idToken = await auth.currentUser?.getIdToken();
+  if (!idToken) throw new Error("Not signed in.");
+  const res = await fetch("/api/schedule-interview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ interviewId }),
+  });
+  let json: any = null;
+  try { json = await res.json(); } catch { /* non-JSON body, e.g. a gateway timeout page */ }
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || json?.error || `Server error (${res.status})`);
+  }
+  return json as ScheduleInterviewResult;
+}
+
 // Shared choke point behind both markInterviewCompleted and
 // markInterviewPartiallyCompleted below — every path that can complete an
 // interview (feedback submission, the interviewer's Mark as

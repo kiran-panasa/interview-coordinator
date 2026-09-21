@@ -9,6 +9,7 @@ import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
+import { scheduleInterviewMeet } from "../../api/interviews";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -508,47 +509,28 @@ export default function InterviewsPage() {
 
   // ── Send calendar invite ────────────────────────────────────────────────────
 
+  // The server stamps scheduleStartedAt while it's creating the event and
+  // clears it when done; older than its 3-minute lock means it gave up.
+  const isScheduleInFlight = (iv) =>
+    !!iv.scheduleStartedAt && !iv.eventId && !iv.meetLink
+    && Date.now() - new Date(iv.scheduleStartedAt).getTime() < 3 * 60 * 1000;
+
   const sendInvite = async (iv) => {
     setInviting(s => ({ ...s, [iv.id]: true }));
     setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
     try {
-      // Longer than callAppsScript's 25s default — "schedule" does several
-      // sequential Google API calls server-side (Meet space creation, two
-      // member adds, the Calendar insert itself) that can legitimately run
-      // past 25s under load. A client-side timeout here does NOT stop the
-      // Apps Script execution, which keeps running to completion regardless
-      // — so a short timeout mainly just makes the browser give up on a
-      // request that's actually going to succeed a few seconds later,
-      // which is exactly what produced the "created in Calendar but no
-      // Meet link saved" reports.
-      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:          "schedule",
-        // Lets the Apps Script write the Meet link straight to this
-        // interview's own Firestore doc server-side, the moment it's
-        // created — before it even tries to respond back to us. That way
-        // the link is saved (and shows up here live) even if this fetch
-        // times out or the tab gets closed before the response arrives.
-        interviewId:     iv.id,
-        candidateEmail:  iv.candidateEmail,
-        interviewerEmail: iv.interviewerEmail,
-        candidateName:   iv.candidateName,
-        interviewerName: iv.interviewerName,
-        round:           iv.round,
-        date:            iv.scheduledDate,
-        startTime:       iv.scheduledTime,
-        durationMinutes: iv.duration || 60,
-      }, 60000);
-      await updateInterview(iv.id, {
-        meetLink: result.meetLink,
-        eventId:  result.eventId,
-        recallBotId: result.recallBotId || "",
-        inviteSentAt: new Date().toISOString(),
-      });
-      if (result.meetLink) {
-        await sendInviteConfirmationEmails(iv, result.meetLink);
-      }
+      // Runs on the server (api/schedule-interview.js): it creates the
+      // Calendar event, saves the Meet link onto this interview and sends
+      // the confirmation emails itself, so the result is kept even if this
+      // tab closes, and its lock refuses a second event while one is
+      // already being created (or was, via the interviewer's Accept).
+      const result = await scheduleInterviewMeet(iv.id);
 
-      if (result.hostManagementWarning) {
+      if (result.inProgress) {
+        setToast({ message: "An invite is already being created for this interview — the Meet link will appear here within a minute.", type: "info" });
+      } else if (result.alreadyScheduled) {
+        setToast({ message: "This interview already has an invite — nothing new was created.", type: "info" });
+      } else if (result.hostManagementWarning) {
         console.error("Host management warning:", result.hostManagementWarning);
         setToast({ message: "Invite sent, but couldn't enable panelist recording access — see browser console for details.", type: "info" });
       } else {
@@ -557,7 +539,7 @@ export default function InterviewsPage() {
     } catch (e) {
       setSendInviteFailed(s => ({ ...s, [iv.id]: true }));
       setToast({
-        message: `Couldn't confirm the invite went through (${e.message}). The Calendar event may still be created behind the scenes — if so, the Meet link will appear here on its own within a minute or two. If it doesn't show up, check this interview's Meet column before sending again, to avoid creating a duplicate.`,
+        message: `Couldn't confirm the invite went through (${e.message}). If the Calendar event was still created, the Meet link will appear here on its own within a minute or two. If it doesn't, use "Add Meet Link Manually" from the row's menu rather than sending again, to avoid a duplicate.`,
         type: "error",
       });
     }
@@ -1517,26 +1499,30 @@ export default function InterviewsPage() {
                       highlight: true,
                     },
                     {
-                      label: inviting[iv.id]
-                        ? "Sending…"
+                      label: (inviting[iv.id] || isScheduleInFlight(iv))
+                        ? "Creating invite…"
                         : (iv.eventId || iv.meetLink)
                           ? "✓ Invite Sent"
                           : sendInviteFailed[iv.id] ? "Retry Send Invite" : "Send Invite",
                       onClick: () => {
-                        if (iv.eventId || iv.meetLink || inviting[iv.id]) return;
+                        if (iv.eventId || iv.meetLink || inviting[iv.id] || isScheduleInFlight(iv)) return;
                         if (sendInviteFailed[iv.id] && !confirm(
                           "The last attempt for this interview couldn't confirm it worked, but the Calendar event/Meet may have already been created. " +
                           "Please check the interview in Google Calendar first. Send again anyway? This may create a duplicate Meet link."
                         )) return;
                         sendInvite(iv);
                       },
-                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
+                      // Not offered while still awaiting the interviewer's
+                      // Accept — accepting is what creates the invite now.
+                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
+                        && iv.status !== "pending_acceptance" && iv.status !== "declined",
                     },
                     {
                       label: "Add Meet Link Manually",
                       onClick: () => handleManualMeetLink(iv),
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
-                        && !iv.eventId && !iv.meetLink && sendInviteFailed[iv.id],
+                        && iv.status !== "pending_acceptance" && iv.status !== "declined"
+                        && !iv.eventId && !iv.meetLink,
                     },
                     {
                       label: iv.assignmentLinks?.length ? `Assignment Links (${iv.assignmentLinks.length})` : "Assignment Links",
