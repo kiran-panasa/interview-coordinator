@@ -111,7 +111,16 @@ export default function InterviewerDashboard() {
                       <p className="text-sm font-semibold text-gray-900 truncate">{i.candidateName}</p>
                       <p className="text-xs text-gray-500 truncate">{i.round} · {i.roleAppliedFor}</p>
                     </div>
-                    <p className="text-sm font-medium text-gray-700 flex-shrink-0">{i.scheduledTime}</p>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {i.meetLink && i.status === "scheduled" && (
+                        <span role="link"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(i.meetLink, "_blank", "noopener"); }}
+                          className="text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full cursor-pointer hover:bg-emerald-100">
+                          Join Meet
+                        </span>
+                      )}
+                      <p className="text-sm font-medium text-gray-700">{i.scheduledTime}</p>
+                    </div>
                   </Link>
                 </motion.div>
               ))}

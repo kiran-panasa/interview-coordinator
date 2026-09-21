@@ -135,7 +135,13 @@ export default function MyInterviewsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {i.meetLink && i.status === "scheduled" && (
+                        <a href={i.meetLink} target="_blank" rel="noreferrer"
+                          className="text-xs text-emerald-700 font-semibold hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mr-3">
+                          Join Meet
+                        </a>
+                      )}
                       <Link to={`/interviewer/interviews/${i.id}`}
                         className="text-xs text-emerald-600 font-semibold hover:text-emerald-700">View</Link>
                     </td>
