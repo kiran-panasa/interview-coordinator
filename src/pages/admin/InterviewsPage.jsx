@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -110,6 +110,29 @@ export default function InterviewsPage() {
   const [filterDateFrom, setFilterDateFrom] = useState(yesterdayIso());
   const [filterDateTo,   setFilterDateTo]   = useState(todayIso());
   const interviews = useInterviewsInDateRange(filterDateFrom, filterDateTo);
+
+  // Auto-heals rows stuck with an eventId but no meetLink — Google creates
+  // the Meet room a little after the Calendar event, and occasionally later
+  // than the couple of retries scheduleInterviewMeet/getMeetLink already do
+  // right after Accept/Send Invite. Rather than leaving that permanently on
+  // the admin to notice and fix by hand (pasting the link off Calendar),
+  // silently retry once per affected row whenever this page has one loaded —
+  // covers a reload, a filter change, or simply leaving the tab open.
+  const meetLinkRetried = useRef(new Set());
+  useEffect(() => {
+    const stuck = interviews.filter(iv =>
+      iv.eventId && !iv.meetLink && iv.status !== "cancelled" && iv.status !== "declined"
+      && !meetLinkRetried.current.has(iv.id)
+    );
+    stuck.forEach((iv, i) => {
+      meetLinkRetried.current.add(iv.id);
+      // Staggered so a page full of stuck rows doesn't fire a burst of
+      // simultaneous Apps Script calls.
+      setTimeout(() => {
+        refreshMeetLink(iv.id, iv.eventId).catch(err => console.error(`Background Meet link retry failed for ${iv.id}:`, err));
+      }, i * 4000);
+    });
+  }, [interviews]);
   const [searchParams, setSearchParams] = useSearchParams();
   const [blockedDates, setBlockedDates] = useState([]);
   useEffect(() => subscribeToBlockedDates(setBlockedDates), []);
@@ -1469,6 +1492,14 @@ export default function InterviewsPage() {
                       </a>
                       <CopyButton value={iv.meetLink} />
                     </div>
+                  ) : iv.eventId ? (
+                    <button
+                      onClick={() => handleRefreshMeetLink(iv)}
+                      className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors"
+                      title="Invite created — Google hasn't returned the Meet link yet. Click to check again."
+                    >
+                      Get link
+                    </button>
                   ) : (
                     <span className="text-xs text-gray-300">—</span>
                   )}
