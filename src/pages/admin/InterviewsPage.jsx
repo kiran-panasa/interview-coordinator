@@ -402,30 +402,55 @@ export default function InterviewsPage() {
         let calendarSyncError  = "";
         let notificationStatus = "not_applicable";
 
-        // Reschedule the EXISTING Calendar event/Meet space in place — never
-        // delete+recreate, so the same Meet link stays associated with this
-        // interview (single source of truth, no duplicate calendar events).
-        if (calendarRelevantChange && editTarget.eventId && APPS_SCRIPT_URL) {
-          try {
-            await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-              action:              "reschedule",
-              eventId:             editTarget.eventId,
-              date:                form.scheduledDate,
-              startTime:           form.scheduledTime,
-              durationMinutes:     form.duration || 60,
-              candidateEmail:      data.candidateEmail,
-              candidateName:       data.candidateName,
-              interviewerEmail:    data.interviewerEmail,
-              interviewerName:     data.interviewerName,
-              round:               form.round,
-              prevCandidateEmail:  candidateChanged   ? editTarget.candidateEmail   : "",
-              prevInterviewerEmail: interviewerChanged ? editTarget.interviewerEmail : "",
-            });
-            calendarSyncStatus = "synced";
-          } catch (e) {
-            calendarSyncStatus = "failed";
-            calendarSyncError  = e.message || String(e);
-            console.error("Calendar reschedule failed:", e);
+        if (calendarRelevantChange && APPS_SCRIPT_URL) {
+          // Re-read the interview's CURRENT eventId rather than trusting
+          // editTarget — that's just a snapshot from when this modal was
+          // opened. If the interviewer accepted (auto-creating their own
+          // Meet) while this modal sat open, editTarget would still say "no
+          // meet yet" and blindly creating one here would produce a second,
+          // duplicate Calendar event for the same interview.
+          const current = await getInterview(editTarget.id).catch(() => null);
+          const currentEventId = current?.eventId || editTarget.eventId;
+
+          if (currentEventId) {
+            // Reschedule the EXISTING Calendar event/Meet space in place —
+            // never delete+recreate, so the same Meet link stays associated
+            // with this interview (single source of truth, no duplicates).
+            try {
+              await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+                action:              "reschedule",
+                eventId:             currentEventId,
+                date:                form.scheduledDate,
+                startTime:           form.scheduledTime,
+                durationMinutes:     form.duration || 60,
+                candidateEmail:      data.candidateEmail,
+                candidateName:       data.candidateName,
+                interviewerEmail:    data.interviewerEmail,
+                interviewerName:     data.interviewerName,
+                round:               form.round,
+                prevCandidateEmail:  candidateChanged   ? editTarget.candidateEmail   : "",
+                prevInterviewerEmail: interviewerChanged ? editTarget.interviewerEmail : "",
+              });
+              calendarSyncStatus = "synced";
+            } catch (e) {
+              calendarSyncStatus = "failed";
+              calendarSyncError  = e.message || String(e);
+              console.error("Calendar reschedule failed:", e);
+            }
+          } else {
+            // No Meet has ever been created for this interview — create one
+            // now instead of leaving it for whatever happens to trigger
+            // scheduling next. scheduleInterviewMeet takes a Firestore lock
+            // first, so even if the interviewer accepts at this exact
+            // moment, only one of the two ever actually creates an event.
+            try {
+              const result = await scheduleInterviewMeet(editTarget.id);
+              calendarSyncStatus = (result.meetLink || result.alreadyScheduled || result.inProgress) ? "synced" : "failed";
+            } catch (e) {
+              calendarSyncStatus = "failed";
+              calendarSyncError  = e.message || String(e);
+              console.error("Meet creation on edit failed:", e);
+            }
           }
         }
 
