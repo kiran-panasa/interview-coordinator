@@ -16,6 +16,7 @@ import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
+import Modal from "../../components/Modal";
 import { usePagination } from "../../hooks/usePagination";
 
 const NUDGE_ROUND_OTHER = "__other__";
@@ -86,6 +87,10 @@ export default function CandidateSchedulingTab({
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
   const [candSearch,     setCandSearch]     = useState("");
+  // Preview-before-send dialog — Send Invites opens this instead of sending
+  // immediately, so nothing goes out until the admin has actually looked at
+  // who/what they're about to send and confirmed it.
+  const [previewOpen,    setPreviewOpen]    = useState(false);
 
   // Guards handleConfirmBooking against a rapid double-click/double-tap
   // creating two Meet spaces + Calendar events + Interview docs for the same
@@ -169,7 +174,11 @@ export default function CandidateSchedulingTab({
     else setSelCandidates(new Set(filteredCandidates.map(c => c.id)));
   };
 
-  const handleSendInvites = async () => {
+  // Runs the same checks handleSendInvites always has, but only to decide
+  // whether the preview dialog is even worth opening — nothing is sent from
+  // here. Kept separate from the dialog's own Confirm button so the fields
+  // are validated the moment "Send Invites" is clicked, not silently on Confirm.
+  const openSendPreview = () => {
     if (selCandidates.size === 0) return;
     if (!filterTemplate) {
       setToast({ message: "Please select a template filter before sending invites.", type: "error" }); return;
@@ -186,6 +195,11 @@ export default function CandidateSchedulingTab({
     if (timeWindowStart && timeWindowEnd && timeWindowEnd <= timeWindowStart) {
       setToast({ message: "The time window's end must be after its start.", type: "error" }); return;
     }
+    setPreviewOpen(true);
+  };
+
+  const handleSendInvites = async () => {
+    if (selCandidates.size === 0) { setPreviewOpen(false); return; }
     const tmpl = templates.find(t => t.id === filterTemplate);
     setSendingInvites(true);
     try {
@@ -262,6 +276,7 @@ export default function CandidateSchedulingTab({
         setToast({ message: `${sent} invite${sent !== 1 ? "s" : ""} sent.` });
       }
       setSelCandidates(new Set());
+      setPreviewOpen(false);
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setSendingInvites(false);
   };
@@ -569,10 +584,10 @@ export default function CandidateSchedulingTab({
           <div>
             <Button
               variant="primary" size="md" icon={Send}
-              onClick={handleSendInvites}
+              onClick={openSendPreview}
               disabled={sendingInvites || selCandidates.size === 0}
             >
-              {sendingInvites ? "Sending…" : `Send Invites (${selCandidates.size})`}
+              {`Send Invites (${selCandidates.size})`}
             </Button>
           </div>
         </div>
@@ -868,6 +883,104 @@ export default function CandidateSchedulingTab({
           </div>
         </div>
       )}
+
+      {/* Preview & Confirm — Send Invites opens this instead of sending
+         straight away. Candidates can be dropped right here; adding more
+         means closing this (Back to Edit — nothing is lost, selection stays)
+         and checking more boxes in the table above, then reopening it. */}
+      <Modal open={previewOpen} onClose={() => !sendingInvites && setPreviewOpen(false)} title="Review Before Sending" wide>
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Template</p>
+              <p className="text-gray-900 font-medium">{templates.find(t => t.id === filterTemplate)?.name || "—"}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Round</p>
+              <p className="text-gray-900 font-medium">{round || "—"}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Program</p>
+              <p className="text-gray-900 font-medium">{filterProgram ? (programs.find(p => p.id === filterProgram)?.name || "—") : "All Programs"}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Interview Duration</p>
+              <p className="text-gray-900 font-medium">{duration} minutes</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Slot Date Range</p>
+              <p className="text-gray-900 font-medium">{formatDate(dateStart)} – {formatDate(dateEnd)}</p>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Invite Expiry</p>
+              <p className="text-gray-900 font-medium">{expiryHours} hours</p>
+            </div>
+            {(timeWindowStart && timeWindowEnd) && (
+              <div>
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Restrict Slot Times</p>
+                <p className="text-gray-900 font-medium">{timeWindowStart} – {timeWindowEnd}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Panelists</p>
+              <p className="text-gray-900 font-medium">
+                {panelistIds.length
+                  ? panelistIds.map(id => activeInterviewers.find(u => u.id === id)?.displayName
+                      || activeInterviewers.find(u => u.id === id)?.email || "—").join(", ")
+                  : "All active interviewers"}
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                Candidates ({selCandidates.size})
+              </p>
+              <p className="text-[11px] text-gray-400">Remove anyone who shouldn't get this invite</p>
+            </div>
+            {selCandidates.size === 0 ? (
+              <p className="text-sm text-gray-400 py-4 text-center">No candidates selected — closing this and picking some from the table.</p>
+            ) : (
+              <div className="max-h-64 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50 scrollbar-thin">
+                {candidates.filter(c => selCandidates.has(c.id)).map(c => (
+                  <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{c.name}</p>
+                      <p className="text-xs text-gray-400 truncate">
+                        {c.email || <span className="text-red-500">No email on file — this invite will fail to send</span>}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => toggleCand(c.id)}
+                      title="Remove from this batch"
+                      className="flex-shrink-0 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg p-1.5 transition-colors">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              disabled={sendingInvites}
+              className="text-sm font-semibold text-gray-600 hover:text-gray-900 px-4 py-2.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+              Back to Edit
+            </button>
+            <Button
+              variant="primary" size="md" icon={Send}
+              onClick={handleSendInvites}
+              disabled={sendingInvites || selCandidates.size === 0}
+            >
+              {sendingInvites ? "Sending…" : `Confirm & Send (${selCandidates.size})`}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
