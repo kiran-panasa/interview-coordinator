@@ -129,9 +129,9 @@ export default function NudgeAnalyticsTab({
 
   // Permanently removes every invite currently shown in this table (respects
   // active filters — clear them first for a true "delete everything," or
-  // filter down to just a test batch to scope the deletion). Each invite's
-  // own history subcollection is left behind (Firestore doesn't cascade
-  // deletes) but is invisible/harmless once its parent invite is gone.
+  // filter down to just a test batch to scope the deletion). deleteScheduleInvite
+  // itself also frees any slot the candidate had booked and clears the
+  // invite's history subcollection — see its own comment for why.
   const handleDeleteAll = async () => {
     if (filtered.length === 0) return;
     const confirmed = confirm(

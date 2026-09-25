@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDocs, addDoc, updateDoc, deleteDoc,
+  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
 import type { ScheduleInvite, OtpVerification, InviteHistoryEntry } from "../types";
@@ -54,8 +54,31 @@ export async function updateScheduleInvite(
   });
 }
 
+// Deleting the invite record alone used to leave two things behind:
+//  - if the candidate had already picked a slot, that slot stayed marked
+//    isBooked on the interviewer's own availability forever (no interview
+//    was ever created from it, so nothing else would free it);
+//  - the invite's own history subcollection, which Firestore never
+//    cascade-deletes, orphaned under a doc that no longer exists.
+// This centralizes the real cleanup so every caller (this tab's row delete,
+// Nudge Analytics' bulk/row delete) gets it for free, and — the candidate-
+// facing effect — getScheduleInviteByToken returns null the moment this
+// runs, which is what flips their link straight to "Invalid Link".
 export async function deleteScheduleInvite(id: string): Promise<void> {
-  await deleteDoc(doc(db, "scheduleInvites", id));
+  const ref  = doc(db, "scheduleInvites", id);
+  const snap = await getDoc(ref);
+  const data = snap.exists() ? (snap.data() as ScheduleInvite) : null;
+
+  if (data?.bookedSlotId && data?.bookedInterviewerId) {
+    await updateDoc(doc(db, "availability", data.bookedInterviewerId, "slots", data.bookedSlotId), {
+      isBooked: false, interviewId: null,
+    }).catch(() => {}); // slot may already be gone/reassigned — deleting the invite must still proceed
+  }
+
+  const historySnap = await getDocs(collection(db, "scheduleInvites", id, "history"));
+  await Promise.all(historySnap.docs.map(d => deleteDoc(d.ref)));
+
+  await deleteDoc(ref);
 }
 
 export async function getScheduleInviteByToken(token: string): Promise<ScheduleInvite | null> {

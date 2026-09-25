@@ -475,11 +475,12 @@ export default function CandidateSchedulingTab({
   };
 
   const handleDeleteInvite = async (inv) => {
-    if (!confirm(`Delete invite for ${inv.candidateName}? This cannot be undone.`)) return;
+    const slotNote = inv.bookedSlotId ? " Their booked slot will be freed back up for other candidates." : "";
+    if (!confirm(`Delete invite for ${inv.candidateName}? Their link stops working immediately.${slotNote} This cannot be undone.`)) return;
     setDeletingId(inv.id);
     try {
       await deleteScheduleInvite(inv.id);
-      setToast({ message: `Invite for ${inv.candidateName} deleted.` });
+      setToast({ message: `Invite for ${inv.candidateName} deleted — their link is now invalid.` });
     } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
     setDeletingId(null);
   };
