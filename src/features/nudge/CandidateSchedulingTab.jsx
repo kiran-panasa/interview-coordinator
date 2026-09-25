@@ -646,6 +646,7 @@ export default function CandidateSchedulingTab({
             )}
           </div>
         </div>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100">
@@ -699,6 +700,7 @@ export default function CandidateSchedulingTab({
             ))}
           </tbody>
         </table>
+        </div>
         <Pagination page={candPagination.page} totalPages={candPagination.totalPages} total={candPagination.total} pageSize={candPagination.pageSize} onPageChange={candPagination.setPage} />
       </motion.div>
 
@@ -721,7 +723,14 @@ export default function CandidateSchedulingTab({
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-            <table className="w-full text-sm">
+            {/* The action column (Copy + kebab) was getting squeezed off the
+               right edge on narrower screens with no way to reach it — the
+               table had no horizontal scroll of its own, so overflow just
+               got clipped by the card's rounded-corner overflow-hidden
+               above. min-w-[760px] plus this inner scroll container means
+               the table now scrolls sideways here instead of hiding columns. */}
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[760px]">
               <thead>
                 <tr className="border-b border-gray-100">
                   {["Candidate", "Template", "Round", "Date Range", "Status", "Sent At", ""].map((h, i) => (
@@ -749,8 +758,8 @@ export default function CandidateSchedulingTab({
                     <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
                       {inv.sentAt ? formatDateTime(inv.sentAt) : "—"}
                     </td>
-                    <td className="px-4 py-3 w-20">
-                      <div className="flex items-center gap-1.5">
+                    <td className="px-4 py-3 w-[130px]">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
                         <button
                           onClick={() => handleCopyLink(inv)}
                           disabled={!inv.inviteToken}
@@ -795,6 +804,7 @@ export default function CandidateSchedulingTab({
                 ))}
               </tbody>
             </table>
+            </div>
             <Pagination page={invPagination.page} totalPages={invPagination.totalPages} total={invPagination.total} pageSize={invPagination.pageSize} onPageChange={invPagination.setPage} />
           </div>
         )}
