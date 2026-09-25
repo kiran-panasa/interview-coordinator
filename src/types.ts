@@ -524,6 +524,10 @@ export interface ScheduleInvite {
   bookedTime?: string;
   bookedAt?: string;
   interviewId?: string;
+  // Set when an admin rejects a candidate's booked slot (see Pending
+  // Confirmations on the Nudge > Candidates tab) — the reason they typed,
+  // also emailed to the candidate verbatim inside a fixed template.
+  rejectionReason?: string;
   // Automated reminder tracking
   nudgeCount?: number;
   reminder1SentAt?: string | null;

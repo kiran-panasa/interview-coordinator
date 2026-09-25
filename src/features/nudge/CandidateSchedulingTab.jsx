@@ -91,6 +91,12 @@ export default function CandidateSchedulingTab({
   // immediately, so nothing goes out until the admin has actually looked at
   // who/what they're about to send and confirmed it.
   const [previewOpen,    setPreviewOpen]    = useState(false);
+  // Reject-booking dialog — holds the invite being rejected (null = closed).
+  // The candidate needs a real explanation, not a silent status flip, so
+  // this drafts the whole email around just the reason the admin types.
+  const [rejectModal,    setRejectModal]    = useState(null);
+  const [rejectReason,   setRejectReason]   = useState("");
+  const [rejecting,      setRejecting]      = useState(false);
 
   // Guards handleConfirmBooking against a rapid double-click/double-tap
   // creating two Meet spaces + Calendar events + Interview docs for the same
@@ -407,14 +413,43 @@ export default function CandidateSchedulingTab({
     setConfirmingId(null);
   };
 
-  const handleRejectBooking = async (inv) => {
-    if (!confirm(`Reject booking for ${inv.candidateName}? Their slot will be freed.`)) return;
+  const openRejectModal = (inv) => { setRejectModal(inv); setRejectReason(""); };
+
+  // The rest of the email is fixed — greeting, sign-off, the rebook link —
+  // so the admin only ever types the one sentence that's actually specific
+  // to this rejection. inviteToken still works after a reject (status just
+  // goes to "cancelled", which SchedulePage treats as a fresh, still-valid
+  // link), so pointing them back at it is accurate, not just a platitude.
+  const buildRejectEmailBody = (inv, reason) => {
+    const link = `${window.location.origin}/student/schedule?invite=${inv.inviteToken}`;
+    return (
+      `Hi ${inv.candidateName},\n\n` +
+      `${reason.trim() || "Unfortunately we're unable to confirm the time you picked."}\n\n` +
+      `You're welcome to pick a different time using your original scheduling link:\n${link}\n\n` +
+      `NxtWave Interview Team`
+    );
+  };
+
+  const handleRejectBooking = async () => {
+    const inv = rejectModal;
+    if (!inv || !rejectReason.trim()) return;
+    setRejecting(true);
     try {
       await markSlotFree(inv.bookedInterviewerId, inv.bookedSlotId);
-      await updateScheduleInvite(inv.id, { status: "cancelled", bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null });
-      logInviteHistory(inv.id, "cancelled", "Booking rejected by admin").catch(() => {});
-      setToast({ message: "Booking rejected and slot freed." });
-    } catch (e) { setToast({ message: e.message, type: "error" }); }
+      await updateScheduleInvite(inv.id, { status: "cancelled", bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null, rejectionReason: rejectReason.trim() });
+      logInviteHistory(inv.id, "cancelled", `Booking rejected by admin: ${rejectReason.trim()}`).catch(() => {});
+      if (APPS_SCRIPT_URL && inv.candidateEmail) {
+        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:    "sendEmail",
+          subject:   `Update on your ${inv.round || inv.templateName || "interview"} booking`,
+          recipients: [{ email: inv.candidateEmail, name: inv.candidateName }],
+          body:      buildRejectEmailBody(inv, rejectReason),
+        });
+      }
+      setToast({ message: `Booking rejected — ${inv.candidateName} has been notified and their slot is freed.` });
+      setRejectModal(null);
+    } catch (e) { setToast({ message: "Failed: " + e.message, type: "error" }); }
+    setRejecting(false);
   };
 
   const handleResendInvite = async (inv) => {
@@ -872,7 +907,7 @@ export default function CandidateSchedulingTab({
                     {confirmingId === inv.id ? "Confirming…" : "✓ Confirm"}
                   </button>
                   <button
-                    onClick={() => handleRejectBooking(inv)}
+                    onClick={() => openRejectModal(inv)}
                     disabled={confirmingId === inv.id}
                     className="flex items-center gap-1.5 text-xs font-semibold border border-red-200 text-red-500 px-3 py-2 rounded-lg hover:bg-red-50 disabled:opacity-60 transition-colors">
                     ✕ Reject
@@ -981,6 +1016,57 @@ export default function CandidateSchedulingTab({
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* Reject Booking — the admin only ever types the one line that's
+         actually specific to this rejection; everything else in the email
+         (greeting, rebook link, sign-off) is fixed by buildRejectEmailBody. */}
+      <Modal open={!!rejectModal} onClose={() => !rejecting && setRejectModal(null)} title="Reject Booking">
+        {rejectModal && (
+          <div className="space-y-4">
+            <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+              <p className="text-sm font-bold text-gray-900">{rejectModal.candidateName}</p>
+              <p className="text-xs text-gray-500">
+                {rejectModal.round || rejectModal.templateName} · {formatDate(rejectModal.bookedDate)} at {rejectModal.bookedTime}
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">
+                Reason to share with {rejectModal.candidateName.split(" ")[0]}
+              </label>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="e.g. This time no longer works for the panelist — please pick another slot."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              />
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Email Preview</p>
+              <pre className="text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 whitespace-pre-wrap font-sans">
+                {buildRejectEmailBody(rejectModal, rejectReason)}
+              </pre>
+            </div>
+            <div className="flex items-center justify-end gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => setRejectModal(null)}
+                disabled={rejecting}
+                className="text-sm font-semibold text-gray-600 hover:text-gray-900 px-4 py-2.5 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectBooking}
+                disabled={rejecting || !rejectReason.trim()}
+                className="flex items-center gap-1.5 text-sm font-semibold bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
+                {rejecting ? "Rejecting…" : "Reject & Notify Candidate"}
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
