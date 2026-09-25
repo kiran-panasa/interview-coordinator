@@ -174,12 +174,14 @@ const BUSY_EXCLUDED_STATUSES = new Set(["cancelled", "declined"]);
 // block the new one with no separate bookkeeping — the next read just sees
 // the interview's current date/time/status.
 function toBusyWindows(
-  docs: { data(): { status?: string; scheduledDate?: string; scheduledTime?: string; duration?: number } }[],
+  docs: { id: string; data(): { status?: string; scheduledDate?: string; scheduledTime?: string; duration?: number } }[],
   dateStart: string,
-  dateEnd: string
+  dateEnd: string,
+  excludeInterviewId?: string
 ): BusyWindow[] {
   const windows: BusyWindow[] = [];
   docs.forEach(d => {
+    if (excludeInterviewId && d.id === excludeInterviewId) return;
     const iv = d.data();
     if (!iv.scheduledDate || !iv.scheduledTime) return;
     if (iv.scheduledDate < dateStart || iv.scheduledDate > dateEnd) return;
@@ -190,10 +192,15 @@ function toBusyWindows(
   return windows;
 }
 
+// excludeInterviewId — pass the interview currently being edited so its own
+// existing booking doesn't show up as a conflict with itself (otherwise
+// re-picking its own current time, or any time within its own duration,
+// would be wrongly refused).
 export async function getInterviewerBusyWindows(
   interviewerId: string,
   dateStart: string,
-  dateEnd: string
+  dateEnd: string,
+  excludeInterviewId?: string
 ): Promise<BusyWindow[]> {
   if (!interviewerId) return [];
   try {
@@ -203,7 +210,7 @@ export async function getInterviewerBusyWindows(
       where("scheduledDate", ">=", dateStart),
       where("scheduledDate", "<=", dateEnd)
     ));
-    return toBusyWindows(snap.docs, dateStart, dateEnd);
+    return toBusyWindows(snap.docs, dateStart, dateEnd, excludeInterviewId);
   } catch (err) {
     // Composite index (interviewerId + scheduledDate) not built/ready yet —
     // fall back to an equality-only query (needs no composite index at all)
@@ -211,7 +218,7 @@ export async function getInterviewerBusyWindows(
     // candidate scheduling page while the index is still building.
     if (err instanceof Error && err.message.toLowerCase().includes("index")) {
       const snap = await getDocs(query(collection(db, "interviews"), where("interviewerId", "==", interviewerId)));
-      return toBusyWindows(snap.docs, dateStart, dateEnd);
+      return toBusyWindows(snap.docs, dateStart, dateEnd, excludeInterviewId);
     }
     throw err;
   }

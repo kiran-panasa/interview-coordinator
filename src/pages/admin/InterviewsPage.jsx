@@ -237,17 +237,27 @@ export default function InterviewsPage() {
       // source) — this is what makes the time picker correctly refuse a
       // time that's already taken even when no availability slot doc
       // matches it at all, which is the common case for manual scheduling.
-      getInterviewerBusyWindows(form.interviewerId, todayStr, farOut.toISOString().slice(0, 10)),
+      // Excludes editTarget's own interview — otherwise its existing
+      // booking would show up as a conflict with itself, and re-picking
+      // its own current time (or anything overlapping its own duration)
+      // would be wrongly refused when editing it.
+      getInterviewerBusyWindows(form.interviewerId, todayStr, farOut.toISOString().slice(0, 10), editTarget?.id),
     ]).then(([s, bw]) => {
+      // Same self-conflict fix for the raw availability slot doc(s) this
+      // interview itself booked (manual scheduling's own markSlotBooked) —
+      // treat them as free again while editing this interview.
+      const sAdjusted = editTarget
+        ? s.map(x => x.interviewId === editTarget.id ? { ...x, isBooked: false } : x)
+        : s;
       // Only future slots are ever schedulable — a slot dated before today
       // can never be booked, regardless of time.
-      const free = s.filter(x => !x.isBooked && x.date >= todayStr);
-      setSlots(s);
+      const free = sAdjusted.filter(x => !x.isBooked && x.date >= todayStr);
+      setSlots(sAdjusted);
       setBusyWindows(bw);
       setAvailDates([...new Set(free.map(x => x.date))].sort());
       setAvailTimes([]);
     });
-  }, [form.interviewerId]);
+  }, [form.interviewerId, editTarget?.id]);
 
   useEffect(() => {
     if (!form.scheduledDate || !form.interviewerId) { setAvailTimes([]); return; }
