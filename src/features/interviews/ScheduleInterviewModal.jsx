@@ -22,11 +22,22 @@ export default function ScheduleInterviewModal({
 }) {
   const roundNames = rounds.map(r => r.name);
   const [customRound, setCustomRound] = useState(() => !!form.round && !roundNames.includes(form.round));
+  // The Date/Start Time fields default to a dropdown limited to whatever the
+  // interviewer actually submitted as available — but an admin who knows the
+  // interviewer is free at some other time (no submission for that date, or
+  // scheduling around an already-known commitment) needs a way past that.
+  // This flips both fields to free date/time inputs, bypassing the
+  // availability-derived options entirely — still subject to the same past-
+  // date and required-field checks handleSave already runs on any submit.
+  const [manualDateTime, setManualDateTime] = useState(false);
   const todayStr = new Date().toISOString().slice(0, 10);
 
   // Re-derive whenever the modal is (re)opened, e.g. for a different edit target
   useEffect(() => {
-    if (open) setCustomRound(!!form.round && !roundNames.includes(form.round));
+    if (open) {
+      setCustomRound(!!form.round && !roundNames.includes(form.round));
+      setManualDateTime(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editTarget]);
 
@@ -59,7 +70,7 @@ export default function ScheduleInterviewModal({
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className={labelCls}>Date *</label>
-            {availDates.length > 0 ? (
+            {!manualDateTime && availDates.length > 0 ? (
               <select value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)} className={inputCls}>
                 <option value="">— Select date —</option>
                 {availDates.map(d => <option key={d} value={d}>{formatDate(d)}</option>)}
@@ -78,7 +89,7 @@ export default function ScheduleInterviewModal({
           </div>
           <div>
             <label className={labelCls}>Start Time *</label>
-            {availTimes.length > 0 ? (
+            {!manualDateTime && availTimes.length > 0 ? (
               <select value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls}>
                 <option value="">— Select time —</option>
                 {availTimes.map(t => <option key={t} value={t}>{t}</option>)}
@@ -95,6 +106,20 @@ export default function ScheduleInterviewModal({
             </select>
           </div>
         </div>
+
+        {/* Only worth offering once there's actually a suggested-availability
+           picker to escape — with none set at all, the fields above already
+           fall back to free date/time inputs on their own. */}
+        {form.interviewerId && (availDates.length > 0 || availTimes.length > 0) && (
+          <button
+            type="button"
+            onClick={() => setManualDateTime(m => !m)}
+            className="text-[11px] font-semibold text-brand-600 hover:underline -mt-2">
+            {manualDateTime
+              ? "Use the interviewer's submitted availability instead"
+              : "Pick a date/time outside their submitted availability"}
+          </button>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-1">
