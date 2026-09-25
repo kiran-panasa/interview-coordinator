@@ -6,6 +6,7 @@ import {
   Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
+import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
@@ -16,7 +17,7 @@ import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, reopenNoShowInterview,
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
-  getInterviewerAvailability, markSlotBooked, markSlotFree,
+  getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, markSlotFree,
   getTemplate, importCompletedInterview, importScheduledInterview,
   createNotification, subscribeToBlockedDates, getInterviewIntegrity,
   logInterviewHistory, getInterviewHistory,
@@ -221,14 +222,28 @@ export default function InterviewsPage() {
   const [historyEntries,    setHistoryEntries]    = useState([]);
   const [historyLoading,    setHistoryLoading]    = useState(false);
 
+  const [busyWindows, setBusyWindows] = useState([]);
+
   useEffect(() => {
-    if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); return; }
-    getInterviewerAvailability(form.interviewerId).then(s => {
-      const todayStr = new Date().toISOString().slice(0, 10);
+    if (!form.interviewerId) { setSlots([]); setAvailDates([]); setAvailTimes([]); setBusyWindows([]); return; }
+    const todayStr = new Date().toISOString().slice(0, 10);
+    // Generous, single-query window — this is an admin-only page (not the
+    // high-traffic public one), so there's no read-budget pressure that'd
+    // justify tightening it to whatever date range happens to be selected.
+    const farOut = new Date(); farOut.setFullYear(farOut.getFullYear() + 2);
+    Promise.all([
+      getInterviewerAvailability(form.interviewerId),
+      // The interviewer's REAL interviews (manual, nudge, import — any
+      // source) — this is what makes the time picker correctly refuse a
+      // time that's already taken even when no availability slot doc
+      // matches it at all, which is the common case for manual scheduling.
+      getInterviewerBusyWindows(form.interviewerId, todayStr, farOut.toISOString().slice(0, 10)),
+    ]).then(([s, bw]) => {
       // Only future slots are ever schedulable — a slot dated before today
       // can never be booked, regardless of time.
       const free = s.filter(x => !x.isBooked && x.date >= todayStr);
       setSlots(s);
+      setBusyWindows(bw);
       setAvailDates([...new Set(free.map(x => x.date))].sort());
       setAvailTimes([]);
     });
@@ -237,15 +252,24 @@ export default function InterviewsPage() {
   useEffect(() => {
     if (!form.scheduledDate || !form.interviewerId) { setAvailTimes([]); return; }
     const now = new Date();
-    const free = slots.filter(s => {
-      if (s.date !== form.scheduledDate || s.isBooked) return false;
-      const start = parseInterviewStart(s.date, s.time);
-      // For today, only show times still ahead of the current time.
-      return !start || start > now;
-    });
-    setAvailTimes(free.map(s => s.time).sort(compareTimeLabels));
+    const daySlots = slots
+      .filter(s => s.date === form.scheduledDate)
+      .map(s => ({ ...s, interviewerId: form.interviewerId }));
+    // collapseSlotsByDuration is duration-aware: a start time is dropped if
+    // ANYTHING (another raw slot, or a real interview via busyWindows)
+    // overlaps any part of [time, time + form.duration) — not just if the
+    // start time's own slot doc happens to be marked booked.
+    const usable = collapseSlotsByDuration(daySlots, form.duration || 60, { [form.interviewerId]: busyWindows })
+      .filter(s => {
+        if (s.isBooked) return false;
+        const start = parseInterviewStart(s.date, s.time);
+        // For today, only show times still ahead of the current time.
+        return !start || start > now;
+      });
+    setAvailTimes(usable.map(s => s.time).sort(compareTimeLabels));
     setForm(f => ({ ...f, scheduledTime: "" }));
-  }, [form.scheduledDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.scheduledDate, form.duration, busyWindows]);
 
   const openNew  = () => { setEditTarget(null); setReassignFromId(null); setForm(EMPTY_FORM); setShowModal(true); };
   const openEdit = (iv) => {

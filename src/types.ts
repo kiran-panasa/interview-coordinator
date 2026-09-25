@@ -451,6 +451,12 @@ export interface AvailabilitySlot {
   isBooked: boolean;
   interviewId?: string | null;
   inviteId?: string;
+  // Set on every raw slot a candidate's booking consumed (a longer
+  // interview can span more than one), so rejecting/resending/deleting
+  // that invite can find and free all of them, not just the one clicked —
+  // see bookSlotForCandidate / freeSlotsHeldByInvite in api/scheduling.ts
+  // and api/availability.ts.
+  heldByInviteId?: string | null;
   bookedAt?: string;
   flagged?: boolean;
 }
@@ -463,6 +469,17 @@ export interface AvailableSlot {
   date: string;
   time: string;
   isBooked: boolean;
+}
+
+// A block of real, current time an interviewer is committed to, computed
+// live from their actual interviews (see getInterviewerBusyWindows in
+// api/availability.ts) rather than a flag any scheduling path has to
+// remember to set — so it's correct no matter how the interview was
+// created (manual, nudge, import) or later changed (reschedule/cancel).
+export interface BusyWindow {
+  date: string;
+  startMin: number;
+  endMin: number;
 }
 
 // ── Scheduling ────────────────────────────────────────────────────────────────

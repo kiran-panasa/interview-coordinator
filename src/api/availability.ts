@@ -3,8 +3,8 @@ import {
   collection, doc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
   query, where, onSnapshot,
 } from "firebase/firestore";
-import type { AvailabilitySlot, AvailableSlot } from "../types";
-import { compareTimeLabels } from "../utils/dates";
+import type { AvailabilitySlot, AvailableSlot, BusyWindow } from "../types";
+import { compareTimeLabels, timeToMinutes } from "../utils/dates";
 import { getBlockedDates } from "./blockedDates";
 import { isDateBlocked } from "../utils/blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
@@ -122,8 +122,23 @@ export async function markSlotBooked(
 
 export async function markSlotFree(interviewerId: string, slotId: string): Promise<void> {
   await updateDoc(doc(db, "availability", interviewerId, "slots", slotId), {
-    isBooked: false, interviewId: null,
+    isBooked: false, interviewId: null, heldByInviteId: null,
   });
+}
+
+// A longer interview can hold more than one raw slot doc (see
+// bookSlotForCandidate in api/scheduling.ts, which tags every slot it locks
+// with heldByInviteId) — this frees all of them, not just the one the
+// invite's own bookedSlotId points at, so rejecting/resending/deleting a
+// booking releases the interviewer's whole reserved window back to
+// everyone else instead of leaving the rest of it silently stuck.
+export async function freeSlotsHeldByInvite(interviewerId: string, inviteId: string): Promise<void> {
+  if (!interviewerId || !inviteId) return;
+  const snap = await getDocs(query(
+    collection(db, "availability", interviewerId, "slots"),
+    where("heldByInviteId", "==", inviteId)
+  ));
+  await Promise.all(snap.docs.map(d => updateDoc(d.ref, { isBooked: false, interviewId: null, heldByInviteId: null })));
 }
 
 export async function flagAvailabilitySlot(
@@ -145,6 +160,78 @@ export async function getSlotsForInterviewers(
   return result;
 }
 
+// Statuses that mean the interviewer is NOT genuinely committed to this
+// time anymore — everything else (including pending_acceptance: they've
+// been assigned it and haven't yet said no) still counts as busy.
+const BUSY_EXCLUDED_STATUSES = new Set(["cancelled", "declined"]);
+
+// The authoritative "is this interviewer actually busy then" signal — built
+// fresh from their real interviews every time it's read, rather than a flag
+// (availability slot isBooked) that has to be kept in sync by every
+// scheduling path. This is what makes a manually-scheduled interview
+// correctly block a nudge candidate from double-booking the same time (and
+// vice versa), and what makes a reschedule/cancel free the old time and
+// block the new one with no separate bookkeeping — the next read just sees
+// the interview's current date/time/status.
+function toBusyWindows(
+  docs: { data(): { status?: string; scheduledDate?: string; scheduledTime?: string; duration?: number } }[],
+  dateStart: string,
+  dateEnd: string
+): BusyWindow[] {
+  const windows: BusyWindow[] = [];
+  docs.forEach(d => {
+    const iv = d.data();
+    if (!iv.scheduledDate || !iv.scheduledTime) return;
+    if (iv.scheduledDate < dateStart || iv.scheduledDate > dateEnd) return;
+    if (iv.status && BUSY_EXCLUDED_STATUSES.has(iv.status)) return;
+    const startMin = timeToMinutes(iv.scheduledTime);
+    windows.push({ date: iv.scheduledDate, startMin, endMin: startMin + (iv.duration || 60) });
+  });
+  return windows;
+}
+
+export async function getInterviewerBusyWindows(
+  interviewerId: string,
+  dateStart: string,
+  dateEnd: string
+): Promise<BusyWindow[]> {
+  if (!interviewerId) return [];
+  try {
+    const snap = await getDocs(query(
+      collection(db, "interviews"),
+      where("interviewerId", "==", interviewerId),
+      where("scheduledDate", ">=", dateStart),
+      where("scheduledDate", "<=", dateEnd)
+    ));
+    return toBusyWindows(snap.docs, dateStart, dateEnd);
+  } catch (err) {
+    // Composite index (interviewerId + scheduledDate) not built/ready yet —
+    // fall back to an equality-only query (needs no composite index at all)
+    // and filter the date range client-side, so this never hard-fails the
+    // candidate scheduling page while the index is still building.
+    if (err instanceof Error && err.message.toLowerCase().includes("index")) {
+      const snap = await getDocs(query(collection(db, "interviews"), where("interviewerId", "==", interviewerId)));
+      return toBusyWindows(snap.docs, dateStart, dateEnd);
+    }
+    throw err;
+  }
+}
+
+// Same, in bulk for a pool of interviewers — mirrors getSlotsForInterviewers'
+// one-query-per-interviewer parallel fetch, scoped to the same date range so
+// it stays cheap (no unscoped collection reads).
+export async function getBusyWindowsForInterviewers(
+  interviewerIds: string[],
+  dateStart: string,
+  dateEnd: string
+): Promise<Map<string, BusyWindow[]>> {
+  const result = new Map<string, BusyWindow[]>();
+  await Promise.all(interviewerIds.map(async id => {
+    result.set(id, await getInterviewerBusyWindows(id, dateStart, dateEnd));
+  }));
+  return result;
+}
+
 // `interviewerIds`, when given (non-empty), restricts the eligible pool to
 // exactly those interviewers — the explicit "Panelists" selection an admin
 // can make when launching a Nudge campaign (see ScheduleInvite.interviewerIds
@@ -154,19 +241,26 @@ export async function getSlotsForInterviewers(
 // whether ANY candidate ever saw their availability) was replaced because it
 // was invisible and error-prone; template still matters for which
 // evaluation form the resulting interview uses, just not for this.
+export interface AvailableSlotsResult {
+  slots: AvailableSlot[];
+  // Keyed by interviewerId — plain object rather than a Map so this is
+  // JSON-serializable for the sessionStorage cache below.
+  busyWindowsByInterviewer: Record<string, BusyWindow[]>;
+}
+
 export async function getAvailableSlots(
   dateStart: string,
   dateEnd: string,
   interviewerIds: string[] | null = null,
   forceRefresh = false
-): Promise<AvailableSlot[]> {
+): Promise<AvailableSlotsResult> {
   const poolKey = interviewerIds && interviewerIds.length ? [...interviewerIds].sort().join(",") : "all";
   const cacheKey = `avail_${poolKey}_${dateStart}_${dateEnd}`;
   if (!forceRefresh) {
     try {
       const cached = sessionStorage.getItem(cacheKey);
       if (cached) {
-        const { data, ts } = JSON.parse(cached) as { data: AvailableSlot[]; ts: number };
+        const { data, ts } = JSON.parse(cached) as { data: AvailableSlotsResult; ts: number };
         if (Date.now() - ts < 5 * 60 * 1000) return data;
       }
     } catch { /* sessionStorage unavailable */ }
@@ -196,32 +290,43 @@ export async function getAvailableSlots(
     fetchEligibleInterviewers(),
     getBlockedDates(),
   ]);
+  const interviewerIdList = interviewers.map(ivr => ivr.id);
 
-  const result: AvailableSlot[] = [];
-  await Promise.all(interviewers.map(async ivr => {
-    const slotsSnap = await getDocs(query(
-      collection(db, "availability", ivr.id, "slots"),
-      where("date", ">=", dateStart),
-      where("date", "<=", dateEnd)
-    ));
-    slotsSnap.docs.forEach(d => {
-      const slot = d.data();
-      if (isDateBlocked(slot.date as string, blockedDates)) return;
-      result.push({
-        slotId:           d.id,
-        interviewerId:    ivr.id,
-        interviewerName:  ivr.displayName || ivr.email,
-        interviewerEmail: ivr.email,
-        date:             slot.date as string,
-        time:             slot.time as string,
-        isBooked:         !!slot.isBooked,
+  const [slotsByInterviewer, busyWindowsByInterviewerMap] = await Promise.all([
+    Promise.all(interviewers.map(async ivr => {
+      const slotsSnap = await getDocs(query(
+        collection(db, "availability", ivr.id, "slots"),
+        where("date", ">=", dateStart),
+        where("date", "<=", dateEnd)
+      ));
+      const slots: AvailableSlot[] = [];
+      slotsSnap.docs.forEach(d => {
+        const slot = d.data();
+        if (isDateBlocked(slot.date as string, blockedDates)) return;
+        slots.push({
+          slotId:           d.id,
+          interviewerId:    ivr.id,
+          interviewerName:  ivr.displayName || ivr.email,
+          interviewerEmail: ivr.email,
+          date:             slot.date as string,
+          time:             slot.time as string,
+          isBooked:         !!slot.isBooked,
+        });
       });
-    });
-  }));
+      return slots;
+    })),
+    getBusyWindowsForInterviewers(interviewerIdList, dateStart, dateEnd),
+  ]);
+
+  const result: AvailableSlot[] = slotsByInterviewer.flat();
   result.sort((a, b) => a.date.localeCompare(b.date) || compareTimeLabels(a.time, b.time));
 
-  try { sessionStorage.setItem(cacheKey, JSON.stringify({ data: result, ts: Date.now() })); }
+  const busyWindowsByInterviewer: Record<string, BusyWindow[]> = {};
+  busyWindowsByInterviewerMap.forEach((windows, id) => { busyWindowsByInterviewer[id] = windows; });
+
+  const data: AvailableSlotsResult = { slots: result, busyWindowsByInterviewer };
+  try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); }
   catch { /* sessionStorage full or unavailable */ }
 
-  return result;
+  return data;
 }

@@ -3,6 +3,8 @@ import Pagination from "../../components/Pagination";
 import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 import { compareTimeLabels } from "../../utils/dates";
+import { getBusyWindowsForInterviewers } from "../../api/firestore";
+import { isSlotEffectivelyBooked } from "../../utils/slotAvailability";
 
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -41,6 +43,23 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
 
   const datesSelected = !!(fromDate && toDate);
 
+  // The interviewers' REAL interviews (manually scheduled, a confirmed
+  // nudge booking, import — any source) for the selected range, so a
+  // manually-scheduled interview shows here as booked even when no
+  // availability slot doc matches it at all — which is the common case.
+  // Own effect (not the parent's always-on ivrSlots subscription) since
+  // this only needs to run for whatever's actually in view here.
+  const [busyWindowsByInterviewer, setBusyWindowsByInterviewer] = useState({});
+  const interviewerIdsKey = templateInterviewers.map(u => u.id).sort().join(",");
+  useEffect(() => {
+    if (!datesSelected || !templateInterviewers.length) { setBusyWindowsByInterviewer({}); return; }
+    let cancelled = false;
+    getBusyWindowsForInterviewers(templateInterviewers.map(u => u.id), fromDate, toDate)
+      .then(map => { if (!cancelled) setBusyWindowsByInterviewer(Object.fromEntries(map)); })
+      .catch(() => { if (!cancelled) setBusyWindowsByInterviewer({}); });
+    return () => { cancelled = true; };
+  }, [interviewerIdsKey, fromDate, toDate, datesSelected]);
+
   // date → [{ ivrId, ivrName, slots[] }] — includes booked slots too (not
   // just free ones), so a filled slot stays visible instead of silently
   // disappearing once someone books it.
@@ -48,9 +67,9 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
     if (!datesSelected) return [];
     const map = {};
     for (const ivr of templateInterviewers) {
-      const slots = (ivrSlots[ivr.id] || []).filter(s =>
-        s.date >= fromDate && s.date <= toDate
-      );
+      const slots = (ivrSlots[ivr.id] || [])
+        .filter(s => s.date >= fromDate && s.date <= toDate)
+        .map(s => ({ ...s, interviewerId: ivr.id }));
       for (const slot of slots) {
         if (!map[slot.date]) map[slot.date] = {};
         if (!map[slot.date][ivr.id])
@@ -66,8 +85,8 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
       }));
   }, [templateInterviewers, ivrSlots, fromDate, toDate]);
 
-  const totalFreeSlots      = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => !s.isBooked).length, 0), 0), [byDate]);
-  const totalBookedSlots    = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => s.isBooked).length, 0), 0), [byDate]);
+  const totalFreeSlots      = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => !isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0), 0), [byDate, busyWindowsByInterviewer]);
+  const totalBookedSlots    = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0), 0), [byDate, busyWindowsByInterviewer]);
   const interviewersWithSlots = useMemo(() => { const s = new Set(); byDate.forEach(d => d.entries.forEach(e => s.add(e.ivrId))); return s.size; }, [byDate]);
 
   const datePagination = usePagination(byDate);
@@ -79,11 +98,14 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
     if (!datesSelected) return [];
     const map = {};
     for (const ivr of templateInterviewers) {
-      const count = (ivrSlots[ivr.id] || []).filter(s => !s.isBooked && s.date >= fromDate && s.date <= toDate).length;
+      const count = (ivrSlots[ivr.id] || [])
+        .filter(s => s.date >= fromDate && s.date <= toDate)
+        .filter(s => !isSlotEffectivelyBooked({ ...s, interviewerId: ivr.id }, busyWindowsByInterviewer))
+        .length;
       map[ivr.id] = { name: ivr.displayName || ivr.email, count };
     }
     return Object.values(map).sort((a, b) => b.count - a.count);
-  }, [templateInterviewers, ivrSlots, fromDate, toDate, datesSelected]);
+  }, [templateInterviewers, ivrSlots, fromDate, toDate, datesSelected, busyWindowsByInterviewer]);
 
   return (
     <div className="space-y-6">
@@ -190,8 +212,8 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
         <>
         <div className="space-y-3">
           {datePagination.paged.map(({ date, entries }) => {
-            const freeOnDate   = entries.reduce((a, e) => a + e.slots.filter(s => !s.isBooked).length, 0);
-            const bookedOnDate = entries.reduce((a, e) => a + e.slots.filter(s => s.isBooked).length, 0);
+            const freeOnDate   = entries.reduce((a, e) => a + e.slots.filter(s => !isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0);
+            const bookedOnDate = entries.reduce((a, e) => a + e.slots.filter(s => isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0);
             const dateLabel = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
               weekday: "long", day: "numeric", month: "long", year: "numeric",
             });
@@ -219,16 +241,19 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
                       <div className="flex flex-wrap gap-1.5">
                         {entry.slots
                           .slice().sort((a, b) => compareTimeLabels(a.time, b.time))
-                          .map(s => (
-                            <span key={s.id} title={s.isBooked ? "Booked — filled by an interview" : "Free"}
-                              className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                                s.isBooked
-                                  ? "bg-orange-50 text-orange-700 border-orange-200"
-                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              }`}>
-                              {s.time}{s.isBooked ? " · Booked" : ""}
-                            </span>
-                          ))}
+                          .map(s => {
+                            const booked = isSlotEffectivelyBooked(s, busyWindowsByInterviewer);
+                            return (
+                              <span key={s.id} title={booked ? "Booked — filled by an interview" : "Free"}
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                                  booked
+                                    ? "bg-orange-50 text-orange-700 border-orange-200"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                }`}>
+                                {s.time}{booked ? " · Booked" : ""}
+                              </span>
+                            );
+                          })}
                       </div>
                     </div>
                   ))}

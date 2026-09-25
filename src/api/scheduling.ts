@@ -4,8 +4,9 @@ import {
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
 import type { ScheduleInvite, OtpVerification, InviteHistoryEntry } from "../types";
-import { parseInterviewStart } from "../utils/dates";
+import { parseInterviewStart, timeToMinutes } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
+import { freeSlotsHeldByInvite } from "./availability";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 // ── Schedule Invites ──────────────────────────────────────────────────────────
@@ -70,8 +71,13 @@ export async function deleteScheduleInvite(id: string): Promise<void> {
   const data = snap.exists() ? (snap.data() as ScheduleInvite) : null;
 
   if (data?.bookedSlotId && data?.bookedInterviewerId) {
+    // Frees every slot this booking held (a longer interview can span more
+    // than one raw slot doc — see bookSlotForCandidate), not just the exact
+    // one bookedSlotId points at. Falls back to freeing just that one slot
+    // directly for invites booked before heldByInviteId existed.
+    await freeSlotsHeldByInvite(data.bookedInterviewerId, id).catch(() => {});
     await updateDoc(doc(db, "availability", data.bookedInterviewerId, "slots", data.bookedSlotId), {
-      isBooked: false, interviewId: null,
+      isBooked: false, interviewId: null, heldByInviteId: null,
     }).catch(() => {}); // slot may already be gone/reassigned — deleting the invite must still proceed
   }
 
@@ -168,7 +174,8 @@ export async function bookSlotForCandidate(
   slotId: string,
   inviteId: string,
   bookedDate: string,
-  bookedTime: string
+  bookedTime: string,
+  durationMinutes = 60
 ): Promise<void> {
   // Validated here too (not just in the UI) since this is the single
   // function every booking path — student portal, resend flows, etc. —
@@ -186,13 +193,48 @@ export async function bookSlotForCandidate(
   const inviteRef  = doc(db, "scheduleInvites", inviteId);
   const historyRef = doc(collection(db, "scheduleInvites", inviteId, "history"));
 
+  // Longer interviews span more than one raw slot doc — e.g. a 90-minute
+  // booking at 3:00 PM also occupies whatever's submitted at 3:30/4:00. The
+  // UI (collapseSlotsByDuration) already refuses to offer a start whose span
+  // overlaps something booked, but that's a point-in-time check, not a
+  // lock — two candidates picking different-but-overlapping starts at
+  // nearly the same moment could otherwise both succeed. Finding every raw
+  // slot in the span and locking all of them here (not just the one
+  // clicked) closes that race. Slots are looked up outside the transaction
+  // (Firestore transactions can only get() known refs, not run queries) and
+  // re-verified with txn.get() below before anything is written.
+  const startMin = timeToMinutes(bookedTime);
+  const endMin   = startMin + durationMinutes;
+  const daySnap = await getDocs(query(
+    collection(db, "availability", interviewerId, "slots"),
+    where("date", "==", bookedDate)
+  ));
+  const coveredRefs = new Set([slotRef.id]);
+  daySnap.docs.forEach(d => {
+    const t = timeToMinutes((d.data() as { time?: string }).time || "");
+    if (t >= startMin && t < endMin) coveredRefs.add(d.id);
+  });
+  const otherRefs = [...coveredRefs].filter(id => id !== slotRef.id).map(id => doc(db, "availability", interviewerId, "slots", id));
+
   await runTransaction(db, async (txn) => {
     const slotDoc = await txn.get(slotRef);
     if (!slotDoc.exists()) throw new Error("Slot no longer exists.");
     if (slotDoc.data().isBooked) throw new Error("This slot is already booked. Please choose another available slot.");
 
+    const otherDocs = await Promise.all(otherRefs.map(ref => txn.get(ref)));
+    for (const d of otherDocs) {
+      if (d.exists() && d.data().isBooked) {
+        throw new Error("Part of this time range was just booked by someone else. Please choose another available slot.");
+      }
+    }
+
     const now = new Date().toISOString();
-    txn.update(slotRef,   { isBooked: true, inviteId, bookedAt: now });
+    // heldByInviteId lets a later reject/resend/delete find and free every
+    // slot this booking consumed, not just the one that was clicked.
+    txn.update(slotRef, { isBooked: true, inviteId, bookedAt: now, heldByInviteId: inviteId });
+    otherRefs.forEach((ref, i) => {
+      if (otherDocs[i].exists()) txn.update(ref, { isBooked: true, inviteId, bookedAt: now, heldByInviteId: inviteId });
+    });
     txn.update(inviteRef, {
       status:              "pending_confirmation",
       bookedSlotId:        slotId,

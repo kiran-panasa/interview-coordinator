@@ -6,7 +6,7 @@ import {
 import { formatDate, formatDateTime } from "../../utils/dates";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
-  markSlotFree, createInterview, getTemplate, createNotification,
+  markSlotFree, freeSlotsHeldByInvite, createInterview, getTemplate, createNotification,
   logInviteHistory, getPreInterviewResources, updateCandidate,
   ensureRoundExists,
 } from "../../api/firestore";
@@ -435,6 +435,9 @@ export default function CandidateSchedulingTab({
     if (!inv || !rejectReason.trim()) return;
     setRejecting(true);
     try {
+      // Frees every slot this booking held, not just the exact one clicked
+      // — a longer interview can span more than one raw slot doc.
+      await freeSlotsHeldByInvite(inv.bookedInterviewerId, inv.id);
       await markSlotFree(inv.bookedInterviewerId, inv.bookedSlotId);
       await updateScheduleInvite(inv.id, { status: "cancelled", bookedSlotId: null, bookedInterviewerId: null, bookedDate: null, bookedTime: null, rejectionReason: rejectReason.trim() });
       logInviteHistory(inv.id, "cancelled", `Booking rejected by admin: ${rejectReason.trim()}`).catch(() => {});
@@ -455,6 +458,14 @@ export default function CandidateSchedulingTab({
   const handleResendInvite = async (inv) => {
     setResendingId(inv.id);
     try {
+      // Resending a still-pending booking (status can be pending_confirmation
+      // here, not just sent/otp_verified) used to wipe the invite's booking
+      // pointers without ever freeing the underlying slot(s) — leaving them
+      // permanently stuck as booked with nothing attached to them anymore.
+      if (inv.bookedInterviewerId) {
+        await freeSlotsHeldByInvite(inv.bookedInterviewerId, inv.id).catch(() => {});
+        if (inv.bookedSlotId) await markSlotFree(inv.bookedInterviewerId, inv.bookedSlotId).catch(() => {});
+      }
       const newToken  = crypto.randomUUID();
       const expiresAt = new Date(Date.now() + (inv.expiryHours || 24) * 3600 * 1000).toISOString();
       await updateScheduleInvite(inv.id, {
