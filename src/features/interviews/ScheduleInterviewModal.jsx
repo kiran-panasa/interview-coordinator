@@ -89,7 +89,8 @@ export default function ScheduleInterviewModal({
           </div>
           <div>
             <label className={labelCls}>Duration *</label>
-            <select value={form.duration} onChange={e => setField("duration", Number(e.target.value))} className={inputCls}>
+            <select value={form.duration} onChange={e => setField("duration", e.target.value ? Number(e.target.value) : "")} className={inputCls}>
+              <option value="">— Select duration —</option>
               {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
             </select>
           </div>

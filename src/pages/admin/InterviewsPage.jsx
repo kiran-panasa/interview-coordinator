@@ -66,7 +66,7 @@ const DURATIONS = [
 
 const EMPTY_FORM = {
   candidateId: "", interviewerId: "", scheduledDate: "", scheduledTime: "",
-  duration: 60, meetLink: "", round: "", notes: "", templateId: "",
+  duration: "", meetLink: "", round: "", notes: "", templateId: "",
 };
 
 const isUUID = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
@@ -323,7 +323,7 @@ export default function InterviewsPage() {
   };
 
   const handleSave = async () => {
-    if (!form.candidateId || !form.interviewerId || !form.scheduledDate || !form.scheduledTime || !form.round)
+    if (!form.candidateId || !form.interviewerId || !form.scheduledDate || !form.scheduledTime || !form.duration || !form.round)
       return setToast({ message: "Fill in all required fields.", type: "error" });
     const chosenStart = parseInterviewStart(form.scheduledDate, form.scheduledTime);
     if (chosenStart && chosenStart < new Date())
