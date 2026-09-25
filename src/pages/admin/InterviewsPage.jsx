@@ -259,6 +259,12 @@ export default function InterviewsPage() {
     });
   }, [form.interviewerId, editTarget?.id]);
 
+  // availTimes/availDates are suggestions only — Date/Start Time are always
+  // free-entry fields (see ScheduleInterviewModal), never gated to these.
+  // Admins schedule around calls/messages with interviewers all the time,
+  // and picking any panelist + any time here still correctly blocks that
+  // slot for everyone else, since Slot Overview and the nudge candidate
+  // picker both check real interviews (busyWindows), not just this list.
   useEffect(() => {
     if (!form.scheduledDate || !form.interviewerId) { setAvailTimes([]); return; }
     const now = new Date();
@@ -277,9 +283,11 @@ export default function InterviewsPage() {
         return !start || start > now;
       });
     setAvailTimes(usable.map(s => s.time).sort(compareTimeLabels));
-    setForm(f => ({ ...f, scheduledTime: "" }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.scheduledDate, form.duration, busyWindows]);
+    // No longer clears form.scheduledTime here — this used to wipe it every
+    // time this list recomputed, including the instant Edit opened (before
+    // the admin had touched anything at all), which is what made the Edit
+    // modal show a blank time for an interview that already had one.
+  }, [form.scheduledDate, form.duration, busyWindows]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openNew  = () => { setEditTarget(null); setReassignFromId(null); setForm(EMPTY_FORM); setShowModal(true); };
   const openEdit = (iv) => {
