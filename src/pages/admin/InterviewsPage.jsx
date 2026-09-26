@@ -402,6 +402,11 @@ export default function InterviewsPage() {
         let calendarSyncError  = "";
         let notificationStatus = "not_applicable";
 
+        // What the interview's status is AFTER this save (data.status is
+        // only set above, by the reassignment branch — otherwise it's
+        // whatever editTarget.status already was).
+        const resultingStatus = data.status || editTarget.status;
+
         if (calendarRelevantChange && APPS_SCRIPT_URL) {
           // Re-read the interview's CURRENT eventId rather than trusting
           // editTarget — that's just a snapshot from when this modal was
@@ -437,12 +442,13 @@ export default function InterviewsPage() {
               calendarSyncError  = e.message || String(e);
               console.error("Calendar reschedule failed:", e);
             }
-          } else {
-            // No Meet has ever been created for this interview — create one
-            // now instead of leaving it for whatever happens to trigger
-            // scheduling next. scheduleInterviewMeet takes a Firestore lock
-            // first, so even if the interviewer accepts at this exact
-            // moment, only one of the two ever actually creates an event.
+          } else if (resultingStatus !== "pending_acceptance") {
+            // No Meet has ever been created for this interview, and nobody
+            // still needs to Accept it (e.g. a scheduled interview whose
+            // time/duration just changed) — create one now instead of
+            // leaving it for whatever happens to trigger scheduling next.
+            // scheduleInterviewMeet takes a Firestore lock first, so even if
+            // something else races it, only one side ever creates an event.
             try {
               const result = await scheduleInterviewMeet(editTarget.id);
               calendarSyncStatus = (result.meetLink || result.alreadyScheduled || result.inProgress) ? "synced" : "failed";
@@ -452,6 +458,13 @@ export default function InterviewsPage() {
               console.error("Meet creation on edit failed:", e);
             }
           }
+          // else: still pending_acceptance (e.g. this edit just reassigned
+          // the panelist) — the Meet is deliberately left for THEM to
+          // create by clicking Accept, same as a brand-new interview. A
+          // Meet appearing here before they've agreed to the assignment is
+          // what made "it shows a Meet but still says Pending Acceptance"
+          // look like a bug — it's the same interview correctly waiting on
+          // its new panelist, not evidence they already accepted.
         }
 
         // Notify whoever's affected: current candidate/interviewer of the
