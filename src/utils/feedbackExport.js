@@ -301,8 +301,8 @@ export async function exportFeedbackToExcel(interviews, templates, programs, can
       comments,
       questionsAsked,
       iv.meetLink || "",
-      isCancelled ? "" : (iv.meetingRecordingUrl || ""),
-      isCancelled ? "" : (iv.transcriptUrl || ""),
+      isCancelled ? "" : (iv.meetingRecordingUrl || (iv.eventId ? "Not fetched yet — open the interview → ⋮ → Meet Recording" : "")),
+      isCancelled ? "" : (iv.transcriptUrl || (iv.eventId ? "Not fetched yet — open the interview → ⋮ → Transcript" : "")),
       (!isCancelled && iv.aiReport) ? `${window.location.origin}/admin/interviews?aiReport=${iv.id}` : "",
       fb?.submittedAt ? new Date(fb.submittedAt).toLocaleString() : "",
     ];
@@ -327,7 +327,9 @@ export async function exportFeedbackToExcel(interviews, templates, programs, can
     if (!LINK_HEADERS.has(header)) return;
     for (let r = 0; r < rows.length; r++) {
       const url = rows[r][colIdx];
-      if (!url) continue;
+      // Recording/Transcript can hold a "not fetched yet" placeholder
+      // instead of a real URL (see below) — only ever linkify an actual URL.
+      if (!url || !/^https?:\/\//i.test(url)) continue;
       const cellRef = XLSX.utils.encode_cell({ r: r + 1, c: colIdx }); // +1 skips the header row
       if (ws[cellRef]) ws[cellRef].l = { Target: url };
     }
