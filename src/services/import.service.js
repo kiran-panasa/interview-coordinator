@@ -1,4 +1,4 @@
-import { materializeFeedback } from "../utils/templateEngine";
+import { materializeFeedback, getUnratedVerdictDomains } from "../utils/templateEngine";
 import { slugify } from "../utils/strings";
 
 export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
@@ -64,6 +64,16 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
   }
 
   const materialized = materializeFeedback(template, { domains: feedbackDomains });
+
+  // A sheet row missing some scored sections gets no Final Score rather than
+  // an average of only the sections that happen to be present.
+  const unrated = getUnratedVerdictDomains(template, materialized);
+  if (unrated.length) {
+    materialized.finalVerdict = null;
+    materialized.scoreIncomplete = true;
+    materialized.missingSections = unrated.map(d => d.label || d.id);
+  }
+
   return {
     ...materialized,
     overallRecommendation: verdict,
