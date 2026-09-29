@@ -109,6 +109,8 @@ export default async function handler(req, res) {
         status: iv.status || "",
         outcome: feedback.overallRecommendation || "",
         finalVerdict: feedback.finalVerdict ?? null,
+        scoreIncomplete: !!feedback.scoreIncomplete,
+        missingSections: feedback.missingSections || [],
         remarks: feedback.comments || "",
         scheduledDate: iv.scheduledDate || "",
         scheduledTime: iv.scheduledTime || "",
