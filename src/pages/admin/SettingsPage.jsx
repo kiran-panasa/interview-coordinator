@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Users, SlidersHorizontal, Shield, BookOpen, Sparkles, User as UserIcon,
-  CheckCircle2, Copy, Check, FileSpreadsheet, FileText, UploadCloud, CalendarOff,
+  CheckCircle2, Copy, Check, FileSpreadsheet, FileText, UploadCloud, CalendarOff, Search,
 } from "lucide-react";
 import UserManagementTab from "../../features/settings/UserManagementTab";
 import GeneralTab from "../../features/settings/GeneralTab";
@@ -103,6 +103,7 @@ export default function SettingsPage() {
   // open, holding a local Set of interviewer ids until Save writes it.
   const [managingVendor, setManagingVendor] = useState(null);
   const [vendorMemberIds, setVendorMemberIds] = useState(new Set());
+  const [vendorMemberSearch, setVendorMemberSearch] = useState("");
   const [vendorMembersSaving, setVendorMembersSaving] = useState(false);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
@@ -403,6 +404,7 @@ export default function SettingsPage() {
   const openManageVendorMembers = (v) => {
     setManagingVendor(v);
     setVendorMemberIds(new Set(users.filter(u => u.vendorId === v.id).map(u => u.id)));
+    setVendorMemberSearch("");
   };
 
   const toggleVendorMember = (userId) => {
@@ -833,12 +835,34 @@ export default function SettingsPage() {
       <Modal open={!!managingVendor} onClose={() => setManagingVendor(null)} title={managingVendor ? `Interviewers — ${managingVendor.name}` : "Interviewers"}>
         <div className="space-y-3">
           <p className="text-xs text-gray-400">
-            Check who belongs to this vendor. An interviewer can only be under one vendor at a time — checking them here moves them out of any other vendor.
+            Check who belongs to this vendor. An interviewer can only be under one vendor at a time — checking them here moves them out of any other vendor. Unchecked and never assigned means they're independent, not tied to any vendor.
           </p>
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={vendorMemberSearch}
+              onChange={e => setVendorMemberSearch(e.target.value)}
+              placeholder="Search interviewers…"
+              autoFocus
+              className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+            />
+          </div>
           <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50 scrollbar-thin">
-            {users.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active")
-              .sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email))
-              .map(u => (
+            {(() => {
+              const q = vendorMemberSearch.trim().toLowerCase();
+              const list = users
+                .filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active")
+                .filter(u => !q || (u.displayName || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q))
+                .sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email));
+              if (list.length === 0) {
+                return (
+                  <p className="text-xs text-gray-400 px-3 py-4 text-center">
+                    {q ? `No interviewers match "${vendorMemberSearch}".` : "No active interviewers yet."}
+                  </p>
+                );
+              }
+              return list.map(u => (
                 <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
                   <input type="checkbox" checked={vendorMemberIds.has(u.id)} onChange={() => toggleVendorMember(u.id)}
                     className="accent-brand-600 w-4 h-4" />
@@ -849,10 +873,8 @@ export default function SettingsPage() {
                     </span>
                   )}
                 </label>
-              ))}
-            {users.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active").length === 0 && (
-              <p className="text-xs text-gray-400 px-3 py-4 text-center">No active interviewers yet.</p>
-            )}
+              ));
+            })()}
           </div>
           <div className="flex gap-3 pt-2">
             <Button variant="primary" size="lg" onClick={handleSaveVendorMembers} disabled={vendorMembersSaving} className="flex-1">
