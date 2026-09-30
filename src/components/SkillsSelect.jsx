@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, X, Plus, Search } from "lucide-react";
 
 export default function SkillsSelect({
@@ -21,10 +22,48 @@ export default function SkillsSelect({
 }) {
   const [open,   setOpen]   = useState(false);
   const [search, setSearch] = useState("");
-  const ref = useRef(null);
+  // The dropdown renders through a portal into document.body (see below) so
+  // it's positioned in fixed viewport coordinates instead of relative to
+  // this trigger — otherwise, opened inside a Modal (whose body scrolls with
+  // overflow-y-auto), the dropdown got silently clipped at the modal's
+  // bottom edge instead of floating over it.
+  const [pos, setPos] = useState(null);
+  const triggerRef = useRef(null);
+  const panelRef   = useRef(null);
+
+  const computePos = useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const estimatedPanelHeight = 320; // search bar + max-h-52 list + footer, generous
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUp = spaceBelow < estimatedPanelHeight && rect.top > spaceBelow;
+    setPos(openUp
+      ? { left: rect.left, width: rect.width, bottom: window.innerHeight - rect.top + 6, openUp: true }
+      : { left: rect.left, width: rect.width, top: rect.bottom + 6, openUp: false }
+    );
+  }, []);
+
+  // Recompute on open, and keep following the trigger while scrolling
+  // (capture:true catches scroll on any ancestor, not just window — needed
+  // since the usual case is the Modal's own scrollable body) or resizing.
+  useEffect(() => {
+    if (!open) return;
+    computePos();
+    window.addEventListener("scroll", computePos, true);
+    window.addEventListener("resize", computePos);
+    return () => {
+      window.removeEventListener("scroll", computePos, true);
+      window.removeEventListener("resize", computePos);
+    };
+  }, [open, computePos]);
 
   useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handler = (e) => {
+      if (triggerRef.current?.contains(e.target)) return;
+      if (panelRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
@@ -97,7 +136,7 @@ export default function SkillsSelect({
   }
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={triggerRef} className="relative">
       {/* Chip trigger */}
       <div
         onClick={() => setOpen(o => !o)}
@@ -133,8 +172,12 @@ export default function SkillsSelect({
         </span>
       </div>
 
-      {open && (
-        <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white border border-gray-100 rounded-xl shadow-popover overflow-hidden animate-scale-in origin-top">
+      {open && pos && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: "fixed", left: pos.left, width: pos.width, ...(pos.openUp ? { bottom: pos.bottom } : { top: pos.top }) }}
+          className={`z-[100] bg-white border border-gray-100 rounded-xl shadow-popover overflow-hidden animate-scale-in ${pos.openUp ? "origin-bottom" : "origin-top"}`}
+        >
           {/* Search input */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
             <Search className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
@@ -204,7 +247,8 @@ export default function SkillsSelect({
                 className="text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
