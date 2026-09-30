@@ -11,6 +11,7 @@ import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
+import { useVendors } from "../../hooks/queries";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -60,6 +61,8 @@ export default function InterviewerNudgeTab({
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
   const addPickerRef = useRef(null);
+  const { data: vendors = [] } = useVendors();
+  const vendorNameById = useMemo(() => new Map(vendors.map(v => [v.id, v.name])), [vendors]);
 
   // Templates explicitly assigned to the selected program, plus any template
   // that hasn't been assigned to a program yet (so nothing vanishes silently).
@@ -147,6 +150,30 @@ export default function InterviewerNudgeTab({
   const toggleIvr = (id) => setSelectedIvrs(prev => {
     const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
   });
+
+  // Vendor quick-select — groups the currently matched/added interviewers by
+  // vendor so a whole vendor's roster can be checked/unchecked in one click,
+  // without hiding anyone or losing the ability to fine-tune individual rows.
+  const vendorGroups = useMemo(() => {
+    const map = new Map(); // vendorId|"" -> { name, ids: [] }
+    for (const u of displayedInterviewers) {
+      const key = u.vendorId || "";
+      if (!map.has(key)) map.set(key, { name: key ? (vendorNameById.get(key) || "Vendor") : "No Vendor", ids: [] });
+      map.get(key).ids.push(u.id);
+    }
+    return [...map.entries()]
+      .map(([id, g]) => ({ id, ...g }))
+      .sort((a, b) => (a.id ? 0 : 1) - (b.id ? 0 : 1) || a.name.localeCompare(b.name));
+  }, [displayedInterviewers, vendorNameById]);
+
+  const toggleVendorSelection = (ids) => {
+    const allSelected = ids.every(id => selectedIvrs.has(id));
+    setSelectedIvrs(prev => {
+      const next = new Set(prev);
+      ids.forEach(id => allSelected ? next.delete(id) : next.add(id));
+      return next;
+    });
+  };
 
   const addInterviewer = (u) => {
     setManuallyAdded(prev => new Set([...prev, u.id]));
@@ -347,6 +374,30 @@ export default function InterviewerNudgeTab({
             </div>
           </div>
 
+          {vendorGroups.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 px-5 py-2.5 border-b border-gray-100 bg-gray-50/40">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mr-1">By vendor:</span>
+              {vendorGroups.map(g => {
+                const allSelected = g.ids.every(id => selectedIvrs.has(id));
+                const someSelected = !allSelected && g.ids.some(id => selectedIvrs.has(id));
+                return (
+                  <button key={g.id} type="button" onClick={() => toggleVendorSelection(g.ids)}
+                    title={`Click to ${allSelected ? "unselect" : "select"} all ${g.ids.length} under ${g.name}`}
+                    className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${
+                      allSelected
+                        ? "bg-brand-600 text-white border-brand-600"
+                        : someSelected
+                          ? "bg-brand-50 text-brand-700 border-brand-300"
+                          : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"
+                    }`}>
+                    {g.name}
+                    <span className="opacity-70">({g.ids.length})</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -358,14 +409,14 @@ export default function InterviewerNudgeTab({
                     className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
                   />
                 </th>
-                {["Interviewer", "Skills", "Free Slots in Range", "Last Response"].map(h => (
+                {["Interviewer", "Vendor", "Skills", "Free Slots in Range", "Last Response"].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {displayedInterviewers.length === 0 ? (
-                <tr><td colSpan={5} className="text-center text-gray-400 py-10 text-sm">
+                <tr><td colSpan={6} className="text-center text-gray-400 py-10 text-sm">
                   No interviewers match the selected template.
                 </td></tr>
               ) : ivrPagination.paged.map(u => {
@@ -391,6 +442,11 @@ export default function InterviewerNudgeTab({
                           </span>
                         )}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.vendorId
+                        ? <span className="text-xs font-medium text-gray-600">{vendorNameById.get(u.vendorId) || "Vendor"}</span>
+                        : <span className="text-xs text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">

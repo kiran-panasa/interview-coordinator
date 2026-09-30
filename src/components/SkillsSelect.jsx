@@ -11,6 +11,13 @@ export default function SkillsSelect({
   placeholder = "Select skills…",
   searchPlaceholder = "Search skills…",
   readOnly = false,
+  // Optional — when any option carries a `group` (e.g. a vendor name), the
+  // list renders sectioned under that group's name instead of flat, with a
+  // header that selects/clears the whole group in one click while every
+  // option keeps its own individual checkbox. Options with no `group` are
+  // bucketed under `ungroupedLabel`. No-op (renders exactly as before) when
+  // nothing sets `group`.
+  ungroupedLabel = "Other",
 }) {
   const [open,   setOpen]   = useState(false);
   const [search, setSearch] = useState("");
@@ -29,6 +36,28 @@ export default function SkillsSelect({
 
   const filtered = skills.filter(s => s.name.toLowerCase().includes(search.toLowerCase()));
   const selected = skills.filter(s => value.includes(s.id));
+
+  const hasGroups = skills.some(s => s.group);
+  // Preserves first-seen order of groups rather than alphabetizing, so a
+  // caller-supplied vendor order (or "Other" always last) stays intact.
+  const groupedFiltered = hasGroups
+    ? (() => {
+        const order = [];
+        const buckets = new Map();
+        for (const s of filtered) {
+          const g = s.group || ungroupedLabel;
+          if (!buckets.has(g)) { buckets.set(g, []); order.push(g); }
+          buckets.get(g).push(s);
+        }
+        return order.map(g => ({ group: g, items: buckets.get(g) }));
+      })()
+    : null;
+  const toggleGroup = (items) => {
+    if (readOnly) return;
+    const ids = items.map(s => s.id);
+    const allSelected = ids.every(id => value.includes(id));
+    onChange(allSelected ? value.filter(v => !ids.includes(v)) : [...new Set([...value, ...ids])]);
+  };
 
   const searchTrimmed = search.trim();
   const alreadyInAdmin  = skills.some(s => s.name.toLowerCase() === searchTrimmed.toLowerCase());
@@ -128,7 +157,24 @@ export default function SkillsSelect({
               </p>
             ) : (
               <>
-                {filtered.map(s => (
+                {groupedFiltered ? groupedFiltered.map(({ group, items }) => (
+                  <div key={group}>
+                    <div className="flex items-center justify-between px-3 pt-2.5 pb-1 bg-gray-50/60 sticky top-0">
+                      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{group}</span>
+                      <button type="button" onClick={() => toggleGroup(items)}
+                        className="text-[11px] font-medium text-brand-600 hover:underline">
+                        {items.every(s => value.includes(s.id)) ? "Clear" : "Select all"}
+                      </button>
+                    </div>
+                    {items.map(s => (
+                      <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors">
+                        <input type="checkbox" checked={value.includes(s.id)} onChange={() => toggle(s.id)}
+                          className="accent-brand-600 flex-shrink-0" />
+                        <span className="text-sm text-gray-700">{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )) : filtered.map(s => (
                   <label key={s.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors">
                     <input type="checkbox" checked={value.includes(s.id)} onChange={() => toggle(s.id)}
                       className="accent-brand-600 flex-shrink-0" />

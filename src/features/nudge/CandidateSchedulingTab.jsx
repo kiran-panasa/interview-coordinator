@@ -16,6 +16,7 @@ import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
+import { useVendors } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import { usePagination } from "../../hooks/usePagination";
 
@@ -62,6 +63,9 @@ export default function CandidateSchedulingTab({
   // once handleSendInvites flips their nudgeStatus to "nudged".
   pendingOnly = false,
 }) {
+  const { data: vendors = [] } = useVendors();
+  const vendorNameById = useMemo(() => new Map(vendors.map(v => [v.id, v.name])), [vendors]);
+
   const [dateStart,      setDateStart]      = useState(today());
   const [dateEnd,        setDateEnd]        = useState(inDays(7));
   const [expiryHours,    setExpiryHours]    = useState(24);
@@ -668,11 +672,16 @@ export default function CandidateSchedulingTab({
           <p className="text-xs font-semibold text-gray-500 mb-2">Select Panelists</p>
           <div className="max-w-md">
             <SkillsSelect
-              skills={activeInterviewers.map(u => ({ id: u.id, name: u.displayName || u.email }))}
+              skills={activeInterviewers.map(u => ({
+                id: u.id,
+                name: u.displayName || u.email,
+                group: u.vendorId ? (vendorNameById.get(u.vendorId) || "Vendor") : undefined,
+              }))}
               value={panelistIds}
               onChange={setPanelistIds}
               placeholder="All active interviewers"
               searchPlaceholder="Search interviewers…"
+              ungroupedLabel="Independent (No Vendor)"
             />
           </div>
         </div>
