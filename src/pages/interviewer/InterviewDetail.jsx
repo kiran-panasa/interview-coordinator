@@ -14,6 +14,7 @@ import {
   getActiveAdmins, getCandidate,
 } from "../../api/firestore";
 import { scheduleInterviewMeet } from "../../api/interviews";
+import { getUnratedVerdictDomains } from "../../utils/templateEngine";
 import { callAppsScript } from "../../lib/appsScript";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
 
@@ -293,8 +294,28 @@ export default function InterviewDetail() {
     if (!partialCompletionReason) return; // Save button is disabled without one, but guard anyway
     setSaving(true);
     try {
-      await markInterviewPartiallyCompleted(id, partialCompletionReason);
-      setInterview(iv => ({ ...iv, status: "partially_completed", partialCompletionReason }));
+      const extraFields = {};
+      // Whatever got saved (via Submit Evaluation) before this interview was
+      // cut short can legitimately be missing whole sections — a plain
+      // weighted average over just what's there would silently read as a
+      // real score (e.g. one perfect 25%-weighted section alone showing the
+      // same verdict as a fully-scored interview). Same
+      // scoreIncomplete/missingSections handling as an incomplete sheet
+      // import (see import.service.js) — shows "Incomplete" instead of a
+      // misleading number, everywhere that already knows how to render it.
+      if (interview.feedback && template) {
+        const unrated = getUnratedVerdictDomains(template, interview.feedback);
+        if (unrated.length) {
+          extraFields.feedback = {
+            ...interview.feedback,
+            finalVerdict: null,
+            scoreIncomplete: true,
+            missingSections: unrated.map(d => d.label || d.id),
+          };
+        }
+      }
+      await markInterviewPartiallyCompleted(id, partialCompletionReason, extraFields);
+      setInterview(iv => ({ ...iv, status: "partially_completed", partialCompletionReason, ...extraFields }));
       setToast({ message: "Interview marked as partially completed." });
       setPartialModalOpen(false);
     } catch (e) {

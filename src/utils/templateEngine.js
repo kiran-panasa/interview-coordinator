@@ -330,32 +330,23 @@ export function computeIntegrityScore(template, feedbackData) {
   return Math.round(Math.max(0, Math.min(5, score5)) * 10) / 10;
 }
 
-// A domain with no data at all (never opened, e.g. an interview cut short
-// and marked Partially Completed before reaching it) counts as a 0, not as
-// excluded from the average — its full weight still counts in the
-// denominator. Excluding it entirely used to let a single scored domain
-// stand in for the whole interview: a perfect 25%-weighted "Coding" section
-// with everything else untouched produced the same verdict as a perfect
-// score across all domains, which is exactly backwards for a partial
-// interview. This makes zero difference for a normally completed interview
-// (every domain has data by submit time either way) — it only changes the
-// number when something was genuinely never filled in.
 export function computeFinalVerdict(template, feedbackData) {
   if (!template?.domains || !feedbackData?.domains) return null;
 
   const scoredDomains = template.domains.filter(
     d => d.enabled !== false && (d.weightInVerdict ?? 0) > 0
   );
-  if (!scoredDomains.length) return null;
 
   let totalWeight = 0;
   let weightedSum = 0;
 
   for (const domain of scoredDomains) {
     const rating = computeDomainRating(domain, feedbackData.domains[domain.id]);
-    const w = domain.weightInVerdict;
-    weightedSum += (rating ?? 0) * w;
-    totalWeight += w;
+    if (rating != null) {
+      const w = domain.weightInVerdict;
+      weightedSum += rating * w;
+      totalWeight += w;
+    }
   }
 
   return totalWeight ? Math.round((weightedSum / totalWeight) * 10) / 10 : null;
