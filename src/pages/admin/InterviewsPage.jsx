@@ -1250,6 +1250,17 @@ export default function InterviewsPage() {
     return true;
   }), [workingSet, activeProgram, templateProgram]);
 
+  // Which vendor each interviewer email currently belongs to — an interview
+  // only ever stores interviewerEmail, not the vendor, so this resolves it
+  // the same way Interviewer Stats does (current assignment, not a
+  // snapshot at scheduling time). Declared before `filtered` below, which
+  // depends on it.
+  const vendorByEmail = useMemo(() => {
+    const map = {};
+    usersAll.forEach(u => { if (u.email && u.vendorId) map[u.email] = u.vendorId; });
+    return map;
+  }, [usersAll]);
+
   // A search query bypasses the active Program tab (searches workingSet,
   // not the tab-scoped programWorkingSet) — otherwise a candidate on a
   // different tab than the one you happen to be viewing silently returns
@@ -1282,15 +1293,6 @@ export default function InterviewsPage() {
   const ivrNameByEmail = useMemo(() => {
     const map = {};
     usersAll.forEach(u => { if (u.email) map[u.email] = u.displayName || u.email; });
-    return map;
-  }, [usersAll]);
-  // Which vendor each interviewer email currently belongs to — an interview
-  // only ever stores interviewerEmail, not the vendor, so this resolves it
-  // the same way Interviewer Stats does (current assignment, not a
-  // snapshot at scheduling time).
-  const vendorByEmail = useMemo(() => {
-    const map = {};
-    usersAll.forEach(u => { if (u.email && u.vendorId) map[u.email] = u.vendorId; });
     return map;
   }, [usersAll]);
 
