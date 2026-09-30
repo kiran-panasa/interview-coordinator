@@ -93,20 +93,6 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
   // Reset to page 1 when filters change
   useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, fromDate, toDate]); // eslint-disable-line
 
-  // interviewer-level summary: total free slots in range per interviewer
-  const ivrSummary = useMemo(() => {
-    if (!datesSelected) return [];
-    const map = {};
-    for (const ivr of templateInterviewers) {
-      const count = (ivrSlots[ivr.id] || [])
-        .filter(s => s.date >= fromDate && s.date <= toDate)
-        .filter(s => !isSlotEffectivelyBooked({ ...s, interviewerId: ivr.id }, busyWindowsByInterviewer))
-        .length;
-      map[ivr.id] = { name: ivr.displayName || ivr.email, count };
-    }
-    return Object.values(map).sort((a, b) => b.count - a.count);
-  }, [templateInterviewers, ivrSlots, fromDate, toDate, datesSelected, busyWindowsByInterviewer]);
-
   return (
     <div className="space-y-6">
       {/* Filters + summary */}
@@ -170,26 +156,6 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
           </button>
         </div>
       </div>
-
-      {/* Interviewer summary bar */}
-      {templateInterviewers.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 px-6 py-4">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">Per Interviewer</p>
-          <div className="flex flex-wrap gap-2">
-            {ivrSummary.map(({ name, count }) => (
-              <span key={name}
-                className={`inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border ${
-                  count > 0
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-gray-50 text-gray-400 border-gray-200"
-                }`}>
-                {name}
-                <span className={`font-bold ${count > 0 ? "text-emerald-600" : "text-gray-300"}`}>{count}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Slots by date */}
       {byDate.length === 0 ? (
