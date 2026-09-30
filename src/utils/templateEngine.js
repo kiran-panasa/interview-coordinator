@@ -361,6 +361,18 @@ export function computeFinalVerdict(template, feedbackData) {
   return totalWeight ? Math.round((weightedSum / totalWeight) * 10) / 10 : null;
 }
 
+// Verdict-weighted domains with no rating at all. computeFinalVerdict skips
+// these (renormalising over the rest), which is right for the live form's
+// running total but makes a partially-filled import look like a full score.
+export function getUnratedVerdictDomains(template, feedbackData) {
+  if (!template?.domains) return [];
+  return template.domains.filter(
+    d => d.enabled !== false
+      && (d.weightInVerdict ?? 0) > 0
+      && computeDomainRating(d, feedbackData?.domains?.[d.id]) == null
+  );
+}
+
 // Every scored_dropdown option is defined on the template as { score, label }
 // (e.g. score: 0, label: "Weak in communication"), but a raw answer only
 // records the score. Consumers that read the interview doc directly out of

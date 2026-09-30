@@ -49,6 +49,8 @@ Only interviews with `status == "completed"` are ever returned — this isn't a 
       "feedback": {
         "overallRecommendation": "Proceed",
         "finalVerdict": 4.3,
+        "scoreIncomplete": false,
+        "missingSections": [],
         "comments": "...",
         "domains": {
           "coding": {
@@ -75,6 +77,8 @@ Only interviews with `status == "completed"` are ever returned — this isn't a 
 ```
 
 `aiReport` and `links.recordingUrl`/`transcriptUrl` are `null` when not yet generated/uploaded for that interview — don't assume they're always populated.
+
+`feedback.scoreIncomplete` is `true` when an interview imported from a sheet had no rating for one or more sections that count toward the Final Score. In that case `finalVerdict` is `null` (rather than an average of only the sections present) and `missingSections` lists those sections by name, e.g. `["Theory", "Resume"]`. Otherwise `scoreIncomplete` is `false` and `missingSections` is `[]`.
 
 Each domain's raw scored fields (in `cards[i]` and at the domain level, e.g. `ps_rating: "4"`) are always just the number the interviewer picked. A sibling `descriptors` object, same shape (`descriptors.cards[i].<fieldId>` / `descriptors.<fieldId>`), carries the matching option's label text (e.g. `"4"` → `"Clean code with minor issues, good structure and readability"`) looked up from the template at read time. A field is omitted from `descriptors` if it wasn't answered or isn't a scored field — don't assume every scored key has a matching descriptor key.
 
