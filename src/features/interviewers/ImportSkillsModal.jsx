@@ -1,18 +1,37 @@
 import { useRef } from "react";
-import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Sparkles } from "lucide-react";
+import { Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Sparkles } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
+
+const FALLBACK_SKILL_NAMES = ["Java", "Python", "MERN", "DSML"];
 
 export default function ImportSkillsModal({
   open, onClose,
   csvText, setCsvText,
   parseResult, setParseResult,
   handleParseCSV, handleImport, importing,
+  skills = [],
 }) {
   const firstErrorRowRef = useRef(null);
   const rows = parseResult?.rows || null;
   const errorRows = rows ? rows.filter(r => r.error) : [];
   const validRows = rows ? rows.filter(r => !r.error) : [];
+
+  const downloadSampleCSV = () => {
+    const skillNames = skills.length ? skills.slice(0, 6).map(s => s.name) : FALLBACK_SKILL_NAMES;
+    const header = ["Panelist Name", ...skillNames].join(",");
+    const sampleRow = (name, pattern) => [name, ...pattern.map(v => (v ? "TRUE" : "FALSE"))].join(",");
+    const rowsCsv = [
+      sampleRow("Interviewer One", skillNames.map((_, i) => i % 2 === 0)),
+      sampleRow("Interviewer Two", skillNames.map(() => true)),
+    ];
+    const csv = [header, ...rowsCsv].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "interviewer_skills_sample.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Modal open={open} onClose={onClose} title="Import Interviewer Skills" wide>
@@ -20,9 +39,15 @@ export default function ImportSkillsModal({
 
         {/* Format reference */}
         <div className="bg-gray-50 rounded-xl border border-gray-100 p-4">
-          <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-            <FileSpreadsheet className="w-3.5 h-3.5 text-gray-400" /> CSV Format
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+              <FileSpreadsheet className="w-3.5 h-3.5 text-gray-400" /> CSV Format
+            </p>
+            <button type="button" onClick={downloadSampleCSV}
+              className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">
+              <Download className="w-3.5 h-3.5" /> Download sample CSV
+            </button>
+          </div>
           <p className="text-xs text-gray-500 leading-relaxed">
             Same shape as your skills spreadsheet — a matrix. First column is the interviewer's{" "}
             <span className="font-mono text-brand-700">Panelist Name</span> (or <span className="font-mono text-brand-700">Email</span>),

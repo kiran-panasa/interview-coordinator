@@ -735,6 +735,7 @@ export default function InterviewersPage() {
         csvText={skillsCsvText} setCsvText={setSkillsCsvText}
         parseResult={skillsParseResult} setParseResult={setSkillsParseResult}
         handleParseCSV={handleParseSkillsCSV} handleImport={handleImportSkills} importing={skillsImporting}
+        skills={skills}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
