@@ -65,33 +65,6 @@ export default function CandidateSchedulingTab({
   const { data: vendors = [] } = useVendors();
   const vendorNameById = useMemo(() => new Map(vendors.map(v => [v.id, v.name])), [vendors]);
 
-  // Grouped-by-vendor, search-filtered interviewer list for the "Select
-  // Panelists" popup — same grouping SkillsSelect used to render inline.
-  const panelistGroups = useMemo(() => {
-    const q = panelistSearch.trim().toLowerCase();
-    const matches = activeInterviewers.filter(u =>
-      !q || u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
-    );
-    const order = [];
-    const buckets = new Map();
-    for (const u of matches) {
-      const key = u.vendorId ? (vendorNameById.get(u.vendorId) || "Vendor") : "Independent (No Vendor)";
-      if (!buckets.has(key)) { buckets.set(key, []); order.push(key); }
-      buckets.get(key).push(u);
-    }
-    order.sort((a, b) => (a === "Independent (No Vendor)" ? 1 : 0) - (b === "Independent (No Vendor)" ? 1 : 0) || a.localeCompare(b));
-    return order.map(name => ({ name, members: buckets.get(name) }));
-  }, [activeInterviewers, vendorNameById, panelistSearch]);
-
-  const togglePanelist = (id) => setPanelistIds(prev =>
-    prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
-  );
-  const togglePanelistGroup = (members) => {
-    const ids = members.map(u => u.id);
-    const allSelected = ids.every(id => panelistIds.includes(id));
-    setPanelistIds(prev => allSelected ? prev.filter(v => !ids.includes(v)) : [...new Set([...prev, ...ids])]);
-  };
-
   const [dateStart,      setDateStart]      = useState(today());
   const [dateEnd,        setDateEnd]        = useState(inDays(7));
   const [expiryHours,    setExpiryHours]    = useState(24);
@@ -132,6 +105,33 @@ export default function CandidateSchedulingTab({
   // the candidate table right below it once the interviewer list got long.
   const [panelistPickerOpen, setPanelistPickerOpen] = useState(false);
   const [panelistSearch,     setPanelistSearch]     = useState("");
+
+  // Grouped-by-vendor, search-filtered interviewer list for the "Select
+  // Panelists" popup — same grouping SkillsSelect used to render inline.
+  const panelistGroups = useMemo(() => {
+    const q = panelistSearch.trim().toLowerCase();
+    const matches = activeInterviewers.filter(u =>
+      !q || u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    );
+    const order = [];
+    const buckets = new Map();
+    for (const u of matches) {
+      const key = u.vendorId ? (vendorNameById.get(u.vendorId) || "Vendor") : "Independent (No Vendor)";
+      if (!buckets.has(key)) { buckets.set(key, []); order.push(key); }
+      buckets.get(key).push(u);
+    }
+    order.sort((a, b) => (a === "Independent (No Vendor)" ? 1 : 0) - (b === "Independent (No Vendor)" ? 1 : 0) || a.localeCompare(b));
+    return order.map(name => ({ name, members: buckets.get(name) }));
+  }, [activeInterviewers, vendorNameById, panelistSearch]);
+
+  const togglePanelist = (id) => setPanelistIds(prev =>
+    prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
+  );
+  const togglePanelistGroup = (members) => {
+    const ids = members.map(u => u.id);
+    const allSelected = ids.every(id => panelistIds.includes(id));
+    setPanelistIds(prev => allSelected ? prev.filter(v => !ids.includes(v)) : [...new Set([...prev, ...ids])]);
+  };
 
   // Guards handleConfirmBooking against a rapid double-click/double-tap
   // creating two Meet spaces + Calendar events + Interview docs for the same
