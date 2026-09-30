@@ -11,6 +11,7 @@ import {
   computeIntegrityScore,
   materializeFeedback,
   withIntegrityDomain,
+  getUnratedVerdictDomains,
   INTEGRITY_DOMAIN_ID,
 } from "../utils/templateEngine";
 import { saveFeedbackAutoDraft, subscribeToInterviewIntegrity } from "../api/firestore";
@@ -53,6 +54,51 @@ function validateRatingsComplete(template, feedbackData, lockedDomainIds = []) {
       const val = domainData[field.id];
       if (val === null || val === undefined || val === "") {
         return `${domain.label}: "${field.label}" rating is required.`;
+      }
+    }
+  }
+  return null;
+}
+
+// True if a domain has any real answer in it, vs. just the empty
+// placeholder shape every unfilled domain starts as (which can already
+// include a pre-created default card — see defaultCardCount in
+// initFeedbackState — so "a card object exists" alone isn't enough; it
+// has to actually have a value in it).
+function domainHasData(domainData) {
+  if (!domainData) return false;
+  const cards = domainData.cards;
+  const fieldFilled = (v) => Array.isArray(v) ? v.length > 0 : (v != null && v !== "");
+  if (Array.isArray(cards) && cards.some(card => Object.values(card).some(fieldFilled))) return true;
+  return Object.entries(domainData).some(([k, v]) => k !== "cards" && fieldFilled(v));
+}
+
+// Lenient version of validateRatingsComplete for "Save as Partially
+// Completed" — a domain the interviewer never opened at all is fine to
+// leave blank, but a domain they DID start (any field filled in, in any of
+// its cards or at the domain level) must still be fully filled in, so a
+// half-finished card can't get silently saved as "just skip it."
+function validatePartialRatings(template, feedbackData, lockedDomainIds = []) {
+  const domains = (template?.domains || []).filter(d => d.enabled !== false && !lockedDomainIds.includes(d.id));
+  for (const domain of domains) {
+    const domainData = feedbackData.domains?.[domain.id] || { cards: [] };
+    if (!domainHasData(domainData)) continue; // never opened — fine to leave for a partial save
+
+    const cardScoredFields = (domain.cardFields || []).filter(f => f.type === "scored_dropdown");
+    const cards = domainData.cards || [];
+    for (let i = 0; i < cards.length; i++) {
+      for (const field of cardScoredFields) {
+        const val = cards[i]?.[field.id];
+        if (val === null || val === undefined || val === "") {
+          return `${domain.label} — Card ${i + 1}: "${field.label}" rating is required for this card, or clear its other fields if you didn't get to it.`;
+        }
+      }
+    }
+    const domainScoredFields = (domain.domainFields || []).filter(f => f.type === "scored_dropdown");
+    for (const field of domainScoredFields) {
+      const val = domainData[field.id];
+      if (val === null || val === undefined || val === "") {
+        return `${domain.label}: "${field.label}" rating is required, or clear this section's other fields if you didn't get to it.`;
       }
     }
   }
@@ -517,7 +563,14 @@ const domainVariants = {
 
 // ── Main form (interviewer fills this) ────────────────────────────────────────
 
-export default function DynamicFeedbackForm({ template, interview, onSubmit, saving, previewMode = false, lockedDomainIds = [] }) {
+export default function DynamicFeedbackForm({
+  template, interview, onSubmit, saving, previewMode = false, lockedDomainIds = [],
+  // Optional — when provided, shows a second "Save as Partially Completed"
+  // action alongside Submit Evaluation. Unlike onSubmit, it only requires
+  // domains the interviewer actually started to be complete; a domain never
+  // opened at all is left out of the save entirely instead of blocking it.
+  onSubmitPartial, canMarkPartial = true,
+}) {
   const integrityFields = useIntegrityDomainFields();
   const effectiveTemplate = useMemo(
     () => withIntegrityDomain(template, integrityFields),
@@ -566,6 +619,26 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
     onSubmit(materializeFeedback(effectiveTemplate, feedbackData));
   };
 
+  // Saves whatever domains were actually started, treating any domain never
+  // opened as "not reached" instead of a blocker — same
+  // scoreIncomplete/missingSections/finalVerdict:null shape already used
+  // elsewhere for an incomplete evaluation, computed up front here rather
+  // than as a post-save correction, so it's correct the moment this saves.
+  const handleSubmitPartial = () => {
+    if (previewMode || !onSubmitPartial) return;
+    const ratingError = validatePartialRatings(effectiveTemplate, feedbackData, lockedDomainIds);
+    if (ratingError) return onSubmitPartial(null, ratingError);
+    const missingDomains = getUnratedVerdictDomains(effectiveTemplate, feedbackData);
+    const materialized = materializeFeedback(effectiveTemplate, feedbackData);
+    onSubmitPartial({
+      ...materialized,
+      submittedAt: new Date().toISOString(),
+      finalVerdict: missingDomains.length ? null : materialized.finalVerdict,
+      scoreIncomplete: missingDomains.length > 0,
+      missingSections: missingDomains.map(d => d.label || d.id),
+    });
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {autosaveEnabled && (
@@ -600,7 +673,18 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
       </div>
 
       {!previewMode && (
-        <div className="flex justify-end pt-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
+          {onSubmitPartial && (
+            <button
+              type="button"
+              onClick={handleSubmitPartial}
+              disabled={saving || !canMarkPartial}
+              title={!canMarkPartial ? "Available once the interview has started and the candidate's attendance is confirmed." : "Save whatever's filled in and mark this interview Partially Completed — sections you never opened won't block this."}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors border border-amber-300 text-amber-700 hover:bg-amber-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+            >
+              Save as Partially Completed
+            </button>
+          )}
           <Button type="submit" variant="primary" size="lg" disabled={saving} icon={saving ? undefined : Check}>
             {saving ? "Saving…" : "Submit Evaluation"}
           </Button>

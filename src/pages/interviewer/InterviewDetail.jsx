@@ -72,6 +72,12 @@ export default function InterviewDetail() {
   const [partialModalOpen,   setPartialModalOpen]   = useState(false);
   const [partialReasonPreset, setPartialReasonPreset] = useState("");
   const [partialReasonText,  setPartialReasonText]  = useState("");
+  // Feedback computed by the form's lenient "Save as Partially Completed"
+  // path (see handleSubmitPartialFeedback) — held here until a reason is
+  // picked in the modal below, since that save never went through the
+  // strict Submit Evaluation flow that normally lands feedback on
+  // interview.feedback first.
+  const [pendingPartialFeedback, setPendingPartialFeedback] = useState(null);
   const [declineModalOpen,   setDeclineModalOpen]   = useState(false);
   const [declineReasonPreset, setDeclineReasonPreset] = useState("");
   const [declineReasonText,  setDeclineReasonText]  = useState("");
@@ -290,20 +296,33 @@ export default function InterviewDetail() {
 
   const partialCompletionReason = partialReasonPreset === "Other" ? partialReasonText.trim() : partialReasonPreset;
 
+  // Reached exclusively via the feedback form's own "Save as Partially
+  // Completed" button now (validatePartialRatings in DynamicFeedbackForm) —
+  // it already computed scoreIncomplete/missingSections/finalVerdict itself,
+  // so this just opens the reason modal on top of it.
+  const handleSubmitPartialFeedback = (feedbackData, errorMsg) => {
+    if (errorMsg) return setToast({ message: errorMsg, type: "error" });
+    setPendingPartialFeedback(feedbackData);
+    openPartialCompletionModal();
+  };
+
   const handleMarkPartiallyCompleted = async () => {
     if (!partialCompletionReason) return; // Save button is disabled without one, but guard anyway
     setSaving(true);
     try {
       const extraFields = {};
-      // Whatever got saved (via Submit Evaluation) before this interview was
-      // cut short can legitimately be missing whole sections — a plain
-      // weighted average over just what's there would silently read as a
-      // real score (e.g. one perfect 25%-weighted section alone showing the
-      // same verdict as a fully-scored interview). Same
-      // scoreIncomplete/missingSections handling as an incomplete sheet
-      // import (see import.service.js) — shows "Incomplete" instead of a
-      // misleading number, everywhere that already knows how to render it.
-      if (interview.feedback && template) {
+      if (pendingPartialFeedback) {
+        // Came from the form's lenient "Save as Partially Completed" path —
+        // this is the first time it's actually being persisted, and it
+        // already has scoreIncomplete/missingSections/finalVerdict baked in.
+        extraFields.feedback = pendingPartialFeedback;
+      } else if (interview.feedback && template) {
+        // A full Submit Evaluation already landed interview.feedback earlier
+        // in this same session — just check whether it should now show as
+        // Incomplete instead of a plain weighted average (e.g. one perfect
+        // 25%-weighted section alone reading the same as a fully-scored
+        // interview). Same scoreIncomplete/missingSections handling as an
+        // incomplete sheet import (see import.service.js).
         const unrated = getUnratedVerdictDomains(template, interview.feedback);
         if (unrated.length) {
           extraFields.feedback = {
@@ -318,6 +337,7 @@ export default function InterviewDetail() {
       setInterview(iv => ({ ...iv, status: "partially_completed", partialCompletionReason, ...extraFields }));
       setToast({ message: "Interview marked as partially completed." });
       setPartialModalOpen(false);
+      setPendingPartialFeedback(null);
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -692,6 +712,8 @@ export default function InterviewDetail() {
               template={template}
               interview={interview}
               onSubmit={handleSaveFeedback}
+              onSubmitPartial={handleSubmitPartialFeedback}
+              canMarkPartial={pastTime && attended === true}
               saving={saving}
               lockedDomainIds={interview.feedbackLockedDomains || []}
             />
@@ -779,7 +801,13 @@ export default function InterviewDetail() {
             </div>
           )}
 
-          {/* Mark as Completed — only when scheduled */}
+          {/* Mark as Completed — only when scheduled. "Mark as Partially
+             Completed" used to live here too, gated on this same
+             hasFeedback flag — which meant an interview cut short before
+             every mandatory field across the whole template was filled
+             could never reach it. That's now the form's own "Save as
+             Partially Completed" button above, which only requires
+             whatever sections were actually started to be complete. */}
           {isScheduled && (
             <div className="mt-6 pt-5 border-t border-gray-100">
               <div className="flex items-center justify-between gap-4">
@@ -792,17 +820,6 @@ export default function InterviewDetail() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  <button
-                    onClick={openPartialCompletionModal}
-                    disabled={!canComplete || saving}
-                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
-                      canComplete
-                        ? "bg-white border border-amber-300 text-amber-700 hover:bg-amber-50"
-                        : "bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent"
-                    }`}
-                  >
-                    Mark as Partially Completed
-                  </button>
                   <button
                     onClick={handleMarkCompleted}
                     disabled={!canComplete || saving}
@@ -823,7 +840,7 @@ export default function InterviewDetail() {
       )}
 
       {/* Partially Completed — reason is mandatory, either a preset pick or free text under "Other" */}
-      <Modal open={partialModalOpen} onClose={() => setPartialModalOpen(false)} title="Mark as Partially Completed">
+      <Modal open={partialModalOpen} onClose={() => { setPartialModalOpen(false); setPendingPartialFeedback(null); }} title="Mark as Partially Completed">
         <div className="space-y-4">
           <p className="text-sm text-gray-500">
             This interview will be marked <span className="font-semibold text-amber-700">Partially Completed</span>.
@@ -853,7 +870,7 @@ export default function InterviewDetail() {
             </div>
           )}
           <div className="flex justify-end gap-3 pt-2">
-            <button onClick={() => setPartialModalOpen(false)}
+            <button onClick={() => { setPartialModalOpen(false); setPendingPartialFeedback(null); }}
               className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
               Cancel
             </button>
