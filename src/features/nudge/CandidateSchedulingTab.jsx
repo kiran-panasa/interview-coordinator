@@ -15,7 +15,6 @@ import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
-import SkillsSelect from "../../components/SkillsSelect";
 import { useVendors } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import { usePagination } from "../../hooks/usePagination";
@@ -66,6 +65,33 @@ export default function CandidateSchedulingTab({
   const { data: vendors = [] } = useVendors();
   const vendorNameById = useMemo(() => new Map(vendors.map(v => [v.id, v.name])), [vendors]);
 
+  // Grouped-by-vendor, search-filtered interviewer list for the "Select
+  // Panelists" popup — same grouping SkillsSelect used to render inline.
+  const panelistGroups = useMemo(() => {
+    const q = panelistSearch.trim().toLowerCase();
+    const matches = activeInterviewers.filter(u =>
+      !q || u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+    );
+    const order = [];
+    const buckets = new Map();
+    for (const u of matches) {
+      const key = u.vendorId ? (vendorNameById.get(u.vendorId) || "Vendor") : "Independent (No Vendor)";
+      if (!buckets.has(key)) { buckets.set(key, []); order.push(key); }
+      buckets.get(key).push(u);
+    }
+    order.sort((a, b) => (a === "Independent (No Vendor)" ? 1 : 0) - (b === "Independent (No Vendor)" ? 1 : 0) || a.localeCompare(b));
+    return order.map(name => ({ name, members: buckets.get(name) }));
+  }, [activeInterviewers, vendorNameById, panelistSearch]);
+
+  const togglePanelist = (id) => setPanelistIds(prev =>
+    prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
+  );
+  const togglePanelistGroup = (members) => {
+    const ids = members.map(u => u.id);
+    const allSelected = ids.every(id => panelistIds.includes(id));
+    setPanelistIds(prev => allSelected ? prev.filter(v => !ids.includes(v)) : [...new Set([...prev, ...ids])]);
+  };
+
   const [dateStart,      setDateStart]      = useState(today());
   const [dateEnd,        setDateEnd]        = useState(inDays(7));
   const [expiryHours,    setExpiryHours]    = useState(24);
@@ -101,6 +127,11 @@ export default function CandidateSchedulingTab({
   const [rejectModal,    setRejectModal]    = useState(null);
   const [rejectReason,   setRejectReason]   = useState("");
   const [rejecting,      setRejecting]      = useState(false);
+  // "Select Panelists" now opens as its own popup card instead of an inline
+  // dropdown — the inline version rendered on top of (and got clipped by)
+  // the candidate table right below it once the interviewer list got long.
+  const [panelistPickerOpen, setPanelistPickerOpen] = useState(false);
+  const [panelistSearch,     setPanelistSearch]     = useState("");
 
   // Guards handleConfirmBooking against a rapid double-click/double-tap
   // creating two Meet spaces + Calendar events + Interview docs for the same
@@ -669,23 +700,87 @@ export default function CandidateSchedulingTab({
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 mb-2">Select Panelists</p>
-          <div className="max-w-md">
-            <SkillsSelect
-              skills={activeInterviewers.map(u => ({
-                id: u.id,
-                name: u.displayName || u.email,
-                group: u.vendorId ? (vendorNameById.get(u.vendorId) || "Vendor") : undefined,
-              }))}
-              value={panelistIds}
-              onChange={setPanelistIds}
-              placeholder="All active interviewers"
-              searchPlaceholder="Search interviewers…"
-              ungroupedLabel="Independent (No Vendor)"
-            />
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-500">Select Panelists</p>
+            <button type="button" onClick={() => setPanelistPickerOpen(true)}
+              className="text-xs font-semibold text-brand-600 hover:underline">
+              {panelistIds.length ? "Edit selection" : "Choose panelists…"}
+            </button>
+          </div>
+          <div
+            onClick={() => setPanelistPickerOpen(true)}
+            className="min-h-[42px] w-full max-w-2xl border border-gray-200 rounded-xl px-3 py-2 flex flex-wrap gap-1.5 cursor-pointer bg-white hover:border-gray-300 transition-colors"
+          >
+            {panelistIds.length === 0 ? (
+              <span className="text-sm text-gray-400 self-center">All active interviewers</span>
+            ) : panelistIds.map(id => {
+              const u = activeInterviewers.find(x => x.id === id);
+              if (!u) return null;
+              return (
+                <span key={id} className="flex items-center gap-1 text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-2.5 py-1 rounded-full">
+                  {u.displayName || u.email}
+                  <button type="button" onClick={e => { e.stopPropagation(); togglePanelist(id); }}
+                    className="text-brand-400 hover:text-brand-700 leading-none">
+                    <X className="w-3 h-3" strokeWidth={2.5} />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         </div>
       </motion.div>
+
+      {/* Select Panelists — its own popup card rather than an inline
+         dropdown, so a long, vendor-grouped list never overlaps the
+         candidate table underneath. */}
+      <Modal open={panelistPickerOpen} onClose={() => setPanelistPickerOpen(false)} title="Select Panelists">
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              autoFocus type="text" value={panelistSearch} onChange={e => setPanelistSearch(e.target.value)}
+              placeholder="Search interviewers…"
+              className="w-full text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+          <div className="border border-gray-100 rounded-xl max-h-80 overflow-y-auto">
+            {panelistGroups.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No interviewers match "{panelistSearch}"</p>
+            ) : panelistGroups.map(({ name, members }) => (
+              <div key={name}>
+                <div className="flex items-center justify-between px-3 pt-2.5 pb-1 bg-gray-50/60 sticky top-0">
+                  <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">{name}</span>
+                  <button type="button" onClick={() => togglePanelistGroup(members)}
+                    className="text-[11px] font-medium text-brand-600 hover:underline">
+                    {members.every(u => panelistIds.includes(u.id)) ? "Clear" : "Select all"}
+                  </button>
+                </div>
+                {members.map(u => (
+                  <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors">
+                    <input type="checkbox" checked={panelistIds.includes(u.id)} onChange={() => togglePanelist(u.id)}
+                      className="accent-brand-600 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-900 truncate">{u.displayName || u.email}</p>
+                      <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-xs text-gray-400">
+              {panelistIds.length ? `${panelistIds.length} selected` : "All active interviewers eligible"}
+            </span>
+            <div className="flex gap-3">
+              {panelistIds.length > 0 && (
+                <button type="button" onClick={() => setPanelistIds([])} className="text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
+              )}
+              <Button variant="primary" size="sm" onClick={() => setPanelistPickerOpen(false)}>Done</Button>
+            </div>
+          </div>
+        </div>
+      </Modal>
 
       {/* Candidate list */}
       <motion.div

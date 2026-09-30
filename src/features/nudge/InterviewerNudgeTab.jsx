@@ -60,6 +60,7 @@ export default function InterviewerNudgeTab({
   const [addSearch,       setAddSearch]       = useState("");
   const [message,         setMessage]         = useState("");
   const [sending,         setSending]         = useState(false);
+  const [ivrSearch,       setIvrSearch]       = useState("");
   const addPickerRef = useRef(null);
   const { data: vendors = [] } = useVendors();
   const vendorNameById = useMemo(() => new Map(vendors.map(v => [v.id, v.name])), [vendors]);
@@ -259,7 +260,30 @@ export default function InterviewerNudgeTab({
   const unreadResponses   = incomingResponses.filter(n => n.status === "unread").length;
   const skillName = (id) => skills.find(s => s.id === id)?.name || id;
 
-  const ivrPagination = usePagination(displayedInterviewers);
+  // Search + vendor-grouped sort for the table only — selection state
+  // (selectedIvrs) always tracks the full displayedInterviewers set, so
+  // filtering the view never silently drops someone's selection. Sorting by
+  // vendor (instead of leaving rows in whatever order they matched in)
+  // means a vendor's panelists always sit together as a block, so clicking
+  // that vendor's quick-select chip is now easy to see the effect of at a
+  // glance instead of scattered rows across the table.
+  const tableInterviewers = useMemo(() => {
+    const q = ivrSearch.trim().toLowerCase();
+    const filtered = q
+      ? displayedInterviewers.filter(u =>
+          u.displayName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q))
+      : displayedInterviewers;
+    const vendorLabel = (u) => u.vendorId ? (vendorNameById.get(u.vendorId) || "Vendor") : null;
+    return [...filtered].sort((a, b) => {
+      const va = vendorLabel(a), vb = vendorLabel(b);
+      if (!va && !vb) return 0;
+      if (!va) return 1;   // no-vendor rows sink to the bottom
+      if (!vb) return -1;
+      return va.localeCompare(vb) || (a.displayName || a.email || "").localeCompare(b.displayName || b.email || "");
+    });
+  }, [displayedInterviewers, ivrSearch, vendorNameById]);
+
+  const ivrPagination = usePagination(tableInterviewers);
 
   const allChecked  = displayedInterviewers.length > 0 && selectedIvrs.size === displayedInterviewers.length;
   const someChecked = selectedIvrs.size > 0 && selectedIvrs.size < displayedInterviewers.length;
@@ -361,6 +385,14 @@ export default function InterviewerNudgeTab({
               )}
             </p>
             <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text" value={ivrSearch} onChange={e => setIvrSearch(e.target.value)}
+                  placeholder="Search interviewers…"
+                  className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-gray-700 w-44"
+                />
+              </div>
               <Button
                 variant="secondary" size="sm" icon={RefreshCw}
                 onClick={() => fetchSlots(activeInterviewers.map(u => u.id))} disabled={slotsLoading}
@@ -415,9 +447,9 @@ export default function InterviewerNudgeTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {displayedInterviewers.length === 0 ? (
+              {tableInterviewers.length === 0 ? (
                 <tr><td colSpan={6} className="text-center text-gray-400 py-10 text-sm">
-                  No interviewers match the selected template.
+                  {ivrSearch ? `No interviewers match "${ivrSearch}"` : "No interviewers match the selected template."}
                 </td></tr>
               ) : ivrPagination.paged.map(u => {
                 const slots    = freeSlotCount(u.id);
