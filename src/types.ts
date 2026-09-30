@@ -12,7 +12,22 @@ export interface User {
   templateIds?: string[];
   skills?: string[];
   phoneNumber?: string;
+  // Which outsourcing vendor this interviewer belongs to (see api/vendors.ts)
+  // — admin-managed grouping used to filter/report Interviews and
+  // Interviewer Stats by vendor. Absent for in-house interviewers and for
+  // any non-interviewer account.
+  vendorId?: string | null;
   createdAt?: string;
+}
+
+// An outsourcing vendor an interviewer can be grouped under (Settings →
+// General → Vendors) — purely a label for filtering/reporting; it grants no
+// access of its own and has no login. Membership lives on User.vendorId
+// (one vendor per interviewer), not on the vendor doc itself.
+export interface Vendor {
+  id: string;
+  name: string;
+  createdAt: string;
 }
 
 export interface Invite {

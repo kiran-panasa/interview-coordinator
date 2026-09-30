@@ -18,6 +18,7 @@ import {
   getAllUsers, getInvites,
   getSkills, createSkill, updateSkill, deleteSkill,
   getRounds, createRound, updateRound, deleteRound,
+  getVendors, createVendor, updateVendor, deleteVendor, setVendorMembers,
   getPrograms, createProgram, updateProgram, deleteProgram,
   getTemplates, updateTemplate, getCandidates, updateCandidate,
   getBlockedDates, createBlockedDate, updateBlockedDate, deleteBlockedDate,
@@ -94,6 +95,16 @@ export default function SettingsPage() {
   const [editingRound, setEditingRound] = useState(null);
   const [addingRound,  setAddingRound]  = useState(false);
 
+  const [vendors,        setVendors]        = useState([]);
+  const [newVendorName,  setNewVendorName]  = useState("");
+  const [editingVendor,  setEditingVendor]  = useState(null);
+  const [addingVendor,   setAddingVendor]   = useState(false);
+  // The interviewer roster being edited for one vendor — { id, name } while
+  // open, holding a local Set of interviewer ids until Save writes it.
+  const [managingVendor, setManagingVendor] = useState(null);
+  const [vendorMemberIds, setVendorMemberIds] = useState(new Set());
+  const [vendorMembersSaving, setVendorMembersSaving] = useState(false);
+
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm,      setInviteForm]      = useState(BLANK_INVITE);
   const [inviteSaving,    setInviteSaving]    = useState(false);
@@ -135,6 +146,7 @@ export default function SettingsPage() {
   const refetchInvites      = () => getInvites().then(setInvites);
   const refetchSkills       = () => getSkills().then(setSkills);
   const refetchRounds       = () => getRounds().then(setRounds);
+  const refetchVendors      = () => getVendors().then(setVendors);
   const refetchPrograms     = () => getPrograms().then(setPrograms);
   const refetchBlockedDates = () => getBlockedDates().then(setBlockedDates);
 
@@ -146,6 +158,7 @@ export default function SettingsPage() {
     });
     getSkills().then(setSkills);
     getRounds().then(setRounds);
+    getVendors().then(setVendors);
     getPrograms().then(setPrograms);
     getBlockedDates().then(setBlockedDates);
   }, []);
@@ -361,6 +374,59 @@ export default function SettingsPage() {
     setToast({ message: `"${r.name}" removed.` });
   };
 
+  // ── Vendors handlers ───────────────────────────────────────────────────────
+  const handleAddVendor = async () => {
+    const name = newVendorName.trim();
+    if (!name) return;
+    await createVendor(name);
+    await refetchVendors();
+    setNewVendorName("");
+    setAddingVendor(false);
+  };
+
+  const handleRenameVendor = async () => {
+    if (!editingVendor?.name?.trim()) return;
+    await updateVendor(editingVendor.id, editingVendor.name.trim());
+    await refetchVendors();
+    setEditingVendor(null);
+  };
+
+  const handleDeleteVendor = async (v) => {
+    const memberCount = users.filter(u => u.vendorId === v.id).length;
+    if (!confirm(`Delete vendor "${v.name}"?${memberCount ? ` Its ${memberCount} interviewer(s) will become unassigned, not removed.` : ""}`)) return;
+    await deleteVendor(v.id);
+    await refetchVendors();
+    await refetchUsers();
+    setToast({ message: `"${v.name}" removed.` });
+  };
+
+  const openManageVendorMembers = (v) => {
+    setManagingVendor(v);
+    setVendorMemberIds(new Set(users.filter(u => u.vendorId === v.id).map(u => u.id)));
+  };
+
+  const toggleVendorMember = (userId) => {
+    setVendorMemberIds(prev => {
+      const next = new Set(prev);
+      next.has(userId) ? next.delete(userId) : next.add(userId);
+      return next;
+    });
+  };
+
+  const handleSaveVendorMembers = async () => {
+    if (!managingVendor) return;
+    setVendorMembersSaving(true);
+    try {
+      await setVendorMembers(managingVendor.id, [...vendorMemberIds]);
+      await refetchUsers();
+      setToast({ message: `Interviewers updated for "${managingVendor.name}".` });
+      setManagingVendor(null);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setVendorMembersSaving(false);
+  };
+
   // ── Programs handlers ─────────────────────────────────────────────────────
   const handleAddProgram = async () => {
     const name = newProgramName.trim();
@@ -544,6 +610,12 @@ export default function SettingsPage() {
           editingRound={editingRound} setEditingRound={setEditingRound}
           handleAddRound={handleAddRound} handleRenameRound={handleRenameRound}
           handleDeleteRound={handleDeleteRound}
+          vendors={vendors} users={users}
+          addingVendor={addingVendor} setAddingVendor={setAddingVendor}
+          newVendorName={newVendorName} setNewVendorName={setNewVendorName}
+          editingVendor={editingVendor} setEditingVendor={setEditingVendor}
+          handleAddVendor={handleAddVendor} handleRenameVendor={handleRenameVendor}
+          handleDeleteVendor={handleDeleteVendor} openManageVendorMembers={openManageVendorMembers}
           addingProgram={addingProgram} setAddingProgram={setAddingProgram}
           newProgramName={newProgramName} setNewProgramName={setNewProgramName}
           editingProgram={editingProgram} setEditingProgram={setEditingProgram}
@@ -755,6 +827,42 @@ export default function SettingsPage() {
             </div>
           </form>
         )}
+      </Modal>
+
+      {/* ── Manage Vendor Interviewers modal ── */}
+      <Modal open={!!managingVendor} onClose={() => setManagingVendor(null)} title={managingVendor ? `Interviewers — ${managingVendor.name}` : "Interviewers"}>
+        <div className="space-y-3">
+          <p className="text-xs text-gray-400">
+            Check who belongs to this vendor. An interviewer can only be under one vendor at a time — checking them here moves them out of any other vendor.
+          </p>
+          <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50 scrollbar-thin">
+            {users.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active")
+              .sort((a, b) => (a.displayName || a.email).localeCompare(b.displayName || b.email))
+              .map(u => (
+                <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                  <input type="checkbox" checked={vendorMemberIds.has(u.id)} onChange={() => toggleVendorMember(u.id)}
+                    className="accent-brand-600 w-4 h-4" />
+                  <span className="text-gray-800">{u.displayName || u.email}</span>
+                  {u.vendorId && u.vendorId !== managingVendor?.id && (
+                    <span className="text-[10px] text-gray-400 ml-auto">
+                      currently: {vendors.find(v => v.id === u.vendorId)?.name || "another vendor"}
+                    </span>
+                  )}
+                </label>
+              ))}
+            {users.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active").length === 0 && (
+              <p className="text-xs text-gray-400 px-3 py-4 text-center">No active interviewers yet.</p>
+            )}
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button variant="primary" size="lg" onClick={handleSaveVendorMembers} disabled={vendorMembersSaving} className="flex-1">
+              {vendorMembersSaving ? "Saving…" : "Save"}
+            </Button>
+            <Button variant="secondary" size="lg" onClick={() => setManagingVendor(null)} className="px-5">
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* ── Block Dates modal ── */}

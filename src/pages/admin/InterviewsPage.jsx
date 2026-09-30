@@ -26,7 +26,7 @@ import {
   ensureRoundExists, seedDefaultRoundsOnce,
 } from "../../api/firestore";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
-import { useTemplates, usePrograms, useCandidates, useUsers, useRounds, QK } from "../../hooks/queries";
+import { useTemplates, usePrograms, useCandidates, useUsers, useRounds, useVendors, QK } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
@@ -97,6 +97,7 @@ export default function InterviewsPage() {
   const queryClient = useQueryClient();
   const { data: candidates  = [] } = useCandidates();
   const { data: usersAll    = [] } = useUsers();
+  const { data: vendors     = [] } = useVendors();
   const { data: templates   = [] } = useTemplates();
   const { data: programs    = [] } = usePrograms();
   const { data: rounds      = [] } = useRounds();
@@ -170,6 +171,7 @@ export default function InterviewsPage() {
   const [activeProgram, setActiveProgram] = useState("all");
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterIvr,      setFilterIvr]      = useState("All");
+  const [filterVendor,   setFilterVendor]   = useState("All");
   const [filterTemplate, setFilterTemplate] = useState("All");
   const [candSearch,     setCandSearch]     = useState("");
   const [showModal,     setShowModal]     = useState(false);
@@ -1260,6 +1262,7 @@ export default function InterviewsPage() {
       if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
       if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
       if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
+      if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
       if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
       if (candSearch) {
         const q = candSearch.trim().toLowerCase();
@@ -1268,7 +1271,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterTemplate, candSearch]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplate, candSearch, vendorByEmail]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -1279,6 +1282,15 @@ export default function InterviewsPage() {
   const ivrNameByEmail = useMemo(() => {
     const map = {};
     usersAll.forEach(u => { if (u.email) map[u.email] = u.displayName || u.email; });
+    return map;
+  }, [usersAll]);
+  // Which vendor each interviewer email currently belongs to — an interview
+  // only ever stores interviewerEmail, not the vendor, so this resolves it
+  // the same way Interviewer Stats does (current assignment, not a
+  // snapshot at scheduling time).
+  const vendorByEmail = useMemo(() => {
+    const map = {};
+    usersAll.forEach(u => { if (u.email && u.vendorId) map[u.email] = u.vendorId; });
     return map;
   }, [usersAll]);
 
@@ -1561,10 +1573,15 @@ export default function InterviewsPage() {
           placeholder="All Interviewers"
           searchPlaceholder="Search interviewer…"
         />
-        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterTemplate !== "All" || candSearch) && (
+        <select value={filterVendor} onChange={e => { setFilterVendor(e.target.value); setIvrPage(1); }}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <option value="All">All Vendors</option>
+          {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplate !== "All" || candSearch) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
-            setFilterIvr("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1);
+            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1);
           }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear

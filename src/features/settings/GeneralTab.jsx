@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing } from "lucide-react";
+import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing, Building2, Users } from "lucide-react";
 import { subscribeToNudgeReminderSettings, updateNudgeReminderSettings, updateProgram } from "../../api/firestore";
 import { useTemplates } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
@@ -26,6 +26,10 @@ export default function GeneralTab({
   addingRound, setAddingRound, newRoundName, setNewRoundName,
   editingRound, setEditingRound,
   handleAddRound, handleRenameRound, handleDeleteRound,
+  vendors, users,
+  addingVendor, setAddingVendor, newVendorName, setNewVendorName,
+  editingVendor, setEditingVendor,
+  handleAddVendor, handleRenameVendor, handleDeleteVendor, openManageVendorMembers,
   addingProgram, setAddingProgram, newProgramName, setNewProgramName,
   editingProgram, setEditingProgram,
   handleAddProgram, handleRenameProgram, handleDeleteProgram, deletingProgram,
@@ -229,6 +233,74 @@ export default function GeneralTab({
           </div>
           {rounds.length === 0 && !addingRound && (
             <p className="text-xs text-gray-400">No rounds defined yet. Click "Add Round" to create the first one.</p>
+          )}
+        </div>
+      </motion.div>
+
+      {/* Vendors */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.04 }}
+        className="mb-8"
+      >
+        <SectionTitle icon={Building2} label="Vendors" count={vendors.length} />
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+          <p className="text-xs text-gray-400 mb-4">
+            Groups interviewers by the outsourcing vendor they belong to — a label for filtering and reporting on
+            Interviews and Interviewer Stats. It doesn't grant any login or access of its own.
+          </p>
+          <div className="space-y-2 mb-4">
+            {vendors.map(v => {
+              const memberCount = users.filter(u => u.vendorId === v.id).length;
+              return (
+                <div key={v.id} className="flex items-center gap-3 border border-gray-100 rounded-xl px-3 py-2">
+                  {editingVendor?.id === v.id ? (
+                    <input
+                      autoFocus
+                      value={editingVendor.name}
+                      onChange={e => setEditingVendor(x => ({ ...x, name: e.target.value }))}
+                      onKeyDown={e => { if (e.key === "Enter") handleRenameVendor(); if (e.key === "Escape") setEditingVendor(null); }}
+                      onBlur={handleRenameVendor}
+                      className="text-sm font-semibold text-gray-800 border-b border-brand-400 focus:outline-none flex-1"
+                    />
+                  ) : (
+                    <span className="text-sm font-semibold text-gray-800 flex-1">{v.name}</span>
+                  )}
+                  <button onClick={() => openManageVendorMembers(v)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-brand-600 px-2 py-1 rounded-lg hover:bg-brand-50 transition-colors">
+                    <Users className="w-3.5 h-3.5" />
+                    {memberCount} interviewer{memberCount !== 1 ? "s" : ""}
+                  </button>
+                  <button onClick={() => setEditingVendor({ id: v.id, name: v.name })}
+                    className="p-1 text-gray-300 hover:text-brand-600 transition-colors">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button onClick={() => handleDeleteVendor(v)}
+                    className="p-1 text-gray-300 hover:text-red-500 transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+          {addingVendor ? (
+            <input
+              autoFocus
+              value={newVendorName}
+              onChange={e => setNewVendorName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleAddVendor(); if (e.key === "Escape") { setAddingVendor(false); setNewVendorName(""); } }}
+              onBlur={() => { if (!newVendorName.trim()) { setAddingVendor(false); setNewVendorName(""); } }}
+              placeholder="Vendor name…"
+              className="text-xs border border-brand-400 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-400 w-48"
+            />
+          ) : (
+            <button onClick={() => setAddingVendor(true)}
+              className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-dashed border-brand-300 rounded-full px-3 py-1 hover:bg-brand-50 transition-colors">
+              <Plus className="w-3 h-3" />
+              Add Vendor
+            </button>
+          )}
+          {vendors.length === 0 && !addingVendor && (
+            <p className="text-xs text-gray-400 mt-2">No vendors defined yet. Click "Add Vendor" to create the first one.</p>
           )}
         </div>
       </motion.div>

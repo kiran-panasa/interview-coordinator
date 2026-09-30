@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Download, X, BarChart3 } from "lucide-react";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
-import { useTemplates, usePrograms, useUsers } from "../../hooks/queries";
+import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/queries";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
 import SkillsSelect from "../../components/SkillsSelect";
 
@@ -37,11 +37,13 @@ export default function InterviewerStatsPage() {
   const { data: templates = [] } = useTemplates();
   const { data: programs  = [] } = usePrograms();
   const { data: usersAll  = [] } = useUsers();
+  const { data: vendors   = [] } = useVendors();
 
   const [programIds,   setProgramIds]   = useState([]);
   const [statuses,     setStatuses]     = useState([]);
   const [templateIds,  setTemplateIds]  = useState([]);
   const [interviewerEmails, setInterviewerEmails] = useState([]);
+  const [vendorIds,    setVendorIds]    = useState([]);
 
   const templateProgramById = useMemo(
     () => new Map(templates.map(t => [t.id, t.program || ""])),
@@ -75,6 +77,20 @@ export default function InterviewerStatsPage() {
       .sort((a, b) => a.name.localeCompare(b.name)),
     [usersAll]
   );
+  const vendorOptions = useMemo(
+    () => vendors.map(v => ({ id: v.id, name: v.name })),
+    [vendors]
+  );
+
+  // An interview only carries interviewerEmail, not who that interviewer's
+  // vendor is — resolved via the same usersByEmail lookup used for the
+  // Interviewer column, so the Vendor filter (and its priorSessions
+  // crediting below) works off the interviewer's CURRENT vendor assignment.
+  const emailBelongsToVendor = (email) => {
+    if (!vendorIds.length) return true;
+    const vId = usersByEmail.get(email)?.vendorId;
+    return !!vId && vendorIds.includes(vId);
+  };
 
   const filtered = useMemo(() => {
     const effectiveStatuses = statuses.length ? statuses : RELEVANT_STATUSES;
@@ -85,9 +101,11 @@ export default function InterviewerStatsPage() {
       if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return false;
       if (templateIds.length && !templateIds.includes(iv.templateId)) return false;
       if (interviewerEmails.length && !interviewerEmails.includes(iv.interviewerEmail)) return false;
+      if (!emailBelongsToVendor(iv.interviewerEmail)) return false;
       return true;
     });
-  }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, templateProgramById]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, vendorIds, templateProgramById, usersByEmail]);
 
   const getRow = (map, email, name) => {
     if (!map.has(email)) {
@@ -135,6 +153,7 @@ export default function InterviewerStatsPage() {
           if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return;
           if (templateIds.length && !templateIds.includes(iv.templateId)) return;
           if (interviewerEmails.length && !interviewerEmails.includes(s.interviewerEmail)) return;
+          if (!emailBelongsToVendor(s.interviewerEmail)) return;
           const key = s.interviewerEmail || "(unknown)";
           const userRec = usersByEmail.get(s.interviewerEmail);
           const row = getRow(map, key, s.interviewerName || userRec?.displayName || key);
@@ -144,7 +163,8 @@ export default function InterviewerStatsPage() {
     }
 
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [filtered, interviews, usersByEmail, statuses, dateFrom, dateTo, programIds, templateIds, interviewerEmails, templateProgramById]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, interviews, usersByEmail, statuses, dateFrom, dateTo, programIds, templateIds, interviewerEmails, vendorIds, templateProgramById]);
 
   const totals = useMemo(() => interviewerStats.reduce((acc, r) => ({
     completed:          acc.completed + r.completed,
@@ -157,10 +177,10 @@ export default function InterviewerStatsPage() {
   [interviewerStats]);
 
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
-    programIds.length || statuses.length || templateIds.length || interviewerEmails.length;
+    programIds.length || statuses.length || templateIds.length || interviewerEmails.length || vendorIds.length;
   const clearFilters = () => {
     setDateFrom(firstOfMonthIso()); setDateTo(todayIso());
-    setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]);
+    setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]); setVendorIds([]);
   };
 
   return (
@@ -202,6 +222,10 @@ export default function InterviewerStatsPage() {
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer</label>
             <SkillsSelect skills={interviewerOptions} value={interviewerEmails} onChange={setInterviewerEmails} placeholder="All Interviewers" searchPlaceholder="Search interviewers…" />
+          </div>
+          <div className="w-56">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Vendor</label>
+            <SkillsSelect skills={vendorOptions} value={vendorIds} onChange={setVendorIds} placeholder="All Vendors" searchPlaceholder="Search vendors…" />
           </div>
           <div className="w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer Status</label>

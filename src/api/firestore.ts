@@ -9,6 +9,7 @@ export * from "./questions";
 export * from "./programs";
 export * from "./skills";
 export * from "./rounds";
+export * from "./vendors";
 export * from "./notifications";
 export * from "./scheduling";
 export * from "./blockedDates";
