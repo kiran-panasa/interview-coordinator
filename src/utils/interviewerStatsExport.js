@@ -1,6 +1,11 @@
 import * as XLSX from "xlsx";
 
-const HEADERS = ["Interviewer", "Completed", "Partially Completed", "Cancelled", "Student No-show", "Declined"];
+// "Completed (Resumed)" is kept separate from plain "Completed" — it's an
+// interviewer finishing off a Partially Completed interview someone else
+// (or they themselves) started, not a full interview on their own, so
+// payment reconciliation shouldn't treat the two the same. See
+// resumedFromPartial in api/interviews.ts.
+const HEADERS = ["Interviewer", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Declined"];
 
 /**
  * Interviewer-wise status counts for the currently applied filters — one
@@ -8,11 +13,11 @@ const HEADERS = ["Interviewer", "Completed", "Partially Completed", "Cancelled",
  * row. No per-interview detail, no payment — the page shows counts only.
  */
 export function exportInterviewerStats(interviewerStats, totals, filenamePrefix = "interviewer_statistics") {
-  const rows = interviewerStats.map(r => [r.name, r.completed, r.partiallyCompleted, r.cancelled, r.noShow, r.declined]);
-  rows.push(["Total", totals.completed, totals.partiallyCompleted, totals.cancelled, totals.noShow, totals.declined]);
+  const rows = interviewerStats.map(r => [r.name, r.completed, r.completedResumed, r.partiallyCompleted, r.cancelled, r.noShow, r.declined]);
+  rows.push(["Total", totals.completed, totals.completedResumed, totals.partiallyCompleted, totals.cancelled, totals.noShow, totals.declined]);
 
   const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
-  ws["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
+  ws["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Interviewer Statistics");

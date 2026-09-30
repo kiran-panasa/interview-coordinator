@@ -343,6 +343,7 @@ export interface Interview {
   candidateUid?: string;
   interviewerId: string;
   interviewerEmail: string;
+  interviewerName?: string;
   templateId?: string;
   templateName?: string;
   // Snapshotted from the template's own Program assignment (Template.program
@@ -426,6 +427,47 @@ export interface Interview {
   createdBy?: string;
   createdAt: string;
   updatedAt?: string;
+
+  // ── Partial completion → Reschedule & Resume ──────────────────────────────
+  // Set once "Reschedule & Resume" is used on a Partially Completed
+  // interview (see resumePartiallyCompletedInterview in api/interviews.ts).
+  // Stays true permanently, even across further resumes, so every view can
+  // tell this apart from an ordinary interview — most importantly so a
+  // finished "Completed" here is never confused with a normal full
+  // interview for payment purposes.
+  resumedFromPartial?: boolean;
+  // Every prior attempt at this same interview, oldest first, captured at
+  // the moment each Reschedule & Resume overwrites the fields it snapshots
+  // (interviewer, schedule, Meet/recording links, the reason it stopped).
+  // The interview's own top-level fields always hold the CURRENT/latest
+  // session; nothing that already reads meetLink/meetingRecordingUrl/etc.
+  // needs to change. Preserved indefinitely — this is the full recording/
+  // interviewer history for the student across every session.
+  priorSessions?: PriorInterviewSession[];
+  // Domain ids that already had data BEFORE the most recent resume —
+  // DynamicFeedbackForm renders exactly these read-only, so a later
+  // panelist can't edit what an earlier one already submitted, while still
+  // filling in the remaining sections on the same form. Cleared (or simply
+  // absent) on a normal, never-resumed interview.
+  feedbackLockedDomains?: string[];
+}
+
+export interface PriorInterviewSession {
+  interviewerId: string;
+  interviewerName?: string;
+  interviewerEmail?: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  duration?: number;
+  meetLink?: string;
+  eventId?: string;
+  meetingRecordingUrl?: string;
+  transcriptUrl?: string;
+  // Why THIS session ended without finishing — the same value that was on
+  // partialCompletionReason at the time it was archived.
+  partialCompletionReason?: string;
+  // When this session was archived (i.e. when the NEXT resume happened).
+  endedAt: string;
 }
 
 // ── Notifications ─────────────────────────────────────────────────────────────

@@ -34,8 +34,8 @@ function cls(...parts) {
 
 // Every scored_dropdown field (card-level or domain-level) is a mandatory rating.
 // Returns a human-readable error for the first one missing a value, or null if complete.
-function validateRatingsComplete(template, feedbackData) {
-  const domains = (template?.domains || []).filter(d => d.enabled !== false);
+function validateRatingsComplete(template, feedbackData, lockedDomainIds = []) {
+  const domains = (template?.domains || []).filter(d => d.enabled !== false && !lockedDomainIds.includes(d.id));
   for (const domain of domains) {
     const domainData = feedbackData.domains?.[domain.id] || { cards: [] };
     const cardScoredFields = (domain.cardFields || []).filter(f => f.type === "scored_dropdown");
@@ -320,7 +320,7 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
 
 // ── Domain section ─────────────────────────────────────────────────────────────
 
-const DomainSection = memo(function DomainSection({ domain, domainData, onChange, disabled, questionBank, defaultOpen }) {
+const DomainSection = memo(function DomainSection({ domain, domainData, onChange, disabled, locked, questionBank, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
 
   const updateCard = useCallback((i, newCard) => {
@@ -369,6 +369,11 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
           {hasCards && (
             <span className="text-xs px-2 py-0.5 bg-brand-100 text-brand-700 rounded-full font-medium">
               {cards.length} {cardNoun.toLowerCase()}{cards.length !== 1 ? "s" : ""}
+            </span>
+          )}
+          {locked && (
+            <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-medium">
+              Submitted in a previous session — read-only
             </span>
           )}
         </div>
@@ -490,7 +495,7 @@ const domainVariants = {
 
 // ── Main form (interviewer fills this) ────────────────────────────────────────
 
-export default function DynamicFeedbackForm({ template, interview, onSubmit, saving, previewMode = false }) {
+export default function DynamicFeedbackForm({ template, interview, onSubmit, saving, previewMode = false, lockedDomainIds = [] }) {
   const integrityFields = useIntegrityDomainFields();
   const effectiveTemplate = useMemo(
     () => withIntegrityDomain(template, integrityFields),
@@ -534,7 +539,7 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
   const handleSubmit = (e) => {
     e.preventDefault();
     if (previewMode) return;
-    const ratingError = validateRatingsComplete(effectiveTemplate, feedbackData);
+    const ratingError = validateRatingsComplete(effectiveTemplate, feedbackData, lockedDomainIds);
     if (ratingError) return onSubmit(null, ratingError);
     onSubmit(materializeFeedback(effectiveTemplate, feedbackData));
   };
@@ -559,9 +564,10 @@ export default function DynamicFeedbackForm({ template, interview, onSubmit, sav
             domain={domain}
             domainData={feedbackData.domains?.[domain.id] || { cards: [] }}
             onChange={data => updateDomain(domain.id, data)}
-            disabled={false}
+            disabled={lockedDomainIds.includes(domain.id)}
+            locked={lockedDomainIds.includes(domain.id)}
             questionBank={template?.questionBank}
-            defaultOpen={!previewMode}
+            defaultOpen={!previewMode && !lockedDomainIds.includes(domain.id)}
           />
         </motion.div>
       ))}

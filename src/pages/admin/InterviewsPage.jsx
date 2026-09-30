@@ -10,7 +10,7 @@ import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
-import { scheduleInterviewMeet, refreshMeetLink } from "../../api/interviews";
+import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview } from "../../api/interviews";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -182,6 +182,12 @@ export default function InterviewsPage() {
   // permanently visible on their side — reassigning to someone else is a
   // new assignment for them, not a silent identity swap on the same record.
   const [reassignFromId, setReassignFromId] = useState(null);
+  // Set only when the modal was opened via "Reschedule & Resume" on a
+  // Partially Completed interview (see openResume) — routes handleSave to
+  // resumePartiallyCompletedInterview instead of the normal create/edit
+  // paths, which archives the current session (interviewer, schedule,
+  // Meet/recording, why it stopped) before overwriting those fields.
+  const [resumeTarget,  setResumeTarget]  = useState(null);
   const [form,          setForm]          = useState(EMPTY_FORM);
   const [slots,         setSlots]         = useState([]);
   const [availDates,    setAvailDates]    = useState([]);
@@ -289,8 +295,9 @@ export default function InterviewsPage() {
     // modal show a blank time for an interview that already had one.
   }, [form.scheduledDate, form.duration, busyWindows]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openNew  = () => { setEditTarget(null); setReassignFromId(null); setForm(EMPTY_FORM); setShowModal(true); };
+  const openNew  = () => { setEditTarget(null); setReassignFromId(null); setResumeTarget(null); setForm(EMPTY_FORM); setShowModal(true); };
   const openEdit = (iv) => {
+    setResumeTarget(null);
     setEditTarget(iv);
     setReassignFromId(null);
     setForm({
@@ -315,6 +322,7 @@ export default function InterviewsPage() {
   // handleSave uses afterward to cross-link the two docs.
   const openReassign = (iv) => {
     setEditTarget(null);
+    setResumeTarget(null);
     setReassignFromId(iv.id);
     setForm({
       candidateId:   iv.candidateId,
@@ -330,12 +338,74 @@ export default function InterviewsPage() {
     setShowModal(true);
   };
 
+  // Reschedule & Resume opens the same form pre-filled from the partially
+  // completed interview, but forces a fresh date/time/interviewer pick
+  // (never silently reuses the ones that already happened) — candidate and
+  // template stay fixed since resumePartiallyCompletedInterview reuses this
+  // exact record and template (its already-scored domains are keyed by
+  // this template's own domain ids).
+  const openResume = (iv) => {
+    setEditTarget(null);
+    setReassignFromId(null);
+    setResumeTarget(iv);
+    setForm({
+      candidateId:   iv.candidateId,
+      interviewerId: iv.interviewerId, // same panelist by default — admin can still change it
+      scheduledDate: "",
+      scheduledTime: "",
+      duration:      iv.duration || 60,
+      meetLink:      "",
+      round:         iv.round     || "",
+      notes:         iv.notes     || "",
+      templateId:    iv.templateId || "",
+    });
+    setShowModal(true);
+  };
+
   const handleSave = async () => {
     if (!form.candidateId || !form.interviewerId || !form.scheduledDate || !form.scheduledTime || !form.duration || !form.round)
       return setToast({ message: "Fill in all required fields.", type: "error" });
     const chosenStart = parseInterviewStart(form.scheduledDate, form.scheduledTime);
     if (chosenStart && chosenStart < new Date())
       return setToast({ message: "Cannot schedule an interview in the past — please pick a future date and time.", type: "error" });
+
+    if (resumeTarget) {
+      setSaving(true);
+      try {
+        const interviewer = interviewers.find(u => u.id === form.interviewerId);
+        const template    = templates.find(t => t.id === form.templateId);
+        await resumePartiallyCompletedInterview(resumeTarget.id, {
+          interviewerId:    form.interviewerId,
+          interviewerEmail: interviewer?.email || "",
+          interviewerName:  interviewer?.displayName || interviewer?.email || "",
+          scheduledDate:    form.scheduledDate,
+          scheduledTime:    form.scheduledTime,
+          duration:         form.duration,
+          round:            form.round,
+          notes:            form.notes,
+          templateId:       form.templateId || "",
+          templateName:     template?.name || "",
+        });
+        if (form.interviewerId) {
+          createNotification({
+            type:           "interview_approval",
+            recipientId:    form.interviewerId,
+            recipientEmail: interviewer?.email,
+            interviewId:    resumeTarget.id,
+            candidateName:  resumeTarget.candidateName,
+            message:        `Resuming a partially completed interview with ${resumeTarget.candidateName} — please Accept or Decline. Sections already scored are locked; you'll pick up where the last session left off.`,
+            status:         "unread",
+          }).catch(() => {});
+        }
+        setToast({ message: "Interview rescheduled — ready to resume." });
+        setShowModal(false);
+        setResumeTarget(null);
+      } catch (e) {
+        setToast({ message: e.message, type: "error" });
+      }
+      setSaving(false);
+      return;
+    }
     setSaving(true);
     try {
       await ensureRoundExists(form.round, rounds);
@@ -1583,9 +1653,39 @@ export default function InterviewsPage() {
                   ) : (
                     <span className="text-xs text-gray-300">—</span>
                   )}
+                  {/* Resumed interview — every earlier session's Meet/recording
+                     stays reachable here too, not just the current one. */}
+                  {iv.priorSessions?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {iv.priorSessions.map((s, i) => (
+                        <span key={i} className="inline-flex items-center gap-0.5 text-[10px] font-medium text-gray-400">
+                          S{i + 1}:
+                          {s.meetLink && (
+                            <a href={s.meetLink} target="_blank" rel="noreferrer"
+                              title={`Session ${i + 1} Meet — ${s.scheduledDate || ""} ${s.scheduledTime || ""}`}
+                              className="text-emerald-600 hover:underline">Meet</a>
+                          )}
+                          {s.meetingRecordingUrl && (
+                            <>
+                              {s.meetLink && <span>·</span>}
+                              <a href={s.meetingRecordingUrl} target="_blank" rel="noreferrer"
+                                title={`Session ${i + 1} recording`}
+                                className="text-emerald-600 hover:underline">Rec</a>
+                            </>
+                          )}
+                          {!s.meetLink && !s.meetingRecordingUrl && <span className="text-gray-300">—</span>}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <Badge value={iv.status} />
+                  {iv.status === "completed" && iv.resumedFromPartial && (
+                    <p className="text-[11px] text-sky-600 mt-1 font-medium" title="Finished off a Partially Completed interview — not a full interview for payment purposes">
+                      Resumed session
+                    </p>
+                  )}
                   {iv.status === "partially_completed" && iv.partialCompletionReason && (
                     <p className="text-[11px] text-amber-600 mt-1 max-w-[160px] truncate" title={iv.partialCompletionReason}>
                       {iv.partialCompletionReason}
@@ -1676,6 +1776,12 @@ export default function InterviewsPage() {
                       highlight: true,
                     },
                     {
+                      label: "Reschedule & Resume",
+                      onClick: () => openResume(iv),
+                      show: iv.status === "partially_completed",
+                      highlight: true,
+                    },
+                    {
                       label: "View Feedback",
                       onClick: () => openFeedback(iv),
                       show: isDoneStatus(iv.status) && !!iv.feedback,
@@ -1738,7 +1844,7 @@ export default function InterviewsPage() {
       </motion.div>
 
       <ScheduleInterviewModal
-        open={showModal} onClose={() => { setShowModal(false); setReassignFromId(null); }}
+        open={showModal} onClose={() => { setShowModal(false); setReassignFromId(null); setResumeTarget(null); }}
         editTarget={editTarget} form={form} setField={setField}
         handleSave={handleSave} saving={saving}
         candidates={candidates} interviewers={interviewers} templates={templates}
@@ -1746,6 +1852,7 @@ export default function InterviewsPage() {
         rounds={rounds} DURATIONS={DURATIONS}
         blockedDates={blockedDates}
         reassignMode={!!reassignFromId}
+        resumeMode={!!resumeTarget}
       />
 
       <FeedbackViewModal

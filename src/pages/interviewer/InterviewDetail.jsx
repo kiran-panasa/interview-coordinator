@@ -389,6 +389,7 @@ export default function InterviewDetail() {
 
   const totalQuestions = template?.questionIds?.length || 0;
   const askedCount      = interview.questionsAsked?.length || 0;
+  const priorSessions   = interview.priorSessions || [];
 
   // Live candidate value wins when available — see the candidateId fetch
   // above. Falls back to the interview's own snapshot for legacy/imported
@@ -483,6 +484,56 @@ export default function InterviewDetail() {
           ))}
         </div>
       </motion.div>
+
+      {/* Previous sessions — this interview was partially completed at least
+         once and later resumed (see Reschedule & Resume, admin side). Each
+         prior session's own Meet/recording stays reachable here, alongside
+         whichever domains it already answered (shown read-only below). */}
+      {priorSessions.length > 0 && (
+        <motion.div initial="hidden" animate="visible" custom={1.5} variants={fadeUp}
+          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
+            Previous Session{priorSessions.length > 1 ? "s" : ""}
+          </p>
+          <div className="space-y-3">
+            {priorSessions.map((s, i) => (
+              <div key={i} className="border border-gray-100 rounded-xl px-4 py-3">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mb-1.5">
+                  <span className="font-semibold text-gray-700">Session {i + 1}</span>
+                  <span>{s.interviewerName || s.interviewerEmail || "Unknown panelist"}</span>
+                  {s.scheduledDate && <span>{formatDate(s.scheduledDate)}{s.scheduledTime ? ` · ${s.scheduledTime}` : ""}</span>}
+                </div>
+                {s.partialCompletionReason && (
+                  <p className="text-xs text-amber-600 mb-1.5">Stopped: {s.partialCompletionReason}</p>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  {s.meetLink && (
+                    <a href={s.meetLink} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium hover:underline">
+                      <Video className="w-3 h-3" /> Meet <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
+                  {s.meetingRecordingUrl && (
+                    <a href={s.meetingRecordingUrl} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium hover:underline">
+                      <Video className="w-3 h-3" /> Recording <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
+                  {s.transcriptUrl && (
+                    <a href={s.transcriptUrl} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 font-medium hover:underline">
+                      <FileText className="w-3 h-3" /> Transcript <ArrowUpRight className="w-3 h-3" />
+                    </a>
+                  )}
+                  {!s.meetLink && !s.meetingRecordingUrl && !s.transcriptUrl && (
+                    <span className="text-xs text-gray-300">No links saved for this session</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Accept / Decline */}
       {isPending && (
@@ -621,6 +672,7 @@ export default function InterviewDetail() {
               interview={interview}
               onSubmit={handleSaveFeedback}
               saving={saving}
+              lockedDomainIds={interview.feedbackLockedDomains || []}
             />
           )}
 

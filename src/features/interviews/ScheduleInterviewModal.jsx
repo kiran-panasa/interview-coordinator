@@ -18,6 +18,7 @@ export default function ScheduleInterviewModal({
   rounds = [], DURATIONS,
   blockedDates = [],
   reassignMode = false,
+  resumeMode = false,
 }) {
   const roundNames = rounds.map(r => r.name);
   const [customRound, setCustomRound] = useState(() => !!form.round && !roundNames.includes(form.round));
@@ -31,17 +32,28 @@ export default function ScheduleInterviewModal({
 
   return (
     <Modal open={open} onClose={onClose}
-      title={editTarget ? "Edit Interview" : reassignMode ? "Reassign Interviewer" : "Schedule Interview"} wide>
+      title={resumeMode ? "Reschedule & Resume" : editTarget ? "Edit Interview" : reassignMode ? "Reassign Interviewer" : "Schedule Interview"} wide>
       <div className="space-y-4">
+        {resumeMode && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            Picking up this Partially Completed interview for another session — sections already scored stay locked; the same evaluation form just continues with whatever's left.
+          </p>
+        )}
         <div>
           <label className={labelCls}>Candidate *</label>
-          <SearchableSelect
-            options={candidates.map(c => ({ id: c.id, label: `${c.name}${c.uid ? ` · ${c.uid}` : ""}` }))}
-            value={form.candidateId}
-            onChange={id => setField("candidateId", id)}
-            placeholder="— Select candidate —"
-            searchPlaceholder="Search by name or UID…"
-          />
+          {resumeMode ? (
+            <p className={`${inputCls} bg-gray-50 text-gray-600`}>
+              {candidates.find(c => c.id === form.candidateId)?.name || "—"}
+            </p>
+          ) : (
+            <SearchableSelect
+              options={candidates.map(c => ({ id: c.id, label: `${c.name}${c.uid ? ` · ${c.uid}` : ""}` }))}
+              value={form.candidateId}
+              onChange={id => setField("candidateId", id)}
+              placeholder="— Select candidate —"
+              searchPlaceholder="Search by name or UID…"
+            />
+          )}
         </div>
 
         <div>
@@ -146,15 +158,24 @@ export default function ScheduleInterviewModal({
 
         <div className="border-t border-gray-100 pt-4">
           <label className={labelCls}>Evaluation Template</label>
-          <select value={form.templateId} onChange={e => setField("templateId", e.target.value)} className={inputCls}>
-            <option value="">— No template (generic feedback) —</option>
-            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          {resumeMode ? (
+            <p className={`${inputCls} bg-gray-50 text-gray-600`}>
+              {templates.find(t => t.id === form.templateId)?.name || "No template (generic feedback)"}
+            </p>
+          ) : (
+            <select value={form.templateId} onChange={e => setField("templateId", e.target.value)} className={inputCls}>
+              <option value="">— No template (generic feedback) —</option>
+              {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+          {resumeMode && (
+            <p className="text-[11px] text-gray-400 mt-1">Fixed — the evaluation already in progress uses this template.</p>
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">
           <Button variant="primary" size="lg" icon={CalendarDays} onClick={handleSave} disabled={saving} className="flex-1">
-            {saving ? "Saving…" : editTarget ? "Update Interview" : "Schedule Interview"}
+            {saving ? "Saving…" : resumeMode ? "Resume Interview" : editTarget ? "Update Interview" : "Schedule Interview"}
           </Button>
           <Button variant="secondary" size="lg" onClick={onClose} className="px-5">
             Cancel

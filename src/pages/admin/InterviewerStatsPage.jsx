@@ -89,35 +89,71 @@ export default function InterviewerStatsPage() {
     });
   }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, templateProgramById]);
 
+  const getRow = (map, email, name) => {
+    if (!map.has(email)) {
+      map.set(email, {
+        email, name,
+        completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0,
+      });
+    }
+    return map.get(email);
+  };
+
   const interviewerStats = useMemo(() => {
     const map = new Map();
+    const effectiveStatuses = statuses.length ? statuses : RELEVANT_STATUSES;
+
     filtered.forEach(iv => {
       const key = iv.interviewerEmail || "(unknown)";
-      if (!map.has(key)) {
-        const userRec = usersByEmail.get(iv.interviewerEmail);
-        map.set(key, {
-          email: key,
-          name: iv.interviewerName || userRec?.displayName || key,
-          completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0,
-        });
+      const userRec = usersByEmail.get(iv.interviewerEmail);
+      const row = getRow(map, key, iv.interviewerName || userRec?.displayName || key);
+      if (iv.status === "completed") {
+        // resumedFromPartial marks a Completed interview that was finished
+        // off after at least one earlier Partially Completed session —
+        // kept out of the plain Completed count so it's never mistaken for
+        // a full interview at payment time (see Panelist Interview Count).
+        if (iv.resumedFromPartial) row.completedResumed++;
+        else row.completed++;
       }
-      const row = map.get(key);
-      if (iv.status === "completed") row.completed++;
       else if (iv.status === "partially_completed") row.partiallyCompleted++;
       else if (iv.status === "cancelled") row.cancelled++;
       else if (iv.status === "no_show") row.noShow++;
       else if (iv.status === "declined") row.declined++;
     });
+
+    // A resumed interview's earlier session(s) live only in priorSessions,
+    // under whichever interviewer ran them — which can differ from the
+    // interview's CURRENT (top-level) interviewer once reassigned. Without
+    // this, that panelist's partial-completion work would simply vanish
+    // from the stats the moment the interview moves on to someone else.
+    if (effectiveStatuses.includes("partially_completed")) {
+      interviews.forEach(iv => {
+        (iv.priorSessions || []).forEach(s => {
+          if (!s.scheduledDate) return;
+          if (dateFrom && s.scheduledDate < dateFrom) return;
+          if (dateTo   && s.scheduledDate > dateTo)   return;
+          if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return;
+          if (templateIds.length && !templateIds.includes(iv.templateId)) return;
+          if (interviewerEmails.length && !interviewerEmails.includes(s.interviewerEmail)) return;
+          const key = s.interviewerEmail || "(unknown)";
+          const userRec = usersByEmail.get(s.interviewerEmail);
+          const row = getRow(map, key, s.interviewerName || userRec?.displayName || key);
+          row.partiallyCompleted++;
+        });
+      });
+    }
+
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [filtered, usersByEmail]);
+  }, [filtered, interviews, usersByEmail, statuses, dateFrom, dateTo, programIds, templateIds, interviewerEmails, templateProgramById]);
 
   const totals = useMemo(() => interviewerStats.reduce((acc, r) => ({
     completed:          acc.completed + r.completed,
+    completedResumed:   acc.completedResumed + r.completedResumed,
     partiallyCompleted: acc.partiallyCompleted + r.partiallyCompleted,
     cancelled:          acc.cancelled + r.cancelled,
     noShow:             acc.noShow + r.noShow,
     declined:           acc.declined + r.declined,
-  }), { completed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0 }),
+  }), { completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0 }),
   [interviewerStats]);
 
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
@@ -192,7 +228,7 @@ export default function InterviewerStatsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Interviewer", "Completed", "Partially Completed", "Cancelled", "Student No-show", "Declined"].map((h, i) => (
+                {["Interviewer", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Declined"].map((h, i) => (
                   <th key={i} className={`text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 ${i === 0 ? "text-left" : "text-right"}`}>
                     {h}
                   </th>
@@ -207,6 +243,7 @@ export default function InterviewerStatsPage() {
                     <p className="text-xs text-gray-400">{r.email}</p>
                   </td>
                   <td className="px-4 py-3 text-right text-emerald-700 font-semibold">{r.completed}</td>
+                  <td className="px-4 py-3 text-right text-sky-700 font-semibold" title="Finished off a Partially Completed interview — not a full interview, kept separate for payment purposes">{r.completedResumed}</td>
                   <td className="px-4 py-3 text-right text-amber-700 font-semibold">{r.partiallyCompleted}</td>
                   <td className="px-4 py-3 text-right text-gray-500">{r.cancelled}</td>
                   <td className="px-4 py-3 text-right text-orange-600">{r.noShow}</td>
@@ -218,6 +255,7 @@ export default function InterviewerStatsPage() {
               <tr className="border-t-2 border-gray-200 bg-gray-50/60">
                 <td className="px-4 py-3 font-bold text-gray-900">Total</td>
                 <td className="px-4 py-3 text-right font-bold text-emerald-700">{totals.completed}</td>
+                <td className="px-4 py-3 text-right font-bold text-sky-700">{totals.completedResumed}</td>
                 <td className="px-4 py-3 text-right font-bold text-amber-700">{totals.partiallyCompleted}</td>
                 <td className="px-4 py-3 text-right font-bold text-gray-500">{totals.cancelled}</td>
                 <td className="px-4 py-3 text-right font-bold text-orange-600">{totals.noShow}</td>
