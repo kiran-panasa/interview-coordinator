@@ -171,6 +171,15 @@ export async function markCandidateAttendance(
   if (!joined) {
     update.status      = "no_show";
     update.nextNudgeAt = null;
+    // Also reachable AFTER an interviewer already confirmed "Candidate
+    // Joined" and started filling in the evaluation, then realized the
+    // candidate never actually showed (see the interviewer-facing "undo" in
+    // InterviewDetail.jsx) — a no-show shouldn't carry forward any
+    // evaluation data, whether it's just an autosaved draft or an already-
+    // submitted one. No-op in the normal (pre-evaluation) no-show path,
+    // since neither field exists yet at that point.
+    update.feedback      = deleteField();
+    update.feedbackDraft = deleteField();
   }
   await updateDoc(doc(db, "interviews", interviewId), update);
 }

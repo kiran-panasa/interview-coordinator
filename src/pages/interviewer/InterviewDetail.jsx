@@ -309,8 +309,30 @@ export default function InterviewDetail() {
     if (!confirm("Mark this candidate as a no-show?\n\nThis will set the interview status to no-show and no feedback is required.")) return;
     setSaving(true);
     await markCandidateAttendance(id, false);
-    setInterview(iv => ({ ...iv, candidateJoined: false, status: "no_show" }));
+    setInterview(iv => ({ ...iv, candidateJoined: false, status: "no_show", feedback: undefined, feedbackDraft: undefined }));
     setToast({ message: "Marked as no-show." });
+    setSaving(false);
+  };
+
+  // Undo path for "Candidate Joined" clicked in error, or the candidate
+  // joined briefly then left before anything actually happened — reachable
+  // any time up to Mark as Completed / Mark as Partially Completed, even
+  // after starting (or fully submitting) the evaluation. Whatever was
+  // entered is discarded — markCandidateAttendance clears both feedback and
+  // feedbackDraft server-side; a no-show has nothing to evaluate.
+  const handleUndoToNoShow = async () => {
+    if (!confirm(
+      "Mark this candidate as a no-show instead?\n\n" +
+      "Any evaluation you've started (or already submitted) for this interview will be discarded — a no-show has no feedback."
+    )) return;
+    setSaving(true);
+    try {
+      await markCandidateAttendance(id, false);
+      setInterview(iv => ({ ...iv, candidateJoined: false, status: "no_show", feedback: undefined, feedbackDraft: undefined }));
+      setToast({ message: "Changed to no-show — the evaluation was discarded." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
     setSaving(false);
   };
 
@@ -872,6 +894,21 @@ export default function InterviewDetail() {
                   </button>
                 </div>
               </div>
+              {/* Undo — for "Candidate Joined" clicked by mistake, or the
+                 candidate left before the interview actually got going.
+                 Reachable any time up to Mark as Completed/Partially
+                 Completed, even after starting (or fully submitting) the
+                 evaluation — whatever was entered gets discarded. */}
+              {attended === true && (
+                <button
+                  type="button"
+                  onClick={handleUndoToNoShow}
+                  disabled={saving}
+                  className="mt-3 text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
+                >
+                  Candidate actually didn't show up? Mark as No-show instead
+                </button>
+              )}
             </div>
           )}
         </motion.div>
