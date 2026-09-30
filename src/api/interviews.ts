@@ -200,14 +200,19 @@ function domainHasData(domainData: Record<string, unknown> | undefined): boolean
   return Object.entries(domainData).some(([k, v]) => k !== "cards" && v != null && v !== "");
 }
 
-// Resumes a Partially Completed interview for another session — reused for
-// the SAME interview/candidate rather than creating a new record (unlike
-// Reassign Interviewer on a declined interview, which deliberately does
-// create a new one — see openReassign in InterviewsPage.jsx for why that
-// case is different). Everything the new session will overwrite (who ran
-// it, when, its Meet/recording, why it stopped) is archived onto
-// priorSessions first, so the full history survives across however many
-// sessions an interview ends up needing.
+// Resumes a Partially Completed interview by creating a brand-new interview
+// record for the next session, rather than mutating the original in place —
+// the original stays exactly as the first panelist left it (status,
+// feedback, reason), permanently visible as its own row, the same way
+// Reassign Interviewer on a declined interview already creates a fresh
+// record instead of overwriting the declined one (see openReassign in
+// InterviewsPage.jsx). The two records are cross-linked
+// (resumedAsInterviewId / resumedFromInterviewId) purely for navigation.
+//
+// Whatever domains already had a real answer carry forward as read-only —
+// the feedback object itself (including those already-scored domains, so
+// they render with their actual saved values) is copied onto the new
+// record rather than making the next panelist re-enter anything.
 export async function resumePartiallyCompletedInterview(
   interviewId: string,
   updates: {
@@ -222,7 +227,7 @@ export async function resumePartiallyCompletedInterview(
     templateId?: string;
     templateName?: string;
   }
-): Promise<void> {
+): Promise<string> {
   const ref = doc(db, "interviews", interviewId);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error("Interview not found.");
@@ -231,47 +236,40 @@ export async function resumePartiallyCompletedInterview(
     throw new Error("Only a Partially Completed interview can be resumed.");
   }
 
-  const now = new Date().toISOString();
-  const priorSession: Record<string, unknown> = {
-    interviewerId:           current.interviewerId,
-    interviewerName:         current.interviewerName || "",
-    interviewerEmail:        current.interviewerEmail,
-    scheduledDate:           current.scheduledDate,
-    scheduledTime:           current.scheduledTime,
-    duration:                current.duration || 60,
-    meetLink:                current.meetLink || "",
-    eventId:                 current.eventId || "",
-    meetingRecordingUrl:     current.meetingRecordingUrl || "",
-    transcriptUrl:           current.transcriptUrl || "",
-    partialCompletionReason: current.partialCompletionReason || "",
-    endedAt:                 now,
-  };
-
   const lockedDomains = Object.keys(current.feedback?.domains || {})
     .filter(id => domainHasData(current.feedback?.domains?.[id]));
 
-  await updateDoc(ref, {
-    ...updates,
-    status:                 "scheduled",
+  const now = new Date().toISOString();
+  const newRef = await addDoc(collection(db, "interviews"), {
+    candidateId:      current.candidateId,
+    candidateName:    current.candidateName,
+    candidateEmail:   current.candidateEmail,
+    candidateUid:     current.candidateUid || "",
+    roleAppliedFor:   current.roleAppliedFor || "",
+    resumeLink:       current.resumeLink || "",
+    programId:        current.programId || "",
+    programName:      current.programName || "",
+    interviewerId:    updates.interviewerId,
+    interviewerEmail: updates.interviewerEmail,
+    interviewerName:  updates.interviewerName,
+    scheduledDate:    updates.scheduledDate,
+    scheduledTime:    updates.scheduledTime,
+    duration:         updates.duration,
+    round:            updates.round,
+    notes:            updates.notes || "",
+    templateId:       updates.templateId || current.templateId || "",
+    templateName:     updates.templateName || current.templateName || "",
+    status:           "pending_acceptance",
+    feedback:              current.feedback || null,
+    feedbackLockedDomains: lockedDomains,
+    resumedFromInterviewId: interviewId,
     resumedFromPartial:     true,
-    priorSessions:          [...(current.priorSessions || []), priorSession],
-    feedbackLockedDomains:  lockedDomains,
-    partialCompletionReason: deleteField(),
-    candidateJoined:        deleteField(),
-    attendanceMarkedAt:     deleteField(),
-    // Cleared, not carried over — this new session needs its own Meet,
-    // and any recording/AI report from the last session is already
-    // preserved above in priorSessions.
-    meetLink:               "",
-    eventId:                deleteField(),
-    recallBotId:            deleteField(),
-    meetingRecordingUrl:    deleteField(),
-    transcriptUrl:          deleteField(),
-    aiReport:               deleteField(),
-    aiReportPending:        false,
-    aiReportPendingSince:   deleteField(),
-    updatedAt:              now,
+    createdAt:        now,
   });
+
+  await updateDoc(ref, { resumedAsInterviewId: newRef.id, updatedAt: now });
+
+  return newRef.id;
 }
 
 export async function saveFeedbackDraft(id: string, feedback: Record<string, unknown>): Promise<void> {

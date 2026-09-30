@@ -36,7 +36,7 @@ export default function ScheduleInterviewModal({
       <div className="space-y-4">
         {resumeMode && (
           <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            Picking up this Partially Completed interview for another session — sections already scored stay locked; the same evaluation form just continues with whatever's left.
+            This creates a new interview record for the next session — the original Partially Completed interview is left exactly as it is, as its own permanent record. Sections already scored carry over locked; the new panelist's form just continues with whatever's left.
           </p>
         )}
         <div>

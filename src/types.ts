@@ -446,22 +446,31 @@ export interface Interview {
   updatedAt?: string;
 
   // ── Partial completion → Reschedule & Resume ──────────────────────────────
-  // Set once "Reschedule & Resume" is used on a Partially Completed
-  // interview (see resumePartiallyCompletedInterview in api/interviews.ts).
-  // Stays true permanently, even across further resumes, so every view can
-  // tell this apart from an ordinary interview — most importantly so a
-  // finished "Completed" here is never confused with a normal full
-  // interview for payment purposes.
+  // Set on the NEW interview record created by "Reschedule & Resume" (see
+  // resumePartiallyCompletedInterview in api/interviews.ts) — true whenever
+  // this record picks up where an earlier Partially Completed interview
+  // left off, so every view can tell this apart from an ordinary interview
+  // — most importantly so a finished "Completed" here is never confused
+  // with a normal full interview for payment purposes.
   resumedFromPartial?: boolean;
-  // Every prior attempt at this same interview, oldest first, captured at
-  // the moment each Reschedule & Resume overwrites the fields it snapshots
-  // (interviewer, schedule, Meet/recording links, the reason it stopped).
-  // The interview's own top-level fields always hold the CURRENT/latest
-  // session; nothing that already reads meetLink/meetingRecordingUrl/etc.
-  // needs to change. Preserved indefinitely — this is the full recording/
-  // interviewer history for the student across every session.
+  // Points back at the Partially Completed interview this one continues.
+  // That original record is left completely untouched (status, feedback,
+  // partialCompletionReason all stay exactly as the first panelist left
+  // them, as its own permanent row) — this is purely a cross-link so either
+  // side can be navigated to from the other, same pattern as
+  // reassignedFrom/reassignedTo above.
+  resumedFromInterviewId?: string;
+  // The inverse — set on the ORIGINAL Partially Completed interview once
+  // it's resumed, pointing forward at the new record that continued it.
+  resumedAsInterviewId?: string;
+  // Legacy — interviews resumed before Reschedule & Resume was changed to
+  // create a new record instead of overwriting this one in place hold their
+  // prior sessions' history here (oldest first: interviewer, schedule,
+  // Meet/recording links, the reason it stopped). No longer written by new
+  // resumes (see resumedFromInterviewId instead), kept only so old records
+  // still render correctly.
   priorSessions?: PriorInterviewSession[];
-  // Domain ids that already had data BEFORE the most recent resume —
+  // Domain ids that already had data in the interview this one resumed —
   // DynamicFeedbackForm renders exactly these read-only, so a later
   // panelist can't edit what an earlier one already submitted, while still
   // filling in the remaining sections on the same form. Cleared (or simply

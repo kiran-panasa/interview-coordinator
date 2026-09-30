@@ -343,9 +343,9 @@ export default function InterviewsPage() {
   // Reschedule & Resume opens the same form pre-filled from the partially
   // completed interview, but forces a fresh date/time/interviewer pick
   // (never silently reuses the ones that already happened) — candidate and
-  // template stay fixed since resumePartiallyCompletedInterview reuses this
-  // exact record and template (its already-scored domains are keyed by
-  // this template's own domain ids).
+  // template stay fixed since resumePartiallyCompletedInterview creates the
+  // new record against this same template (its already-scored domains,
+  // carried forward read-only, are keyed by this template's own domain ids).
   const openResume = (iv) => {
     setEditTarget(null);
     setReassignFromId(null);
@@ -376,7 +376,7 @@ export default function InterviewsPage() {
       try {
         const interviewer = interviewers.find(u => u.id === form.interviewerId);
         const template    = templates.find(t => t.id === form.templateId);
-        await resumePartiallyCompletedInterview(resumeTarget.id, {
+        const newId = await resumePartiallyCompletedInterview(resumeTarget.id, {
           interviewerId:    form.interviewerId,
           interviewerEmail: interviewer?.email || "",
           interviewerName:  interviewer?.displayName || interviewer?.email || "",
@@ -393,13 +393,27 @@ export default function InterviewsPage() {
             type:           "interview_approval",
             recipientId:    form.interviewerId,
             recipientEmail: interviewer?.email,
-            interviewId:    resumeTarget.id,
+            interviewId:    newId,
             candidateName:  resumeTarget.candidateName,
-            message:        `Resuming a partially completed interview with ${resumeTarget.candidateName} — please Accept or Decline. Sections already scored are locked; you'll pick up where the last session left off.`,
+            message:        `You have a new interview with ${resumeTarget.candidateName} — please Accept or Decline. It continues a Partially Completed interview: sections already scored are locked; you'll pick up where the last session left off.`,
             status:         "unread",
           }).catch(() => {});
+          if (APPS_SCRIPT_URL && interviewer?.email) {
+            callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+              action:  "sendEmail",
+              subject: "Action Required: Interview Assigned",
+              body:
+                `Hi ${interviewer?.displayName || "there"},\n\nYou have a new interview scheduled, continuing a Partially Completed interview:\n\n` +
+                `Candidate: ${resumeTarget.candidateName || "—"}\nRound: ${form.round}\n` +
+                `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n` +
+                `Sections already scored by the previous panelist are locked — you'll pick up where the last session left off.\n\n` +
+                `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${newId}\n\n` +
+                `Thank you.`,
+              recipients: [{ email: interviewer.email, name: interviewer.displayName || interviewer.email }],
+            }).catch(() => {});
+          }
         }
-        setToast({ message: "Interview rescheduled — ready to resume." });
+        setToast({ message: "New interview created for the next session — the original Partially Completed record is unchanged." });
         setShowModal(false);
         setResumeTarget(null);
       } catch (e) {
@@ -1700,8 +1714,8 @@ export default function InterviewsPage() {
                 </td>
                 <td className="px-4 py-3">
                   <Badge value={iv.status} />
-                  {iv.status === "completed" && iv.resumedFromPartial && (
-                    <p className="text-[11px] text-sky-600 mt-1 font-medium" title="Finished off a Partially Completed interview — not a full interview for payment purposes">
+                  {(iv.status === "completed" || iv.status === "partially_completed") && iv.resumedFromPartial && (
+                    <p className="text-[11px] text-sky-600 mt-1 font-medium" title="Continues an earlier Partially Completed interview — not a full interview for payment purposes">
                       Resumed session
                     </p>
                   )}
@@ -1722,6 +1736,27 @@ export default function InterviewsPage() {
                     return (
                       <p className="text-[11px] text-gray-400 mt-1">
                         → Reassigned to {reassignedIv?.interviewerName || "another interviewer"}
+                      </p>
+                    );
+                  })()}
+                  {/* Partially Completed and later resumed — this row is left
+                     completely untouched (its own permanent record of what
+                     this panelist actually did), cross-linked to whichever
+                     new record picked up the rest. Best-effort resolve, same
+                     as the declined/reassignedTo case above. */}
+                  {iv.status === "partially_completed" && iv.resumedAsInterviewId && (() => {
+                    const resumedIv = interviews.find(x => x.id === iv.resumedAsInterviewId);
+                    return (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        → Resumed by {resumedIv?.interviewerName || "another interviewer"}
+                      </p>
+                    );
+                  })()}
+                  {iv.resumedFromInterviewId && (() => {
+                    const priorIv = interviews.find(x => x.id === iv.resumedFromInterviewId);
+                    return (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        ← Continues {priorIv?.interviewerName ? `${priorIv.interviewerName}'s` : "an earlier"} session
                       </p>
                     );
                   })()}

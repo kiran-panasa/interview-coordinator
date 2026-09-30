@@ -11,7 +11,7 @@ import {
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   markSlotFree, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
-  getActiveAdmins, getCandidate,
+  getActiveAdmins, getCandidate, getInterview,
 } from "../../api/firestore";
 import { scheduleInterviewMeet } from "../../api/interviews";
 import { getUnratedVerdictDomains } from "../../utils/templateEngine";
@@ -87,6 +87,41 @@ export default function InterviewDetail() {
     const t = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(t);
   }, []);
+
+  // Resume now creates a separate interview record per session (the
+  // original Partially Completed record is left untouched) rather than
+  // archiving history onto this same doc — so "Previous Sessions" below
+  // walks the resumedFromInterviewId chain backward to fetch each earlier
+  // record directly, instead of reading an embedded array. Capped at 20
+  // hops purely as a runaway-loop guard; a real chain is never that long.
+  const [linkedPriorSessions, setLinkedPriorSessions] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const chain = [];
+      let cursor = interview?.resumedFromInterviewId;
+      let hops = 0;
+      while (cursor && hops < 20) {
+        const prior = await getInterview(cursor).catch(() => null);
+        if (!prior) break;
+        chain.push(prior);
+        cursor = prior.resumedFromInterviewId;
+        hops++;
+      }
+      if (!cancelled) setLinkedPriorSessions(chain.reverse().map(prior => ({
+        interviewerId:           prior.interviewerId,
+        interviewerName:         prior.interviewerName,
+        interviewerEmail:        prior.interviewerEmail,
+        scheduledDate:           prior.scheduledDate,
+        scheduledTime:           prior.scheduledTime,
+        meetLink:                prior.meetLink,
+        meetingRecordingUrl:     prior.meetingRecordingUrl,
+        transcriptUrl:           prior.transcriptUrl,
+        partialCompletionReason: prior.partialCompletionReason,
+      })));
+    })();
+    return () => { cancelled = true; };
+  }, [interview?.resumedFromInterviewId]);
 
   // Live subscription — so an admin edit (reschedule, panelist swap, new
   // Meet/assignment links, etc.) shows up here immediately instead of only
@@ -430,7 +465,10 @@ export default function InterviewDetail() {
 
   const totalQuestions = template?.questionIds?.length || 0;
   const askedCount      = interview.questionsAsked?.length || 0;
-  const priorSessions   = interview.priorSessions || [];
+  // Prefer the resumedFromInterviewId chain (current behavior); an embedded
+  // priorSessions array only exists on interviews resumed before that
+  // change, so it's still read as a fallback for those older records.
+  const priorSessions   = linkedPriorSessions.length ? linkedPriorSessions : (interview.priorSessions || []);
 
   // Live candidate value wins when available — see the candidateId fetch
   // above. Falls back to the interview's own snapshot for legacy/imported
