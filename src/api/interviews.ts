@@ -201,12 +201,31 @@ export async function reopenNoShowInterview(interviewId: string): Promise<void> 
 }
 
 // True if a domain has any real answer in it, vs. just the empty
-// placeholder shape ({ cards: [] }) every unfilled domain starts as.
+// placeholder shape every unfilled domain starts as. A card object existing
+// isn't enough on its own — a domain with a configured defaultCardCount
+// already has one before anything's typed into it, and since "Save as
+// Partially Completed" (DynamicFeedbackForm.jsx) now saves EVERY domain via
+// materializeFeedback — including ones the interviewer never opened, each
+// still carrying that default empty card — a plain cards.length > 0 check
+// here was locking domains nobody had actually scored.
+//
+// current.feedback is the MATERIALIZED form (this runs after saving, not
+// on live in-progress form state), so it also carries computed-only keys
+// materializeFeedback/attachDescriptors add to every domain that has scored
+// fields at all — descriptors and domain_rating — regardless of whether
+// anything was actually filled in. Those have to be excluded explicitly, or
+// an untouched domain with scored card fields reads as "has data" purely
+// because attachDescriptors always attaches a (empty-valued) descriptors
+// key once a domain has any scored fields configured, which is nearly all
+// of them — reproducing the exact bug this rewrite fixes.
+const DOMAIN_COMPUTED_KEYS = new Set(["cards", "descriptors", "domain_rating"]);
+
 function domainHasData(domainData: Record<string, unknown> | undefined): boolean {
   if (!domainData) return false;
   const cards = domainData.cards;
-  if (Array.isArray(cards) && cards.length > 0) return true;
-  return Object.entries(domainData).some(([k, v]) => k !== "cards" && v != null && v !== "");
+  const fieldFilled = (v: unknown) => Array.isArray(v) ? v.length > 0 : (v != null && v !== "");
+  if (Array.isArray(cards) && cards.some(card => Object.values(card as Record<string, unknown>).some(fieldFilled))) return true;
+  return Object.entries(domainData).some(([k, v]) => !DOMAIN_COMPUTED_KEYS.has(k) && fieldFilled(v));
 }
 
 // Resumes a Partially Completed interview by creating a brand-new interview
