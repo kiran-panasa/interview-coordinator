@@ -13,9 +13,10 @@ function inDays(n) {
   return d.toISOString().slice(0, 10);
 }
 
-export default function SlotOverviewTab({ programs, templates, activeInterviewers, ivrSlots, slotsLoading, fetchSlots, blockedDates = [] }) {
+export default function SlotOverviewTab({ programs, templates, skills = [], activeInterviewers, ivrSlots, slotsLoading, fetchSlots, blockedDates = [] }) {
   const [selectedProgramId,  setSelectedProgramId]  = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [selectedSkillId,    setSelectedSkillId]    = useState("");
   const [fromDate, setFromDate] = useState(today());
   const [toDate,   setToDate]   = useState(inDays(7));
 
@@ -32,14 +33,13 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
   }, [selectedProgramId]); // eslint-disable-line
 
   const templateInterviewers = useMemo(() => {
-    if (selectedTemplateId)
-      return activeInterviewers.filter(u => (u.templateIds || []).includes(selectedTemplateId));
-    if (selectedProgramId) {
-      const ptIds = programTemplates.map(t => t.id);
-      return activeInterviewers.filter(u => (u.templateIds || []).some(tid => ptIds.includes(tid)));
-    }
-    return activeInterviewers;
-  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates]);
+    const base = selectedTemplateId
+      ? activeInterviewers.filter(u => (u.templateIds || []).includes(selectedTemplateId))
+      : selectedProgramId
+        ? activeInterviewers.filter(u => (u.templateIds || []).some(tid => programTemplates.map(t => t.id).includes(tid)))
+        : activeInterviewers;
+    return selectedSkillId ? base.filter(u => (u.skills || []).includes(selectedSkillId)) : base;
+  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillId]);
 
   const datesSelected = !!(fromDate && toDate);
 
@@ -91,14 +91,14 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
 
   const datePagination = usePagination(byDate);
   // Reset to page 1 when filters change
-  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, fromDate, toDate]); // eslint-disable-line
+  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillId, fromDate, toDate]); // eslint-disable-line
 
   return (
     <div className="space-y-6">
       {/* Filters + summary */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Overview</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
             <select value={selectedProgramId} onChange={e => setSelectedProgramId(e.target.value)}
@@ -113,6 +113,14 @@ export default function SlotOverviewTab({ programs, templates, activeInterviewer
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">All Templates</option>
               {programTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Skill</label>
+            <select value={selectedSkillId} onChange={e => setSelectedSkillId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="">All Skills</option>
+              {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
           <div>

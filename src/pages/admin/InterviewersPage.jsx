@@ -4,9 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
   Search, Download, ChevronDown, FileSpreadsheet, FileText,
-  RotateCcw, Users, AlertTriangle, ExternalLink,
+  RotateCcw, Users, AlertTriangle, ExternalLink, Upload,
 } from "lucide-react";
-import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers } from "../../api/firestore";
+import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers, createSkill, bulkUpdateUserSkills } from "../../api/firestore";
 import { compareTimeLabels } from "../../utils/dates";
 import { useSkills, useUsers, useInterviewerCounts, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
@@ -19,6 +19,8 @@ import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { SkeletonRows } from "../../components/Skeleton";
 import { usePagination } from "../../hooks/usePagination";
+import ImportSkillsModal from "../../features/interviewers/ImportSkillsModal";
+import { parseSkillsImportCSV } from "../../utils/skillsImportCSV";
 
 const EXP_RANGES = [
   { label: "0–2 yrs",  test: (e) => e >= 0 && e <= 2  },
@@ -157,6 +159,14 @@ export default function InterviewersPage() {
   const exportRef = useRef(null);
   const [selectedIds,         setSelectedIds]         = useState(new Set());
 
+  // Bulk "Import Skills" — parses independently of the page's own scoped/
+  // filtered interviewer list, since matching needs the full active roster
+  // regardless of whatever's currently loaded for the table.
+  const [showImportSkills, setShowImportSkills] = useState(false);
+  const [skillsCsvText,    setSkillsCsvText]    = useState("");
+  const [skillsParseResult, setSkillsParseResult] = useState(null);
+  const [skillsImporting,  setSkillsImporting]  = useState(false);
+
   useEffect(() => {
     const close = (e) => { if (exportRef.current && !exportRef.current.contains(e.target)) setShowExport(false); };
     document.addEventListener("mousedown", close);
@@ -183,6 +193,51 @@ export default function InterviewersPage() {
       setToast({ message: e.message, type: "error" });
     }
     setSaving(false);
+  };
+
+  // Own one-off full fetch of active interviewers — matching needs the
+  // complete roster regardless of the page's own scoped/filtered view.
+  const handleParseSkillsCSV = async () => {
+    const all = await getAllUsers().catch(err => {
+      setToast({ message: "Couldn't load interviewers: " + err.message, type: "error" });
+      return null;
+    });
+    if (!all) return;
+    const pool = all.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active");
+    const result = parseSkillsImportCSV(skillsCsvText, pool, skills);
+    setSkillsParseResult(result);
+  };
+
+  const handleImportSkills = async () => {
+    if (!skillsParseResult || skillsParseResult.globalError) return;
+    const { rows, skillCols } = skillsParseResult;
+    const validRows = rows.filter(r => !r.error && r.interviewer);
+    if (!validRows.length) return;
+    setSkillsImporting(true);
+    try {
+      // Auto-create any skill column names not yet in Settings → Skills.
+      const nameToId = new Map(skills.map(s => [s.name.trim().toLowerCase(), s.id]));
+      for (const name of skillCols) {
+        const key = name.trim().toLowerCase();
+        if (!nameToId.has(key)) nameToId.set(key, await createSkill(name));
+      }
+      const skillColIdsSet = new Set(skillCols.map(name => nameToId.get(name.trim().toLowerCase())));
+      const updates = validRows.map(row => {
+        // Preserve any skill the interviewer already has that isn't one of
+        // this sheet's columns — only the columns actually present get synced.
+        const retained = (row.interviewer.skills || []).filter(id => !skillColIdsSet.has(id));
+        const added = row.checkedSkillNames.map(name => nameToId.get(name.trim().toLowerCase())).filter(Boolean);
+        return { id: row.interviewer.id, skills: [...new Set([...retained, ...added])] };
+      });
+      await bulkUpdateUserSkills(updates);
+      queryClient.invalidateQueries({ queryKey: QK.skills });
+      refreshAfterMutation();
+      setToast({ message: `Updated skills for ${updates.length} interviewer${updates.length !== 1 ? "s" : ""}.` });
+      setShowImportSkills(false); setSkillsCsvText(""); setSkillsParseResult(null);
+    } catch (e) {
+      setToast({ message: "Import failed: " + e.message, type: "error" });
+    }
+    setSkillsImporting(false);
   };
 
   const viewAvailability = async (u) => {
@@ -337,6 +392,9 @@ export default function InterviewersPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" icon={Upload} onClick={() => setShowImportSkills(true)}>
+            Import Skills
+          </Button>
           {/* Export dropdown */}
           <div className="relative" ref={exportRef}>
             <Button
@@ -671,6 +729,13 @@ export default function InterviewersPage() {
           );
         })()}
       </Modal>
+
+      <ImportSkillsModal
+        open={showImportSkills} onClose={() => setShowImportSkills(false)}
+        csvText={skillsCsvText} setCsvText={setSkillsCsvText}
+        parseResult={skillsParseResult} setParseResult={setSkillsParseResult}
+        handleParseCSV={handleParseSkillsCSV} handleImport={handleImportSkills} importing={skillsImporting}
+      />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>

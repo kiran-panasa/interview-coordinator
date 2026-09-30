@@ -145,7 +145,7 @@ export default function NudgePage() {
 
           {activeTab === "slots" && (
             <SlotOverviewTab
-              programs={programs} templates={templates} activeInterviewers={activeInterviewers}
+              programs={programs} templates={templates} skills={skills} activeInterviewers={activeInterviewers}
               ivrSlots={ivrSlots} slotsLoading={slotsLoading} fetchSlots={fetchSlots}
               blockedDates={blockedDates}
             />

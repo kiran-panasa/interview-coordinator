@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc,
+  collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, deleteDoc, writeBatch,
   query, where, orderBy, limit, startAfter, getCountFromServer,
 } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
@@ -101,6 +101,19 @@ export async function getUsersByIds(ids: string[]): Promise<User[]> {
 
 export async function updateUser(id: string, data: Partial<Omit<User, "id">>): Promise<void> {
   await updateDoc(doc(db, "users", id), data);
+}
+
+// Bulk-sets each interviewer's `skills` array in one round trip — used by
+// the "Import Skills" CSV upload. Chunked at 450 (Firestore's batch limit is
+// 500 writes) even though a real skills sheet is nowhere near that size, so
+// this doesn't silently break if it ever is.
+export async function bulkUpdateUserSkills(updates: { id: string; skills: string[] }[]): Promise<void> {
+  for (let i = 0; i < updates.length; i += 450) {
+    const chunk = updates.slice(i, i + 450);
+    const batch = writeBatch(db);
+    chunk.forEach(u => batch.update(doc(db, "users", u.id), { skills: u.skills }));
+    await batch.commit();
+  }
 }
 
 export async function deleteUser(id: string): Promise<void> {
