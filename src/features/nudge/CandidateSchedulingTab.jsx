@@ -10,6 +10,7 @@ import {
   logInviteHistory, getPreInterviewResources, updateCandidate,
   ensureRoundExists,
 } from "../../api/firestore";
+import { scheduleInterviewMeet } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
@@ -330,51 +331,72 @@ export default function CandidateSchedulingTab({
       const tmpl = inv.templateId ? await getTemplate(inv.templateId) : null;
       const ivr  = users.find(u => u.id === inv.bookedInterviewerId);
       const roundLabel = inv.round || tmpl?.name || "Interview";
-      if (!ivr?.email || !inv.candidateEmail) {
-        throw new Error("Missing interviewer or candidate email — cannot schedule.");
-      }
-      // Must succeed before we create the interview record or mark the invite
-      // confirmed — otherwise the admin sees "confirmed" with no Meet link sent.
       const durationMinutes = inv.duration || 60;
-      const result = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action:           "schedule",
-        candidateEmail:   inv.candidateEmail,
-        interviewerEmail: ivr.email,
-        candidateName:    inv.candidateName,
-        interviewerName:  ivr?.displayName || ivr?.email || "",
-        round:            roundLabel,
-        date:             inv.bookedDate,
-        startTime:        inv.bookedTime,
-        durationMinutes,
-      });
-      const id = await createInterview({
-        candidateId:      inv.candidateId,
-        candidateName:    inv.candidateName,
-        candidateEmail:   inv.candidateEmail,
-        interviewerId:    inv.bookedInterviewerId,
-        interviewerName:  ivr?.displayName || ivr?.email || "",
-        interviewerEmail: ivr?.email || "",
-        scheduledDate:    inv.bookedDate,
-        scheduledTime:    inv.bookedTime,
-        duration:         durationMinutes,
-        round:            roundLabel,
-        templateId:       inv.templateId || "",
-        templateName:     inv.templateName || "",
-        meetLink:         result?.meetLink || "",
-        eventId:          result?.eventId || "",
-        recallBotId:      result?.recallBotId || "",
-        createdBy:        currentUser.uid,
-        // Candidate slots come from the panelist's own published availability
-        // and the Meet link is already generated — skip the interviewer's
-        // separate manual accept/decline step for this flow.
-        status:           "scheduled",
-      });
-      await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
-      logInviteHistory(inv.id, "confirmed", "Booking confirmed by admin").catch(() => {});
+
+      // Idempotent: if an earlier attempt already got far enough to create
+      // the interview record — even if the Meet-link step after it then
+      // timed out — reuse that SAME record instead of creating a second
+      // one. This used to call Apps Script directly before any interview
+      // record existed, with no lock and no interviewId for it to save a
+      // crashed/timed-out attempt onto — a timeout there (confirmed to
+      // happen — "the email/calendar service didn't respond in time") left
+      // nothing in Firestore for the admin to see, so clicking Confirm again
+      // created a genuinely separate Calendar event and interview record.
+      let id = inv.interviewId;
+      if (!id) {
+        if (!ivr?.email || !inv.candidateEmail) {
+          throw new Error("Missing interviewer or candidate email — cannot schedule.");
+        }
+        id = await createInterview({
+          candidateId:      inv.candidateId,
+          candidateName:    inv.candidateName,
+          candidateEmail:   inv.candidateEmail,
+          interviewerId:    inv.bookedInterviewerId,
+          interviewerName:  ivr?.displayName || ivr?.email || "",
+          interviewerEmail: ivr?.email || "",
+          scheduledDate:    inv.bookedDate,
+          scheduledTime:    inv.bookedTime,
+          duration:         durationMinutes,
+          round:            roundLabel,
+          templateId:       inv.templateId || "",
+          templateName:     inv.templateName || "",
+          createdBy:        currentUser.uid,
+          // Candidate slots come from the panelist's own published availability
+          // — skip the interviewer's separate manual accept/decline step for
+          // this flow. The Meet link itself is created just below.
+          status:           "scheduled",
+        });
+        // Linked immediately — a plain Firestore write, not the slow/
+        // flaky step — so even if scheduleInterviewMeet below times out,
+        // the interview already shows up in the Interviews page (Meet
+        // pending, same as any other "Get link" case) and a retry of this
+        // same function picks it up above instead of creating a second one.
+        await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
+        logInviteHistory(inv.id, "confirmed", "Booking confirmed by admin").catch(() => {});
+      }
+
+      // Same transaction-locked, retry-safe path used everywhere else in
+      // the app for this (interviewer Accept, admin Send Invite) — a
+      // concurrent or retried call either reuses the existing meetLink/
+      // eventId or detects the lock and backs off, instead of creating a
+      // duplicate Calendar event.
+      const result = await scheduleInterviewMeet(id);
+
+      // Already fully scheduled (or another attempt is actively in
+      // progress) from an EARLIER call — every notification below already
+      // went out (or is about to) that time, so sending them again here
+      // would just double up the interviewer/candidate emails.
+      if (result.inProgress) {
+        setToast({ message: "This booking is already being scheduled — check back in a moment." });
+        confirmingIdsRef.current.delete(inv.id);
+        setConfirmingId(null);
+        return;
+      }
+      const alreadyDone = !!result.alreadyScheduled;
 
       // Interviewer isn't asked to Accept/Decline on this path (the slot was
       // already theirs to begin with) — but they still need to be told.
-      if (ivr?.id) {
+      if (!alreadyDone && ivr?.id) {
         createNotification({
           type:           "interview_approval",
           recipientId:    ivr.id,
@@ -385,7 +407,7 @@ export default function CandidateSchedulingTab({
           status:         "unread",
         }).catch(() => {});
       }
-      if (APPS_SCRIPT_URL && ivr?.email) {
+      if (!alreadyDone && APPS_SCRIPT_URL && ivr?.email) {
         callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
           action:  "sendEmail",
           subject: "Action Required: Interview Assigned",
@@ -403,7 +425,7 @@ export default function CandidateSchedulingTab({
       // and the only place the admin-managed pre-interview resources (video
       // setup guide + instruction/reference docs) get attached. Interviewers
       // never see this section.
-      if (APPS_SCRIPT_URL && inv.candidateEmail) {
+      if (!alreadyDone && APPS_SCRIPT_URL && inv.candidateEmail) {
         const resources = await getPreInterviewResources().catch(() => null);
         const instructionLines = [];
         if (resources?.videoGuideUrl) {
