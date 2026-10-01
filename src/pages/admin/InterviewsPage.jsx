@@ -822,6 +822,52 @@ export default function InterviewsPage() {
     setRecordingLoading(s => ({ ...s, [iv.id]: false }));
   };
 
+  // No eventId at all (not just a missing recording) means there's nothing
+  // for resolveRecordingUrl_/resolveTranscriptUrl_ to ever search against —
+  // the interview was conducted but its Calendar event/Meet link was never
+  // captured. The recording still exists on Google's side (Meet
+  // auto-records to the organizer's Drive) — this just lets an admin paste
+  // in the link once they've found it there by date/candidate, same
+  // pattern as handleManualMeetLink above.
+  const handleManualRecordingLink = async (iv) => {
+    const link = window.prompt(
+      "Paste the recording link for this interview (e.g. from the organizer's Google Drive → Meet Recordings folder):",
+      iv.meetingRecordingUrl || ""
+    );
+    if (!link) return;
+    const trimmed = link.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setToast({ message: "That doesn't look like a valid link (must start with http:// or https://).", type: "error" });
+      return;
+    }
+    try {
+      await updateInterview(iv.id, { meetingRecordingUrl: trimmed });
+      setToast({ message: "Recording link saved." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
+  // Same gap, same fix, for the transcript.
+  const handleManualTranscriptLink = async (iv) => {
+    const link = window.prompt(
+      "Paste the transcript link for this interview (e.g. the \"Notes by Gemini\" Google Doc):",
+      iv.transcriptUrl || ""
+    );
+    if (!link) return;
+    const trimmed = link.trim();
+    if (!/^https?:\/\//i.test(trimmed)) {
+      setToast({ message: "That doesn't look like a valid link (must start with http:// or https://).", type: "error" });
+      return;
+    }
+    try {
+      await updateInterview(iv.id, { transcriptUrl: trimmed });
+      setToast({ message: "Transcript link saved." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   // ── AI Report ────────────────────────────────────────────────────────────────
 
   // Deliberately does NOT run the recording/transcript discovery chain
@@ -1859,11 +1905,24 @@ export default function InterviewsPage() {
                       copyResolve: (!iv.meetingRecordingUrl && (iv.eventId || iv.meetLink)) ? () => resolveRecordingUrl_(iv) : undefined,
                     },
                     {
+                      // Only offered once there's truly nothing to auto-
+                      // resolve from (no eventId/meetLink at all) — otherwise
+                      // the copy-icon "resolve" above already covers it.
+                      label: iv.meetingRecordingUrl ? "Edit Recording Link" : "Add Recording Link Manually",
+                      onClick: () => handleManualRecordingLink(iv),
+                      show: isDoneStatus(iv.status) && !iv.eventId && !iv.meetLink,
+                    },
+                    {
                       label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",
                       onClick: () => { if (!transcriptLoading[iv.id]) handleViewTranscript(iv); },
                       show: isDoneStatus(iv.status),
                       copyValue: iv.transcriptUrl || undefined,
                       copyResolve: (!iv.transcriptUrl && (iv.eventId || iv.meetLink)) ? () => resolveTranscriptUrl_(iv) : undefined,
+                    },
+                    {
+                      label: iv.transcriptUrl ? "Edit Transcript Link" : "Add Transcript Link Manually",
+                      onClick: () => handleManualTranscriptLink(iv),
+                      show: isDoneStatus(iv.status) && !iv.eventId && !iv.meetLink,
                     },
                     {
                       label: "AI Report",
