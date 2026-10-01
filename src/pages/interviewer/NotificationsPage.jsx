@@ -47,6 +47,17 @@ export default function NotificationsPage() {
   const nudges   = notifications;
   const unread   = nudges.filter(n => n.status === "unread").length;
 
+  // "read" is distinct from a nudge's own "available"/"unavailable" response
+  // status — marking a still-unresponded nudge as read just clears its
+  // unread highlight, it doesn't answer it for them, so the Available/Not
+  // Available buttons stay exactly as they were.
+  const markAllRead = async () => {
+    const unreadIds = nudges.filter(n => n.status === "unread").map(n => n.id);
+    if (!unreadIds.length) return;
+    await Promise.all(unreadIds.map(id => updateNotification(id, { status: "read" }).catch(() => {})));
+    setToast({ message: `Marked ${unreadIds.length} notification${unreadIds.length !== 1 ? "s" : ""} as read.` });
+  };
+
   const handleAvailable = (n) => {
     // Navigate immediately — don't make the interviewer wait for Firestore
     const params = new URLSearchParams();
@@ -137,7 +148,13 @@ export default function NotificationsPage() {
         className="flex items-center gap-3 mb-8">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Notifications</h1>
         {unread > 0 && (
-          <span className="text-sm font-bold bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full">{unread} new</span>
+          <>
+            <span className="text-sm font-bold bg-red-100 text-red-600 px-2.5 py-0.5 rounded-full">{unread} new</span>
+            <button onClick={markAllRead}
+              className="ml-auto text-xs font-semibold text-emerald-600 hover:text-emerald-700 hover:underline transition-colors">
+              Mark all as read
+            </button>
+          </>
         )}
       </motion.div>
 
