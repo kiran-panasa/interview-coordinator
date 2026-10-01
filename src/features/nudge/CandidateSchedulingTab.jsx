@@ -91,6 +91,13 @@ export default function CandidateSchedulingTab({
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
   const [candSearch,     setCandSearch]     = useState("");
+  // Bulk Select by List — paste a batch of emails/UIDs (from a sheet, a
+  // program roster, wherever) to check them all in one go instead of
+  // clicking through dozens of individual rows, which gets impractical past
+  // a handful of candidates when there are 1000+ in the table.
+  const [bulkSelectOpen,   setBulkSelectOpen]   = useState(false);
+  const [bulkSelectText,   setBulkSelectText]   = useState("");
+  const [bulkSelectResult, setBulkSelectResult] = useState(null); // { matched: Candidate[], unmatched: string[] }
   // Preview-before-send dialog — Send Invites opens this instead of sending
   // immediately, so nothing goes out until the admin has actually looked at
   // who/what they're about to send and confirmed it.
@@ -214,6 +221,29 @@ export default function CandidateSchedulingTab({
   const toggleAllCands = () => {
     if (selCandidates.size === filteredCandidates.length) setSelCandidates(new Set());
     else setSelCandidates(new Set(filteredCandidates.map(c => c.id)));
+  };
+
+  // Matches against the FULL candidate list, not just whatever's currently
+  // filtered/visible in the table — so pasting a roster works regardless of
+  // what search/program filter happens to be set, and a match is added to
+  // the existing selection (not a replace), so this can be run more than
+  // once (e.g. two separate lists) without losing earlier picks.
+  const handleBulkSelect = () => {
+    const tokens = bulkSelectText.split(/[\n,]+/).map(t => t.trim()).filter(Boolean);
+    if (!tokens.length) return;
+    const byEmail = new Map(candidates.filter(c => c.email).map(c => [c.email.toLowerCase(), c]));
+    const byUid   = new Map(candidates.filter(c => c.uid).map(c => [c.uid.toLowerCase(), c]));
+    const matched = [];
+    const matchedIds = new Set();
+    const unmatched = [];
+    for (const token of tokens) {
+      const key = token.toLowerCase();
+      const c = token.includes("@") ? byEmail.get(key) : (byUid.get(key) || byEmail.get(key));
+      if (c && !matchedIds.has(c.id)) { matched.push(c); matchedIds.add(c.id); }
+      else if (!c) unmatched.push(token);
+    }
+    if (matched.length) setSelCandidates(prev => new Set([...prev, ...matched.map(c => c.id)]));
+    setBulkSelectResult({ matched, unmatched });
   };
 
   // Runs the same checks handleSendInvites always has, but only to decide
@@ -832,6 +862,12 @@ export default function CandidateSchedulingTab({
                 {selCandidates.size === filteredCandidates.length ? "Deselect all" : "Select all"}
               </button>
             )}
+            <button
+              onClick={() => { setBulkSelectText(""); setBulkSelectResult(null); setBulkSelectOpen(true); }}
+              className="text-xs text-brand-600 hover:underline font-medium whitespace-nowrap"
+            >
+              Bulk Select by List…
+            </button>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -891,6 +927,54 @@ export default function CandidateSchedulingTab({
         </div>
         <Pagination page={candPagination.page} totalPages={candPagination.totalPages} total={candPagination.total} pageSize={candPagination.pageSize} onPageChange={candPagination.setPage} />
       </motion.div>
+
+      {/* Bulk Select by List — paste emails/Student UIDs (one per line, or
+         comma-separated) to check all of them at once, instead of clicking
+         through individual rows one at a time across 1000+ candidates. */}
+      <Modal open={bulkSelectOpen} onClose={() => setBulkSelectOpen(false)} title="Bulk Select by List">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            Paste a list of candidate emails or Student UIDs — one per line, or comma-separated.
+            Matches get added to your current selection (nothing already checked is lost).
+          </p>
+          <textarea
+            rows={8}
+            value={bulkSelectText}
+            onChange={e => { setBulkSelectText(e.target.value); setBulkSelectResult(null); }}
+            placeholder={"ashleygabriel006@gmail.com\nvnitish.6666@gmail.com\nSTU-2024-0417\n..."}
+            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+          />
+
+          {bulkSelectResult && (
+            <div className="space-y-2">
+              <p className="text-sm">
+                <span className="font-semibold text-emerald-700">{bulkSelectResult.matched.length} matched and selected.</span>
+                {bulkSelectResult.unmatched.length > 0 && (
+                  <span className="text-amber-700"> {bulkSelectResult.unmatched.length} not found.</span>
+                )}
+              </p>
+              {bulkSelectResult.unmatched.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 max-h-28 overflow-y-auto">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Not found — check for typos or a different email/UID on file:</p>
+                  <p className="text-xs text-amber-600 font-mono break-all">{bulkSelectResult.unmatched.join(", ")}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button
+              type="button"
+              onClick={() => setBulkSelectOpen(false)}
+              className="text-sm font-semibold text-gray-600 hover:text-gray-900 px-4 py-2.5 rounded-lg hover:bg-gray-50 transition-colors">
+              Done
+            </button>
+            <Button variant="primary" size="md" onClick={handleBulkSelect} disabled={!bulkSelectText.trim()}>
+              Match &amp; Select
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* Invites log */}
       <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}>
