@@ -12,9 +12,10 @@ import PreInterviewResourcesTab from "../../features/settings/PreInterviewResour
 import { parseInvitesCSV, downloadInviteSampleCSV, downloadInviteSampleExcel } from "../../utils/settingsCSV";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "../../firebase";
+import { callAppsScript } from "../../lib/appsScript";
 import {
   updateUser,
-  createInvite, deleteInvite,
+  createInvite, deleteInvite, updateInvite,
   getAllUsers, getInvites,
   getSkills, createSkill, updateSkill, deleteSkill,
   getRounds, createRound, updateRound, deleteRound,
@@ -31,6 +32,9 @@ import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 
 const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
+
+const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
+const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 
 const ROLE_OPTIONS = [
   { value: "interviewer",         label: "Interviewer",           desc: "Can conduct interviews and submit evaluations" },
@@ -64,7 +68,7 @@ const ROLE_GROUPS = [
 ];
 
 export default function SettingsPage() {
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
   const [searchParams] = useSearchParams();
   const sectionParam = searchParams.get("section");
   const [activeSection, setActiveSection] = useState(
@@ -84,6 +88,16 @@ export default function SettingsPage() {
   const [phoneModal,    setPhoneModal]    = useState(null); // user object | null
   const [phoneInput,    setPhoneInput]    = useState("");
   const [phoneSaving,   setPhoneSaving]   = useState(false);
+
+  // ── Change email modal ─────────────────────────────────────────────────────
+  // Changes the Auth account's real login email (not just the Firestore
+  // display field) via /api/admin-update-user-email — see that file for why
+  // this can't be a plain updateUser() client-side write like every other
+  // action on this page.
+  const [emailModal,    setEmailModal]    = useState(null); // user object | null
+  const [emailInput,    setEmailInput]    = useState("");
+  const [emailSaving,   setEmailSaving]   = useState(false);
+  const [emailError,    setEmailError]    = useState("");
 
   const [skills,       setSkills]       = useState([]);
   const [newSkillName, setNewSkillName] = useState("");
@@ -262,6 +276,77 @@ export default function SettingsPage() {
       setToast({ message: "Failed to update phone. Try again.", type: "error" });
     }
     setPhoneSaving(false);
+  };
+
+  const openEmailModal = (u) => { setEmailModal(u); setEmailInput(u.email || ""); setEmailError(""); };
+  const handleSetEmail = async (e) => {
+    e.preventDefault();
+    setEmailError("");
+    const trimmed = emailInput.trim();
+    if (!trimmed) { setEmailError("Email is required."); return; }
+    setEmailSaving(true);
+    try {
+      const idToken = await currentUser.getIdToken();
+      const resp = await fetch("/api/admin-update-user-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ targetUserId: emailModal.id, newEmail: trimmed }),
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result.success) {
+        setEmailError(result.message || "Failed to update email.");
+        setEmailSaving(false);
+        return;
+      }
+      await refetchUsers();
+      if (!result.unchanged) {
+        setToast({ message: `Email updated for ${emailModal.displayName || result.oldEmail}.` });
+        // Best-effort notice to both addresses — the old one so the account
+        // owner knows it changed even if they weren't the one who asked
+        // (account-security transparency), the new one so they know this is
+        // now their login. Their password is unchanged either way.
+        if (APPS_SCRIPT_URL) {
+          const body =
+            `Hi ${emailModal.displayName || "there"},\n\n` +
+            `The login email for your NxtWave Interview Coordinator account was changed by an admin:\n\n` +
+            `Old email: ${result.oldEmail}\nNew email: ${result.newEmail}\n\n` +
+            `Your password is unchanged — sign in with your new email and existing password.\n\n` +
+            `If you didn't expect this change, please contact an admin immediately.\n\n` +
+            `— NxtWave Team`;
+          callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+            action: "sendEmail", subject: "Your account email was changed",
+            body,
+            recipients: [result.oldEmail, result.newEmail]
+              .filter((v, i, arr) => v && arr.indexOf(v) === i)
+              .map(email => ({ email, name: emailModal.displayName || "" })),
+          }).catch(() => {});
+        }
+      }
+      setEmailModal(null);
+    } catch (err) {
+      setEmailError(err.message || "Failed to update email. Try again.");
+    }
+    setEmailSaving(false);
+  };
+
+  // Pending invites have no Firebase Auth account yet (nobody's signed up),
+  // so correcting a typo here is just a plain Firestore write — none of the
+  // Auth-sync concerns handleSetEmail above exists for.
+  const handleEditInviteEmail = async (invite) => {
+    const next = window.prompt(`New email for ${invite.name || invite.email}:`, invite.email || "");
+    if (!next) return;
+    const trimmed = next.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setToast({ message: "That doesn't look like a valid email address.", type: "error" });
+      return;
+    }
+    try {
+      await updateInvite(invite.id, { email: trimmed });
+      await refetchInvites();
+      setToast({ message: "Invite email updated." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
   };
 
   const handleInviteSubmit = async (e) => {
@@ -592,7 +677,8 @@ export default function SettingsPage() {
           copiedId={copiedId} copyLink={copyLink}
           approve={approve} reject={reject} changeRole={changeRole} revoke={revoke}
           sendReset={sendReset} openPhoneModal={openPhoneModal}
-          handleRemoveInvite={handleRemoveInvite}
+          openEmailModal={openEmailModal} canChangeEmail={userProfile?.role === "admin"}
+          handleRemoveInvite={handleRemoveInvite} handleEditInviteEmail={handleEditInviteEmail}
           onOpenInviteModal={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); setInviteError(""); setShowInviteModal(true); }}
           onOpenCSV={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}
         />
@@ -824,6 +910,41 @@ export default function SettingsPage() {
                 {phoneSaving ? "Saving…" : "Save"}
               </Button>
               <Button type="button" variant="secondary" onClick={() => setPhoneModal(null)}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* ── Change email modal ── */}
+      <Modal open={!!emailModal} onClose={() => !emailSaving && setEmailModal(null)} title="Change Email">
+        {emailModal && (
+          <form onSubmit={handleSetEmail} className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Change the login email for <strong>{emailModal.displayName || emailModal.email}</strong>.
+              This updates their actual sign-in account, not just how it's displayed — their password stays
+              the same, and both the old and new address get notified.
+            </p>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                New Email
+              </label>
+              <input
+                type="email"
+                autoFocus
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                placeholder="name@example.com"
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+              {emailError && <p className="text-xs text-red-500 mt-1.5">{emailError}</p>}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <Button type="submit" variant="primary" className="flex-1" disabled={emailSaving}>
+                {emailSaving ? "Saving…" : "Save"}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setEmailModal(null)} disabled={emailSaving}>
                 Cancel
               </Button>
             </div>

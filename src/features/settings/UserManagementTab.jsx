@@ -54,7 +54,8 @@ export default function UserManagementTab({
   currentUser,
   copiedId, copyLink,
   approve, reject, changeRole, revoke, sendReset, openPhoneModal,
-  handleRemoveInvite,
+  openEmailModal, canChangeEmail = false,
+  handleRemoveInvite, handleEditInviteEmail,
   onOpenInviteModal, onOpenCSV,
 }) {
   return (
@@ -178,6 +179,7 @@ export default function UserManagementTab({
                         <KebabMenu actions={[
                           { label: "Send reset email", onClick: () => sendReset(u) },
                           { label: u.phone ? "Update phone" : "Set phone", onClick: () => openPhoneModal(u) },
+                          { label: "Change Email", onClick: () => openEmailModal(u), show: canChangeEmail, highlight: true },
                           { label: "Revoke access", onClick: () => revoke(u), danger: true, disabled: saving[u.id], show: u.id !== currentUser?.uid },
                         ]} />
                       </td>
@@ -261,6 +263,12 @@ export default function UserManagementTab({
                                 {copiedId === inv.id ? <Check className="w-3.5 h-3.5 flex-shrink-0" /> : <Copy className="w-3.5 h-3.5 flex-shrink-0" />}
                                 {copiedId === inv.id ? "Copied!" : "Copy link"}
                               </button>
+                              {handleEditInviteEmail && (
+                                <button onClick={() => handleEditInviteEmail(inv)}
+                                  className="text-xs text-gray-500 hover:text-gray-800 font-medium transition-colors">
+                                  Edit Email
+                                </button>
+                              )}
                               <button onClick={() => handleRemoveInvite(inv)}
                                 className="text-xs text-red-400 hover:text-red-600 font-medium transition-colors">
                                 Remove
