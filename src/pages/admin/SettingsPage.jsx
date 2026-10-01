@@ -69,6 +69,11 @@ const ROLE_GROUPS = [
 
 export default function SettingsPage() {
   const { currentUser, userProfile } = useAuth();
+  // Only the strict "admin" role can change another user's login email —
+  // the broader ADMIN_ROLES set that has access to this page also includes
+  // content_team/interviewer_content, who shouldn't be able to touch Auth
+  // accounts.
+  const canChangeEmail = userProfile?.role === "admin";
   const [searchParams] = useSearchParams();
   const sectionParam = searchParams.get("section");
   const [activeSection, setActiveSection] = useState(
@@ -84,20 +89,16 @@ export default function SettingsPage() {
 
   const [pendingRoles, setPendingRoles] = useState({});
 
-  // ── Set phone modal ────────────────────────────────────────────────────────
-  const [phoneModal,    setPhoneModal]    = useState(null); // user object | null
-  const [phoneInput,    setPhoneInput]    = useState("");
-  const [phoneSaving,   setPhoneSaving]   = useState(false);
-
-  // ── Change email modal ─────────────────────────────────────────────────────
-  // Changes the Auth account's real login email (not just the Firestore
-  // display field) via /api/admin-update-user-email — see that file for why
-  // this can't be a plain updateUser() client-side write like every other
-  // action on this page.
-  const [emailModal,    setEmailModal]    = useState(null); // user object | null
-  const [emailInput,    setEmailInput]    = useState("");
-  const [emailSaving,   setEmailSaving]   = useState(false);
-  const [emailError,    setEmailError]    = useState("");
+  // ── Edit Profile modal ─────────────────────────────────────────────────────
+  // One combined form (name/email/phone/role) instead of separate Set
+  // Phone / Change Email kebab entries — email changes still route through
+  // /api/admin-update-user-email (see that file for why: it updates the
+  // actual Firebase Auth login account, not just the Firestore display
+  // field, which a plain updateUser() can't do for another user).
+  const [profileModal,  setProfileModal]  = useState(null); // user object | null
+  const [profileForm,   setProfileForm]   = useState({ displayName: "", email: "", phone: "", role: "interviewer" });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError,  setProfileError]  = useState("");
 
   const [skills,       setSkills]       = useState([]);
   const [newSkillName, setNewSkillName] = useState("");
@@ -263,70 +264,86 @@ export default function SettingsPage() {
     }
   };
 
-  const openPhoneModal = (u) => { setPhoneModal(u); setPhoneInput(u.phone || ""); };
-  const handleSetPhone = async (e) => {
-    e.preventDefault();
-    setPhoneSaving(true);
-    try {
-      await updateUser(phoneModal.id, { phone: phoneInput.trim() || null });
-      await refetchUsers();
-      setToast({ message: `Phone updated for ${phoneModal.displayName || phoneModal.email}.` });
-      setPhoneModal(null);
-    } catch {
-      setToast({ message: "Failed to update phone. Try again.", type: "error" });
-    }
-    setPhoneSaving(false);
+  const openEditProfile = (u) => {
+    setProfileModal(u);
+    setProfileForm({
+      displayName: u.displayName || "",
+      email:       u.email || "",
+      phone:       u.phone || "",
+      role:        u.role || "interviewer",
+    });
+    setProfileError("");
   };
 
-  const openEmailModal = (u) => { setEmailModal(u); setEmailInput(u.email || ""); setEmailError(""); };
-  const handleSetEmail = async (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
-    setEmailError("");
-    const trimmed = emailInput.trim();
-    if (!trimmed) { setEmailError("Email is required."); return; }
-    setEmailSaving(true);
+    setProfileError("");
+    const name  = profileForm.displayName.trim();
+    const email = profileForm.email.trim();
+    if (!name)  { setProfileError("Name is required.");  return; }
+    if (!email) { setProfileError("Email is required."); return; }
+    setProfileSaving(true);
     try {
-      const idToken = await currentUser.getIdToken();
-      const resp = await fetch("/api/admin-update-user-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ targetUserId: emailModal.id, newEmail: trimmed }),
-      });
-      const result = await resp.json();
-      if (!resp.ok || !result.success) {
-        setEmailError(result.message || "Failed to update email.");
-        setEmailSaving(false);
-        return;
-      }
-      await refetchUsers();
-      if (!result.unchanged) {
-        setToast({ message: `Email updated for ${emailModal.displayName || result.oldEmail}.` });
-        // Best-effort notice to both addresses — the old one so the account
-        // owner knows it changed even if they weren't the one who asked
-        // (account-security transparency), the new one so they know this is
-        // now their login. Their password is unchanged either way.
-        if (APPS_SCRIPT_URL) {
-          const body =
-            `Hi ${emailModal.displayName || "there"},\n\n` +
-            `The login email for your NxtWave Interview Coordinator account was changed by an admin:\n\n` +
-            `Old email: ${result.oldEmail}\nNew email: ${result.newEmail}\n\n` +
-            `Your password is unchanged — sign in with your new email and existing password.\n\n` +
-            `If you didn't expect this change, please contact an admin immediately.\n\n` +
-            `— NxtWave Team`;
-          callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-            action: "sendEmail", subject: "Your account email was changed",
-            body,
-            recipients: [result.oldEmail, result.newEmail]
-              .filter((v, i, arr) => v && arr.indexOf(v) === i)
-              .map(email => ({ email, name: emailModal.displayName || "" })),
-          }).catch(() => {});
+      // Email changes route through the Auth-aware endpoint — see the
+      // profileModal state comment above for why this can't just be
+      // folded into the plain updateUser() call below like every other
+      // field here.
+      let emailResult = null;
+      if (email.toLowerCase() !== (profileModal.email || "").toLowerCase()) {
+        const idToken = await currentUser.getIdToken();
+        const resp = await fetch("/api/admin-update-user-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ targetUserId: profileModal.id, newEmail: email }),
+        });
+        emailResult = await resp.json();
+        if (!resp.ok || !emailResult.success) {
+          setProfileError(emailResult.message || "Failed to update email.");
+          setProfileSaving(false);
+          return;
         }
       }
-      setEmailModal(null);
+
+      const otherChanges = {};
+      if (name !== (profileModal.displayName || "")) otherChanges.displayName = name;
+      const phone = profileForm.phone.trim() || null;
+      if (phone !== (profileModal.phone || null)) otherChanges.phone = phone;
+      // A user can't demote/change their own role from here — same rule
+      // the table's own inline role dropdown already enforces.
+      if (profileForm.role !== profileModal.role && profileModal.id !== currentUser?.uid) {
+        otherChanges.role = profileForm.role;
+      }
+      if (Object.keys(otherChanges).length) await updateUser(profileModal.id, otherChanges);
+
+      await refetchUsers();
+      setToast({ message: `Profile updated for ${name || profileModal.email}.` });
+
+      // Best-effort notice to both addresses when email actually changed —
+      // the old one so the account owner knows it changed even if they
+      // weren't the one who asked (account-security transparency), the new
+      // one so they know this is now their login. Password is unchanged.
+      if (emailResult && !emailResult.unchanged && APPS_SCRIPT_URL) {
+        const body =
+          `Hi ${name || "there"},\n\n` +
+          `The login email for your NxtWave Interview Coordinator account was changed by an admin:\n\n` +
+          `Old email: ${emailResult.oldEmail}\nNew email: ${emailResult.newEmail}\n\n` +
+          `Your password is unchanged — sign in with your new email and existing password.\n\n` +
+          `If you didn't expect this change, please contact an admin immediately.\n\n` +
+          `— NxtWave Team`;
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action: "sendEmail", subject: "Your account email was changed",
+          body,
+          recipients: [emailResult.oldEmail, emailResult.newEmail]
+            .filter((v, i, arr) => v && arr.indexOf(v) === i)
+            .map(em => ({ email: em, name })),
+        }).catch(() => {});
+      }
+
+      setProfileModal(null);
     } catch (err) {
-      setEmailError(err.message || "Failed to update email. Try again.");
+      setProfileError(err.message || "Failed to update profile. Try again.");
     }
-    setEmailSaving(false);
+    setProfileSaving(false);
   };
 
   // Pending invites have no Firebase Auth account yet (nobody's signed up),
@@ -676,8 +693,7 @@ export default function SettingsPage() {
           currentUser={currentUser}
           copiedId={copiedId} copyLink={copyLink}
           approve={approve} reject={reject} changeRole={changeRole} revoke={revoke}
-          sendReset={sendReset} openPhoneModal={openPhoneModal}
-          openEmailModal={openEmailModal} canChangeEmail={userProfile?.role === "admin"}
+          openEditProfile={openEditProfile}
           handleRemoveInvite={handleRemoveInvite} handleEditInviteEmail={handleEditInviteEmail}
           onOpenInviteModal={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); setInviteError(""); setShowInviteModal(true); }}
           onOpenCSV={() => { setCsvPreview([]); setCsvErrors([]); setShowCSV(true); }}
@@ -881,72 +897,75 @@ export default function SettingsPage() {
         </div>
       </Modal>
 
-      {/* ── Set phone modal ── */}
-      <Modal open={!!phoneModal} onClose={() => setPhoneModal(null)} title="Set Phone Number">
-        {phoneModal && (
-          <form onSubmit={handleSetPhone} className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Set a phone number for <strong>{phoneModal.displayName || phoneModal.email}</strong>.
-              Once saved, they can use OTP-based password recovery from the login page.
-            </p>
+      {/* ── Edit Profile modal ── */}
+      <Modal open={!!profileModal} onClose={() => !profileSaving && setProfileModal(null)} title="Edit Profile">
+        {profileModal && (
+          <form onSubmit={handleSaveProfile} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                Phone Number
-              </label>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Name</label>
+              <input
+                type="text" autoFocus
+                value={profileForm.displayName}
+                onChange={e => setProfileForm(f => ({ ...f, displayName: e.target.value }))}
+                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Email</label>
+              {canChangeEmail ? (
+                <input
+                  type="email"
+                  value={profileForm.email}
+                  onChange={e => setProfileForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              ) : (
+                <p className="text-sm text-gray-500 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">{profileForm.email}</p>
+              )}
+              <p className="text-xs text-gray-400 mt-1.5">
+                {canChangeEmail
+                  ? "This updates their actual sign-in account, not just how it's displayed — their password stays the same, and both the old and new address get notified."
+                  : "Only an admin can change the login email."}
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Phone</label>
               <input
                 type="tel"
-                autoFocus
-                value={phoneInput}
-                onChange={e => setPhoneInput(e.target.value)}
+                value={profileForm.phone}
+                onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))}
                 placeholder="+91 98765 43210"
                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
-              <p className="text-xs text-gray-400 mt-1.5">
-                Include country code, e.g. +91 for India. Leave blank to remove the phone number.
-              </p>
+              <p className="text-xs text-gray-400 mt-1.5">Include country code, e.g. +91 for India. Leave blank to remove.</p>
             </div>
-            <div className="flex gap-3 pt-1">
-              <Button type="submit" variant="primary" className="flex-1" disabled={phoneSaving}>
-                {phoneSaving ? "Saving…" : "Save"}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setPhoneModal(null)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )}
-      </Modal>
+            {profileModal.id !== currentUser?.uid && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Role</label>
+                <select
+                  value={profileForm.role}
+                  onChange={e => setProfileForm(f => ({ ...f, role: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white cursor-pointer">
+                  {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+            )}
 
-      {/* ── Change email modal ── */}
-      <Modal open={!!emailModal} onClose={() => !emailSaving && setEmailModal(null)} title="Change Email">
-        {emailModal && (
-          <form onSubmit={handleSetEmail} className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Change the login email for <strong>{emailModal.displayName || emailModal.email}</strong>.
-              This updates their actual sign-in account, not just how it's displayed — their password stays
-              the same, and both the old and new address get notified.
-            </p>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
-                New Email
-              </label>
-              <input
-                type="email"
-                autoFocus
-                value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
-                placeholder="name@example.com"
-                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
-              {emailError && <p className="text-xs text-red-500 mt-1.5">{emailError}</p>}
-            </div>
-            <div className="flex gap-3 pt-1">
-              <Button type="submit" variant="primary" className="flex-1" disabled={emailSaving}>
-                {emailSaving ? "Saving…" : "Save"}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setEmailModal(null)} disabled={emailSaving}>
-                Cancel
-              </Button>
+            {profileError && <p className="text-xs text-red-500">{profileError}</p>}
+
+            <div className="flex items-center justify-between pt-1">
+              <button type="button" onClick={() => sendReset(profileModal)}
+                className="text-xs font-semibold text-brand-600 hover:underline">
+                Send password reset email
+              </button>
+              <div className="flex gap-3">
+                <Button type="button" variant="secondary" onClick={() => setProfileModal(null)} disabled={profileSaving}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={profileSaving}>
+                  {profileSaving ? "Saving…" : "Save"}
+                </Button>
+              </div>
             </div>
           </form>
         )}

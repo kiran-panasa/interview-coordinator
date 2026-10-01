@@ -53,8 +53,8 @@ export default function UserManagementTab({
   saving,
   currentUser,
   copiedId, copyLink,
-  approve, reject, changeRole, revoke, sendReset, openPhoneModal,
-  openEmailModal, canChangeEmail = false,
+  approve, reject, changeRole, revoke,
+  openEditProfile,
   handleRemoveInvite, handleEditInviteEmail,
   onOpenInviteModal, onOpenCSV,
 }) {
@@ -177,9 +177,7 @@ export default function UserManagementTab({
                       </td>
                       <td className="px-4 py-3">
                         <KebabMenu actions={[
-                          { label: "Send reset email", onClick: () => sendReset(u) },
-                          { label: u.phone ? "Update phone" : "Set phone", onClick: () => openPhoneModal(u) },
-                          { label: "Change Email", onClick: () => openEmailModal(u), show: canChangeEmail, highlight: true },
+                          { label: "Edit Profile", onClick: () => openEditProfile(u) },
                           { label: "Revoke access", onClick: () => revoke(u), danger: true, disabled: saving[u.id], show: u.id !== currentUser?.uid },
                         ]} />
                       </td>
