@@ -27,6 +27,26 @@ function formatDisplay(v) {
   return `${String(h12).padStart(2, "0")}:${String(p.min).padStart(2, "0")} ${period}`;
 }
 
+// Flexible free-typed input — "7:30 PM", "7:30PM", "730 PM", "7 PM",
+// "19:30" (bare 24-hour, when no AM/PM is given at all). Returns a 24-hour
+// { h, min } or null if it doesn't parse as a time.
+function parseTypedTime(text) {
+  if (!text) return null;
+  const t = text.trim().toUpperCase();
+  const m = t.match(/^(\d{1,2}):?(\d{2})?\s*(AM|PM)?$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = m[2] != null ? Number(m[2]) : 0;
+  const period = m[3];
+  if (min > 59) return null;
+  if (period) {
+    if (h < 1 || h > 12) return null;
+    return { h: from12Hour(h, period), min };
+  }
+  if (h > 23) return null;
+  return { h, min };
+}
+
 const HOURS_12   = Array.from({ length: 12 }, (_, i) => i + 1); // 1..12
 const MINUTES_60 = Array.from({ length: 60 }, (_, i) => i);      // 0..59
 
@@ -47,8 +67,11 @@ export default function TimePicker({
 }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState(null);
+  const [typedText, setTypedText] = useState("");
+  const [typedInvalid, setTypedInvalid] = useState(false);
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
+  const textInputRef = useRef(null);
   const hourListRef = useRef(null);
   const minuteListRef = useRef(null);
 
@@ -60,7 +83,21 @@ export default function TimePicker({
     if (disabled) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setCoords({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    setTypedText(formatDisplay(value));
+    setTypedInvalid(false);
     setOpen(true);
+  };
+
+  // Typing is a third way in, alongside the hour/minute lists and the AM/PM
+  // toggle — scrolling a 60-item minute list to find one exact value is
+  // slower than just typing it. Committed on Enter or on blur; an
+  // unparseable string stays in the box with a red border instead of being
+  // silently discarded, so a mid-edit value never gets lost.
+  const commitTyped = () => {
+    const t = parseTypedTime(typedText);
+    if (!t) { setTypedInvalid(!!typedText.trim()); return; }
+    setTypedInvalid(false);
+    emit(t.h, t.min);
   };
 
   useEffect(() => {
@@ -89,6 +126,15 @@ export default function TimePicker({
       minuteListRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: "center" });
     });
   }, [open]);
+
+  // Keep the typed text in sync with clicks on the hour/minute lists or the
+  // AM/PM toggle, so switching between typing and clicking never shows a
+  // stale value in the box.
+  useEffect(() => {
+    if (!open) return;
+    setTypedText(formatDisplay(value));
+    setTypedInvalid(false);
+  }, [open, value]);
 
   const emit = (h24, min) => {
     onChange({ target: { value: `${String(h24).padStart(2, "0")}:${String(min).padStart(2, "0")}` } });
@@ -128,8 +174,26 @@ export default function TimePicker({
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
             style={{ position: "fixed", top: coords.top, left: coords.left, zIndex: 9999 }}
-            className="bg-white rounded-xl border border-gray-200 shadow-popover p-2 w-40"
+            className="bg-white rounded-xl border border-gray-200 shadow-popover p-2 w-44"
           >
+            <input
+              ref={textInputRef}
+              type="text"
+              autoFocus
+              value={typedText}
+              onChange={e => { setTypedText(e.target.value); setTypedInvalid(false); }}
+              onBlur={commitTyped}
+              onKeyDown={e => {
+                if (e.key === "Enter") { e.preventDefault(); commitTyped(); }
+                if (e.key === "Escape") setOpen(false);
+              }}
+              placeholder="hh:mm AM/PM"
+              className={`w-full text-center text-sm font-medium border rounded-lg px-2 py-1.5 mb-2 focus:outline-none focus:ring-2 transition-colors ${
+                typedInvalid
+                  ? "border-red-300 focus:ring-red-400 text-red-600"
+                  : "border-gray-200 focus:ring-brand-400 text-gray-800"
+              }`}
+            />
             <div className="flex gap-1">
               <div ref={hourListRef} className="flex-1 max-h-48 overflow-y-auto">
                 {HOURS_12.map(h => (
