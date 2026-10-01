@@ -3,6 +3,7 @@ import { CalendarDays, AlertTriangle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
+import TimePicker from "../../components/TimePicker";
 import SearchableSelect from "../../components/SearchableSelect";
 
 const OTHER_VALUE = "__other__";
@@ -80,7 +81,7 @@ export default function ScheduleInterviewModal({
           </div>
           <div>
             <label className={labelCls}>Start Time *</label>
-            <input type="time" value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls} />
+            <TimePicker value={form.scheduledTime} onChange={e => setField("scheduledTime", e.target.value)} className={inputCls} />
           </div>
           <div>
             <label className={labelCls}>Duration *</label>
