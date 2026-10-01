@@ -72,8 +72,6 @@ export default function TimePicker({
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
   const textInputRef = useRef(null);
-  const hourListRef = useRef(null);
-  const minuteListRef = useRef(null);
 
   const parsed = parseHHmm(value);
   const { h12: selH12, period: selPeriod } = parsed ? to12Hour(parsed.h) : { h12: null, period: "AM" };
@@ -118,18 +116,9 @@ export default function TimePicker({
     };
   }, [open]);
 
-  // Scroll the currently-selected hour/minute into view when the popover opens.
-  useEffect(() => {
-    if (!open) return;
-    requestAnimationFrame(() => {
-      hourListRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: "center" });
-      minuteListRef.current?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: "center" });
-    });
-  }, [open]);
-
-  // Keep the typed text in sync with clicks on the hour/minute lists or the
-  // AM/PM toggle, so switching between typing and clicking never shows a
-  // stale value in the box.
+  // Keep the typed text in sync with picking from the Hour/Minute dropdowns
+  // or the AM/PM toggle, so switching between typing and picking never
+  // shows a stale value in the box.
   useEffect(() => {
     if (!open) return;
     setTypedText(formatDisplay(value));
@@ -194,29 +183,21 @@ export default function TimePicker({
                   : "border-gray-200 focus:ring-brand-400 text-gray-800"
               }`}
             />
-            <div className="flex gap-1">
-              <div ref={hourListRef} className="flex-1 max-h-48 overflow-y-auto">
-                {HOURS_12.map(h => (
-                  <button key={h} type="button" data-selected={h === selH12}
-                    onClick={() => pickHour(h)}
-                    className={`w-full text-center text-sm py-1.5 rounded-lg transition-colors ${
-                      h === selH12 ? "bg-brand-600 text-white font-semibold" : "text-gray-700 hover:bg-gray-50"
-                    }`}>
-                    {String(h).padStart(2, "0")}
-                  </button>
-                ))}
-              </div>
-              <div ref={minuteListRef} className="flex-1 max-h-48 overflow-y-auto">
-                {MINUTES_60.map(m => (
-                  <button key={m} type="button" data-selected={m === selMin}
-                    onClick={() => pickMin(m)}
-                    className={`w-full text-center text-sm py-1.5 rounded-lg transition-colors ${
-                      m === selMin ? "bg-brand-600 text-white font-semibold" : "text-gray-700 hover:bg-gray-50"
-                    }`}>
-                    {String(m).padStart(2, "0")}
-                  </button>
-                ))}
-              </div>
+            <div className="flex gap-1.5">
+              <select
+                value={selH12 ?? ""} onChange={e => pickHour(Number(e.target.value))}
+                className="flex-1 text-center text-sm border border-gray-200 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white text-gray-800 cursor-pointer"
+              >
+                <option value="" disabled>HH</option>
+                {HOURS_12.map(h => <option key={h} value={h}>{String(h).padStart(2, "0")}</option>)}
+              </select>
+              <select
+                value={selMin ?? ""} onChange={e => pickMin(Number(e.target.value))}
+                className="flex-1 text-center text-sm border border-gray-200 rounded-lg py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-400 bg-white text-gray-800 cursor-pointer"
+              >
+                <option value="" disabled>MM</option>
+                {MINUTES_60.map(m => <option key={m} value={m}>{String(m).padStart(2, "0")}</option>)}
+              </select>
             </div>
             <div className="flex gap-1 mt-2 pt-2 border-t border-gray-100">
               {["AM", "PM"].map(p => (
