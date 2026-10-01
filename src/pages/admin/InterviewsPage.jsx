@@ -822,52 +822,6 @@ export default function InterviewsPage() {
     setRecordingLoading(s => ({ ...s, [iv.id]: false }));
   };
 
-  // No eventId at all (not just a missing recording) means there's nothing
-  // for resolveRecordingUrl_/resolveTranscriptUrl_ to ever search against —
-  // the interview was conducted but its Calendar event/Meet link was never
-  // captured. The recording still exists on Google's side (Meet
-  // auto-records to the organizer's Drive) — this just lets an admin paste
-  // in the link once they've found it there by date/candidate, same
-  // pattern as handleManualMeetLink above.
-  const handleManualRecordingLink = async (iv) => {
-    const link = window.prompt(
-      "Paste the recording link for this interview (e.g. from the organizer's Google Drive → Meet Recordings folder):",
-      iv.meetingRecordingUrl || ""
-    );
-    if (!link) return;
-    const trimmed = link.trim();
-    if (!/^https?:\/\//i.test(trimmed)) {
-      setToast({ message: "That doesn't look like a valid link (must start with http:// or https://).", type: "error" });
-      return;
-    }
-    try {
-      await updateInterview(iv.id, { meetingRecordingUrl: trimmed });
-      setToast({ message: "Recording link saved." });
-    } catch (e) {
-      setToast({ message: e.message, type: "error" });
-    }
-  };
-
-  // Same gap, same fix, for the transcript.
-  const handleManualTranscriptLink = async (iv) => {
-    const link = window.prompt(
-      "Paste the transcript link for this interview (e.g. the \"Notes by Gemini\" Google Doc):",
-      iv.transcriptUrl || ""
-    );
-    if (!link) return;
-    const trimmed = link.trim();
-    if (!/^https?:\/\//i.test(trimmed)) {
-      setToast({ message: "That doesn't look like a valid link (must start with http:// or https://).", type: "error" });
-      return;
-    }
-    try {
-      await updateInterview(iv.id, { transcriptUrl: trimmed });
-      setToast({ message: "Transcript link saved." });
-    } catch (e) {
-      setToast({ message: e.message, type: "error" });
-    }
-  };
-
   // ── AI Report ────────────────────────────────────────────────────────────────
 
   // Deliberately does NOT run the recording/transcript discovery chain
@@ -1128,9 +1082,17 @@ export default function InterviewsPage() {
         meetLink: trimmed,
         inviteSentAt: new Date().toISOString(),
       });
-      await sendInviteConfirmationEmails(iv, trimmed);
-      setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
-      setToast({ message: "Meet link saved and confirmation emails sent." });
+      // "Your interview is confirmed, here's the join link" only makes
+      // sense before the interview happens — backfilling a link onto an
+      // already-completed interview (so its transcript/recording can be
+      // looked up) shouldn't trigger that email.
+      if (!isDoneStatus(iv.status)) {
+        await sendInviteConfirmationEmails(iv, trimmed);
+        setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
+        setToast({ message: "Meet link saved and confirmation emails sent." });
+      } else {
+        setToast({ message: "Meet link saved." });
+      }
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -1852,9 +1814,20 @@ export default function InterviewsPage() {
                       highlight: true,
                     },
                     {
+                      // Also offered after completion now — an interview can
+                      // reach "Completed" with feedback submitted but no
+                      // meetLink ever recorded (the event was never created,
+                      // or its id never got saved), and with no meetLink/
+                      // eventId at all, the recording/transcript lookup
+                      // later has nothing to search against, ever. Adding
+                      // the Meet link here at least lets the transcript
+                      // resolve via its Meet-API fallback (keyed off the
+                      // link itself, not the Calendar event) — the
+                      // recording lookup still needs the real eventId,
+                      // which isn't recoverable from the link alone.
                       label: "Add Meet Link Manually",
                       onClick: () => handleManualMeetLink(iv),
-                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
+                      show: iv.status !== "cancelled" && iv.status !== "no_show"
                         && iv.status !== "pending_acceptance" && iv.status !== "declined"
                         && !iv.meetLink,
                     },
@@ -1905,24 +1878,11 @@ export default function InterviewsPage() {
                       copyResolve: (!iv.meetingRecordingUrl && (iv.eventId || iv.meetLink)) ? () => resolveRecordingUrl_(iv) : undefined,
                     },
                     {
-                      // Only offered once there's truly nothing to auto-
-                      // resolve from (no eventId/meetLink at all) — otherwise
-                      // the copy-icon "resolve" above already covers it.
-                      label: iv.meetingRecordingUrl ? "Edit Recording Link" : "Add Recording Link Manually",
-                      onClick: () => handleManualRecordingLink(iv),
-                      show: isDoneStatus(iv.status) && !iv.eventId && !iv.meetLink,
-                    },
-                    {
                       label: transcriptLoading[iv.id] ? "Opening Transcript…" : "Transcript",
                       onClick: () => { if (!transcriptLoading[iv.id]) handleViewTranscript(iv); },
                       show: isDoneStatus(iv.status),
                       copyValue: iv.transcriptUrl || undefined,
                       copyResolve: (!iv.transcriptUrl && (iv.eventId || iv.meetLink)) ? () => resolveTranscriptUrl_(iv) : undefined,
-                    },
-                    {
-                      label: iv.transcriptUrl ? "Edit Transcript Link" : "Add Transcript Link Manually",
-                      onClick: () => handleManualTranscriptLink(iv),
-                      show: isDoneStatus(iv.status) && !iv.eventId && !iv.meetLink,
                     },
                     {
                       label: "AI Report",
