@@ -296,7 +296,16 @@ export default function SettingsPage() {
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
           body: JSON.stringify({ targetUserId: profileModal.id, newEmail: email }),
         });
-        emailResult = await resp.json();
+        const raw = await resp.text();
+        try {
+          emailResult = JSON.parse(raw);
+        } catch {
+          // Not JSON — the endpoint crashed before it could answer properly.
+          // Say so plainly instead of surfacing a JSON parse error.
+          setProfileError(`Email update failed on the server (HTTP ${resp.status}). Check the Vercel function logs for /api/admin-update-user-email.`);
+          setProfileSaving(false);
+          return;
+        }
         if (!resp.ok || !emailResult.success) {
           setProfileError(emailResult.message || "Failed to update email.");
           setProfileSaving(false);

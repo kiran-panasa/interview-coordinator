@@ -27,24 +27,27 @@ export default async function handler(req, res) {
     return res.status(405).json({ success: false, error: "method_not_allowed" });
   }
 
-  // getDb() must run before getAuth() below — see push-academy-feedback.js
-  // for why (same lazy Admin-app-init ordering requirement).
-  const db = getDb();
-
-  const header = req.headers.authorization || "";
-  const idToken = header.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!idToken) {
-    return res.status(401).json({ success: false, error: "unauthorized" });
-  }
-
-  let callerUid;
+  // Everything below runs inside this try, including Admin SDK init. An init
+  // failure outside a try used to make Vercel return its own plain-text error
+  // page, which the browser then failed to parse as JSON — hiding the real cause.
   try {
-    ({ uid: callerUid } = await getAuth().verifyIdToken(idToken));
-  } catch {
-    return res.status(401).json({ success: false, error: "unauthorized" });
-  }
+    // getDb() must run before getAuth() — see push-academy-feedback.js for why
+    // (same lazy Admin-app-init ordering requirement).
+    const db = getDb();
 
-  try {
+    const header = req.headers.authorization || "";
+    const idToken = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!idToken) {
+      return res.status(401).json({ success: false, error: "unauthorized" });
+    }
+
+    let callerUid;
+    try {
+      ({ uid: callerUid } = await getAuth().verifyIdToken(idToken));
+    } catch {
+      return res.status(401).json({ success: false, error: "unauthorized" });
+    }
+
     const callerSnap = await db.collection("users").doc(callerUid).get();
     const callerRole = callerSnap.exists ? callerSnap.data().role : null;
     if (callerRole !== "admin") {
