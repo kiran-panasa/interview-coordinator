@@ -107,6 +107,7 @@ export default async function handler(req, res) {
         templateName: iv.templateName || "",
         round: iv.round || "",
         status: iv.status || "",
+        partialCompletionReason: iv.status === "partially_completed" ? (iv.partialCompletionReason || null) : null,
         outcome: feedback.overallRecommendation || "",
         finalVerdict: feedback.finalVerdict ?? null,
         remarks: feedback.comments || "",

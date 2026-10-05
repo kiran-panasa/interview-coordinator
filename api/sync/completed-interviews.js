@@ -41,6 +41,7 @@ function mapInterview(doc, templateById, integrityDomainFields) {
   return {
     interviewId: doc.id,
     status: d.status,
+    partialCompletionReason: d.status === "partially_completed" ? (d.partialCompletionReason || null) : null,
     round: d.round || null,
     candidate: {
       id: d.candidateId || null,
@@ -154,7 +155,7 @@ export default async function handler(req, res) {
       });
     }
 
-    let base = db.collection("interviews").where("status", "==", "completed");
+    let base = db.collection("interviews").where("status", "in", ["completed", "partially_completed"]);
     if (lastSyncIso) base = base.where("updatedAt", ">", lastSyncIso);
     else if (fromDate) base = base.where("scheduledDate", ">=", fromDate);
     base = base.orderBy(orderField, "asc").orderBy("__name__", "asc");

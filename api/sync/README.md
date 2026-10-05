@@ -29,7 +29,7 @@ Missing or wrong token → `401`.
 | `pageSize`     | No       | 1–200, default 50.                                                          |
 | `cursor`       | No       | Opaque token from a previous response's `pagination.nextCursor`, to fetch the next page. |
 
-Only interviews with `status == "completed"` are ever returned — this isn't a filter you can turn off.
+Only interviews with `status` of `"completed"` or `"partially_completed"` are ever returned — this isn't a filter you can turn off. A partially completed interview carries `partialCompletionReason` (free text, e.g. the candidate dropped off mid-interview, or a sheet import that had no score for some sections); it's `null` for completed ones. Sections a partially completed interview didn't cover are scored at the lowest option, so they're included in `finalVerdict` like any other score.
 
 ## Response — `200`
 
@@ -40,6 +40,7 @@ Only interviews with `status == "completed"` are ever returned — this isn't a 
     {
       "interviewId": "abc123",
       "status": "completed",
+      "partialCompletionReason": null,
       "round": "Round 1",
       "candidate": { "id": "...", "name": "Jane Doe", "email": "jane@example.com" },
       "interviewer": { "id": "...", "name": "Rahul Sharma", "email": "rahul@nxtwave.tech" },

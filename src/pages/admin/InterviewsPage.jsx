@@ -18,7 +18,7 @@ import {
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, markSlotFree,
-  getTemplate, importCompletedInterview, importScheduledInterview,
+  getTemplate, importCompletedInterview, importScheduledInterview, markInterviewPartiallyCompleted,
   createNotification, subscribeToBlockedDates, getInterviewIntegrity,
   logInterviewHistory, getInterviewHistory,
   getScheduleInviteByInterviewId, updateScheduleInvite,
@@ -1151,11 +1151,13 @@ export default function InterviewsPage() {
         // for both past completed interviews and upcoming scheduled ones.
         if (existingInterview) {
           if (verdict || hasDomainFeedback) {
-            await markInterviewCompleted(existingInterview.id, {
-              ...linkFields,
-              feedback: buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes),
-              candidateJoined: true,
-            });
+            const { feedback, partialCompletionReason } = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
+            const fields = { ...linkFields, feedback, candidateJoined: true };
+            if (partialCompletionReason) {
+              await markInterviewPartiallyCompleted(existingInterview.id, partialCompletionReason, fields);
+            } else {
+              await markInterviewCompleted(existingInterview.id, fields);
+            }
           } else if (Object.keys(linkFields).length > 0) {
             await updateInterview(existingInterview.id, linkFields);
           }
@@ -1181,8 +1183,8 @@ export default function InterviewsPage() {
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
         };
         if (verdict || hasDomainFeedback) {
-          const feedback = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
-          await importCompletedInterview({ ...base, feedback });
+          const { feedback, partialCompletionReason } = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
+          await importCompletedInterview({ ...base, feedback }, partialCompletionReason);
         } else {
           await importScheduledInterview(base);
         }

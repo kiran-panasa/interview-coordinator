@@ -758,12 +758,16 @@ export async function importScheduledInterview(
   return ref.id;
 }
 
+// A non-empty partialCompletionReason imports the row as partially completed
+// (see buildFeedbackFromCSV in services/import.service.js).
 export async function importCompletedInterview(
-  data: Omit<Interview, "id" | "status" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
+  data: Omit<Interview, "id" | "status" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">,
+  partialCompletionReason: string | null = null
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
     ...(await withProgramInfo(await withCandidateUid(data))),
-    status: "completed",
+    status: partialCompletionReason ? "partially_completed" : "completed",
+    ...(partialCompletionReason ? { partialCompletionReason } : {}),
     candidateJoined: true,
     attendanceMarkedAt: new Date().toISOString(),
     questionsAsked: [],
