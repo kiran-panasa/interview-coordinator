@@ -297,7 +297,7 @@ export async function exportFeedbackToExcel(interviews, templates, programs, can
       integrityRemarksText,
       ...sectionCells,
       fb?.overallRecommendation || "",
-      fb?.finalVerdict != null ? fb.finalVerdict : (fb?.scoreIncomplete ? "Incomplete" : ""),
+      fb?.finalVerdict != null ? fb.finalVerdict : "",
       comments,
       questionsAsked,
       iv.meetLink || "",

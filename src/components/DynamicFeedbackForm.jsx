@@ -523,28 +523,6 @@ function VerdictBanner({ value }) {
   );
 }
 
-function IncompleteVerdictBanner({ missingSections }) {
-  const missing = (missingSections || []).join(", ");
-  return (
-    <div className="bg-gray-100 border border-gray-200 rounded-2xl p-5 text-gray-700">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
-            <Award className="w-5 h-5 text-gray-400" />
-          </div>
-          <div>
-            <div className="text-sm font-semibold">Final Interview Verdict</div>
-            <div className="text-xs text-gray-500 mt-0.5">
-              {missing ? `Not calculated — no rating for: ${missing}` : "Not calculated — some sections have no rating"}
-            </div>
-          </div>
-        </div>
-        <div className="text-lg font-bold text-gray-500">Incomplete</div>
-      </div>
-    </div>
-  );
-}
-
 function IntegrityBanner({ value }) {
   return (
     <ScoreBanner
@@ -711,12 +689,9 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   [effectiveTemplate?.domains]);
 
-  // scoreIncomplete imports deliberately store no verdict — don't recompute a
-  // partial average from whichever sections the sheet did have.
-  const scoreIncomplete = !!feedbackData?.scoreIncomplete && feedbackData?.finalVerdict == null;
   const finalVerdict = useMemo(
-    () => scoreIncomplete ? null : (feedbackData?.finalVerdict ?? computeFinalVerdict(effectiveTemplate, feedbackData)),
-    [effectiveTemplate, feedbackData, scoreIncomplete]
+    () => feedbackData?.finalVerdict ?? computeFinalVerdict(effectiveTemplate, feedbackData),
+    [effectiveTemplate, feedbackData]
   );
 
   const integrityScore = useMemo(
@@ -752,9 +727,7 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {scoreIncomplete
-          ? <IncompleteVerdictBanner missingSections={feedbackData.missingSections} />
-          : <VerdictBanner value={finalVerdict} />}
+        <VerdictBanner value={finalVerdict} />
         <IntegrityBanner value={integrityScore} />
       </div>
     </div>
