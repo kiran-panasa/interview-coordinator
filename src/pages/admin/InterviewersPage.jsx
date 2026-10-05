@@ -6,7 +6,7 @@ import {
   Search, Download, ChevronDown, FileSpreadsheet, FileText,
   RotateCcw, Users, AlertTriangle, ExternalLink, Upload,
 } from "lucide-react";
-import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers, createSkill, bulkUpdateUserSkills } from "../../api/firestore";
+import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers, getSkills, createSkill, bulkUpdateUserSkills } from "../../api/firestore";
 import { compareTimeLabels } from "../../utils/dates";
 import { useSkills, useUsers, useInterviewerCounts, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
@@ -215,8 +215,12 @@ export default function InterviewersPage() {
     if (!validRows.length) return;
     setSkillsImporting(true);
     try {
+      // Re-read Settings → Skills from the server instead of trusting the
+      // cached list, so a skill another admin just added (or an earlier import
+      // created) is matched rather than duplicated.
+      const liveSkills = await getSkills();
+      const nameToId = new Map(liveSkills.map(s => [s.name.trim().toLowerCase(), s.id]));
       // Auto-create any skill column names not yet in Settings → Skills.
-      const nameToId = new Map(skills.map(s => [s.name.trim().toLowerCase(), s.id]));
       for (const name of skillCols) {
         const key = name.trim().toLowerCase();
         if (!nameToId.has(key)) nameToId.set(key, await createSkill(name));
