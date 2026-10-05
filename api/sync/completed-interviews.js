@@ -62,6 +62,8 @@ function mapInterview(doc, templateById, integrityDomainFields) {
     feedback: fb ? {
       overallRecommendation: fb.overallRecommendation ?? null,
       finalVerdict: fb.finalVerdict ?? null,
+      scoreIncomplete: !!fb.scoreIncomplete,
+      missingSections: fb.missingSections || [],
       comments: fb.comments ?? null,
       // Each card/domain field's raw score is left as-is; a sibling
       // `descriptors` object (same shape) carries the option's label text

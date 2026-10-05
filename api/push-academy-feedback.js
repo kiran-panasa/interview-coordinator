@@ -110,6 +110,8 @@ export default async function handler(req, res) {
         partialCompletionReason: iv.status === "partially_completed" ? (iv.partialCompletionReason || null) : null,
         outcome: feedback.overallRecommendation || "",
         finalVerdict: feedback.finalVerdict ?? null,
+        scoreIncomplete: !!feedback.scoreIncomplete,
+        missingSections: feedback.missingSections || [],
         remarks: feedback.comments || "",
         scheduledDate: iv.scheduledDate || "",
         scheduledTime: iv.scheduledTime || "",

@@ -308,7 +308,9 @@ export interface Feedback {
   comments?: string;
   submittedAt?: string;
   importedFromSheet?: boolean;
-  finalVerdict?: number;
+  finalVerdict?: number | null;
+  scoreIncomplete?: boolean;   // sheet import had unrated verdict sections, so finalVerdict is left null
+  missingSections?: string[];  // labels of those sections
   integrityScore?: number; // 0–5, see computeIntegrityScore in utils/templateEngine.js
   [key: string]: unknown;
 }
