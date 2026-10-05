@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers, getSkills, createSkill, bulkUpdateUserSkills } from "../../api/firestore";
 import { compareTimeLabels } from "../../utils/dates";
-import { useSkills, useUsers, useInterviewerCounts, QK } from "../../hooks/queries";
+import { useSkills, useUsers, useInterviewerCounts, useVendors, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 import Modal from "../../components/Modal";
@@ -21,13 +21,6 @@ import { SkeletonRows } from "../../components/Skeleton";
 import { usePagination } from "../../hooks/usePagination";
 import ImportSkillsModal from "../../features/interviewers/ImportSkillsModal";
 import { parseSkillsImportCSV } from "../../utils/skillsImportCSV";
-
-const EXP_RANGES = [
-  { label: "0–2 yrs",  test: (e) => e >= 0 && e <= 2  },
-  { label: "3–5 yrs",  test: (e) => e >= 3 && e <= 5  },
-  { label: "6–10 yrs", test: (e) => e >= 6 && e <= 10 },
-  { label: "10+ yrs",  test: (e) => e > 10             },
-];
 
 const SEL = "border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white";
 
@@ -57,8 +50,7 @@ export default function InterviewersPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [search,         setSearch]         = useState("");
   const [filterSkill,    setFilterSkill]    = useState("");
-  const [filterCompany,  setFilterCompany]  = useState("");
-  const [filterExp,      setFilterExp]      = useState("");
+  const [filterVendor,   setFilterVendor]   = useState("");
   const [showExport,     setShowExport]     = useState(false);
 
   // The default view only ever reads the 10 most recent interviewers for
@@ -66,7 +58,7 @@ export default function InterviewersPage() {
   // any of the filter dropdowns, and opening the Export menu (which needs
   // the complete active roster) all genuinely need the full list — see
   // getInterviewersPage / the pageItems state below.
-  const needsFullList = search.trim() !== "" || !!filterSkill || !!filterCompany || !!filterExp || showExport;
+  const needsFullList = search.trim() !== "" || !!filterSkill || !!filterVendor || showExport;
   const { data: usersAll = [], isLoading } = useUsers(needsFullList);
   const { data: counts } = useInterviewerCounts();
   const interviewers = usersAll.filter(u =>
@@ -147,11 +139,13 @@ export default function InterviewersPage() {
 
   // Currently-visible tab's interviewer objects — the full-fetched+filtered
   // list once search/filters/Export pulled everything in, the scoped page
-  // otherwise. Used for the Company filter's options and for resolving
+  // otherwise. Used for resolving
   // which full objects correspond to selected row ids.
   const currentTabPool = needsFullList ? (showArchived ? archivedInterviewers : interviewers) : pageItems;
 
   const { data: skills    = [] } = useSkills();
+  const { data: vendors   = [] } = useVendors();
+  const vendorNameById = new Map(vendors.map(v => [v.id, v.name]));
   const [viewAvail,    setViewAvail]    = useState(null);
   const [editModal,    setEditModal]    = useState(null); // { user, draftSkills }
   const [saving,       setSaving]       = useState(false);
@@ -341,16 +335,11 @@ export default function InterviewersPage() {
   // Companies filter dropdown is populated from whatever's currently
   // loaded — best-effort in the default scoped view (fills in fully once
   // search/a filter/Export has triggered a full fetch this session).
-  const uniqueCompanies = [...new Set(currentTabPool.map(u => u.company).filter(Boolean))].sort();
 
   const filtered = currentTabPool.filter(u => {
     if (filterSkill    && !(u.skills      || []).includes(filterSkill))    return false;
-    if (filterCompany  && u.company !== filterCompany)                     return false;
-    if (filterExp) {
-      const range = EXP_RANGES.find(r => r.label === filterExp);
-      const exp   = parseFloat(u.experience);
-      if (!range || isNaN(exp) || !range.test(exp)) return false;
-    }
+    if (filterVendor === "__none__" && u.vendorId) return false;
+    if (filterVendor && filterVendor !== "__none__" && u.vendorId !== filterVendor) return false;
     const q = search.toLowerCase();
     return !q ||
       u.displayName?.toLowerCase().includes(q) ||
@@ -359,8 +348,8 @@ export default function InterviewersPage() {
       u.companyRole?.toLowerCase().includes(q);
   });
 
-  const hasFilters = search || filterSkill || filterCompany || filterExp;
-  const clearFilters = () => { setSearch(""); setFilterSkill(""); setFilterCompany(""); setFilterExp(""); };
+  const hasFilters = search || filterSkill || filterVendor;
+  const clearFilters = () => { setSearch(""); setFilterSkill(""); setFilterVendor(""); };
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
 
@@ -469,13 +458,10 @@ export default function InterviewersPage() {
           <option value="">All Skills</option>
           {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <select value={filterCompany} onChange={e => setFilterCompany(e.target.value)} className={SEL}>
-          <option value="">All Companies</option>
-          {uniqueCompanies.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={filterExp} onChange={e => setFilterExp(e.target.value)} className={SEL}>
-          <option value="">All Experience</option>
-          {EXP_RANGES.map(r => <option key={r.label} value={r.label}>{r.label}</option>)}
+        <select value={filterVendor} onChange={e => setFilterVendor(e.target.value)} className={SEL}>
+          <option value="">All Vendors</option>
+          <option value="__none__">No Vendor</option>
+          {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
         {hasFilters && (
           <button onClick={clearFilters} className="text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
