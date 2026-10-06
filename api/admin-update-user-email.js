@@ -81,6 +81,16 @@ export default async function handler(req, res) {
     // export in the app reads from here, not from Auth directly.
     await db.collection("users").doc(targetUserId).update({ email: trimmedEmail });
 
+    // Interviews carry a copy of the interviewer's email from when they were
+    // scheduled. Without updating those too, the interviewer's own list and
+    // admin filters would stop matching them after the change.
+    const ivSnap = await db.collection("interviews").where("interviewerId", "==", targetUserId).get();
+    for (let i = 0; i < ivSnap.docs.length; i += 450) {
+      const batch = db.batch();
+      ivSnap.docs.slice(i, i + 450).forEach(d => batch.update(d.ref, { interviewerEmail: trimmedEmail }));
+      await batch.commit();
+    }
+
     return res.status(200).json({ success: true, oldEmail, newEmail: trimmedEmail });
   } catch (err) {
     if (err?.code === "auth/email-already-exists") {

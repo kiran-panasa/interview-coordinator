@@ -831,21 +831,39 @@ export function subscribeToInterview(id: string, callback: (interview: Interview
 
 export function subscribeToInterviewerInterviews(
   interviewerEmail: string,
+  interviewerId: string | undefined,
   callback: (interviews: Interview[]) => void
 ): () => void {
-  const q = query(
-    collection(db, "interviews"),
-    where("interviewerEmail", "==", interviewerEmail),
-  );
-  return onSnapshot(
-    q,
-    snap => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
-      docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
-      callback(docs);
-    },
-    err => reportFirestoreListenerError("interviewerInterviews", err)
-  );
+  // Matched by account ID when we have it, so changing someone's email never
+  // hides their interviews. Email is still matched too, for older records
+  // created before interviewerId was stored on each interview.
+  let byIdDocs: Interview[] = [];
+  let byEmailDocs: Interview[] = [];
+  const emit = () => {
+    const merged = new Map<string, Interview>();
+    [...byIdDocs, ...byEmailDocs].forEach(i => merged.set(i.id, i));
+    const docs = [...merged.values()];
+    docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
+    callback(docs);
+  };
+  const toDocs = (snap: { docs: { id: string; data: () => Record<string, unknown> }[] }) =>
+    snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
+  const onErr = (err: unknown) => reportFirestoreListenerError("interviewerInterviews", err);
+
+  const unsubs: (() => void)[] = [];
+  if (interviewerId) {
+    unsubs.push(onSnapshot(
+      query(collection(db, "interviews"), where("interviewerId", "==", interviewerId)),
+      snap => { byIdDocs = toDocs(snap); emit(); },
+      onErr
+    ));
+  }
+  unsubs.push(onSnapshot(
+    query(collection(db, "interviews"), where("interviewerEmail", "==", interviewerEmail)),
+    snap => { byEmailDocs = toDocs(snap); emit(); },
+    onErr
+  ));
+  return () => unsubs.forEach(u => u());
 }
 
 export async function archiveInterview(id: string): Promise<void> {

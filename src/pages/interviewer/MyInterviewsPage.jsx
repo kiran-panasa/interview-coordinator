@@ -19,7 +19,7 @@ const fadeUp = {
 
 export default function MyInterviewsPage() {
   const { userProfile } = useAuth();
-  const interviews = useInterviewerInterviews(userProfile?.email);
+  const interviews = useInterviewerInterviews(userProfile?.email, userProfile?.id);
   const [tab, setTab] = useState("Upcoming");
   const [filterStatus, setFilterStatus] = useState("All");
 

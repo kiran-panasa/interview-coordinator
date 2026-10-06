@@ -1292,13 +1292,14 @@ export default function InterviewsPage() {
   // different tab than the one you happen to be viewing silently returns
   // zero results, which reads as "search is broken" rather than "search
   // worked, but you're on the wrong tab."
+  const ivrKey = (i) => i.interviewerId || i.interviewerEmail || "";
   const filtered = useMemo(() => {
     const base = candSearch.trim() ? workingSet : programWorkingSet;
     return base.filter(i => {
       if (filterStatus !== "All" && i.status !== filterStatus) return false;
       if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
       if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
-      if (filterIvr      !== "All" && i.interviewerEmail !== filterIvr) return false;
+      if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
       if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
       if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
       if (candSearch) {
@@ -1312,15 +1313,20 @@ export default function InterviewsPage() {
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
-  const uniqueIvrs = useMemo(
-    () => [...new Set(programWorkingSet.map(i => i.interviewerEmail))].filter(Boolean).sort(),
-    [programWorkingSet]
-  );
-  const ivrNameByEmail = useMemo(() => {
-    const map = {};
-    usersAll.forEach(u => { if (u.email) map[u.email] = u.displayName || u.email; });
-    return map;
-  }, [usersAll]);
+  // Interviewers are keyed by account ID (falls back to email for older
+  // records without one), and labelled by their current name — so an email
+  // change never leaves an old address showing up as the option label.
+  const ivrOptions = useMemo(() => {
+    const byKey = new Map();
+    programWorkingSet.forEach(i => {
+      const key = ivrKey(i);
+      if (key && !byKey.has(key)) {
+        const user = usersAll.find(u => u.id === i.interviewerId || (i.interviewerEmail && u.email === i.interviewerEmail));
+        byKey.set(key, user?.displayName || i.interviewerName || user?.email || i.interviewerEmail || key);
+      }
+    });
+    return [...byKey.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [programWorkingSet, usersAll]);
 
   const uniqueTemplates = useMemo(
     () => [...new Set(programWorkingSet.map(i => i.templateName))].filter(Boolean).sort(),
@@ -1595,7 +1601,7 @@ export default function InterviewsPage() {
         </select>
         <SearchableSelect
           className="w-48"
-          options={[{ id: "All", label: "All Interviewers" }, ...uniqueIvrs.map(e => ({ id: e, label: ivrNameByEmail[e] || e }))]}
+          options={[{ id: "All", label: "All Interviewers" }, ...ivrOptions]}
           value={filterIvr}
           onChange={id => { setFilterIvr(id); setIvrPage(1); }}
           placeholder="All Interviewers"

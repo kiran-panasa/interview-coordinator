@@ -34,7 +34,7 @@ const fadeUp = {
 
 export default function InterviewerDashboard() {
   const { userProfile } = useAuth();
-  const interviews = useInterviewerInterviews(userProfile?.email);
+  const interviews = useInterviewerInterviews(userProfile?.email, userProfile?.id);
 
   // interviews starts out as the hook's initial [] and is replaced with a new
   // array reference the moment the first Firestore snapshot arrives — compare

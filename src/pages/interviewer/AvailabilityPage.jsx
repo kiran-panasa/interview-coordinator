@@ -523,7 +523,7 @@ export default function AvailabilityPage() {
   };
 
   // ── Interview status lookup — lets a booked slot report as "Completed" ───────
-  const myInterviews = useInterviewerInterviews(userProfile?.email);
+  const myInterviews = useInterviewerInterviews(userProfile?.email, userProfile?.id);
   const interviewStatusById = useMemo(() => {
     const map = {};
     myInterviews.forEach(iv => { map[iv.id] = iv.status; });
