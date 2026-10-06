@@ -1086,7 +1086,9 @@ export default function InterviewsPage() {
       // sense before the interview happens — backfilling a link onto an
       // already-completed interview (so its transcript/recording can be
       // looked up) shouldn't trigger that email.
-      if (!isDoneStatus(iv.status)) {
+      // Correcting a link that was already there shouldn't re-send the
+      // "you're confirmed" emails — only a first-time link does.
+      if (!iv.meetLink && !isDoneStatus(iv.status)) {
         await sendInviteConfirmationEmails(iv, trimmed);
         setSendInviteFailed(s => ({ ...s, [iv.id]: false }));
         setToast({ message: "Meet link saved and confirmation emails sent." });
@@ -1827,11 +1829,10 @@ export default function InterviewsPage() {
                       // link itself, not the Calendar event) — the
                       // recording lookup still needs the real eventId,
                       // which isn't recoverable from the link alone.
-                      label: "Add Meet Link Manually",
+                      label: iv.meetLink ? "Edit Meet Link" : "Add Meet Link Manually",
                       onClick: () => handleManualMeetLink(iv),
                       show: iv.status !== "cancelled" && iv.status !== "no_show"
-                        && iv.status !== "pending_acceptance" && iv.status !== "declined"
-                        && !iv.meetLink,
+                        && iv.status !== "pending_acceptance" && iv.status !== "declined",
                     },
                     {
                       label: iv.assignmentLinks?.length ? `Assignment Links (${iv.assignmentLinks.length})` : "Assignment Links",
