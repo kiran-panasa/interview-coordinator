@@ -309,7 +309,7 @@ export interface Feedback {
   submittedAt?: string;
   importedFromSheet?: boolean;
   finalVerdict?: number | null;
-  scoreIncomplete?: boolean;   // sheet import had unrated verdict sections, so finalVerdict is left null
+  scoreIncomplete?: boolean;   // partially completed with unrated verdict sections (in-app or sheet import), so finalVerdict is left null
   missingSections?: string[];  // labels of those sections
   integrityScore?: number; // 0–5, see computeIntegrityScore in utils/templateEngine.js
   [key: string]: unknown;
