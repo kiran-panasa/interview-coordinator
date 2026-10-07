@@ -1,5 +1,6 @@
 import { splitCSVLines, parseLine } from "./csv";
 import { slugify } from "./strings";
+import { isNotApplicable } from "../services/import.service";
 export { buildFeedbackFromCSV } from "../services/import.service";
 
 export const VERDICT_MAP = { proceed: "Proceed", hold: "Hold", reject: "Reject" };
@@ -102,7 +103,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
       });
 
       Object.entries(domainData).forEach(([k, v]) => {
-        if (k.endsWith("_rating") && v) {
+        if (k.endsWith("_rating") && v && !isNotApplicable(v)) {
           const n = parseFloat(v);
           if (isNaN(n) || n < 0 || n > 5) warnings.push(`${k}: "${v}" is not a valid score (expected 0–5)`);
         }

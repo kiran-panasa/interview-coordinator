@@ -1,6 +1,14 @@
 import { materializeFeedback } from "../utils/templateEngine";
 import { slugify } from "../utils/strings";
 
+// "NA" / "N/A" (any case) in a rating cell marks a section that doesn't
+// apply to this interview — e.g. one added to the template after it took
+// place. Unlike a blank cell, it's left unrated and drops out of the Final
+// Score instead of being treated as a missing score.
+export function isNotApplicable(raw) {
+  return typeof raw === "string" && /^n\/?a$/i.test(raw.trim());
+}
+
 function lowestOptionScore(field) {
   const scores = (field.options || []).map(o => parseFloat(o.score)).filter(n => !isNaN(n));
   return scores.length ? Math.min(...scores) : null;
@@ -11,9 +19,8 @@ function lowestOptionScore(field) {
 // so a sheet row with a blank score in a verdict-weighted section is treated
 // the same way: the blank gets that field's lowest option and the interview
 // is imported as partially completed, with the affected sections as the
-// reason. A section the sheet has no column for at all (e.g. one added to
-// the template after the interview took place) is not a blank — it's left
-// unrated and drops out of the Final Score, as before.
+// reason. A section marked NA, or with no column in the sheet at all, is not
+// a blank — it's left unrated and drops out of the Final Score.
 export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
   const hasDomainData = Object.values(domainData).some(Boolean);
 
@@ -40,6 +47,7 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
     const domainState = { cards: [] };
     const countsInVerdict = (domain.weightInVerdict ?? 0) > 0;
     const scoreOrLowest = (raw, columnPresent, field) => {
+      if (isNotApplicable(raw)) return null;
       if (raw !== "" && raw != null) return parseFloat(raw);
       if (!columnPresent || !countsInVerdict) return null;
       const lowest = lowestOptionScore(field);
