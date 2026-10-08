@@ -97,13 +97,12 @@ export default function CandidateSchedulingTab({
   // a handful of candidates when there are 1000+ in the table.
   const [bulkSelectOpen,   setBulkSelectOpen]   = useState(false);
   const [bulkSelectText,   setBulkSelectText]   = useState("");
-  // Sent Invites log filters — Status/Template narrow by exact match, Sent
-  // At is an inclusive date range over inv.sentAt. Export Links CSV reads
-  // the same filtered list, so what's on screen is what gets downloaded.
+  // Sent Invites log filters — Status/Template/Invite Sent On narrow by
+  // exact match. Export Links CSV reads the same filtered list, so what's
+  // on screen is what gets downloaded.
   const [inviteStatusFilter,   setInviteStatusFilter]   = useState("");
   const [inviteTemplateFilter, setInviteTemplateFilter] = useState("");
-  const [inviteSentFrom,       setInviteSentFrom]       = useState("");
-  const [inviteSentTo,         setInviteSentTo]         = useState("");
+  const [inviteSentOn,         setInviteSentOn]         = useState("");
   const [bulkSelectResult, setBulkSelectResult] = useState(null); // { matched: Candidate[], unmatched: string[] }
   // Preview-before-send dialog — Send Invites opens this instead of sending
   // immediately, so nothing goes out until the admin has actually looked at
@@ -638,19 +637,19 @@ export default function CandidateSchedulingTab({
     return invites.filter(inv => {
       if (inviteStatusFilter && inv.status !== inviteStatusFilter) return false;
       if (inviteTemplateFilter && inv.templateName !== inviteTemplateFilter) return false;
-      if (inviteSentFrom || inviteSentTo) {
+      if (inviteSentOn) {
         const sentTime = inv.sentAt ? new Date(inv.sentAt).getTime() : null;
         if (sentTime == null) return false;
-        if (inviteSentFrom && sentTime < new Date(inviteSentFrom + "T00:00:00").getTime()) return false;
-        if (inviteSentTo && sentTime > new Date(inviteSentTo + "T23:59:59.999").getTime()) return false;
+        if (sentTime < new Date(inviteSentOn + "T00:00:00").getTime()) return false;
+        if (sentTime > new Date(inviteSentOn + "T23:59:59.999").getTime()) return false;
       }
       return true;
     });
-  }, [invites, inviteStatusFilter, inviteTemplateFilter, inviteSentFrom, inviteSentTo]);
+  }, [invites, inviteStatusFilter, inviteTemplateFilter, inviteSentOn]);
 
-  const inviteFiltersActive = !!(inviteStatusFilter || inviteTemplateFilter || inviteSentFrom || inviteSentTo);
+  const inviteFiltersActive = !!(inviteStatusFilter || inviteTemplateFilter || inviteSentOn);
   const clearInviteFilters = () => {
-    setInviteStatusFilter(""); setInviteTemplateFilter(""); setInviteSentFrom(""); setInviteSentTo("");
+    setInviteStatusFilter(""); setInviteTemplateFilter(""); setInviteSentOn("");
   };
 
   const candPagination = usePagination(filteredCandidates);
@@ -1023,7 +1022,7 @@ export default function CandidateSchedulingTab({
         </div>
         {invites.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-soft px-4 py-3 mb-3">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-1">Status</label>
                 <select value={inviteStatusFilter} onChange={e => setInviteStatusFilter(e.target.value)}
@@ -1041,13 +1040,8 @@ export default function CandidateSchedulingTab({
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Sent From</label>
-                <DatePicker value={inviteSentFrom} onChange={e => setInviteSentFrom(e.target.value)} max={inviteSentTo || undefined} blockedDates={blockedDates}
-                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Sent To</label>
-                <DatePicker value={inviteSentTo} onChange={e => setInviteSentTo(e.target.value)} min={inviteSentFrom || undefined} blockedDates={blockedDates}
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Invite Sent On</label>
+                <DatePicker value={inviteSentOn} onChange={e => setInviteSentOn(e.target.value)} blockedDates={blockedDates}
                   className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
               </div>
               {inviteFiltersActive && (
