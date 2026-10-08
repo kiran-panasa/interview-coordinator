@@ -97,6 +97,13 @@ export default function CandidateSchedulingTab({
   // a handful of candidates when there are 1000+ in the table.
   const [bulkSelectOpen,   setBulkSelectOpen]   = useState(false);
   const [bulkSelectText,   setBulkSelectText]   = useState("");
+  // Sent Invites log filters — Status/Template narrow by exact match, Sent
+  // At is an inclusive date range over inv.sentAt. Export Links CSV reads
+  // the same filtered list, so what's on screen is what gets downloaded.
+  const [inviteStatusFilter,   setInviteStatusFilter]   = useState("");
+  const [inviteTemplateFilter, setInviteTemplateFilter] = useState("");
+  const [inviteSentFrom,       setInviteSentFrom]       = useState("");
+  const [inviteSentTo,         setInviteSentTo]         = useState("");
   const [bulkSelectResult, setBulkSelectResult] = useState(null); // { matched: Candidate[], unmatched: string[] }
   // Preview-before-send dialog — Send Invites opens this instead of sending
   // immediately, so nothing goes out until the admin has actually looked at
@@ -589,7 +596,7 @@ export default function CandidateSchedulingTab({
 
   const handleExportLinks = () => {
     const rows = [["Candidate Name", "Email", "Template", "Round", "Date Range", "Status", "Scheduling Link"]];
-    invites.forEach(inv => {
+    filteredInvites.forEach(inv => {
       const link = inv.inviteToken
         ? `${window.location.origin}/student/schedule?invite=${inv.inviteToken}`
         : "—";
@@ -621,8 +628,33 @@ export default function CandidateSchedulingTab({
   const pendingBookings = invites.filter(i => i.status === "pending_confirmation");
   const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
 
+  const inviteTemplateOptions = useMemo(() => {
+    const set = new Set();
+    invites.forEach(inv => { if (inv.templateName) set.add(inv.templateName); });
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [invites]);
+
+  const filteredInvites = useMemo(() => {
+    return invites.filter(inv => {
+      if (inviteStatusFilter && inv.status !== inviteStatusFilter) return false;
+      if (inviteTemplateFilter && inv.templateName !== inviteTemplateFilter) return false;
+      if (inviteSentFrom || inviteSentTo) {
+        const sentTime = inv.sentAt ? new Date(inv.sentAt).getTime() : null;
+        if (sentTime == null) return false;
+        if (inviteSentFrom && sentTime < new Date(inviteSentFrom + "T00:00:00").getTime()) return false;
+        if (inviteSentTo && sentTime > new Date(inviteSentTo + "T23:59:59.999").getTime()) return false;
+      }
+      return true;
+    });
+  }, [invites, inviteStatusFilter, inviteTemplateFilter, inviteSentFrom, inviteSentTo]);
+
+  const inviteFiltersActive = !!(inviteStatusFilter || inviteTemplateFilter || inviteSentFrom || inviteSentTo);
+  const clearInviteFilters = () => {
+    setInviteStatusFilter(""); setInviteTemplateFilter(""); setInviteSentFrom(""); setInviteSentTo("");
+  };
+
   const candPagination = usePagination(filteredCandidates);
-  const invPagination  = usePagination(invites);
+  const invPagination  = usePagination(filteredInvites);
 
   return (
     <div className="space-y-8">
@@ -989,9 +1021,49 @@ export default function CandidateSchedulingTab({
             </button>
           )}
         </div>
-        {invites.length === 0 ? (
+        {invites.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft px-4 py-3 mb-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Status</label>
+                <select value={inviteStatusFilter} onChange={e => setInviteStatusFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="">All Statuses</option>
+                  {Object.entries(STATUS_LABEL).map(([val, label]) => <option key={val} value={val}>{label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Template</label>
+                <select value={inviteTemplateFilter} onChange={e => setInviteTemplateFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="">All Templates</option>
+                  {inviteTemplateOptions.map(name => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Sent From</label>
+                <DatePicker value={inviteSentFrom} onChange={e => setInviteSentFrom(e.target.value)} max={inviteSentTo || undefined} blockedDates={blockedDates}
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1">Sent To</label>
+                <DatePicker value={inviteSentTo} onChange={e => setInviteSentTo(e.target.value)} min={inviteSentFrom || undefined} blockedDates={blockedDates}
+                  className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+              {inviteFiltersActive && (
+                <div className="flex items-end">
+                  <button onClick={clearInviteFilters}
+                    className="text-xs font-semibold text-gray-400 hover:text-red-500 transition-colors pb-1.5">
+                    Clear filters
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {filteredInvites.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
-            <p className="text-sm text-gray-400">No invites sent yet.</p>
+            <p className="text-sm text-gray-400">{inviteFiltersActive ? "No invites match these filters." : "No invites sent yet."}</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
