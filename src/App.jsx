@@ -1,6 +1,7 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./AuthContext";
+import { lazyWithRetry as lazy } from "./utils/lazyWithRetry";
 
 const LoginPage     = lazy(() => import("./pages/auth/LoginPage"));
 const PendingPage   = lazy(() => import("./pages/auth/PendingPage"));
