@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Pagination from "../../components/Pagination";
 import DatePicker from "../../components/DatePicker";
+import SkillsSelect from "../../components/SkillsSelect";
 import { usePagination } from "../../hooks/usePagination";
 import { compareTimeLabels } from "../../utils/dates";
 import { getBusyWindowsForInterviewers } from "../../api/firestore";
@@ -16,7 +17,7 @@ function inDays(n) {
 export default function SlotOverviewTab({ programs, templates, skills = [], activeInterviewers, ivrSlots, slotsLoading, fetchSlots, blockedDates = [] }) {
   const [selectedProgramId,  setSelectedProgramId]  = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [selectedSkillId,    setSelectedSkillId]    = useState("");
+  const [selectedSkillIds,   setSelectedSkillIds]   = useState([]);
   const [fromDate, setFromDate] = useState(today());
   const [toDate,   setToDate]   = useState(inDays(7));
 
@@ -38,8 +39,10 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
       : selectedProgramId
         ? activeInterviewers.filter(u => (u.templateIds || []).some(tid => programTemplates.map(t => t.id).includes(tid)))
         : activeInterviewers;
-    return selectedSkillId ? base.filter(u => (u.skills || []).includes(selectedSkillId)) : base;
-  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillId]);
+    return selectedSkillIds.length
+      ? base.filter(u => selectedSkillIds.every(id => (u.skills || []).includes(id)))
+      : base;
+  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillIds]);
 
   const datesSelected = !!(fromDate && toDate);
 
@@ -91,7 +94,7 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
 
   const datePagination = usePagination(byDate);
   // Reset to page 1 when filters change
-  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillId, fromDate, toDate]); // eslint-disable-line
+  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillIds, fromDate, toDate]); // eslint-disable-line
 
   return (
     <div className="space-y-6">
@@ -117,11 +120,12 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Skill</label>
-            <select value={selectedSkillId} onChange={e => setSelectedSkillId(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-              <option value="">All Skills</option>
-              {skills.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <SkillsSelect
+              skills={skills}
+              value={selectedSkillIds}
+              onChange={setSelectedSkillIds}
+              placeholder="All Skills"
+            />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">From</label>
