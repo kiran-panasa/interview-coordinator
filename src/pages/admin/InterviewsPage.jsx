@@ -10,7 +10,7 @@ import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
-import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview } from "../../api/interviews";
+import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview, correctInterviewStatus } from "../../api/interviews";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -41,6 +41,7 @@ import DatePicker from "../../components/DatePicker";
 import FeedbackEditModal from "../../features/interviews/FeedbackEditModal";
 import AssignmentLinksModal from "../../features/interviews/AssignmentLinksModal";
 import InterviewHistoryModal from "../../features/interviews/InterviewHistoryModal";
+import CorrectStatusModal from "../../features/interviews/CorrectStatusModal";
 import CopyButton from "../../components/CopyButton";
 import AiReportModal from "../../features/interviews/AiReportModal";
 import SearchableSelect from "../../components/SearchableSelect";
@@ -56,6 +57,10 @@ const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "parti
 // completed one is (viewing/downloading feedback, recording/transcript/AI
 // report actions, archiving) — it just carries a mandatory reason alongside.
 const isDoneStatus = (status) => status === "completed" || status === "partially_completed";
+const STATUS_LABEL = {
+  completed: "Completed", partially_completed: "Partially Completed",
+  cancelled: "Cancelled", no_show: "No Show",
+};
 const DURATIONS = [
   { label: "30 min",  value: 30  },
   { label: "45 min",  value: 45  },
@@ -209,6 +214,10 @@ export default function InterviewsPage() {
   const [assignmentLinksModal,   setAssignmentLinksModal]   = useState(null); // interview
   const [assignmentLinksForm,    setAssignmentLinksForm]    = useState([]);
   const [assignmentLinksSaving,  setAssignmentLinksSaving]  = useState(false);
+  const [correctStatusModal, setCorrectStatusModal] = useState(null); // interview
+  const [correctStatusNew,   setCorrectStatusNew]   = useState("");
+  const [correctStatusReason, setCorrectStatusReason] = useState("");
+  const [correctingStatus,   setCorrectingStatus]   = useState(false);
   const [toast,         setToast]         = useState(null);
   const [showImport,      setShowImport]      = useState(false);
   const [csvText,         setCsvText]         = useState("");
@@ -1391,6 +1400,36 @@ export default function InterviewsPage() {
     setAssignmentLinksSaving(false);
   }
 
+  function openCorrectStatus(iv) {
+    setCorrectStatusNew("");
+    setCorrectStatusReason("");
+    setCorrectStatusModal(iv);
+  }
+
+  async function handleCorrectStatus() {
+    if (!correctStatusModal || !correctStatusNew || !correctStatusReason.trim()) return;
+    setCorrectingStatus(true);
+    try {
+      const before = correctStatusModal.status;
+      await correctInterviewStatus(correctStatusModal.id, correctStatusNew, correctStatusReason.trim());
+      await logInterviewHistory(correctStatusModal.id, {
+        changes: [
+          { field: "status", label: "Status", from: STATUS_LABEL[before] || before, to: STATUS_LABEL[correctStatusNew] || correctStatusNew },
+          { field: "auditCorrectionReason", label: "Audit Remark", from: null, to: correctStatusReason.trim() },
+        ],
+        changedBy:     currentUser.uid,
+        changedByName: userProfile?.displayName || userProfile?.email || currentUser.email || "Admin",
+        calendarSyncStatus: "not_applicable",
+        notificationStatus: "not_applicable",
+      }).catch(() => {});
+      setToast({ message: "Status corrected." });
+      setCorrectStatusModal(null);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setCorrectingStatus(false);
+  }
+
   async function openHistory(iv) {
     setHistoryModal(iv);
     setHistoryLoading(true);
@@ -1847,6 +1886,11 @@ export default function InterviewsPage() {
                     },
                     { label: "View History", onClick: () => openHistory(iv) },
                     {
+                      label: "Correct Status (Audit)",
+                      onClick: () => openCorrectStatus(iv),
+                      show: isDoneStatus(iv.status),
+                    },
+                    {
                       label: "Mark No-show",
                       onClick: () => handleMarkNoShow(iv),
                       show: iv.status === "scheduled" || iv.status === "pending_acceptance",
@@ -1975,6 +2019,15 @@ export default function InterviewsPage() {
         setAssignmentLinksForm={setAssignmentLinksForm}
         handleSaveAssignmentLinks={handleSaveAssignmentLinks}
         assignmentLinksSaving={assignmentLinksSaving}
+      />
+
+      <CorrectStatusModal
+        correctStatusModal={correctStatusModal}
+        onClose={() => setCorrectStatusModal(null)}
+        newStatus={correctStatusNew} setNewStatus={setCorrectStatusNew}
+        reason={correctStatusReason} setReason={setCorrectStatusReason}
+        handleCorrectStatus={handleCorrectStatus}
+        correcting={correctingStatus}
       />
 
       <InterviewHistoryModal

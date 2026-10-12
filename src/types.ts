@@ -387,6 +387,14 @@ export interface Interview {
   // carried through to admin views and the Download Feedback export for
   // payment reconciliation / audit purposes.
   partialCompletionReason?: string;
+  // Set when an admin overrides the status after auditing the recording/
+  // transcript — e.g. a panelist marked "Completed" but the call only ran
+  // a few minutes before the candidate dropped (see correctInterviewStatus
+  // in api/interviews.ts). Distinct from partialCompletionReason/
+  // declineReason, which are set by the interviewer themselves in the
+  // normal flow — this one is always an after-the-fact admin correction.
+  auditCorrectionReason?: string;
+  auditCorrectedAt?: string;
   // Set whenever an interviewer declines an admin-scheduled interview (see
   // handleDecline in InterviewDetail.jsx) — shown to admins on the
   // Interviews page so a decline isn't just a silent status flip with no

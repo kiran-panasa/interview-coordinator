@@ -519,6 +519,30 @@ export async function markInterviewPartiallyCompleted(
   await completeInterview(id, "partially_completed", { ...extraFields, partialCompletionReason: reason });
 }
 
+// Admin correction after auditing the recording/transcript — e.g. a
+// panelist marked "Completed" but the call only ran a few minutes before
+// the candidate dropped. Deliberately minimal and distinct from
+// completeInterview (a fresh completion, which re-triggers AI report
+// generation + the Academy push) and markInterviewCancelled (a LIVE
+// cancellation, which deletes feedback/recording/transcript and frees the
+// slot). This never touches any of that — feedback, recording, transcript
+// and the AI report are the evidence the correction was based on, and
+// deleting them here would destroy the audit trail.
+export async function correctInterviewStatus(
+  id: string,
+  newStatus: "partially_completed" | "cancelled" | "no_show",
+  reason: string
+): Promise<void> {
+  const fields: Record<string, unknown> = {
+    status: newStatus,
+    auditCorrectionReason: reason,
+    auditCorrectedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  if (newStatus === "partially_completed") fields.partialCompletionReason = reason;
+  await updateDoc(doc(db, "interviews", id), fields);
+}
+
 export async function submitFeedback(id: string, feedback: Record<string, unknown>): Promise<void> {
   await markInterviewCompleted(id, {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
