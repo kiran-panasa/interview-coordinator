@@ -117,27 +117,40 @@ export default function InterviewerStatsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, vendorIds, durations, templateProgramById, usersByEmail]);
 
+  // Every count column gets its own per-duration breakdown, keyed by
+  // minutes (e.g. { 60: 2, 90: 4 }) — Completed and Completed (Resumed)
+  // are tracked separately since they're already separate payment buckets.
+  const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "declined"];
+
   const getRow = (map, email, name) => {
     if (!map.has(email)) {
-      map.set(email, {
-        email, name,
-        completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0,
-        // Per-duration breakdown of the plain Completed count only (not
-        // Completed (Resumed) — that's already a separate payment bucket).
-        // Keyed by minutes, e.g. { 60: 2, 90: 4 }.
-        completedByDuration: {},
-      });
+      const row = { email, name };
+      COUNT_FIELDS.forEach(f => { row[f] = 0; row[`${f}ByDuration`] = {}; });
+      map.set(email, row);
     }
     return map.get(email);
   };
 
-  // "60m: 2, 90m: 4" when a panelist's completed interviews span more than
-  // one duration, otherwise just the plain count — most panelists only ever
-  // run one duration, so their cell stays exactly as before.
-  const formatCompletedCell = (completed, byDuration) => {
+  const bump = (row, field, duration) => {
+    row[field]++;
+    const d = duration || 60;
+    const byDur = row[`${field}ByDuration`];
+    byDur[d] = (byDur[d] || 0) + 1;
+  };
+
+  // "60m: 2, 90m: 4" when a panelist's count for this column spans more than
+  // one duration, otherwise just the plain number — most panelists only
+  // ever run one duration, so their cell stays exactly as before.
+  const formatBreakdownCell = (count, byDuration) => {
     const entries = Object.entries(byDuration).filter(([, n]) => n > 0).sort(([a], [b]) => Number(a) - Number(b));
-    if (entries.length <= 1) return String(completed);
+    if (entries.length <= 1) return String(count);
     return entries.map(([mins, n]) => `${mins}m: ${n}`).join(", ");
+  };
+
+  const withDisplays = (row) => {
+    const out = { ...row };
+    COUNT_FIELDS.forEach(f => { out[`${f}Display`] = formatBreakdownCell(row[f], row[`${f}ByDuration`]); });
+    return out;
   };
 
   const interviewerStats = useMemo(() => {
@@ -153,17 +166,13 @@ export default function InterviewerStatsPage() {
         // off after at least one earlier Partially Completed session —
         // kept out of the plain Completed count so it's never mistaken for
         // a full interview at payment time (see Panelist Interview Count).
-        if (iv.resumedFromPartial) row.completedResumed++;
-        else {
-          row.completed++;
-          const d = iv.duration || 60;
-          row.completedByDuration[d] = (row.completedByDuration[d] || 0) + 1;
-        }
+        if (iv.resumedFromPartial) bump(row, "completedResumed", iv.duration);
+        else bump(row, "completed", iv.duration);
       }
-      else if (iv.status === "partially_completed") row.partiallyCompleted++;
-      else if (iv.status === "cancelled") row.cancelled++;
-      else if (iv.status === "no_show") row.noShow++;
-      else if (iv.status === "declined") row.declined++;
+      else if (iv.status === "partially_completed") bump(row, "partiallyCompleted", iv.duration);
+      else if (iv.status === "cancelled") bump(row, "cancelled", iv.duration);
+      else if (iv.status === "no_show") bump(row, "noShow", iv.duration);
+      else if (iv.status === "declined") bump(row, "declined", iv.duration);
     });
 
     // A resumed interview's earlier session(s) live only in priorSessions,
@@ -181,35 +190,33 @@ export default function InterviewerStatsPage() {
           if (templateIds.length && !templateIds.includes(iv.templateId)) return;
           if (interviewerEmails.length && !interviewerEmails.includes(s.interviewerEmail)) return;
           if (!emailBelongsToVendor(s.interviewerEmail)) return;
+          if (durations.length && !durations.includes(String(s.duration || 60))) return;
           const key = s.interviewerEmail || "(unknown)";
           const userRec = usersByEmail.get(s.interviewerEmail);
           const row = getRow(map, key, s.interviewerName || userRec?.displayName || key);
-          row.partiallyCompleted++;
+          bump(row, "partiallyCompleted", s.duration);
         });
       });
     }
 
     return [...map.values()]
-      .map(row => ({ ...row, completedDisplay: formatCompletedCell(row.completed, row.completedByDuration) }))
+      .map(withDisplays)
       .sort((a, b) => a.name.localeCompare(b.name));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, interviews, usersByEmail, statuses, dateFrom, dateTo, programIds, templateIds, interviewerEmails, vendorIds, durations, templateProgramById]);
 
   const totals = useMemo(() => {
-    const acc = interviewerStats.reduce((acc, r) => {
-      Object.entries(r.completedByDuration).forEach(([d, n]) => { acc.completedByDuration[d] = (acc.completedByDuration[d] || 0) + n; });
-      return {
-        completed:          acc.completed + r.completed,
-        completedResumed:   acc.completedResumed + r.completedResumed,
-        partiallyCompleted: acc.partiallyCompleted + r.partiallyCompleted,
-        cancelled:          acc.cancelled + r.cancelled,
-        noShow:             acc.noShow + r.noShow,
-        declined:           acc.declined + r.declined,
-        completedByDuration: acc.completedByDuration,
-      };
-    }, { completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0, completedByDuration: {} });
-    acc.completedDisplay = formatCompletedCell(acc.completed, acc.completedByDuration);
-    return acc;
+    const acc = { email: "", name: "" };
+    COUNT_FIELDS.forEach(f => { acc[f] = 0; acc[`${f}ByDuration`] = {}; });
+    interviewerStats.forEach(r => {
+      COUNT_FIELDS.forEach(f => {
+        acc[f] += r[f];
+        Object.entries(r[`${f}ByDuration`]).forEach(([d, n]) => {
+          acc[`${f}ByDuration`][d] = (acc[`${f}ByDuration`][d] || 0) + n;
+        });
+      });
+    });
+    return withDisplays(acc);
   }, [interviewerStats]);
 
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
@@ -307,11 +314,11 @@ export default function InterviewerStatsPage() {
                     <p className="text-xs text-gray-400">{r.email}</p>
                   </td>
                   <td className="px-4 py-3 text-right text-emerald-700 font-semibold whitespace-nowrap">{r.completedDisplay}</td>
-                  <td className="px-4 py-3 text-right text-sky-700 font-semibold" title="Finished off a Partially Completed interview — not a full interview, kept separate for payment purposes">{r.completedResumed}</td>
-                  <td className="px-4 py-3 text-right text-amber-700 font-semibold">{r.partiallyCompleted}</td>
-                  <td className="px-4 py-3 text-right text-gray-500">{r.cancelled}</td>
-                  <td className="px-4 py-3 text-right text-orange-600">{r.noShow}</td>
-                  <td className="px-4 py-3 text-right text-red-600">{r.declined}</td>
+                  <td className="px-4 py-3 text-right text-sky-700 font-semibold whitespace-nowrap" title="Finished off a Partially Completed interview — not a full interview, kept separate for payment purposes">{r.completedResumedDisplay}</td>
+                  <td className="px-4 py-3 text-right text-amber-700 font-semibold whitespace-nowrap">{r.partiallyCompletedDisplay}</td>
+                  <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{r.cancelledDisplay}</td>
+                  <td className="px-4 py-3 text-right text-orange-600 whitespace-nowrap">{r.noShowDisplay}</td>
+                  <td className="px-4 py-3 text-right text-red-600 whitespace-nowrap">{r.declinedDisplay}</td>
                 </tr>
               ))}
             </tbody>
@@ -319,11 +326,11 @@ export default function InterviewerStatsPage() {
               <tr className="border-t-2 border-gray-200 bg-gray-50/60">
                 <td className="px-4 py-3 font-bold text-gray-900">Total</td>
                 <td className="px-4 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">{totals.completedDisplay}</td>
-                <td className="px-4 py-3 text-right font-bold text-sky-700">{totals.completedResumed}</td>
-                <td className="px-4 py-3 text-right font-bold text-amber-700">{totals.partiallyCompleted}</td>
-                <td className="px-4 py-3 text-right font-bold text-gray-500">{totals.cancelled}</td>
-                <td className="px-4 py-3 text-right font-bold text-orange-600">{totals.noShow}</td>
-                <td className="px-4 py-3 text-right font-bold text-red-600">{totals.declined}</td>
+                <td className="px-4 py-3 text-right font-bold text-sky-700 whitespace-nowrap">{totals.completedResumedDisplay}</td>
+                <td className="px-4 py-3 text-right font-bold text-amber-700 whitespace-nowrap">{totals.partiallyCompletedDisplay}</td>
+                <td className="px-4 py-3 text-right font-bold text-gray-500 whitespace-nowrap">{totals.cancelledDisplay}</td>
+                <td className="px-4 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{totals.noShowDisplay}</td>
+                <td className="px-4 py-3 text-right font-bold text-red-600 whitespace-nowrap">{totals.declinedDisplay}</td>
               </tr>
             </tfoot>
           </table>
