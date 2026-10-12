@@ -13,8 +13,11 @@ const HEADERS = ["Interviewer", "Completed", "Completed (Resumed)", "Partially C
  * row. No per-interview detail, no payment — the page shows counts only.
  */
 export function exportInterviewerStats(interviewerStats, totals, filenamePrefix = "interviewer_statistics") {
-  const rows = interviewerStats.map(r => [r.name, r.completed, r.completedResumed, r.partiallyCompleted, r.cancelled, r.noShow, r.declined]);
-  rows.push(["Total", totals.completed, totals.completedResumed, totals.partiallyCompleted, totals.cancelled, totals.noShow, totals.declined]);
+  // Completed uses completedDisplay (falls back to the plain number when a
+  // panelist only ran one duration) so a multi-duration breakdown like
+  // "60m: 2, 90m: 4" matches exactly what's on screen.
+  const rows = interviewerStats.map(r => [r.name, r.completedDisplay ?? r.completed, r.completedResumed, r.partiallyCompleted, r.cancelled, r.noShow, r.declined]);
+  rows.push(["Total", totals.completedDisplay ?? totals.completed, totals.completedResumed, totals.partiallyCompleted, totals.cancelled, totals.noShow, totals.declined]);
 
   const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
   ws["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];

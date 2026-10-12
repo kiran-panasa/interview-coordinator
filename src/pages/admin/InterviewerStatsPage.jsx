@@ -44,6 +44,7 @@ export default function InterviewerStatsPage() {
   const [templateIds,  setTemplateIds]  = useState([]);
   const [interviewerEmails, setInterviewerEmails] = useState([]);
   const [vendorIds,    setVendorIds]    = useState([]);
+  const [durations,    setDurations]    = useState([]);
 
   const templateProgramById = useMemo(
     () => new Map(templates.map(t => [t.id, t.program || ""])),
@@ -81,6 +82,14 @@ export default function InterviewerStatsPage() {
     () => vendors.map(v => ({ id: v.id, name: v.name })),
     [vendors]
   );
+  // Distinct durations actually scheduled — not hardcoded, so a new
+  // duration (e.g. 45m) shows up here the moment it's used anywhere.
+  // Interviews without a duration fall back to 60 (matches every other
+  // read site's "iv.duration || 60" convention).
+  const durationOptions = useMemo(() => {
+    const set = new Set(interviews.map(iv => iv.duration || 60));
+    return [...set].sort((a, b) => a - b).map(d => ({ id: String(d), name: `${d} mins` }));
+  }, [interviews]);
 
   // An interview only carries interviewerEmail, not who that interviewer's
   // vendor is — resolved via the same usersByEmail lookup used for the
@@ -102,19 +111,33 @@ export default function InterviewerStatsPage() {
       if (templateIds.length && !templateIds.includes(iv.templateId)) return false;
       if (interviewerEmails.length && !interviewerEmails.includes(iv.interviewerEmail)) return false;
       if (!emailBelongsToVendor(iv.interviewerEmail)) return false;
+      if (durations.length && !durations.includes(String(iv.duration || 60))) return false;
       return true;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, vendorIds, templateProgramById, usersByEmail]);
+  }, [interviews, dateFrom, dateTo, programIds, statuses, templateIds, interviewerEmails, vendorIds, durations, templateProgramById, usersByEmail]);
 
   const getRow = (map, email, name) => {
     if (!map.has(email)) {
       map.set(email, {
         email, name,
         completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0,
+        // Per-duration breakdown of the plain Completed count only (not
+        // Completed (Resumed) — that's already a separate payment bucket).
+        // Keyed by minutes, e.g. { 60: 2, 90: 4 }.
+        completedByDuration: {},
       });
     }
     return map.get(email);
+  };
+
+  // "60m: 2, 90m: 4" when a panelist's completed interviews span more than
+  // one duration, otherwise just the plain count — most panelists only ever
+  // run one duration, so their cell stays exactly as before.
+  const formatCompletedCell = (completed, byDuration) => {
+    const entries = Object.entries(byDuration).filter(([, n]) => n > 0).sort(([a], [b]) => Number(a) - Number(b));
+    if (entries.length <= 1) return String(completed);
+    return entries.map(([mins, n]) => `${mins}m: ${n}`).join(", ");
   };
 
   const interviewerStats = useMemo(() => {
@@ -131,7 +154,11 @@ export default function InterviewerStatsPage() {
         // kept out of the plain Completed count so it's never mistaken for
         // a full interview at payment time (see Panelist Interview Count).
         if (iv.resumedFromPartial) row.completedResumed++;
-        else row.completed++;
+        else {
+          row.completed++;
+          const d = iv.duration || 60;
+          row.completedByDuration[d] = (row.completedByDuration[d] || 0) + 1;
+        }
       }
       else if (iv.status === "partially_completed") row.partiallyCompleted++;
       else if (iv.status === "cancelled") row.cancelled++;
@@ -162,25 +189,34 @@ export default function InterviewerStatsPage() {
       });
     }
 
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...map.values()]
+      .map(row => ({ ...row, completedDisplay: formatCompletedCell(row.completed, row.completedByDuration) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, interviews, usersByEmail, statuses, dateFrom, dateTo, programIds, templateIds, interviewerEmails, vendorIds, templateProgramById]);
+  }, [filtered, interviews, usersByEmail, statuses, dateFrom, dateTo, programIds, templateIds, interviewerEmails, vendorIds, durations, templateProgramById]);
 
-  const totals = useMemo(() => interviewerStats.reduce((acc, r) => ({
-    completed:          acc.completed + r.completed,
-    completedResumed:   acc.completedResumed + r.completedResumed,
-    partiallyCompleted: acc.partiallyCompleted + r.partiallyCompleted,
-    cancelled:          acc.cancelled + r.cancelled,
-    noShow:             acc.noShow + r.noShow,
-    declined:           acc.declined + r.declined,
-  }), { completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0 }),
-  [interviewerStats]);
+  const totals = useMemo(() => {
+    const acc = interviewerStats.reduce((acc, r) => {
+      Object.entries(r.completedByDuration).forEach(([d, n]) => { acc.completedByDuration[d] = (acc.completedByDuration[d] || 0) + n; });
+      return {
+        completed:          acc.completed + r.completed,
+        completedResumed:   acc.completedResumed + r.completedResumed,
+        partiallyCompleted: acc.partiallyCompleted + r.partiallyCompleted,
+        cancelled:          acc.cancelled + r.cancelled,
+        noShow:             acc.noShow + r.noShow,
+        declined:           acc.declined + r.declined,
+        completedByDuration: acc.completedByDuration,
+      };
+    }, { completed: 0, completedResumed: 0, partiallyCompleted: 0, cancelled: 0, noShow: 0, declined: 0, completedByDuration: {} });
+    acc.completedDisplay = formatCompletedCell(acc.completed, acc.completedByDuration);
+    return acc;
+  }, [interviewerStats]);
 
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
-    programIds.length || statuses.length || templateIds.length || interviewerEmails.length || vendorIds.length;
+    programIds.length || statuses.length || templateIds.length || interviewerEmails.length || vendorIds.length || durations.length;
   const clearFilters = () => {
     setDateFrom(firstOfMonthIso()); setDateTo(todayIso());
-    setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]); setVendorIds([]);
+    setProgramIds([]); setStatuses([]); setTemplateIds([]); setInterviewerEmails([]); setVendorIds([]); setDurations([]);
   };
 
   return (
@@ -231,6 +267,10 @@ export default function InterviewerStatsPage() {
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer Status</label>
             <SkillsSelect skills={STATUS_OPTIONS} value={statuses} onChange={setStatuses} placeholder="All (Completed, Partially Completed, Cancelled, No-show)" searchPlaceholder="Search statuses…" />
           </div>
+          <div className="w-44">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
+            <SkillsSelect skills={durationOptions} value={durations} onChange={setDurations} placeholder="All Durations" searchPlaceholder="Search durations…" />
+          </div>
           {hasFilters && (
             <button onClick={clearFilters}
               className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 py-2 transition-colors">
@@ -266,7 +306,7 @@ export default function InterviewerStatsPage() {
                     <p className="font-semibold text-gray-900">{r.name}</p>
                     <p className="text-xs text-gray-400">{r.email}</p>
                   </td>
-                  <td className="px-4 py-3 text-right text-emerald-700 font-semibold">{r.completed}</td>
+                  <td className="px-4 py-3 text-right text-emerald-700 font-semibold whitespace-nowrap">{r.completedDisplay}</td>
                   <td className="px-4 py-3 text-right text-sky-700 font-semibold" title="Finished off a Partially Completed interview — not a full interview, kept separate for payment purposes">{r.completedResumed}</td>
                   <td className="px-4 py-3 text-right text-amber-700 font-semibold">{r.partiallyCompleted}</td>
                   <td className="px-4 py-3 text-right text-gray-500">{r.cancelled}</td>
@@ -278,7 +318,7 @@ export default function InterviewerStatsPage() {
             <tfoot>
               <tr className="border-t-2 border-gray-200 bg-gray-50/60">
                 <td className="px-4 py-3 font-bold text-gray-900">Total</td>
-                <td className="px-4 py-3 text-right font-bold text-emerald-700">{totals.completed}</td>
+                <td className="px-4 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">{totals.completedDisplay}</td>
                 <td className="px-4 py-3 text-right font-bold text-sky-700">{totals.completedResumed}</td>
                 <td className="px-4 py-3 text-right font-bold text-amber-700">{totals.partiallyCompleted}</td>
                 <td className="px-4 py-3 text-right font-bold text-gray-500">{totals.cancelled}</td>
