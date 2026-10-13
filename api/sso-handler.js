@@ -122,10 +122,16 @@ async function me(req, res) {
     .filter(s => s.exists)
     .map(s => ({ id: s.id, name: s.data().name, durationMinutes: s.data().durationMinutes || 60 }));
 
+  // Only invites for templates CURRENTLY assigned to this candidate —
+  // candidate.templateIds can change after an invite was created (admin
+  // reassigns templates), and a stale invite for a template the student
+  // isn't assigned to anymore shouldn't still show as bookable.
+  const assignedTemplateIds = new Set(candidate.templateIds || []);
   const invitesSnap = await db.collection("scheduleInvites").where("candidateId", "==", session.candidateId).get();
   const pendingInvites = invitesSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(inv => !["confirmed", "cancelled"].includes(inv.status))
+    .filter(inv => inv.templateId && assignedTemplateIds.has(inv.templateId))
     .map(inv => ({
       id: inv.id, inviteToken: inv.inviteToken || "", templateId: inv.templateId || "", templateName: inv.templateName || "",
       round: inv.round || "", status: inv.status,
