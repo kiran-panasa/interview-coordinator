@@ -30,6 +30,8 @@ const NotificationsPage    = lazy(() => import("./pages/interviewer/Notification
 const InterviewerAboutPage = lazy(() => import("./pages/interviewer/AboutPage"));
 const SchedulePage         = lazy(() => import("./pages/student/SchedulePage"));
 const CandidatePortal      = lazy(() => import("./pages/student/CandidatePortal"));
+const SsoCallbackPage      = lazy(() => import("./pages/student/SsoCallbackPage"));
+const StudentDashboardPage = lazy(() => import("./pages/student/StudentDashboardPage"));
 
 import { ADMIN_ROLES } from "./constants/roles";
 
@@ -105,8 +107,10 @@ function AppRoutes() {
         </Route>
 
         {/* Public student pages — no auth required */}
-        <Route path="/student/schedule" element={<SchedulePage />} />
-        <Route path="/student/portal"   element={<CandidatePortal />} />
+        <Route path="/student/schedule"  element={<SchedulePage />} />
+        <Route path="/student/portal"    element={<CandidatePortal />} />
+        <Route path="/student/dashboard" element={<StudentDashboardPage />} />
+        <Route path="/sso/callback"      element={<SsoCallbackPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
