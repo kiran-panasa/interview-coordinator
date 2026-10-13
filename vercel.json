@@ -1,5 +1,12 @@
 {
   "rewrites": [
+    { "source": "/api/sso/accounts/token",    "destination": "/api/sso-handler?route=accounts/token" },
+    { "source": "/api/sso/accounts/callback", "destination": "/api/sso-handler?route=accounts/callback" },
+    { "source": "/api/sso/callback",          "destination": "/api/sso-handler?route=callback" },
+    { "source": "/api/sso/me",                "destination": "/api/sso-handler?route=me" },
+    { "source": "/api/sso/logout",            "destination": "/api/sso-handler?route=logout" },
+    { "source": "/api/sso/otp/request",       "destination": "/api/sso-handler?route=otp/request" },
+    { "source": "/api/sso/otp/verify",        "destination": "/api/sso-handler?route=otp/verify" },
     {
       "source": "/(.*)",
       "destination": "/index.html"

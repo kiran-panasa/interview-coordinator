@@ -4,19 +4,23 @@ import { createSession, exchangeTokenForSession } from "../_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "../_lib/ssoSession.js";
 import { sendWhatsAppOtp } from "../_lib/whatsapp.js";
 
-// Every /api/sso/* route, consolidated into one catch-all function —
-// Vercel's Hobby plan caps a deployment at 12 Serverless Functions, and the
-// 7 separate SSO files (accounts/token, accounts/callback, callback, me,
-// logout, otp/request, otp/verify) pushed this project's total to 14,
-// which is what made the "mobile-number login" deployment fail outright.
-// One file dispatching on the path segments keeps all the same endpoints
-// at the same URLs while only counting as a single function.
+// Every /api/sso/* route, consolidated into one function — Vercel's Hobby
+// plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
+// files (accounts/token, accounts/callback, callback, me, logout,
+// otp/request, otp/verify) pushed this project's total to 14, which is
+// what made the "mobile-number login" deployment fail outright.
+//
+// This is a plain literal file, not a [...path] bracket route — Vercel's
+// Next.js-style dynamic function-route convention isn't honored for this
+// project's (Vite) framework preset, so a bracket file silently became
+// unreachable (every request fell through to the SPA shell instead).
+// vercel.json instead rewrites each friendly /api/sso/* path here with a
+// ?route= query param, which this dispatches on.
 
 const SECURE = process.env.NODE_ENV === "production";
 
 export default async function handler(req, res) {
-  const segments = Array.isArray(req.query.path) ? req.query.path : [req.query.path].filter(Boolean);
-  const route = segments.join("/");
+  const route = String(req.query.route || "");
 
   try {
     switch (route) {
