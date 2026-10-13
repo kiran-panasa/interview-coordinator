@@ -1,7 +1,21 @@
 import { getDb } from "./firebaseAdmin.js";
 import { randomToken } from "./ssoSession.js";
 
-// Shared by both callback endpoints (the frontend-driven
+// Shared by every login path (Forms-token exchange, mobile-OTP verify) —
+// creates a new session record once a candidate's identity has already
+// been established by the caller.
+export async function createSession(candidateId, studentUid = "") {
+  const db = getDb();
+  const sessionId = randomToken();
+  const csrfToken = randomToken(16);
+  const now = new Date().toISOString();
+  await db.collection("ssoSessions").doc(sessionId).set({
+    candidateId, studentUid, csrfToken, createdAt: now, lastActiveAt: now,
+  });
+  return { sessionId, csrfToken };
+}
+
+// Used by both callback endpoints (the frontend-driven
 // /api/sso/accounts/callback and the backend-driven /api/sso/callback) —
 // validates and CONSUMES a one-time login token (single use, 5-minute TTL,
 // per the SSO spec Section 2), then creates a new session record.
@@ -25,15 +39,5 @@ export async function exchangeTokenForSession(authToken) {
   });
   if (claim.error) return claim;
 
-  const sessionId = randomToken();
-  const csrfToken = randomToken(16);
-  const now = new Date().toISOString();
-  await db.collection("ssoSessions").doc(sessionId).set({
-    candidateId: claim.candidateId,
-    studentUid: claim.studentUid,
-    csrfToken,
-    createdAt: now,
-    lastActiveAt: now,
-  });
-  return { sessionId, csrfToken };
+  return createSession(claim.candidateId, claim.studentUid);
 }

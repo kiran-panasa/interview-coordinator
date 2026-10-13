@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, LogIn } from "lucide-react";
+import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, LogIn, Smartphone } from "lucide-react";
 import { formatDate } from "../../utils/dates";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
 import {
@@ -71,13 +71,81 @@ const stepMotion = {
 };
 
 export default function CandidatePortal() {
-  const [step,       setStep]       = useState("email");
+  const navigate = useNavigate();
+  const [step,       setStep]       = useState("mobile");
   const [email,      setEmail]      = useState("");
   const [emailError, setEmailError] = useState("");
   const [otp,        setOtp]        = useState("");
   const [otpError,   setOtpError]   = useState("");
   const [busy,       setBusy]       = useState(false);
   const [invites,    setInvites]    = useState([]);
+
+  // Mobile-number login — a separate path from the legacy email+OTP flow
+  // above; both end up signed in, but mobile creates a real SSO session
+  // (/api/sso/*) landing on the Student Dashboard, while email stays the
+  // older invite-list-only view for anyone who prefers it.
+  const [phone,          setPhone]          = useState("");
+  const [phoneError,     setPhoneError]     = useState("");
+  const [mobileOtp,      setMobileOtp]      = useState("");
+  const [mobileOtpError, setMobileOtpError] = useState("");
+  const [devOtpHint,     setDevOtpHint]     = useState("");
+
+  const handleRequestMobileOtp = async () => {
+    setPhoneError("");
+    const trimmed = phone.trim();
+    if (!trimmed) { setPhoneError("Please enter your mobile number."); return; }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/sso/otp/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPhoneError(data.error === "student_not_found"
+          ? "No account found for this mobile number. Contact the admin."
+          : "Failed to send code. Please try again.");
+        setBusy(false);
+        return;
+      }
+      // Only ever set when WhatsApp delivery isn't configured yet — see
+      // api/sso/otp/request.js. Disappears automatically once it is.
+      setDevOtpHint(data.channel === "dev_fallback" ? data.devOtp : "");
+      setStep("mobile-otp");
+    } catch {
+      setPhoneError("Failed to send code. Please try again.");
+    }
+    setBusy(false);
+  };
+
+  const handleVerifyMobileOtp = async () => {
+    setMobileOtpError("");
+    if (mobileOtp.trim().length !== 6) { setMobileOtpError("Enter the 6-digit code."); return; }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/sso/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ phone: phone.trim(), otp: mobileOtp.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMobileOtpError(
+          data.error === "code_expired" ? "Code expired. Please request a new one."
+          : data.error === "incorrect_code" ? "Incorrect code. Please try again."
+          : "Verification failed. Please try again."
+        );
+        setBusy(false);
+        return;
+      }
+      navigate("/student/dashboard");
+    } catch {
+      setMobileOtpError("Verification failed. Please try again.");
+    }
+    setBusy(false);
+  };
 
   // Use a stable portal token per email so OTP infra works unchanged
   const portalToken = `portal_${email.trim().toLowerCase()}`;
@@ -138,6 +206,101 @@ export default function CandidatePortal() {
   return (
     <StudentLayout>
       <AnimatePresence mode="wait">
+        {step === "mobile" && (
+          <motion.div key="mobile" {...stepMotion}>
+            <Card>
+              <div className="text-center mb-8">
+                <div className="w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
+                  <Smartphone className="w-6 h-6 text-brand-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 tracking-tight">Student Sign In</h2>
+                <p className="text-sm text-gray-500 mt-1">Enter your registered mobile number</p>
+              </div>
+              <div className="space-y-4">
+                {FORMS_SSO_LINK_ID && (
+                  <>
+                    <a
+                      href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
+                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors">
+                      <LogIn className="w-4 h-4" /> Sign In via Academy Account
+                    </a>
+                    <div className="flex items-center gap-3 text-xs text-gray-400">
+                      <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
+                    </div>
+                  </>
+                )}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
+                    Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={e => { setPhone(e.target.value); setPhoneError(""); }}
+                    placeholder="9876543210"
+                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+                    onKeyDown={e => e.key === "Enter" && handleRequestMobileOtp()}
+                    autoFocus
+                  />
+                  {phoneError && <p className="text-xs text-red-500 mt-1.5">{phoneError}</p>}
+                </div>
+                <Button variant="primary" size="lg" icon={busy ? undefined : ArrowRight}
+                  onClick={handleRequestMobileOtp} disabled={busy} className="w-full">
+                  {busy ? "Sending Code…" : "Send One-Time Code"}
+                </Button>
+                <button onClick={() => setStep("email")}
+                  className="w-full text-sm text-gray-400 hover:text-brand-600 transition-colors">
+                  Use your email instead
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
+        {step === "mobile-otp" && (
+          <motion.div key="mobile-otp" {...stepMotion}>
+            <Card>
+              <div className="text-center mb-8">
+                <div className="w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">
+                  <ShieldCheck className="w-6 h-6 text-brand-600" />
+                </div>
+                <h2 className="text-xl font-bold text-gray-900 tracking-tight">Verify Your Mobile Number</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  We sent a 6-digit code to <span className="font-semibold">{phone}</span>
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">Code expires in 10 minutes</p>
+                {devOtpHint && (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                    WhatsApp isn't configured yet — for testing, your code is <span className="font-bold">{devOtpHint}</span>
+                  </p>
+                )}
+              </div>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={mobileOtp}
+                  onChange={e => { setMobileOtp(e.target.value.replace(/\D/g, "")); setMobileOtpError(""); }}
+                  placeholder="000000"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-center text-2xl font-bold tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+                  onKeyDown={e => e.key === "Enter" && handleVerifyMobileOtp()}
+                  autoFocus
+                />
+                {mobileOtpError && <p className="text-xs text-red-500 mt-1.5 text-center">{mobileOtpError}</p>}
+                <Button variant="primary" size="lg" icon={busy ? undefined : ArrowRight}
+                  onClick={handleVerifyMobileOtp} disabled={busy || mobileOtp.length !== 6} className="w-full">
+                  {busy ? "Verifying…" : "Verify Code"}
+                </Button>
+                <button onClick={() => { setStep("mobile"); setMobileOtp(""); setMobileOtpError(""); setDevOtpHint(""); }}
+                  className="w-full text-sm text-gray-400 hover:text-brand-600 transition-colors">
+                  Didn't receive it? Go back to resend
+                </button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+
         {step === "email" && (
           <motion.div key="email" {...stepMotion}>
             <Card>
@@ -149,18 +312,6 @@ export default function CandidatePortal() {
                 <p className="text-sm text-gray-500 mt-1">Enter your registered email to view your scheduling invites</p>
               </div>
               <div className="space-y-4">
-                {FORMS_SSO_LINK_ID && (
-                  <>
-                    <a
-                      href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
-                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors">
-                      <LogIn className="w-4 h-4" /> Student Sign In
-                    </a>
-                    <div className="flex items-center gap-3 text-xs text-gray-400">
-                      <div className="flex-1 h-px bg-gray-100" /> or use email <div className="flex-1 h-px bg-gray-100" />
-                    </div>
-                  </>
-                )}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
                     Registered Email
@@ -180,6 +331,10 @@ export default function CandidatePortal() {
                   onClick={handleSendOtp} disabled={busy} className="w-full">
                   {busy ? "Sending OTP…" : "Send One-Time Code"}
                 </Button>
+                <button onClick={() => { setStep("mobile"); setEmail(""); setEmailError(""); }}
+                  className="w-full text-sm text-gray-400 hover:text-brand-600 transition-colors">
+                  Use your mobile number instead
+                </button>
               </div>
             </Card>
           </motion.div>
