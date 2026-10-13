@@ -55,6 +55,9 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("sso/me error:", err);
-    return res.status(500).json({ error: "internal_error" });
+    // TEMPORARY — surfaces the real error for live debugging while this
+    // endpoint is still being brought up; revert to a generic message once
+    // confirmed working.
+    return res.status(500).json({ error: "internal_error", debug: err?.message || String(err), stack: err?.stack });
   }
 }
