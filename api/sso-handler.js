@@ -3,6 +3,7 @@ import { randomToken } from "./_lib/ssoSession.js";
 import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
 import { sendWhatsAppOtp } from "./_lib/whatsapp.js";
+import { sendSmsOtp } from "./_lib/sms.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
 // plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
@@ -187,10 +188,17 @@ async function otpRequest(req, res) {
     createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), used: false,
   });
 
+  // SMS is the primary channel — plain text, not WhatsApp. WhatsApp stays
+  // as a secondary fallback (harmless to keep, in case it's configured
+  // too), then the on-screen dev fallback if neither is set up yet.
+  const sms = await sendSmsOtp(phone, otp);
+  if (sms.sent) return res.status(200).json({ success: true, channel: "sms" });
+
   const whatsapp = await sendWhatsAppOtp(phone, otp);
   if (whatsapp.sent) return res.status(200).json({ success: true, channel: "whatsapp" });
-  console.warn(`OTP for ${phone} (WhatsApp not configured: ${whatsapp.reason}):`, otp);
-  return res.status(200).json({ success: true, channel: "dev_fallback", devOtp: otp, reason: whatsapp.reason });
+
+  console.warn(`OTP for ${phone} (SMS not configured: ${sms.reason}; WhatsApp not configured: ${whatsapp.reason}):`, otp);
+  return res.status(200).json({ success: true, channel: "dev_fallback", devOtp: otp, reason: sms.reason });
 }
 
 // ── POST /api/sso/otp/verify ──────────────────────────────────────────────────

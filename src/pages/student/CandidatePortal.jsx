@@ -271,7 +271,7 @@ export default function CandidatePortal() {
                 <p className="text-xs text-gray-400 mt-0.5">Code expires in 10 minutes</p>
                 {devOtpHint && (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                    WhatsApp isn't configured yet — for testing, your code is <span className="font-bold">{devOtpHint}</span>
+                    SMS isn't configured yet — for testing, your code is <span className="font-bold">{devOtpHint}</span>
                   </p>
                 )}
               </div>
