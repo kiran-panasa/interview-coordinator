@@ -231,6 +231,11 @@ export interface Template {
   program?: string;
   domains: Domain[];
   skills?: string[];
+  // Default interview length for this template, in minutes — pre-fills the
+  // Duration field wherever an invite/interview is created on this template
+  // (still overridable per-booking). Absent on templates created before
+  // this existed; every read site falls back to 60.
+  durationMinutes?: number;
   questionBank?: QuestionBank;
   questionIds?: string[];
   // Link to this template's Interview Guidelines / Format doc (e.g. a Google

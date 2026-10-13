@@ -6,6 +6,7 @@ import {
   Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
+import { DURATIONS } from "../../constants/durations";
 import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
@@ -61,13 +62,6 @@ const STATUS_LABEL = {
   completed: "Completed", partially_completed: "Partially Completed",
   cancelled: "Cancelled", no_show: "No Show",
 };
-const DURATIONS = [
-  { label: "30 min",  value: 30  },
-  { label: "45 min",  value: 45  },
-  { label: "1 hour",  value: 60  },
-  { label: "1.5 hrs", value: 90  },
-  { label: "2 hours", value: 120 },
-];
 
 const EMPTY_FORM = {
   candidateId: "", interviewerId: "", scheduledDate: "", scheduledTime: "",

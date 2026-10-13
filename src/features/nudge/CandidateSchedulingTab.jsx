@@ -4,6 +4,7 @@ import {
   CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck, Search,
 } from "lucide-react";
 import { formatDate, formatDateTime } from "../../utils/dates";
+import { DURATIONS } from "../../constants/durations";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, freeSlotsHeldByInvite, createInterview, getTemplate, createNotification,
@@ -188,6 +189,11 @@ export default function CandidateSchedulingTab({
     const program = programs.find(p => p.id === filterProgram);
     if (program?.defaultTemplateId && templateOptions.some(t => t.id === program.defaultTemplateId)) {
       setFilterTemplate(program.defaultTemplateId);
+      const defaultTmpl = templates.find(t => t.id === program.defaultTemplateId);
+      if (defaultTmpl?.durationMinutes) {
+        setDurationCustomMode(false);
+        setDuration(defaultTmpl.durationMinutes);
+      }
     } else if (filterTemplate && !templateOptions.some(t => t.id === filterTemplate)) {
       setFilterTemplate("");
     }
@@ -206,6 +212,13 @@ export default function CandidateSchedulingTab({
     if (tmpl?.program && tmpl.program !== filterProgram) {
       templateJustPickedRef.current = true;
       setFilterProgram(tmpl.program);
+    }
+    // Duration follows the template's own default so the admin doesn't have
+    // to remember/retype it per campaign — still editable below for a
+    // one-off exception.
+    if (tmpl?.durationMinutes) {
+      setDurationCustomMode(false);
+      setDuration(tmpl.durationMinutes);
     }
   };
 
@@ -735,9 +748,7 @@ export default function CandidateSchedulingTab({
                 else { setDurationCustomMode(false); setDuration(Number(v)); }
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-              <option value={30}>30 minutes</option>
-              <option value={60}>60 minutes</option>
-              <option value={90}>90 minutes</option>
+              {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               <option value="custom">Custom…</option>
             </select>
             {durationCustomMode && (

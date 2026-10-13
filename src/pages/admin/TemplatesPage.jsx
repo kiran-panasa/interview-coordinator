@@ -5,6 +5,7 @@ import {
   Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid, ExternalLink,
 } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
+import { DURATIONS } from "../../constants/durations";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createTemplate, updateTemplate, deleteTemplate, updateInterview,
@@ -126,7 +127,7 @@ export default function TemplatesPage() {
   const openBlank = () => {
     setEditTarget(null);
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
-    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {}, guidelinesDocUrl: "", guidelinesDocLabel: "" });
+    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {}, guidelinesDocUrl: "", guidelinesDocLabel: "", durationMinutes: 60 });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setAssignedQIds([]);
     setShowNewPicker(false);
@@ -172,6 +173,7 @@ export default function TemplatesPage() {
       name: `Copy of ${source.name}`, program: source.program || "", skills: source.skills || [],
       domains: stripIntegrityDomain(resluggedDomains),
       guidelinesDocUrl: source.guidelinesDocUrl || "", guidelinesDocLabel: source.guidelinesDocLabel || "",
+      durationMinutes: source.durationMinutes || 60,
     });
     setQbTexts(toTexts(source.questionBank || source.questions));
     // Deliberately NOT source.questionIds — cloning a template copies its
@@ -196,6 +198,7 @@ export default function TemplatesPage() {
       name: t.name, program: t.program || "", skills: t.skills || [],
       domains: stripIntegrityDomain(deepClone(migrateDomainsForEdit(rawDomains))),
       guidelinesDocUrl: t.guidelinesDocUrl || "", guidelinesDocLabel: t.guidelinesDocLabel || "",
+      durationMinutes: t.durationMinutes || 60,
     });
     setQbTexts(toTexts(t.questionBank || t.questions));
     setAssignedQIds(t.questionIds || []);
@@ -315,6 +318,7 @@ export default function TemplatesPage() {
         questionIds: assignedQIds,
         guidelinesDocUrl: (form.guidelinesDocUrl || "").trim(),
         guidelinesDocLabel: (form.guidelinesDocLabel || "").trim(),
+        durationMinutes: form.durationMinutes || 60,
         schemaVersion: 2,
       };
       if (editTarget) {
@@ -745,7 +749,7 @@ export default function TemplatesPage() {
         title={editTarget ? "Edit Template" : "New Interview Template"} wide>
         <div className="space-y-5">
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
                 Template Name *
@@ -766,6 +770,18 @@ export default function TemplatesPage() {
               >
                 <option value="">— Unassigned —</option>
                 {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">
+                Interview Duration
+              </label>
+              <select
+                value={form.durationMinutes || 60}
+                onChange={e => setForm(f => ({ ...f, durationMinutes: Number(e.target.value) }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white transition-shadow"
+              >
+                {DURATIONS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
               </select>
             </div>
           </div>
