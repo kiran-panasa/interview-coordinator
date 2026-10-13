@@ -1,8 +1,8 @@
-import { getDb } from "../_lib/firebaseAdmin.js";
-import { randomToken } from "../_lib/ssoSession.js";
-import { createSession, exchangeTokenForSession } from "../_lib/ssoExchange.js";
-import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "../_lib/ssoSession.js";
-import { sendWhatsAppOtp } from "../_lib/whatsapp.js";
+import { getDb } from "./_lib/firebaseAdmin.js";
+import { randomToken } from "./_lib/ssoSession.js";
+import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
+import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
+import { sendWhatsAppOtp } from "./_lib/whatsapp.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
 // plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
