@@ -24,25 +24,30 @@ export default async function handler(req, res) {
     }
     const candidate = candidateSnap.data();
 
+    // Sorted here in JS rather than via Firestore's orderBy — a compound
+    // where+orderBy on different fields needs a composite index, and this
+    // collection has none for candidateId+scheduledDate yet. Fine at a
+    // single candidate's interview-count scale.
     const interviewsSnap = await db.collection("interviews")
       .where("candidateId", "==", session.candidateId)
-      .orderBy("scheduledDate", "desc")
       .get();
-    const interviews = interviewsSnap.docs.map(d => {
-      const iv = d.data();
-      // Only what a student needs to see — never leak internal fields like
-      // interviewer contact details, admin notes, or scoring data.
-      return {
-        id: d.id,
-        templateName:  iv.templateName  || "",
-        round:         iv.round         || "",
-        scheduledDate: iv.scheduledDate || "",
-        scheduledTime: iv.scheduledTime || "",
-        duration:      iv.duration      || 60,
-        status:        iv.status,
-        meetLink:      iv.meetLink      || "",
-      };
-    });
+    const interviews = interviewsSnap.docs
+      .map(d => {
+        const iv = d.data();
+        // Only what a student needs to see — never leak internal fields
+        // like interviewer contact details, admin notes, or scoring data.
+        return {
+          id: d.id,
+          templateName:  iv.templateName  || "",
+          round:         iv.round         || "",
+          scheduledDate: iv.scheduledDate || "",
+          scheduledTime: iv.scheduledTime || "",
+          duration:      iv.duration      || 60,
+          status:        iv.status,
+          meetLink:      iv.meetLink      || "",
+        };
+      })
+      .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 
     return res.status(200).json({
       candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: candidate.program || "" },
