@@ -140,6 +140,7 @@ async function me(req, res) {
         scheduledDate: iv.scheduledDate || "", scheduledTime: iv.scheduledTime || "",
         duration: iv.duration || 60, status: iv.status, meetLink: iv.meetLink || "",
         rescheduleRequested: !!iv.rescheduleRequested,
+        aiReport: iv.aiReport || null,
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));

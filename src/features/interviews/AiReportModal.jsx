@@ -45,7 +45,7 @@ const SectionHeader = ({ icon: Icon, children }) => (
   </h3>
 );
 
-export default function AiReportModal({ interview, loading, status, onClose, onRegenerate, onRetry }) {
+export default function AiReportModal({ interview, loading, status, onClose, onRegenerate, onRetry, readOnly = false }) {
   const report = interview?.aiReport;
   const decisionMeta = report ? (DECISION_META[report.decision] || { label: report.decisionLabel, cls: "bg-gray-50 text-gray-700 border-gray-200", icon: Sparkles }) : null;
   const DecisionIcon = decisionMeta?.icon;
@@ -200,17 +200,21 @@ export default function AiReportModal({ interview, loading, status, onClose, onR
 
           <div className="pt-2 flex items-center justify-between border-t border-gray-100">
             <div className="flex items-center gap-4">
-              <button onClick={onRegenerate}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                <RefreshCw className="w-3 h-3" /> Regenerate report
-              </button>
-              {/* Same canonical /admin/interviews?aiReport=<id> deep link the
-                  Download Feedback export uses in its AI Report column —
-                  opening it re-shows this exact report, no regeneration. */}
-              <span className="flex items-center gap-1 text-xs text-gray-400">
-                Copy report link
-                <CopyButton value={`${window.location.origin}/admin/interviews?aiReport=${interview.id}`} />
-              </span>
+              {!readOnly && (
+                <>
+                  <button onClick={onRegenerate}
+                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    <RefreshCw className="w-3 h-3" /> Regenerate report
+                  </button>
+                  {/* Same canonical /admin/interviews?aiReport=<id> deep link the
+                      Download Feedback export uses in its AI Report column —
+                      opening it re-shows this exact report, no regeneration. */}
+                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                    Copy report link
+                    <CopyButton value={`${window.location.origin}/admin/interviews?aiReport=${interview.id}`} />
+                  </span>
+                </>
+              )}
             </div>
             <Button variant="secondary" onClick={onClose}>
               Close

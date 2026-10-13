@@ -5,11 +5,23 @@ import { auth } from "../../firebase";
 import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText, RefreshCw,
+  ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown,
 } from "lucide-react";
 import { formatDate } from "../../utils/dates";
+import { getPreInterviewResources } from "../../api/firestore";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
+import AiReportModal from "../../features/interviews/AiReportModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import Button from "../../components/Button";
+
+const SEEN_INVITES_KEY = "ic_seen_invites";
+function readSeenInviteIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_INVITES_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function writeSeenInviteIds(ids) {
+  try { localStorage.setItem(SEEN_INVITES_KEY, JSON.stringify([...ids])); } catch { /* storage unavailable */ }
+}
 
 const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
@@ -56,6 +68,10 @@ export default function StudentDashboardPage() {
   const [resumeSaving, setResumeSaving] = useState(false);
   const [resumeSaved,  setResumeSaved]  = useState(false);
   const [reschedulingId, setReschedulingId] = useState(null);
+  const [resources, setResources] = useState(null);
+  const [newInviteIds, setNewInviteIds] = useState(new Set());
+  const [expandedInviteId, setExpandedInviteId] = useState(null);
+  const [aiReportInterview, setAiReportInterview] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -69,8 +85,19 @@ export default function StudentDashboardPage() {
         if (res.status === 401) { navigate("/student/portal", { replace: true }); return; }
         const json = await res.json();
         if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
+
+        // Compare against what this browser already saw last visit BEFORE
+        // marking the current set as seen — gives a one-time "new" flag per
+        // invite rather than a persistent/never-clearing badge.
+        const bookableNow = (json.pendingInvites || []).filter(i => ["sent", "otp_verified"].includes(i.status));
+        const seen = readSeenInviteIds();
+        setNewInviteIds(new Set(bookableNow.filter(i => !seen.has(i.id)).map(i => i.id)));
+        writeSeenInviteIds(new Set(bookableNow.map(i => i.id)));
+        if (bookableNow.length) setExpandedInviteId(bookableNow[0].id);
+
         setData(json);
         setResumeLink(json.candidate?.resumeLink || "");
+        getPreInterviewResources().then(setResources).catch(() => {});
       } catch {
         setError("network_error");
       }
@@ -166,12 +193,16 @@ export default function StudentDashboardPage() {
     const Icon = item.icon;
     const active = tab === item.id;
     const badge = item.id === "slots" ? bookable.length : item.id === "interviews" ? upcoming.length : 0;
+    const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
       <button onClick={() => setTab(item.id)}
-        className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+        className={`relative flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
           active ? "bg-brand-50 text-brand-700" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
         }`}>
-        <Icon className="w-4 h-4 flex-shrink-0" />
+        <span className="relative flex-shrink-0">
+          <Icon className="w-4 h-4" />
+          {hasNew && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />}
+        </span>
         <span className="flex-1 text-left">{item.label}</span>
         {badge > 0 && (
           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? "bg-brand-600 text-white" : "bg-gray-200 text-gray-600"}`}>
@@ -341,6 +372,26 @@ export default function StudentDashboardPage() {
                   <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book.</p>
                 </div>
 
+                {(resources?.videoGuideUrl || resources?.documents?.length > 0) && (
+                  <Card className="p-5 bg-amber-50/50 border-amber-200">
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-2.5">Before You Book</p>
+                    <div className="flex flex-wrap gap-2">
+                      {resources.videoGuideUrl && (
+                        <a href={resources.videoGuideUrl} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                          <PlayCircle className="w-3.5 h-3.5" /> {resources.videoGuideLabel || "Setup Video Guide"}
+                        </a>
+                      )}
+                      {(resources.documents || []).map(doc => (
+                        <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                          <FileDown className="w-3.5 h-3.5" /> {doc.label}
+                        </a>
+                      ))}
+                    </div>
+                  </Card>
+                )}
+
                 {bookable.length === 0 && awaiting.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
                     <CalendarRange className="w-8 h-8 text-gray-200 mb-2" />
@@ -348,28 +399,45 @@ export default function StudentDashboardPage() {
                   </Card>
                 ) : (
                   <>
-                    {bookable.map(inv => (
-                      <Card key={inv.id} className="p-6">
-                        <div className="flex items-start justify-between gap-3 mb-4">
-                          <div>
-                            <p className="font-bold text-gray-900">{inv.round || inv.templateName || "Interview"}</p>
-                            {inv.dateRangeStart && (
-                              <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                                <CalendarClock className="w-3 h-3" />
-                                Book between {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
-                              </p>
-                            )}
-                          </div>
-                          <span className="text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 bg-violet-50 text-violet-700 border-violet-200">
-                            Ready to Book
-                          </span>
-                        </div>
-                        <InlineSlotPicker invite={inv} onBooked={() => window.location.reload()} />
-                      </Card>
-                    ))}
+                    {bookable.map(inv => {
+                      const isExpanded = expandedInviteId === inv.id;
+                      return (
+                        <Card key={inv.id} className="overflow-hidden">
+                          <button
+                            onClick={() => setExpandedInviteId(isExpanded ? null : inv.id)}
+                            className="flex items-center justify-between gap-3 w-full px-6 py-4 text-left hover:bg-gray-50/70 transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-900 truncate">{inv.round || inv.templateName || "Interview"}</p>
+                                {inv.dateRangeStart && (
+                                  <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
+                                    <CalendarClock className="w-3 h-3" />
+                                    Book between {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              {newInviteIds.has(inv.id) && (
+                                <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">NEW</span>
+                              )}
+                              <span className="text-[11px] font-semibold border px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border-violet-200">
+                                Ready to Book
+                              </span>
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-6 pb-6 pt-1 border-t border-gray-50">
+                              <InlineSlotPicker invite={inv} onBooked={() => window.location.reload()} />
+                            </div>
+                          )}
+                        </Card>
+                      );
+                    })}
                     {awaiting.map(inv => (
-                      <Card key={inv.id} className="p-6">
-                        <div className="flex items-center gap-2 text-sm text-violet-800 font-medium bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+                      <Card key={inv.id} className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-sm text-violet-800 font-medium">
                           <Clock3 className="w-4 h-4 flex-shrink-0" />
                           {inv.round || inv.templateName} — slot selected, awaiting confirmation.
                         </div>
@@ -435,17 +503,25 @@ export default function StudentDashboardPage() {
                       <div className="space-y-3">
                         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4">Past</p>
                         {past.map(iv => (
-                          <Card key={iv.id} className="p-5 opacity-70">
+                          <Card key={iv.id} className="p-5">
                             <div className="flex items-center justify-between gap-3">
-                              <div>
+                              <div className="opacity-70">
                                 <p className="font-semibold text-gray-700 text-sm">{iv.round || iv.templateName || "Interview"}</p>
                                 {iv.scheduledDate && (
                                   <p className="text-xs text-gray-400 mt-0.5">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
                                 )}
                               </div>
-                              <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                                {STATUS_LABEL[iv.status] || iv.status}
-                              </span>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {iv.aiReport && (
+                                  <button onClick={() => setAiReportInterview(iv)}
+                                    className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-brand-200 bg-brand-50 px-2.5 py-1 rounded-full hover:bg-brand-100 transition-colors">
+                                    <Sparkles className="w-3 h-3" /> View Report
+                                  </button>
+                                )}
+                                <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full opacity-70 ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                                  {STATUS_LABEL[iv.status] || iv.status}
+                                </span>
+                              </div>
                             </div>
                           </Card>
                         ))}
@@ -459,6 +535,14 @@ export default function StudentDashboardPage() {
           </div>
         </div>
       </div>
+
+      <AiReportModal
+        interview={aiReportInterview}
+        loading={false}
+        status={null}
+        readOnly
+        onClose={() => setAiReportInterview(null)}
+      />
     </ErrorBoundary>
   );
 }
