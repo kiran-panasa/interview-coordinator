@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { Loader2, CalendarCheck2 } from "lucide-react";
-import { formatDateLong, parseInterviewStart, timeToMinutes, hhmmToMinutes } from "../utils/dates";
+import { Loader2, CalendarCheck2, RefreshCw, User2 } from "lucide-react";
+import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes } from "../utils/dates";
 import {
   updateScheduleInvite, getAvailableSlots, bookSlotForCandidate, getActiveAdmins,
 } from "../api/firestore";
 import { callAppsScript } from "../lib/appsScript";
-import { formatDate } from "../utils/dates";
 import { collapseSlotsByDurationGrouped } from "../utils/slotAvailability";
 import { resolveActionAdminRecipients } from "../utils/adminNotify";
 import Button from "./Button";
@@ -25,15 +24,16 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
 }
 
 // The same slot-browse-and-book experience as SchedulePage.jsx's "Pick a
-// Slot" step, minus the email+OTP steps — reused here because the SSO
-// session has already proven who the student is, so re-verifying by email
-// per invite would be redundant. Needs the caller to have already called
-// signInAnonymously() (same Firestore anon-auth requirement as the rest of
-// the student-facing booking flow).
+// Slot" step, minus the email+OTP steps (the SSO session already proved
+// who the student is) — plus a date-first picker and visible panelist
+// names per slot, so it's clear WHO each time belongs to instead of a flat
+// list of times from however many interviewers are pooled together.
 export default function InlineSlotPicker({ invite, onBooked }) {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [slots, setSlots] = useState([]);
   const [busyWindowsByInterviewer, setBusyWindowsByInterviewer] = useState({});
+  const [selectedDate, setSelectedDate] = useState(null);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [booked, setBooked] = useState(null);
@@ -83,26 +83,39 @@ export default function InlineSlotPicker({ invite, onBooked }) {
     } catch { /* best-effort */ }
   };
 
+  const fetchSlots = async (forceRefresh = false) => {
+    try {
+      const { slots: s, busyWindowsByInterviewer: bw } = await getAvailableSlots(
+        invite.dateRangeStart, invite.dateRangeEnd, invite.interviewerIds || null, forceRefresh
+      );
+      setSlots(s);
+      setBusyWindowsByInterviewer(bw);
+      if (!forceRefresh && computeBookableSlots(invite, s, bw).length === 0) notifyAdminsNoSlotsAvailable(invite);
+      return { s, bw };
+    } catch {
+      setSlots([]);
+      return { s: [], bw: {} };
+    }
+  };
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      try {
-        if (invite.status === "sent") {
-          await updateScheduleInvite(invite.id, { status: "otp_verified" }).catch(() => {});
-        }
-        const { slots: s, busyWindowsByInterviewer: bw } = await getAvailableSlots(
-          invite.dateRangeStart, invite.dateRangeEnd, invite.interviewerIds || null
-        );
-        setSlots(s);
-        setBusyWindowsByInterviewer(bw);
-        if (computeBookableSlots(invite, s, bw).length === 0) notifyAdminsNoSlotsAvailable(invite);
-      } catch {
-        setSlots([]);
+      if (invite.status === "sent") {
+        await updateScheduleInvite(invite.id, { status: "otp_verified" }).catch(() => {});
       }
+      await fetchSlots(false);
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invite.id]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    setSelected(null);
+    await fetchSlots(true);
+    setRefreshing(false);
+  };
 
   const handleBook = async () => {
     if (!selected) return;
@@ -112,14 +125,12 @@ export default function InlineSlotPicker({ invite, onBooked }) {
         selected.interviewerId, selected.slotId, invite.id,
         selected.date, selected.time, invite.duration || 60
       );
-      setBooked({ date: selected.date, time: selected.time });
+      setBooked({ date: selected.date, time: selected.time, interviewerName: selected.interviewerName });
       notifyAdminsBookingPending(invite, selected);
       onBooked?.();
     } catch (e) {
       if (e.message.includes("already booked") || e.message.includes("already passed")) {
-        const { slots: fresh, busyWindowsByInterviewer: freshBw } =
-          await getAvailableSlots(invite.dateRangeStart, invite.dateRangeEnd, invite.interviewerIds || null, true);
-        setSlots(fresh);
+        const { bw: freshBw } = { bw: (await fetchSlots(true)).bw };
         setBusyWindowsByInterviewer(freshBw);
         setSelected(null);
         alert(e.message);
@@ -136,7 +147,10 @@ export default function InlineSlotPicker({ invite, onBooked }) {
         <CalendarCheck2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
         <div>
           <p className="text-sm font-bold text-emerald-800">Slot reserved — {formatDateLong(booked.date)} · {booked.time}</p>
-          <p className="text-xs text-emerald-600 mt-0.5">Pending admin confirmation. You'll get a Meet invite by email once confirmed.</p>
+          <p className="text-xs text-emerald-600 mt-0.5">
+            {booked.interviewerName ? `With ${booked.interviewerName} — ` : ""}
+            Pending admin confirmation. You'll get a Meet invite by email once confirmed.
+          </p>
         </div>
       </div>
     );
@@ -151,21 +165,56 @@ export default function InlineSlotPicker({ invite, onBooked }) {
   }
 
   const bookableSlots = computeBookableSlots(invite, slots, busyWindowsByInterviewer);
-  const slotsByDate = bookableSlots.reduce((acc, s) => {
-    (acc[s.date] ||= []).push(s);
+  const dates = [...new Set(bookableSlots.map(s => s.date))].sort();
+  const activeDate = selectedDate && dates.includes(selectedDate) ? selectedDate : dates[0];
+
+  if (dates.length === 0) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-gray-400 py-4 text-center">No slots available right now — please check back later.</p>
+        <button onClick={handleRefresh} disabled={refreshing}
+          className="flex items-center justify-center gap-1.5 w-full text-xs font-semibold text-brand-600 hover:text-brand-700 py-2 transition-colors">
+          <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} /> {refreshing ? "Refreshing…" : "Refresh Slots"}
+        </button>
+      </div>
+    );
+  }
+
+  // Grouped by interviewer within the selected date, so it's clear WHO
+  // each time slot belongs to instead of one undifferentiated time list.
+  const slotsForDate = bookableSlots.filter(s => s.date === activeDate);
+  const byInterviewer = slotsForDate.reduce((acc, s) => {
+    (acc[s.interviewerName || "Interviewer"] ||= []).push(s);
     return acc;
   }, {});
 
-  if (Object.keys(slotsByDate).length === 0) {
-    return <p className="text-sm text-gray-400 py-4 text-center">No slots available right now — please check back later.</p>;
-  }
-
   return (
     <div className="space-y-4">
-      <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
-        {Object.entries(slotsByDate).map(([date, daySlots]) => (
-          <div key={date}>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">{formatDateLong(date)}</p>
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Pick a date</p>
+        <button onClick={handleRefresh} disabled={refreshing}
+          className="flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors disabled:opacity-50">
+          <RefreshCw className={`w-3 h-3 ${refreshing ? "animate-spin" : ""}`} /> {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {dates.map(d => (
+          <button key={d} onClick={() => { setSelectedDate(d); setSelected(null); }}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+              d === activeDate ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-600 border-gray-200 hover:border-brand-300"
+            }`}>
+            {formatDateLong(d).split(",").slice(0, 2).join(",")}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+        {Object.entries(byInterviewer).map(([name, daySlots]) => (
+          <div key={name}>
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-1.5">
+              <User2 className="w-3.5 h-3.5 text-gray-400" /> {name}
+            </p>
             <div className="flex flex-wrap gap-2">
               {daySlots.map(s => {
                 const isSelected = selected?.slotId === s.slotId && selected?.interviewerId === s.interviewerId;
@@ -191,9 +240,10 @@ export default function InlineSlotPicker({ invite, onBooked }) {
           </div>
         ))}
       </div>
+
       {selected && (
         <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 text-sm text-brand-800 font-medium">
-          Selected: {formatDateLong(selected.date)} · {selected.time}
+          Selected: {formatDateLong(selected.date)} · {selected.time} with {selected.interviewerName}
         </div>
       )}
       <Button variant="primary" onClick={handleBook} disabled={!selected || busy} className="w-full">

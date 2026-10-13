@@ -32,6 +32,8 @@ export default async function handler(req, res) {
       case "logout":            return await logout(req, res);
       case "otp/request":       return await otpRequest(req, res);
       case "otp/verify":        return await otpVerify(req, res);
+      case "profile/resume":    return await updateResume(req, res);
+      case "interviews/request-reschedule": return await requestReschedule(req, res);
       default:                  return res.status(404).json({ error: "not_found" });
     }
   } catch (err) {
@@ -137,12 +139,13 @@ async function me(req, res) {
         id: d.id, templateName: iv.templateName || "", round: iv.round || "",
         scheduledDate: iv.scheduledDate || "", scheduledTime: iv.scheduledTime || "",
         duration: iv.duration || 60, status: iv.status, meetLink: iv.meetLink || "",
+        rescheduleRequested: !!iv.rescheduleRequested,
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 
   return res.status(200).json({
-    candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: programName },
+    candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: programName, resumeLink: candidate.resumeLink || "" },
     templates, interviews, pendingInvites,
   });
 }
@@ -222,5 +225,56 @@ async function otpVerify(req, res) {
 
   const session = await createSession(record.candidateId);
   setSessionCookies(res, session.sessionId, session.csrfToken, { secure: SECURE });
+  return res.status(200).json({ success: true });
+}
+
+// ── POST /api/sso/profile/resume ───────────────────────────────────────────
+// Lets the signed-in student set/update their own resume link — scoped to
+// their OWN candidate record only (session.candidateId, never a client-
+// supplied id), same pattern as every other session-gated write here.
+async function updateResume(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
+  const session = await getValidSession(req);
+  if (!session) return res.status(401).json({ error: "no_session" });
+
+  const resumeLink = String(req.body?.resumeLink || "").trim();
+  if (resumeLink && !/^https?:\/\//i.test(resumeLink)) {
+    return res.status(400).json({ error: "invalid_url", message: "Resume link must be a valid http(s) URL." });
+  }
+  await getDb().collection("candidates").doc(session.candidateId).update({
+    resumeLink, resumeUpdatedAt: new Date().toISOString(),
+  });
+  return res.status(200).json({ success: true, resumeLink });
+}
+
+// ── POST /api/sso/interviews/request-reschedule ─────────────────────────────
+// Records a reschedule request against the student's OWN interview only —
+// verified by candidateId match, not just interview id, so a student can
+// never flag someone else's interview. No SLA engine or auto-approval yet
+// (see the Student Dashboard & SSO Technical Due Diligence doc — that's a
+// bigger, separate piece of work) — this just captures the request and
+// reason so an admin can see and act on it.
+async function requestReschedule(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
+  const session = await getValidSession(req);
+  if (!session) return res.status(401).json({ error: "no_session" });
+
+  const interviewId = String(req.body?.interviewId || "").trim();
+  const reason = String(req.body?.reason || "").trim();
+  if (!interviewId || !reason) return res.status(400).json({ error: "invalid_parameter" });
+
+  const db = getDb();
+  const ref = db.collection("interviews").doc(interviewId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data().candidateId !== session.candidateId) {
+    return res.status(404).json({ error: "interview_not_found" });
+  }
+  await ref.update({
+    rescheduleRequested: true,
+    rescheduleRequestReason: reason,
+    rescheduleRequestedAt: new Date().toISOString(),
+  });
   return res.status(200).json({ success: true });
 }

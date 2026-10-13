@@ -4,11 +4,12 @@ import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
 import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
-  User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3,
+  User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText, RefreshCw,
 } from "lucide-react";
 import { formatDate } from "../../utils/dates";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
 import ErrorBoundary from "../../components/ErrorBoundary";
+import Button from "../../components/Button";
 
 const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
@@ -51,6 +52,10 @@ export default function StudentDashboardPage() {
   const [error,   setError]   = useState("");
   const [data,    setData]    = useState(null);
   const [tab,     setTab]     = useState("overview");
+  const [resumeLink,   setResumeLink]   = useState("");
+  const [resumeSaving, setResumeSaving] = useState(false);
+  const [resumeSaved,  setResumeSaved]  = useState(false);
+  const [reschedulingId, setReschedulingId] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -65,6 +70,7 @@ export default function StudentDashboardPage() {
         const json = await res.json();
         if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
         setData(json);
+        setResumeLink(json.candidate?.resumeLink || "");
       } catch {
         setError("network_error");
       }
@@ -81,6 +87,54 @@ export default function StudentDashboardPage() {
       });
     } catch { /* sign out locally regardless */ }
     navigate("/student/portal", { replace: true });
+  };
+
+  const handleSaveResume = async () => {
+    setResumeSaving(true);
+    setResumeSaved(false);
+    try {
+      const res = await fetch("/api/sso/profile/resume", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        body: JSON.stringify({ resumeLink: resumeLink.trim() }),
+      });
+      if (res.ok) {
+        setResumeSaved(true);
+        setTimeout(() => setResumeSaved(false), 2500);
+      } else {
+        const json = await res.json().catch(() => ({}));
+        alert(json.message || "Couldn't save your resume link — make sure it's a valid https:// URL.");
+      }
+    } catch {
+      alert("Couldn't save your resume link. Please try again.");
+    }
+    setResumeSaving(false);
+  };
+
+  const handleRequestReschedule = async (interviewId) => {
+    const reason = window.prompt("Why would you like to reschedule this interview? (This goes to the admin team.)");
+    if (!reason || !reason.trim()) return;
+    setReschedulingId(interviewId);
+    try {
+      const res = await fetch("/api/sso/interviews/request-reschedule", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        body: JSON.stringify({ interviewId, reason: reason.trim() }),
+      });
+      if (res.ok) {
+        setData(d => ({
+          ...d,
+          interviews: d.interviews.map(iv => iv.id === interviewId ? { ...iv, rescheduleRequested: true } : iv),
+        }));
+      } else {
+        alert("Couldn't submit your reschedule request. Please try again.");
+      }
+    } catch {
+      alert("Couldn't submit your reschedule request. Please try again.");
+    }
+    setReschedulingId(null);
   };
 
   if (loading) {
@@ -202,17 +256,6 @@ export default function StudentDashboardPage() {
                   </Card>
                 )}
 
-                {bookable.length > 0 && (
-                  <Card className="p-5 border-violet-200 bg-violet-50/50">
-                    <p className="text-sm font-semibold text-violet-800">
-                      You have {bookable.length} interview{bookable.length > 1 ? "s" : ""} ready to book.
-                    </p>
-                    <button onClick={() => setTab("slots")}
-                      className="text-sm font-semibold text-violet-700 hover:underline mt-1">
-                      Go to Slot Overview →
-                    </button>
-                  </Card>
-                )}
               </div>
             )}
 
@@ -259,6 +302,33 @@ export default function StudentDashboardPage() {
                         ))}
                       </div>
                     </div>
+                  )}
+                </Card>
+
+                <Card className="p-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="w-4 h-4 text-brand-600" />
+                    <p className="text-sm font-bold text-gray-900">Resume</p>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-3">
+                    Shared with the panelist running your interview — keep this up to date.
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={resumeLink}
+                      onChange={e => setResumeLink(e.target.value)}
+                      placeholder="https://drive.google.com/your-resume"
+                      className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
+                    />
+                    <Button variant="primary" onClick={handleSaveResume} disabled={resumeSaving} className="px-5 flex-shrink-0">
+                      {resumeSaving ? "Saving…" : resumeSaved ? "Saved ✓" : "Save"}
+                    </Button>
+                  </div>
+                  {resumeLink && (
+                    <a href={resumeLink} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline mt-2 inline-block">
+                      View current resume →
+                    </a>
                   )}
                 </Card>
               </div>
@@ -336,16 +406,26 @@ export default function StudentDashboardPage() {
                                   </p>
                                 )}
                               </div>
-                              <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                                {STATUS_LABEL[iv.status] || iv.status}
+                              <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                iv.rescheduleRequested ? "bg-amber-50 text-amber-700 border-amber-200" : (STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200")
+                              }`}>
+                                {iv.rescheduleRequested ? "Reschedule Requested" : (STATUS_LABEL[iv.status] || iv.status)}
                               </span>
                             </div>
-                            {iv.meetLink && iv.status === "scheduled" && (
-                              <a href={iv.meetLink} target="_blank" rel="noreferrer"
-                                className="flex items-center justify-center gap-1.5 w-full text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
-                                <Video className="w-3.5 h-3.5" /> Join Meet
-                              </a>
-                            )}
+                            <div className="flex gap-2">
+                              {iv.meetLink && iv.status === "scheduled" && (
+                                <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                                  className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                                  <Video className="w-3.5 h-3.5" /> Join Meet
+                                </a>
+                              )}
+                              {iv.status === "scheduled" && !iv.rescheduleRequested && (
+                                <button onClick={() => handleRequestReschedule(iv.id)} disabled={reschedulingId === iv.id}
+                                  className="flex items-center justify-center gap-1.5 flex-1 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
+                                  <RefreshCw className="w-3.5 h-3.5" /> {reschedulingId === iv.id ? "Submitting…" : "Request Reschedule"}
+                                </button>
+                              )}
+                            </div>
                           </Card>
                         ))}
                       </div>

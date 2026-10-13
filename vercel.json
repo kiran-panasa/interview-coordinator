@@ -7,6 +7,8 @@
     { "source": "/api/sso/logout",            "destination": "/api/sso-handler?route=logout" },
     { "source": "/api/sso/otp/request",       "destination": "/api/sso-handler?route=otp/request" },
     { "source": "/api/sso/otp/verify",        "destination": "/api/sso-handler?route=otp/verify" },
+    { "source": "/api/sso/profile/resume",    "destination": "/api/sso-handler?route=profile/resume" },
+    { "source": "/api/sso/interviews/request-reschedule", "destination": "/api/sso-handler?route=interviews/request-reschedule" },
     {
       "source": "/(.*)",
       "destination": "/index.html"
