@@ -5,7 +5,7 @@ import { auth } from "../../firebase";
 import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText, RefreshCw,
-  ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown,
+  ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
 } from "lucide-react";
 import { formatDate } from "../../utils/dates";
 import { getPreInterviewResources } from "../../api/firestore";
@@ -54,6 +54,7 @@ function Card({ children, className = "" }) {
 const NAV = [
   { id: "overview", label: "Overview",      icon: LayoutGrid },
   { id: "details",  label: "My Details",    icon: User },
+  { id: "book",     label: "Book an Interview", icon: CalendarPlus },
   { id: "slots",    label: "Slot Overview", icon: CalendarRange },
   { id: "interviews", label: "My Interviews", icon: ListChecks },
 ];
@@ -72,37 +73,45 @@ export default function StudentDashboardPage() {
   const [newInviteIds, setNewInviteIds] = useState(new Set());
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
+  const [bookingTemplateId, setBookingTemplateId] = useState(null);
+
+  const loadDashboard = async ({ expandInviteId } = {}) => {
+    try {
+      const res = await fetch("/api/sso/me", { credentials: "include" });
+      if (res.status === 401) { navigate("/student/portal", { replace: true }); return; }
+      const json = await res.json();
+      if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
+
+      // Compare against what this browser already saw last visit BEFORE
+      // marking the current set as seen — gives a one-time "new" flag per
+      // invite rather than a persistent/never-clearing badge.
+      const bookableNow = (json.pendingInvites || []).filter(i => ["sent", "otp_verified"].includes(i.status));
+      const seen = readSeenInviteIds();
+      setNewInviteIds(new Set(bookableNow.filter(i => !seen.has(i.id)).map(i => i.id)));
+      writeSeenInviteIds(new Set(bookableNow.map(i => i.id)));
+      if (expandInviteId) setExpandedInviteId(expandInviteId);
+      else if (bookableNow.length) setExpandedInviteId(bookableNow[0].id);
+
+      setData(json);
+      setResumeLink(json.candidate?.resumeLink || "");
+      return json;
+    } catch {
+      setError("network_error");
+    }
+  };
 
   useEffect(() => {
     (async () => {
-      try {
-        // InlineSlotPicker (Slot Overview tab) reads/writes availability and
-        // scheduleInvites via the client Firestore SDK, same as the rest of
-        // the student-facing booking flow — that needs an authenticated
-        // (even if anonymous) session for the current Firestore rules.
-        await signInAnonymously(auth).catch(() => {});
-        const res = await fetch("/api/sso/me", { credentials: "include" });
-        if (res.status === 401) { navigate("/student/portal", { replace: true }); return; }
-        const json = await res.json();
-        if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
-
-        // Compare against what this browser already saw last visit BEFORE
-        // marking the current set as seen — gives a one-time "new" flag per
-        // invite rather than a persistent/never-clearing badge.
-        const bookableNow = (json.pendingInvites || []).filter(i => ["sent", "otp_verified"].includes(i.status));
-        const seen = readSeenInviteIds();
-        setNewInviteIds(new Set(bookableNow.filter(i => !seen.has(i.id)).map(i => i.id)));
-        writeSeenInviteIds(new Set(bookableNow.map(i => i.id)));
-        if (bookableNow.length) setExpandedInviteId(bookableNow[0].id);
-
-        setData(json);
-        setResumeLink(json.candidate?.resumeLink || "");
-        getPreInterviewResources().then(setResources).catch(() => {});
-      } catch {
-        setError("network_error");
-      }
+      // InlineSlotPicker (Slot Overview tab) reads/writes availability and
+      // scheduleInvites via the client Firestore SDK, same as the rest of
+      // the student-facing booking flow — that needs an authenticated
+      // (even if anonymous) session for the current Firestore rules.
+      await signInAnonymously(auth).catch(() => {});
+      await loadDashboard();
+      getPreInterviewResources().then(setResources).catch(() => {});
       setLoading(false);
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const handleSignOut = async () => {
@@ -164,6 +173,28 @@ export default function StudentDashboardPage() {
     setReschedulingId(null);
   };
 
+  const handleSelfBook = async (templateId) => {
+    setBookingTemplateId(templateId);
+    try {
+      const res = await fetch("/api/sso/interviews/self-book", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        body: JSON.stringify({ templateId }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        await loadDashboard({ expandInviteId: json.inviteId });
+        setTab("slots");
+      } else {
+        alert("Couldn't start booking for this template. Please try again.");
+      }
+    } catch {
+      alert("Couldn't start booking for this template. Please try again.");
+    }
+    setBookingTemplateId(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-50/40 to-gray-50 flex items-center justify-center">
@@ -187,6 +218,7 @@ export default function StudentDashboardPage() {
   const past     = interviews.filter(i => !["pending_acceptance", "scheduled", "declined"].includes(i.status));
   const bookable = pendingInvites.filter(i => ["sent", "otp_verified"].includes(i.status));
   const awaiting = pendingInvites.filter(i => i.status === "slot_selected");
+  const templatesInProgress = new Set(pendingInvites.map(i => i.templateId).filter(Boolean));
   const nextUpcoming = upcoming.find(i => i.status === "scheduled" && i.scheduledDate);
 
   const NavButton = ({ item }) => {
@@ -362,6 +394,48 @@ export default function StudentDashboardPage() {
                     </a>
                   )}
                 </Card>
+              </div>
+            )}
+
+            {tab === "book" && (
+              <div className="space-y-5">
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
+                  <p className="text-sm text-gray-500 mt-0.5">
+                    Ready sooner than expected? Pick one of your assigned templates to see open panelist slots for the next 7 days.
+                  </p>
+                </div>
+
+                {templates.length === 0 ? (
+                  <Card className="flex flex-col items-center justify-center py-10">
+                    <CalendarPlus className="w-8 h-8 text-gray-200 mb-2" />
+                    <p className="text-sm text-gray-400">No templates assigned yet — check back later or contact the admin team.</p>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {templates.map(t => {
+                      const inProgress = templatesInProgress.has(t.id);
+                      return (
+                        <Card key={t.id} className="p-5 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="font-bold text-gray-900">{t.name}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{t.durationMinutes} minutes</p>
+                          </div>
+                          {inProgress ? (
+                            <button onClick={() => setTab("slots")}
+                              className="text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3.5 py-2 rounded-xl hover:bg-violet-100 transition-colors flex-shrink-0">
+                              Already in Slot Overview →
+                            </button>
+                          ) : (
+                            <Button variant="primary" onClick={() => handleSelfBook(t.id)} disabled={bookingTemplateId === t.id} className="flex-shrink-0">
+                              {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots"}
+                            </Button>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 

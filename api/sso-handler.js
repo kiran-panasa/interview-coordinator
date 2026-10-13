@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       case "otp/verify":        return await otpVerify(req, res);
       case "profile/resume":    return await updateResume(req, res);
       case "interviews/request-reschedule": return await requestReschedule(req, res);
+      case "interviews/self-book": return await selfBook(req, res);
       default:                  return res.status(404).json({ error: "not_found" });
     }
   } catch (err) {
@@ -126,7 +127,7 @@ async function me(req, res) {
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(inv => !["confirmed", "cancelled"].includes(inv.status))
     .map(inv => ({
-      id: inv.id, inviteToken: inv.inviteToken || "", templateName: inv.templateName || "",
+      id: inv.id, inviteToken: inv.inviteToken || "", templateId: inv.templateId || "", templateName: inv.templateName || "",
       round: inv.round || "", status: inv.status,
       dateRangeStart: inv.dateRangeStart || "", dateRangeEnd: inv.dateRangeEnd || "",
     }));
@@ -278,4 +279,78 @@ async function requestReschedule(req, res) {
     rescheduleRequestedAt: new Date().toISOString(),
   });
   return res.status(200).json({ success: true });
+}
+
+// ── POST /api/sso/interviews/self-book ───────────────────────────────────────
+// Lets a student proactively volunteer for one of their OWN assigned
+// templates (candidate.templateIds — checked server-side, never trusting
+// the client) instead of waiting for an admin-sent invite. Creates a
+// ScheduleInvite the same shape admin-created ones have, pre-verified
+// (status "otp_verified") since the SSO session already proved identity,
+// open to any active interviewer (no interviewerIds restriction) — same as
+// an admin invite with no explicit panelist restriction. True skill-based
+// panelist matching isn't built yet (see the Student Dashboard & SSO
+// Technical Due Diligence doc) so this can't scope eligible panelists any
+// more precisely than that today.
+async function selfBook(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
+  const session = await getValidSession(req);
+  if (!session) return res.status(401).json({ error: "no_session" });
+
+  const templateId = String(req.body?.templateId || "").trim();
+  if (!templateId) return res.status(400).json({ error: "invalid_parameter" });
+
+  const db = getDb();
+  const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
+  if (!candidateSnap.exists) return res.status(404).json({ error: "candidate_not_found" });
+  const candidate = candidateSnap.data();
+  if (!(candidate.templateIds || []).includes(templateId)) {
+    return res.status(403).json({ error: "template_not_assigned" });
+  }
+
+  // Reuse an existing still-open invite for this template rather than
+  // creating a duplicate if the student already started one.
+  const existingSnap = await db.collection("scheduleInvites")
+    .where("candidateId", "==", session.candidateId)
+    .where("templateId", "==", templateId)
+    .get();
+  const existing = existingSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .find(inv => !["confirmed", "cancelled"].includes(inv.status));
+  if (existing) {
+    return res.status(200).json({ success: true, inviteId: existing.id, reused: true });
+  }
+
+  const templateSnap = await db.collection("interviewTemplates").doc(templateId).get();
+  if (!templateSnap.exists) return res.status(404).json({ error: "template_not_found" });
+  const template = templateSnap.data();
+
+  const now = new Date();
+  const dateRangeStart = now.toISOString().slice(0, 10);
+  const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dateRangeEnd = endDate.toISOString().slice(0, 10);
+  const expiresAt = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  const ref = await db.collection("scheduleInvites").add({
+    candidateId: session.candidateId,
+    candidateUid: candidate.uid || "",
+    candidateEmail: candidate.email,
+    candidateName: candidate.name,
+    templateId,
+    templateName: template.name,
+    program: template.program || candidate.program || "",
+    round: template.name,
+    duration: template.durationMinutes || 60,
+    dateRangeStart,
+    dateRangeEnd,
+    status: "otp_verified",
+    inviteToken: randomToken(16),
+    selfBooked: true,
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+    expiresAt,
+  });
+
+  return res.status(200).json({ success: true, inviteId: ref.id });
 }
