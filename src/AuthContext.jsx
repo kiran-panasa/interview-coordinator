@@ -13,6 +13,14 @@ export function AuthProvider({ children }) {
   const [currentUser,  setCurrentUser]  = useState(null);
   const [userProfile,  setUserProfile]  = useState(null);
   const [authLoading,  setAuthLoading]  = useState(true);
+  // Set if loadProfile() is still pending after a long timeout — normally
+  // this resolves in well under a second, but a corrupted local Firestore
+  // cache in one specific browser profile can make the very first read
+  // hang forever with no error, no timeout, nothing to click: the app just
+  // sits on "Loading…" indefinitely (confirmed via a real report — stuck
+  // for days in one profile, works immediately in incognito). This turns
+  // that silent infinite hang into a visible, actionable state.
+  const [authStuck,    setAuthStuck]    = useState(false);
 
   const loadProfile = async (user) => {
     let profile = await getMyProfile(user.uid).catch(e => { logError(e, { label: "getMyProfile" }); return null; });
@@ -68,9 +76,19 @@ export function AuthProvider({ children }) {
       }
 
       setAuthLoading(true);
+      setAuthStuck(false);
       setCurrentUser(user);
+      let settled = false;
+      const stuckTimer = setTimeout(() => {
+        if (!settled) {
+          logError(new Error("Auth profile load timed out"), { label: "authLoadingTimeout", uid: user?.uid });
+          setAuthStuck(true);
+        }
+      }, 15000);
       if (user) await loadProfile(user);
       else setUserProfile(null);
+      settled = true;
+      clearTimeout(stuckTimer);
       setAuthLoading(false);
     });
     return unsub;
@@ -105,9 +123,27 @@ export function AuthProvider({ children }) {
     if (currentUser) loadProfile(currentUser);
   }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Best-effort nuke of this origin's local storage/IndexedDB (where a
+  // corrupted Firestore cache would live) before reloading — a plain
+  // reload alone often isn't enough if the stuck read is caused by
+  // genuinely corrupted local persistence, not just an in-memory hang.
+  const clearCacheAndReload = useCallback(async () => {
+    try {
+      if (window.indexedDB?.databases) {
+        const dbs = await indexedDB.databases();
+        await Promise.all(dbs.map(d => d.name && new Promise(resolve => {
+          const req = indexedDB.deleteDatabase(d.name);
+          req.onsuccess = req.onerror = req.onblocked = resolve;
+        })));
+      }
+    } catch { /* best effort */ }
+    try { sessionStorage.clear(); localStorage.clear(); } catch { /* ignore */ }
+    window.location.reload();
+  }, []);
+
   const ctxValue = useMemo(
-    () => ({ currentUser, userProfile, authLoading, refreshProfile }),
-    [currentUser, userProfile, authLoading, refreshProfile]
+    () => ({ currentUser, userProfile, authLoading, authStuck, refreshProfile, clearCacheAndReload }),
+    [currentUser, userProfile, authLoading, authStuck, refreshProfile, clearCacheAndReload]
   );
 
   return (

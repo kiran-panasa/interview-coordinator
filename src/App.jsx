@@ -39,9 +39,38 @@ const PageFallback = () => (
   <div className="min-h-screen flex items-center justify-center text-gray-400">Loading…</div>
 );
 
+// Shown instead of the plain spinner once AuthContext's 15s timeout fires —
+// a stuck local Firestore cache leaves authLoading true forever with no
+// error of its own, so without this the page just spins indefinitely with
+// nothing to click (see AuthContext.jsx's authStuck).
+function AuthStuckFallback() {
+  const { clearCacheAndReload } = useAuth();
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="max-w-sm text-center space-y-3">
+        <p className="text-sm font-semibold text-gray-700">This is taking longer than it should.</p>
+        <p className="text-xs text-gray-400">
+          Your browser's local cache for this site may be stuck. Clearing it usually fixes this.
+        </p>
+        <button
+          onClick={clearCacheAndReload}
+          className="text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 px-4 py-2 rounded-lg transition-colors"
+        >
+          Clear Cache &amp; Reload
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AuthGate() {
+  const { authStuck } = useAuth();
+  return authStuck ? <AuthStuckFallback /> : <PageFallback />;
+}
+
 function RootRedirect() {
   const { currentUser, userProfile, authLoading } = useAuth();
-  if (authLoading) return <PageFallback />;
+  if (authLoading) return <AuthGate />;
   if (!currentUser) return <Navigate to="/login" replace />;
   if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
   if (userProfile.role === "admin") return <Navigate to="/admin/dashboard" replace />;
@@ -52,7 +81,7 @@ function RootRedirect() {
 
 function AdminGuard({ children }) {
   const { currentUser, userProfile, authLoading } = useAuth();
-  if (authLoading) return <PageFallback />;
+  if (authLoading) return <AuthGate />;
   if (!currentUser) return <Navigate to="/login" replace />;
   if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
   if (!ADMIN_ROLES.includes(userProfile.role)) return <Navigate to="/interviewer/dashboard" replace />;
@@ -61,7 +90,7 @@ function AdminGuard({ children }) {
 
 function InterviewerGuard({ children }) {
   const { currentUser, userProfile, authLoading } = useAuth();
-  if (authLoading) return <PageFallback />;
+  if (authLoading) return <AuthGate />;
   if (!currentUser) return <Navigate to="/login" replace />;
   if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
   if (userProfile.role !== "interviewer" && userProfile.role !== "interviewer_content") return <Navigate to="/admin/templates" replace />;
