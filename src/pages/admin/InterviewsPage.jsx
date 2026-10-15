@@ -937,17 +937,18 @@ export default function InterviewsPage() {
 
   // Dismisses the flag once an admin has acted on it — either by actually
   // rescheduling (Edit, below) or by sending a fresh nudge from Nudge →
-  // Candidates so the student can pick their own new slot. Doesn't change
-  // status/date itself; this just clears the "needs attention" marker so it
-  // drops off the badge/quick-filter above.
+  // Candidates so the student can pick their own new slot. Only flips
+  // rescheduleRequested off (so it drops off the badge/quick-filter and the
+  // "Mark Reschedule Handled" action above) — the reason/requestedAt are
+  // kept, not nulled out, so the fact that this interview was ever flagged
+  // stays visible on the row regardless of what status it moves to next.
   const handleClearRescheduleRequest = async (iv) => {
     try {
       await updateInterview(iv.id, {
         rescheduleRequested: false,
-        rescheduleRequestReason: null,
-        rescheduleRequestedAt: null,
+        rescheduleRequestResolvedAt: new Date().toISOString(),
       });
-      setToast({ message: "Reschedule request cleared." });
+      setToast({ message: "Reschedule request marked handled." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
@@ -1864,6 +1865,18 @@ export default function InterviewsPage() {
                     <p className="text-[11px] text-amber-600 mt-1 max-w-[160px] truncate"
                       title={`Candidate asked to reschedule: ${iv.rescheduleRequestReason || "—"}`}>
                       ⏰ Reschedule: {iv.rescheduleRequestReason || "—"}
+                    </p>
+                  )}
+                  {/* Kept visible after "Mark Reschedule Handled" (and
+                     regardless of what status the interview is in now) —
+                     handleClearRescheduleRequest only flips rescheduleRequested
+                     off, it never clears the reason, so this stays as a
+                     permanent record that the candidate once asked to
+                     reschedule, not just a transient pending flag. */}
+                  {!iv.rescheduleRequested && iv.rescheduleRequestReason && (
+                    <p className="text-[11px] text-gray-400 mt-1 max-w-[160px] truncate"
+                      title={`Reschedule requested and handled: ${iv.rescheduleRequestReason}`}>
+                      Reschedule handled: {iv.rescheduleRequestReason}
                     </p>
                   )}
                   {iv.status === "declined" && iv.reassignedTo && (() => {

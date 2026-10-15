@@ -427,11 +427,16 @@ export interface Interview {
   // Dashboard (POST /api/sso/interviews/request-reschedule in
   // api/sso-handler.js) — surfaced on the Interviews page next to the
   // status badge and via the "Reschedule Requested" quick filter/sidebar
-  // badge (see useRescheduleRequestedInterviews), and cleared by an admin
-  // via handleClearRescheduleRequest once actioned.
+  // badge (see useRescheduleRequestedInterviews). An admin flips
+  // rescheduleRequested back to false via "Mark Reschedule Handled"
+  // (handleClearRescheduleRequest) once actioned — the reason/requestedAt
+  // are deliberately left in place (not cleared) so the row keeps showing
+  // that this interview was once flagged, in whatever status it's in by
+  // then, instead of that history disappearing the moment it's handled.
   rescheduleRequested?: boolean;
   rescheduleRequestReason?: string | null;
   rescheduleRequestedAt?: string | null;
+  rescheduleRequestResolvedAt?: string | null;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];
