@@ -25,7 +25,7 @@ function writeSeenInviteIds(ids) {
 
 const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
-  scheduled:           "Upcoming",
+  scheduled:           "Scheduled",
   completed:            "Completed",
   partially_completed:  "Partially Completed",
   cancelled:            "Cancelled",
@@ -42,25 +42,27 @@ const STATUS_STYLE = {
   no_show:              "bg-orange-50 text-orange-600 border-orange-200",
 };
 // My Interviews is split into one section per status (instead of a single
-// "Past" catch-all) so every outcome — upcoming, in-progress scheduling,
-// reschedule requests (candidate- or admin-side), completed, partially
-// completed, cancelled, missed — is its own clearly labeled, trackable
-// group rather than lumped together.
+// "Past" catch-all) so every outcome is its own clearly labeled, trackable
+// group rather than lumped together. "Being Rescheduled" (an interviewer
+// declined and admin needs to reassign) is folded into Reschedule Approved
+// rather than kept as its own tab — from the candidate's side both mean the
+// same thing ("this round is being re-arranged, a new slot is coming"), just
+// triggered from different sides (candidate request vs interviewer decline).
+// "Missed" (no_show) has no tab at all — a student who didn't show up
+// already knows; it's not something they need a dedicated view to track.
 const INTERVIEW_SECTIONS = [
   { key: "pending_acceptance", label: "Scheduling In Progress", match: i => i.status === "pending_acceptance" },
-  { key: "reschedule_requested", label: "Reschedule Requested", match: i => i.status === "scheduled" && i.rescheduleRequested },
-  { key: "reschedule_approved", label: "Reschedule Approved", match: i => i.status === "scheduled" && i.rescheduleApproved && !i.rescheduleRequested },
-  { key: "scheduled",      label: "Upcoming",            match: i => i.status === "scheduled" && !i.rescheduleRequested && !i.rescheduleApproved },
-  { key: "declined",       label: "Being Rescheduled",   match: i => i.status === "declined" },
+  { key: "scheduled",      label: "Scheduled",            match: i => i.status === "scheduled" && !i.rescheduleRequested && !i.rescheduleApproved },
   { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
+  { key: "reschedule_requested", label: "Reschedule Requested", match: i => i.status === "scheduled" && i.rescheduleRequested },
+  { key: "reschedule_approved", label: "Reschedule Approved", match: i => (i.status === "scheduled" && i.rescheduleApproved && !i.rescheduleRequested) || i.status === "declined" },
   { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
   { key: "cancelled",      label: "Cancelled",           match: i => i.status === "cancelled" },
-  { key: "no_show",        label: "Missed",              match: i => i.status === "no_show" },
 ];
 // Sections whose interviews can still be acted on (Join Meet / Request
 // Reschedule) and get the larger, higher-contrast card — everything else
 // (completed/cancelled/etc.) gets the compact, muted "past" card.
-const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled", "declined"]);
+const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled"]);
 
 function readCookie(name) {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -343,7 +345,7 @@ export default function StudentDashboardPage() {
                 </div>
 
                 {nextUpcoming && (
-                  <Card className="p-6">
+                  <Card className="p-6 max-w-md">
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Next Up</p>
                     <p className="font-bold text-gray-900">{interviewTitle(nextUpcoming)}</p>
                     <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
@@ -352,7 +354,7 @@ export default function StudentDashboardPage() {
                     </p>
                     {nextUpcoming.meetLink && (
                       <a href={nextUpcoming.meetLink} target="_blank" rel="noreferrer"
-                        className="flex items-center justify-center gap-1.5 w-full text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors mt-4">
+                        className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors mt-4">
                         <Video className="w-3.5 h-3.5" /> Join Meet
                       </a>
                     )}
@@ -363,7 +365,7 @@ export default function StudentDashboardPage() {
             )}
 
             {tab === "details" && (
-              <div className="space-y-5">
+              <div className="space-y-5 max-w-2xl">
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Details</h1>
                 <Card className="p-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -631,22 +633,22 @@ export default function StudentDashboardPage() {
                                   Your reschedule request was approved — kindly select a slot whenever you're available.
                                 </p>
                               )}
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2">
                                 {iv.meetLink && iv.status === "scheduled" && !iv.rescheduleApproved && (
                                   <a href={iv.meetLink} target="_blank" rel="noreferrer"
-                                    className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
                                     <Video className="w-3.5 h-3.5" /> Join Meet
                                   </a>
                                 )}
                                 {iv.status === "scheduled" && !iv.rescheduleRequested && !iv.rescheduleApproved && (
                                   <button onClick={() => handleRequestReschedule(iv.id)} disabled={reschedulingId === iv.id}
-                                    className="flex items-center justify-center gap-1.5 flex-1 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
+                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
                                     <RefreshCw className="w-3.5 h-3.5" /> {reschedulingId === iv.id ? "Submitting…" : "Request Reschedule"}
                                   </button>
                                 )}
                                 {iv.rescheduleApproved && (
                                   <button onClick={() => setTab("slots")}
-                                    className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
                                     <CalendarPlus className="w-3.5 h-3.5" /> Book an Interview
                                   </button>
                                 )}

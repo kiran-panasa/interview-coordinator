@@ -196,11 +196,14 @@ export default function InlineSlotPicker({ invite, onBooked }) {
         </button>
       </div>
 
+      {/* Violet, not brand-blue — a different accent from the time-slot
+         buttons below, so it's visually clear these two rows are separate
+         pickers (which date vs which time) rather than one continuous group. */}
       <div className="flex flex-wrap gap-2">
         {dates.map(d => (
           <button key={d} onClick={() => { setSelectedDate(d); setSelected(null); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-              d === activeDate ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-600 border-gray-200 hover:border-brand-300"
+              d === activeDate ? "bg-violet-600 text-white border-violet-600" : "bg-white text-gray-600 border-gray-200 hover:border-violet-300"
             }`}>
             {formatDateLong(d).split(",").slice(0, 2).join(",")}
           </button>
@@ -235,7 +238,7 @@ export default function InlineSlotPicker({ invite, onBooked }) {
           Selected: {formatDateLong(selected.date)} · {selected.time}
         </div>
       )}
-      <Button variant="primary" onClick={handleBook} disabled={!selected || busy} className="w-full">
+      <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy}>
         {busy ? "Booking…" : "Confirm This Slot"}
       </Button>
     </div>
