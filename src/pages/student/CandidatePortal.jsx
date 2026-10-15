@@ -104,7 +104,7 @@ export default function CandidatePortal() {
       const data = await res.json();
       if (!res.ok) {
         setPhoneError(data.error === "student_not_found"
-          ? "No account found for this mobile number. Contact the admin."
+          ? "No access — you're not registered. Please connect with your team."
           : "Failed to send code. Please try again.");
         setBusy(false);
         return;

@@ -102,7 +102,7 @@ async function accountsToken(req, res) {
     await logTokenAttempt(db, { outcome: "student_not_found", userId, matchCount: snap.size });
     return res.status(404).json({
       error: "student_not_found",
-      message: "No access — this student ID isn't recognized. Please check with the Interview Coordinator admin team.",
+      message: "No access — you're not registered. Please connect with your team.",
     });
   }
   const candidate = snap.docs[0];
@@ -228,7 +228,7 @@ async function otpRequest(req, res) {
 
   const db = getDb();
   const snap = await db.collection("candidates").where("phone", "==", phone).get();
-  if (snap.size !== 1) return res.status(404).json({ error: "student_not_found", message: "No account found for this mobile number." });
+  if (snap.size !== 1) return res.status(404).json({ error: "student_not_found", message: "No access — you're not registered. Please connect with your team." });
   const candidate = snap.docs[0];
 
   const otp = generateOtp();
