@@ -313,9 +313,12 @@ export default function StudentDashboardPage() {
           </div>
         </div>
 
-        {/* Main content */}
+        {/* Main content — fills the rest of the page next to the fixed-width
+           sidebar instead of capping out at max-w-3xl and leaving most of a
+           wide screen empty; applies to every tab since they all render
+           inside this one wrapper. */}
         <div className="flex-1 min-w-0">
-          <div className="max-w-3xl mx-auto px-6 py-8">
+          <div className="px-8 py-8">
 
             {tab === "overview" && (
               <div className="space-y-5">
