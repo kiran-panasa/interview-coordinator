@@ -1668,9 +1668,25 @@ export default function InterviewsPage() {
             placeholder="Search candidate…"
             className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-48 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
-        <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setIvrPage(1); }}
+        {/* "Reschedule Requested" is a synthetic option, not a real `status`
+           value (a reschedule-requested interview is still "scheduled") —
+           selecting it flips filterRescheduleOnly instead of filterStatus,
+           which is also what bypasses the date range below (see the
+           filtered useMemo) since a request can land outside whatever
+           window is currently selected. */}
+        <select
+          value={filterRescheduleOnly ? "reschedule_requested" : filterStatus}
+          onChange={e => {
+            const v = e.target.value;
+            setFilterRescheduleOnly(v === "reschedule_requested");
+            setFilterStatus(v === "reschedule_requested" ? "All" : v);
+            setIvrPage(1);
+          }}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
+          <option value="reschedule_requested">
+            Reschedule Requested{rescheduleRequestedAll.length > 0 ? ` (${rescheduleRequestedAll.length})` : ""}
+          </option>
         </select>
         <div className="flex items-center gap-1.5">
           {/* Drives the actual Firestore query (see useInterviewsInDateRange) —
@@ -1708,22 +1724,6 @@ export default function InterviewsPage() {
           <option value="All">All Vendors</option>
           {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
-        {/* Bypasses the date range above entirely — see the filtered useMemo —
-           so a reschedule request on an interview outside the selected
-           window is still findable with one click instead of guessing dates. */}
-        <button onClick={() => { setFilterRescheduleOnly(v => !v); setIvrPage(1); }}
-          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-            filterRescheduleOnly
-              ? "bg-red-50 text-red-700 border-red-200"
-              : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
-          }`}>
-          Reschedule Requested
-          {rescheduleRequestedAll.length > 0 && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-              filterRescheduleOnly ? "bg-red-600 text-white" : "bg-red-100 text-red-600"
-            }`}>{rescheduleRequestedAll.length}</span>
-          )}
-        </button>
         {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch || filterRescheduleOnly) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
