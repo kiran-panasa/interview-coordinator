@@ -46,6 +46,7 @@ import CorrectStatusModal from "../../features/interviews/CorrectStatusModal";
 import CopyButton from "../../components/CopyButton";
 import AiReportModal from "../../features/interviews/AiReportModal";
 import SearchableSelect from "../../components/SearchableSelect";
+import SkillsSelect from "../../components/SkillsSelect";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -171,7 +172,7 @@ export default function InterviewsPage() {
   const [filterStatus,   setFilterStatus]   = useState("All");
   const [filterIvr,      setFilterIvr]      = useState("All");
   const [filterVendor,   setFilterVendor]   = useState("All");
-  const [filterTemplate, setFilterTemplate] = useState("All");
+  const [filterTemplates, setFilterTemplates] = useState([]); // template names, empty = All
   const [candSearch,     setCandSearch]     = useState("");
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
@@ -1304,7 +1305,7 @@ export default function InterviewsPage() {
       if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
       if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
       if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
-      if (filterTemplate !== "All" && i.templateName    !== filterTemplate) return false;
+      if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
       if (candSearch) {
         const q = candSearch.trim().toLowerCase();
         const hay = [i.candidateName, i.candidateEmail, i.candidateUid].filter(Boolean).join(" ").toLowerCase();
@@ -1312,7 +1313,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplate, candSearch, vendorByEmail]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -1627,11 +1628,15 @@ export default function InterviewsPage() {
             blockedDates={blockedDates}
             className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
-        <select value={filterTemplate} onChange={e => { setFilterTemplate(e.target.value); setIvrPage(1); }}
-          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-          <option value="All">All Templates</option>
-          {uniqueTemplates.map(t => <option key={t} value={t}>{t}</option>)}
-        </select>
+        <div className="w-52">
+          <SkillsSelect
+            skills={uniqueTemplates.map(t => ({ id: t, name: t }))}
+            value={filterTemplates}
+            onChange={ids => { setFilterTemplates(ids); setIvrPage(1); }}
+            placeholder="All Templates"
+            searchPlaceholder="Search templates…"
+          />
+        </div>
         <SearchableSelect
           className="w-48"
           options={[{ id: "All", label: "All Interviewers" }, ...ivrOptions]}
@@ -1645,10 +1650,10 @@ export default function InterviewsPage() {
           <option value="All">All Vendors</option>
           {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplate !== "All" || candSearch) && (
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
-            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplate("All"); setCandSearch(""); setIvrPage(1);
+            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setIvrPage(1);
           }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
