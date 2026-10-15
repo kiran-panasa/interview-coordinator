@@ -1799,9 +1799,10 @@ export default function InterviewsPage() {
                       {iv.declineReason}
                     </p>
                   )}
-                  {iv.status !== "cancelled" && iv.cancelRequestReason && (
-                    <p className="text-[11px] text-red-500 mt-1 max-w-[160px] truncate" title={`Interviewer asked to cancel: ${iv.cancelRequestReason}`}>
-                      ⚠ Cancel requested: {iv.cancelRequestReason}
+                  {iv.status === "cancelled" && iv.cancelReason && (
+                    <p className="text-[11px] text-red-500 mt-1 max-w-[160px] truncate"
+                      title={`Cancelled by ${iv.cancelledBy === "interviewer" ? "interviewer" : "admin"}: ${iv.cancelReason}`}>
+                      {iv.cancelledBy === "interviewer" ? "By interviewer: " : ""}{iv.cancelReason}
                     </p>
                   )}
                   {iv.status === "declined" && iv.reassignedTo && (() => {
@@ -1972,11 +1973,10 @@ export default function InterviewsPage() {
                       show: iv.archived === true,
                     },
                     {
-                      label: iv.cancelRequestReason ? "Cancel (Interviewer Requested)" : "Cancel",
+                      label: "Cancel",
                       onClick: () => handleCancel(iv),
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
                       danger: true,
-                      highlight: !!iv.cancelRequestReason,
                     },
                     { label: "Delete", onClick: () => handleDelete(iv), danger: true },
                   ]} />

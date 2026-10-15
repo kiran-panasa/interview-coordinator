@@ -140,7 +140,10 @@ export async function deleteInterview(id: string): Promise<void> {
 // so a cancelled interview can never carry stale ratings, a verdict, an AI
 // report, or a completion timestamp into admin views, exports, or payment
 // reconciliation — regardless of what it held before being cancelled.
-export async function markInterviewCancelled(id: string): Promise<void> {
+export async function markInterviewCancelled(
+  id: string,
+  opts?: { reason?: string; cancelledBy?: "interviewer" | "admin" }
+): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     status: "cancelled",
     eventId: null,
@@ -155,22 +158,8 @@ export async function markInterviewCancelled(id: string): Promise<void> {
     candidateJoined: deleteField(),
     attendanceMarkedAt: deleteField(),
     partialCompletionReason: deleteField(),
-    cancelRequestReason: deleteField(),
-    cancelRequestedAt: deleteField(),
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-// Interviewer-initiated request to cancel a scheduled interview (e.g. a
-// personal emergency) — see openCancelRequestModal/handleRequestCancellation
-// in InterviewDetail.jsx. Only persists the reason for admin visibility on
-// the Interviews page; status is left exactly as-is, since actually cancelling
-// (and notifying both parties) still goes through markInterviewCancelled once
-// an admin reviews it.
-export async function requestInterviewCancellation(id: string, reason: string): Promise<void> {
-  await updateDoc(doc(db, "interviews", id), {
-    cancelRequestReason: reason,
-    cancelRequestedAt: new Date().toISOString(),
+    cancelReason: opts?.reason || deleteField(),
+    cancelledBy: opts?.cancelledBy || deleteField(),
     updatedAt: new Date().toISOString(),
   });
 }
