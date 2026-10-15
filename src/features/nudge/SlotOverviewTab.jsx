@@ -3,6 +3,7 @@ import Pagination from "../../components/Pagination";
 import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
 import { usePagination } from "../../hooks/usePagination";
+import { useVendors } from "../../hooks/queries";
 import { compareTimeLabels } from "../../utils/dates";
 import { getBusyWindowsForInterviewers } from "../../api/firestore";
 import { isSlotEffectivelyBooked } from "../../utils/slotAvailability";
@@ -18,8 +19,12 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
   const [selectedProgramId,  setSelectedProgramId]  = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedSkillIds,   setSelectedSkillIds]   = useState([]);
+  const [selectedVendorIds,  setSelectedVendorIds]  = useState([]);
   const [fromDate, setFromDate] = useState(today());
   const [toDate,   setToDate]   = useState(inDays(7));
+
+  const { data: vendors = [] } = useVendors();
+  const vendorOptions = useMemo(() => vendors.map(v => ({ id: v.id, name: v.name })), [vendors]);
 
   const programTemplates = selectedProgramId
     ? templates.filter(t => t.program === selectedProgramId)
@@ -34,15 +39,19 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
   }, [selectedProgramId]); // eslint-disable-line
 
   const templateInterviewers = useMemo(() => {
-    const base = selectedTemplateId
+    let base = selectedTemplateId
       ? activeInterviewers.filter(u => (u.templateIds || []).includes(selectedTemplateId))
       : selectedProgramId
         ? activeInterviewers.filter(u => (u.templateIds || []).some(tid => programTemplates.map(t => t.id).includes(tid)))
         : activeInterviewers;
-    return selectedSkillIds.length
-      ? base.filter(u => selectedSkillIds.every(id => (u.skills || []).includes(id)))
-      : base;
-  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillIds]);
+    if (selectedSkillIds.length) {
+      base = base.filter(u => selectedSkillIds.every(id => (u.skills || []).includes(id)));
+    }
+    if (selectedVendorIds.length) {
+      base = base.filter(u => u.vendorId && selectedVendorIds.includes(u.vendorId));
+    }
+    return base;
+  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillIds, selectedVendorIds]);
 
   const datesSelected = !!(fromDate && toDate);
 
@@ -94,14 +103,14 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
 
   const datePagination = usePagination(byDate);
   // Reset to page 1 when filters change
-  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillIds, fromDate, toDate]); // eslint-disable-line
+  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillIds, selectedVendorIds, fromDate, toDate]); // eslint-disable-line
 
   return (
     <div className="space-y-6">
       {/* Filters + summary */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Overview</p>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
             <select value={selectedProgramId} onChange={e => setSelectedProgramId(e.target.value)}
@@ -125,6 +134,16 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
               value={selectedSkillIds}
               onChange={setSelectedSkillIds}
               placeholder="All Skills"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Vendor</label>
+            <SkillsSelect
+              skills={vendorOptions}
+              value={selectedVendorIds}
+              onChange={setSelectedVendorIds}
+              placeholder="All Vendors"
+              searchPlaceholder="Search vendors…"
             />
           </div>
           <div>
