@@ -216,8 +216,26 @@ async function me(req, res) {
       noSlotsNotifiedAt: inv.noSlotsNotifiedAt || "",
     }));
 
-  const interviewsSnap = await db.collection("interviews").where("candidateId", "==", session.candidateId).get();
-  const interviews = interviewsSnap.docs
+  // Matched by candidateId (the normal, correct path) UNIONED with a
+  // candidateEmail match — a booking made against a different/duplicate
+  // candidate doc for the same person (e.g. one created by an admin via the
+  // old email-link nudge flow, another provisioned by SSO) would otherwise
+  // silently never show up here even though session.candidateId itself
+  // resolved correctly. This is the same class of linkage gap as the
+  // Forms/Accounts uid mismatch found earlier (different dimension — that
+  // was candidate.uid vs this account's SSO user_id; this is candidateId vs
+  // a stale/duplicate candidate doc) — catching it here means a candidate
+  // record mismatch degrades to "shows twice if duplicated" rather than
+  // "an interview silently never appears."
+  const [byIdSnap, byEmailSnap] = await Promise.all([
+    db.collection("interviews").where("candidateId", "==", session.candidateId).get(),
+    candidate.email
+      ? db.collection("interviews").where("candidateEmail", "==", candidate.email).get()
+      : Promise.resolve({ docs: [] }),
+  ]);
+  const interviewDocsById = new Map();
+  [...byIdSnap.docs, ...byEmailSnap.docs].forEach(d => interviewDocsById.set(d.id, d));
+  const interviews = [...interviewDocsById.values()]
     .map(d => {
       const iv = d.data();
       return {
