@@ -27,7 +27,7 @@ const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
   scheduled:           "Upcoming",
   completed:            "Completed",
-  partially_completed:  "Completed",
+  partially_completed:  "Partially Completed",
   cancelled:            "Cancelled",
   declined:             "Being Rescheduled",
   no_show:              "Missed",
@@ -36,11 +36,30 @@ const STATUS_STYLE = {
   pending_acceptance: "bg-amber-50 text-amber-700 border-amber-200",
   scheduled:           "bg-blue-50 text-blue-700 border-blue-200",
   completed:            "bg-emerald-50 text-emerald-700 border-emerald-200",
-  partially_completed:  "bg-emerald-50 text-emerald-700 border-emerald-200",
+  partially_completed:  "bg-sky-50 text-sky-700 border-sky-200",
   cancelled:            "bg-gray-100 text-gray-400 border-gray-200",
   declined:             "bg-violet-50 text-violet-700 border-violet-200",
   no_show:              "bg-orange-50 text-orange-600 border-orange-200",
 };
+// My Interviews is split into one section per status (instead of a single
+// "Past" catch-all) so every outcome — upcoming, in-progress scheduling,
+// reschedule requests (candidate- or admin-side), completed, partially
+// completed, cancelled, missed — is its own clearly labeled, trackable
+// group rather than lumped together.
+const INTERVIEW_SECTIONS = [
+  { key: "pending_acceptance", label: "Scheduling In Progress", match: i => i.status === "pending_acceptance" },
+  { key: "reschedule_requested", label: "Reschedule Requested", match: i => i.status === "scheduled" && i.rescheduleRequested },
+  { key: "scheduled",      label: "Upcoming",            match: i => i.status === "scheduled" && !i.rescheduleRequested },
+  { key: "declined",       label: "Being Rescheduled",   match: i => i.status === "declined" },
+  { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
+  { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
+  { key: "cancelled",      label: "Cancelled",           match: i => i.status === "cancelled" },
+  { key: "no_show",        label: "Missed",              match: i => i.status === "no_show" },
+];
+// Sections whose interviews can still be acted on (Join Meet / Request
+// Reschedule) and get the larger, higher-contrast card — everything else
+// (completed/cancelled/etc.) gets the compact, muted "past" card.
+const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "scheduled", "declined"]);
 
 function readCookie(name) {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -49,6 +68,16 @@ function readCookie(name) {
 
 function Card({ children, className = "" }) {
   return <div className={`bg-white rounded-2xl border border-gray-100 shadow-soft ${className}`}>{children}</div>;
+}
+
+// templateName and round can differ (e.g. templateName "Frontend
+// Development", round "Technical Round 1") — showing only one or the other
+// (as the My Interviews cards used to, preferring round) silently dropped
+// whichever wasn't picked. Showing both when they differ, so the card
+// title always identifies the actual template, not just which round of it.
+function interviewTitle(iv) {
+  if (iv.templateName && iv.round && iv.templateName !== iv.round) return `${iv.templateName} — ${iv.round}`;
+  return iv.templateName || iv.round || "Interview";
 }
 
 const NAV = [
@@ -304,9 +333,9 @@ export default function StudentDashboardPage() {
                 {nextUpcoming && (
                   <Card className="p-6">
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Next Up</p>
-                    <p className="font-bold text-gray-900">{nextUpcoming.round || nextUpcoming.templateName}</p>
-                    <p className="flex items-center gap-1.5 text-sm text-gray-500 mt-1">
-                      <CalendarClock className="w-3.5 h-3.5" />
+                    <p className="font-bold text-gray-900">{interviewTitle(nextUpcoming)}</p>
+                    <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
+                      <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
                       {formatDate(nextUpcoming.scheduledDate)} · {nextUpcoming.scheduledTime} · {nextUpcoming.duration}m
                     </p>
                     {nextUpcoming.meetLink && (
@@ -519,74 +548,74 @@ export default function StudentDashboardPage() {
                   </Card>
                 ) : (
                   <>
-                    {upcoming.length > 0 && (
-                      <div className="space-y-3">
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Upcoming</p>
-                        {upcoming.map(iv => (
-                          <Card key={iv.id} className="p-6">
-                            <div className="flex items-start justify-between gap-3 mb-3">
-                              <div>
-                                <p className="font-bold text-gray-900">{iv.round || iv.templateName || "Interview"}</p>
-                                {iv.scheduledDate && (
-                                  <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                                    <CalendarClock className="w-3 h-3" />
-                                    {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
-                                  </p>
-                                )}
-                              </div>
-                              <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                iv.rescheduleRequested ? "bg-amber-50 text-amber-700 border-amber-200" : (STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200")
-                              }`}>
-                                {iv.rescheduleRequested ? "Reschedule Requested" : (STATUS_LABEL[iv.status] || iv.status)}
-                              </span>
-                            </div>
-                            <div className="flex gap-2">
-                              {iv.meetLink && iv.status === "scheduled" && (
-                                <a href={iv.meetLink} target="_blank" rel="noreferrer"
-                                  className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
-                                  <Video className="w-3.5 h-3.5" /> Join Meet
-                                </a>
-                              )}
-                              {iv.status === "scheduled" && !iv.rescheduleRequested && (
-                                <button onClick={() => handleRequestReschedule(iv.id)} disabled={reschedulingId === iv.id}
-                                  className="flex items-center justify-center gap-1.5 flex-1 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
-                                  <RefreshCw className="w-3.5 h-3.5" /> {reschedulingId === iv.id ? "Submitting…" : "Request Reschedule"}
-                                </button>
-                              )}
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
-
-                    {past.length > 0 && (
-                      <div className="space-y-3">
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4">Past</p>
-                        {past.map(iv => (
-                          <Card key={iv.id} className="p-5">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="opacity-70">
-                                <p className="font-semibold text-gray-700 text-sm">{iv.round || iv.templateName || "Interview"}</p>
-                                {iv.scheduledDate && (
-                                  <p className="text-xs text-gray-400 mt-0.5">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 flex-shrink-0">
-                                {iv.aiReport && (
-                                  <button onClick={() => setAiReportInterview(iv)}
-                                    className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-brand-200 bg-brand-50 px-2.5 py-1 rounded-full hover:bg-brand-100 transition-colors">
-                                    <Sparkles className="w-3 h-3" /> View Report
-                                  </button>
-                                )}
-                                <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full opacity-70 ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                                  {STATUS_LABEL[iv.status] || iv.status}
+                    {INTERVIEW_SECTIONS.map(section => {
+                      const items = interviews.filter(section.match);
+                      if (items.length === 0) return null;
+                      const isActive = ACTIVE_SECTION_KEYS.has(section.key);
+                      return (
+                        <div key={section.key} className="space-y-3">
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4">
+                            {section.label} <span className="text-gray-300">({items.length})</span>
+                          </p>
+                          {items.map(iv => isActive ? (
+                            <Card key={iv.id} className="p-6">
+                              <div className="flex items-start justify-between gap-3 mb-3">
+                                <div>
+                                  <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                                  {iv.scheduledDate && (
+                                    <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
+                                      <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                                      {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
+                                    </p>
+                                  )}
+                                </div>
+                                <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${
+                                  iv.rescheduleRequested ? "bg-amber-50 text-amber-700 border-amber-200" : (STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200")
+                                }`}>
+                                  {iv.rescheduleRequested ? "Reschedule Requested" : (STATUS_LABEL[iv.status] || iv.status)}
                                 </span>
                               </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    )}
+                              <div className="flex gap-2">
+                                {iv.meetLink && iv.status === "scheduled" && (
+                                  <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                                    className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                                    <Video className="w-3.5 h-3.5" /> Join Meet
+                                  </a>
+                                )}
+                                {iv.status === "scheduled" && !iv.rescheduleRequested && (
+                                  <button onClick={() => handleRequestReschedule(iv.id)} disabled={reschedulingId === iv.id}
+                                    className="flex items-center justify-center gap-1.5 flex-1 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
+                                    <RefreshCw className="w-3.5 h-3.5" /> {reschedulingId === iv.id ? "Submitting…" : "Request Reschedule"}
+                                  </button>
+                                )}
+                              </div>
+                            </Card>
+                          ) : (
+                            <Card key={iv.id} className="p-5">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="opacity-80">
+                                  <p className="font-semibold text-gray-700 text-sm">{interviewTitle(iv)}</p>
+                                  {iv.scheduledDate && (
+                                    <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  {iv.aiReport && (
+                                    <button onClick={() => setAiReportInterview(iv)}
+                                      className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-brand-200 bg-brand-50 px-2.5 py-1 rounded-full hover:bg-brand-100 transition-colors">
+                                      <Sparkles className="w-3 h-3" /> View Report
+                                    </button>
+                                  )}
+                                  <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                                    {STATUS_LABEL[iv.status] || iv.status}
+                                  </span>
+                                </div>
+                              </div>
+                            </Card>
+                          ))}
+                        </div>
+                      );
+                    })}
                   </>
                 )}
               </div>
