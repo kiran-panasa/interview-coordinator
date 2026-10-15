@@ -54,8 +54,7 @@ function Card({ children, className = "" }) {
 const NAV = [
   { id: "overview", label: "Overview",      icon: LayoutGrid },
   { id: "details",  label: "My Details",    icon: User },
-  { id: "book",     label: "Book an Interview", icon: CalendarPlus },
-  { id: "slots",    label: "Slot Overview", icon: CalendarRange },
+  { id: "slots",    label: "Book an Interview", icon: CalendarPlus },
   { id: "interviews", label: "My Interviews", icon: ListChecks },
 ];
 
@@ -397,53 +396,11 @@ export default function StudentDashboardPage() {
               </div>
             )}
 
-            {tab === "book" && (
-              <div className="space-y-5">
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">
-                    Ready sooner than expected? Pick one of your assigned templates to see open panelist slots for the next 7 days.
-                  </p>
-                </div>
-
-                {templates.length === 0 ? (
-                  <Card className="flex flex-col items-center justify-center py-10">
-                    <CalendarPlus className="w-8 h-8 text-gray-200 mb-2" />
-                    <p className="text-sm text-gray-400">No templates assigned yet — check back later or contact the admin team.</p>
-                  </Card>
-                ) : (
-                  <div className="space-y-3">
-                    {templates.map(t => {
-                      const inProgress = templatesInProgress.has(t.id);
-                      return (
-                        <Card key={t.id} className="p-5 flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-bold text-gray-900">{t.name}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">{t.durationMinutes} minutes</p>
-                          </div>
-                          {inProgress ? (
-                            <button onClick={() => setTab("slots")}
-                              className="text-xs font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-3.5 py-2 rounded-xl hover:bg-violet-100 transition-colors flex-shrink-0">
-                              Already in Slot Overview →
-                            </button>
-                          ) : (
-                            <Button variant="primary" onClick={() => handleSelfBook(t.id)} disabled={bookingTemplateId === t.id} className="flex-shrink-0">
-                              {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots"}
-                            </Button>
-                          )}
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
             {tab === "slots" && (
               <div className="space-y-5">
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Slot Overview</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book.</p>
+                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
+                  <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or start one of your assigned templates below.</p>
                 </div>
 
                 {(resources?.videoGuideUrl || resources?.documents?.length > 0) && (
@@ -466,11 +423,40 @@ export default function StudentDashboardPage() {
                   </Card>
                 )}
 
-                {bookable.length === 0 && awaiting.length === 0 ? (
-                  <Card className="flex flex-col items-center justify-center py-10">
-                    <CalendarRange className="w-8 h-8 text-gray-200 mb-2" />
-                    <p className="text-sm text-gray-400">Nothing to book right now.</p>
+                {/* Assigned templates that haven't been started yet — "Find
+                   Slots" kicks off self-book (see handleSelfBook), which
+                   turns into one of the expandable cards below once it has
+                   an invite. Templates already in progress are left out
+                   here since they already have a card below. */}
+                {templates.filter(t => !templatesInProgress.has(t.id)).map(t => (
+                  <Card key={t.id} className="p-5 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold text-gray-900">{t.name}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{t.durationMinutes} minutes · open panelist slots for the next 7 days</p>
+                    </div>
+                    <Button variant="primary" onClick={() => handleSelfBook(t.id)} disabled={bookingTemplateId === t.id} className="flex-shrink-0">
+                      {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots"}
+                    </Button>
                   </Card>
+                ))}
+
+                {templates.length === 0 ? (
+                  <Card className="flex flex-col items-center justify-center py-10">
+                    <CalendarPlus className="w-8 h-8 text-gray-200 mb-2" />
+                    <p className="text-sm text-gray-400">No templates assigned yet — check back later or contact the admin team.</p>
+                  </Card>
+                ) : bookable.length === 0 && awaiting.length === 0 ? (
+                  // Only worth a card of its own when there's an in-progress
+                  // template with nothing actionable (e.g. awaiting admin
+                  // confirmation covers it) — if nothing's in progress at
+                  // all, the "Find Slots" cards above already are the call
+                  // to action, so this would just be a redundant message.
+                  templatesInProgress.size > 0 && (
+                    <Card className="flex flex-col items-center justify-center py-10">
+                      <CalendarRange className="w-8 h-8 text-gray-200 mb-2" />
+                      <p className="text-sm text-gray-400">Nothing to book right now.</p>
+                    </Card>
+                  )
                 ) : (
                   <>
                     {bookable.map(inv => {
