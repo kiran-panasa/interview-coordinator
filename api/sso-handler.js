@@ -190,6 +190,20 @@ async function me(req, res) {
       id: inv.id, inviteToken: inv.inviteToken || "", templateId: inv.templateId || "", templateName: inv.templateName || "",
       round: inv.round || "", status: inv.status,
       dateRangeStart: inv.dateRangeStart || "", dateRangeEnd: inv.dateRangeEnd || "", expiresAt: inv.expiresAt || "",
+      // InlineSlotPicker.jsx (Slot Overview / Book an Interview tab) reads
+      // all four of these straight off the invite — duration (wrong default
+      // of 60min for any non-default-length template otherwise),
+      // timeRangeStart/End (an admin-set business-hours restriction, if
+      // any), and interviewerIds (the skill-matched/manually-restricted
+      // panelist pool, see findSkillMatchedInterviewerIds in selfBook) —
+      // previously missing here entirely, so none of them ever reached the
+      // dashboard's picker even though the public email-link flow
+      // (SchedulePage.jsx, which reads the full invite doc directly) always
+      // respected them correctly.
+      duration: inv.duration || 60,
+      timeRangeStart: inv.timeRangeStart || "",
+      timeRangeEnd: inv.timeRangeEnd || "",
+      interviewerIds: inv.interviewerIds || null,
     }));
 
   const interviewsSnap = await db.collection("interviews").where("candidateId", "==", session.candidateId).get();
@@ -342,17 +356,45 @@ async function requestReschedule(req, res) {
   return res.status(200).json({ success: true });
 }
 
+// Resolves which active interviewers are eligible for a template's
+// "Required Skills" (Template.skills, set on the Templates page) — an
+// interviewer qualifies only if their own skills (InterviewersPage.jsx /
+// ProfilePage.jsx) cover EVERY skill the template requires, not just one.
+// Returns null (meaning "no restriction, use the full active-interviewer
+// pool") when the template has no required skills set, OR when skill data
+// is incomplete enough that nobody currently qualifies — self-book must
+// never silently show zero bookable interviewers just because admins
+// haven't finished tagging skills yet; it's meant to narrow the pool, not
+// be able to block booking outright.
+async function findSkillMatchedInterviewerIds(db, templateSkills) {
+  if (!templateSkills || !templateSkills.length) return null;
+  const snap = await db.collection("users")
+    .where("role", "in", ["interviewer", "interviewer_content"])
+    .where("status", "==", "active")
+    .get();
+  const matched = snap.docs
+    .filter(d => {
+      const userSkills = d.data().skills || [];
+      return templateSkills.every(s => userSkills.includes(s));
+    })
+    .map(d => d.id);
+  if (!matched.length) {
+    console.warn(`[selfBook] No active interviewer matches all required skills [${templateSkills.join(", ")}] — falling back to the full interviewer pool.`);
+    return null;
+  }
+  return matched;
+}
+
 // ── POST /api/sso/interviews/self-book ───────────────────────────────────────
 // Lets a student proactively volunteer for one of their OWN assigned
 // templates (candidate.templateIds — checked server-side, never trusting
 // the client) instead of waiting for an admin-sent invite. Creates a
 // ScheduleInvite the same shape admin-created ones have, pre-verified
-// (status "otp_verified") since the SSO session already proved identity,
-// open to any active interviewer (no interviewerIds restriction) — same as
-// an admin invite with no explicit panelist restriction. True skill-based
-// panelist matching isn't built yet (see the Student Dashboard & SSO
-// Technical Due Diligence doc) so this can't scope eligible panelists any
-// more precisely than that today.
+// (status "otp_verified") since the SSO session already proved identity.
+// Scoped to interviewers matching the template's Required Skills when any
+// are set (see findSkillMatchedInterviewerIds) — same interviewerIds field
+// an admin's manual "Select Panelists" picker already uses, so
+// getAvailableSlots (src/api/availability.ts) needs no changes to respect it.
 async function selfBook(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
   if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
@@ -390,6 +432,8 @@ async function selfBook(req, res) {
   if (!templateSnap.exists) return res.status(404).json({ error: "template_not_found" });
   const template = templateSnap.data();
 
+  const matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
+
   const now = new Date();
   const dateRangeStart = now.toISOString().slice(0, 10);
   const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -411,6 +455,7 @@ async function selfBook(req, res) {
     status: "otp_verified",
     inviteToken: randomToken(16),
     selfBooked: true,
+    ...(matchedInterviewerIds ? { interviewerIds: matchedInterviewerIds } : {}),
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     expiresAt,
