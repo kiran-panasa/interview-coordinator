@@ -1279,11 +1279,14 @@ export default function InterviewsPage() {
     setLinksImporting(true);
     const results = await Promise.all(validRows.map(async (row) => {
       try {
-        const { existingInterview, meetingLink, meetingRecordingLink, transcriptLink } = row.resolved;
+        const { existingInterview, meetingLink, meetingRecordingLink, transcriptLink, assignmentLinks } = row.resolved;
         const update = {
           ...(meetingLink          ? { meetLink: meetingLink }                     : {}),
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
           ...(transcriptLink       ? { transcriptUrl: transcriptLink }             : {}),
+          // Replaces, not merges — same as every other link column here;
+          // a re-upload is meant to be the new source of truth for that row.
+          ...(assignmentLinks?.length ? { assignmentLinks } : {}),
         };
         await updateInterview(existingInterview.id, update);
         return { ok: true };

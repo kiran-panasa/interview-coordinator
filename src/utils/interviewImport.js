@@ -168,8 +168,9 @@ export function parseLinksCSV(text, candidates, templates, existing) {
   if (!headers.includes("candidateemail") && !headers.includes("candidateuid")) {
     return { globalError: "Missing columns: candidateEmail or candidateUid (need at least one)" };
   }
-  if (!headers.includes("meetinglink") && !headers.includes("meetingrecordinglink") && !headers.includes("transcriptlink")) {
-    return { globalError: "Missing columns: meetingLink, meetingRecordingLink, and/or transcriptLink (need at least one)" };
+  if (!headers.includes("meetinglink") && !headers.includes("meetingrecordinglink")
+    && !headers.includes("transcriptlink") && !headers.includes("assignmentlinks")) {
+    return { globalError: "Missing columns: meetingLink, meetingRecordingLink, transcriptLink, and/or assignmentLinks (need at least one)" };
   }
 
   const idx = name => headers.indexOf(name.toLowerCase().replace(/\s+/g, ""));
@@ -187,6 +188,12 @@ export function parseLinksCSV(text, candidates, templates, existing) {
         meetingLink:          g("meetingLink"),
         meetingRecordingLink: g("meetingRecordingLink"),
         transcriptLink:       g("transcriptLink"),
+        // Multiple assignment links for one candidate+round (e.g. a DSA
+        // question doc plus a take-home repo link) — one cell, pipe-
+        // separated, same reasoning as every other multi-value CSV cell in
+        // this app: a comma inside a URL's query string isn't rare enough
+        // to risk, a literal "|" essentially never shows up in a link.
+        assignmentLinks:      g("assignmentLinks").split("|").map(s => s.trim()).filter(Boolean),
       };
 
       const errors = [];
@@ -204,8 +211,8 @@ export function parseLinksCSV(text, candidates, templates, existing) {
       if (!raw.templateName) errors.push("templateName required");
       else if (!template) errors.push(`Template not found: "${raw.templateName}"`);
 
-      if (!raw.meetingLink && !raw.meetingRecordingLink && !raw.transcriptLink) {
-        errors.push("Provide meetingLink, meetingRecordingLink, and/or transcriptLink");
+      if (!raw.meetingLink && !raw.meetingRecordingLink && !raw.transcriptLink && !raw.assignmentLinks.length) {
+        errors.push("Provide meetingLink, meetingRecordingLink, transcriptLink, and/or assignmentLinks");
       }
 
       const scheduledDate = raw.date ? normalizeDate(raw.date) : null;
@@ -239,6 +246,7 @@ export function parseLinksCSV(text, candidates, templates, existing) {
           meetingLink:          raw.meetingLink,
           meetingRecordingLink: raw.meetingRecordingLink,
           transcriptLink:       raw.transcriptLink,
+          assignmentLinks:      raw.assignmentLinks,
         },
         errors,
       };
@@ -247,11 +255,12 @@ export function parseLinksCSV(text, candidates, templates, existing) {
 }
 
 export function downloadLinksTemplate() {
-  const headers = ["candidateEmail", "candidateUid", "templateName", "date", "meetingLink", "meetingRecordingLink", "transcriptLink"];
+  const headers = ["candidateEmail", "candidateUid", "templateName", "date", "meetingLink", "meetingRecordingLink", "transcriptLink", "assignmentLinks"];
   const example = [
     "john.doe@example.com", "", "AI SYSTEMS MASTERY", "15/06/2026",
     "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
     "https://docs.google.com/document/d/xxxx/edit",
+    "https://docs.google.com/document/assignment1|https://github.com/example/take-home",
   ];
   const rows = [headers.join(","), example.map(v => (v.includes(",") || v.includes(" ")) ? `"${v}"` : v).join(",")];
 

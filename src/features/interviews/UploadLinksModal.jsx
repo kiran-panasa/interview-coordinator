@@ -14,7 +14,7 @@ export default function UploadLinksModal({
   const validCount = parsedRows ? parsedRows.filter(r => r.errors.length === 0).length : 0;
 
   return (
-    <Modal open={open} onClose={onClose} title="Upload Meeting & Recording Links" wide>
+    <Modal open={open} onClose={onClose} title="Upload Meeting, Recording & Assignment Links" wide>
       <div className="space-y-5">
 
         {/* Format reference */}
@@ -40,6 +40,7 @@ export default function UploadLinksModal({
                   ["meetingLink",          "Yes*", "https://meet.google.com/abc-defg-hij — *at least one link column is required"],
                   ["meetingRecordingLink", "Yes*", "Link to the recorded meeting"],
                   ["transcriptLink",       "No",   "A Google Doc link — lets Transcript open it directly and AI Report generate from it"],
+                  ["assignmentLinks",      "No",   "Shown to the interviewer alongside the Meet link — multiple links in one cell, separated by |"],
                 ].map(([col, req, ex]) => (
                   <tr key={col}>
                     <td className="py-1.5 pr-4 font-mono text-[11px] text-brand-700">{col}</td>
@@ -56,7 +57,8 @@ export default function UploadLinksModal({
           </div>
           <p className="text-xs text-gray-500 mt-3">
             This only updates interviews that already exist — it matches each row to one by candidate + template
-            (and date, if given) and writes the link(s) onto it. It never creates a new interview.
+            (and date, if given) and writes the link(s) onto it, whatever its current status (pending acceptance,
+            scheduled, or later). It never creates a new interview.
           </p>
           <button onClick={downloadLinksTemplate}
             className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors">
@@ -85,7 +87,7 @@ export default function UploadLinksModal({
             rows={6}
             value={csvText}
             onChange={e => { setCsvText(e.target.value); setParsedRows(null); }}
-            placeholder={"candidateEmail,templateName,meetingLink,meetingRecordingLink,transcriptLink\njohn@example.com,AI SYSTEMS MASTERY,https://meet.google.com/abc-defg-hij,https://drive.google.com/file/d/xxxx/view,https://docs.google.com/document/d/xxxx/edit"}
+            placeholder={"candidateEmail,templateName,meetingLink,meetingRecordingLink,transcriptLink,assignmentLinks\njohn@example.com,AI SYSTEMS MASTERY,https://meet.google.com/abc-defg-hij,https://drive.google.com/file/d/xxxx/view,https://docs.google.com/document/d/xxxx/edit,https://docs.google.com/document/assignment1|https://github.com/example/take-home"}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
           />
         </div>
@@ -145,7 +147,12 @@ export default function UploadLinksModal({
                               : <span className="text-red-500">Not found</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">
-                            {[row.raw.meetingLink && "Meeting", row.raw.meetingRecordingLink && "Recording", row.raw.transcriptLink && "Transcript"].filter(Boolean).join(" + ") || "—"}
+                            {[
+                              row.raw.meetingLink && "Meeting",
+                              row.raw.meetingRecordingLink && "Recording",
+                              row.raw.transcriptLink && "Transcript",
+                              row.raw.assignmentLinks?.length && `Assignment (${row.raw.assignmentLinks.length})`,
+                            ].filter(Boolean).join(" + ") || "—"}
                           </td>
                           <td className="px-3 py-2">
                             {hasErr ? (
