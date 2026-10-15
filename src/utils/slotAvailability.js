@@ -82,6 +82,33 @@ export function collapseSlotsByDurationGrouped(slots, durationMinutes, busyWindo
   return out;
 }
 
+// Merges per-interviewer collapsed slots (collapseSlotsByDurationGrouped)
+// down to one entry per (date, time) — multiple interviewers offering the
+// same start time used to render as one button PER interviewer, so a
+// popular time (e.g. 5 panelists all free at 9:00 AM) showed up repeated
+// 5 times, mostly disabled once a few got booked. That was especially
+// confusing once panelist identity stopped being shown to the candidate at
+// all (InlineSlotPicker.jsx, SchedulePage.jsx) — the repeats looked like a
+// glitch, not 5 distinct options. Now that time shows once, and only goes
+// from pickable to blocked once EVERY interviewer offering it is booked —
+// not the moment the first one is. When still open, the merged slot points
+// at whichever underlying interviewer slot is free, so booking it behaves
+// exactly as if that one interviewer's slot had been picked directly.
+export function mergeSlotsAcrossInterviewers(slots) {
+  const byKey = new Map();
+  for (const s of slots) {
+    const key = `${s.date}|${s.time}`;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key).push(s);
+  }
+  return [...byKey.values()]
+    .map(group => {
+      const open = group.find(s => !s.isBooked);
+      return open ? { ...open } : { ...group[0], isBooked: true };
+    })
+    .sort((a, b) => compareTimeLabels(a.time, b.time));
+}
+
 // Used by displays that show every raw slot individually rather than
 // collapsing by duration (Slot Overview) — a slot is "really" booked if
 // either its own isBooked flag says so, or its start time falls inside a

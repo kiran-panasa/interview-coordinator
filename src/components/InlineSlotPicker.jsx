@@ -5,7 +5,7 @@ import {
   updateScheduleInvite, getAvailableSlots, bookSlotForCandidate, getActiveAdmins,
 } from "../api/firestore";
 import { callAppsScript } from "../lib/appsScript";
-import { collapseSlotsByDurationGrouped } from "../utils/slotAvailability";
+import { collapseSlotsByDurationGrouped, mergeSlotsAcrossInterviewers } from "../utils/slotAvailability";
 import { resolveActionAdminRecipients } from "../utils/adminNotify";
 import Button from "./Button";
 
@@ -20,7 +20,8 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
     const startMin = timeToMinutes(slot.time);
     return startMin >= windowStartMin && startMin <= windowEndMin;
   };
-  return collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60, busyWindowsByInterviewer);
+  const perInterviewer = collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60, busyWindowsByInterviewer);
+  return mergeSlotsAcrossInterviewers(perInterviewer);
 }
 
 // The same slot-browse-and-book experience as SchedulePage.jsx's "Pick a

@@ -246,7 +246,14 @@ export default function StudentDashboardPage() {
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
   const past     = interviews.filter(i => !["pending_acceptance", "scheduled", "declined"].includes(i.status));
   const bookable = pendingInvites.filter(i => ["sent", "otp_verified"].includes(i.status));
-  const awaiting = pendingInvites.filter(i => i.status === "slot_selected");
+  // bookSlotForCandidate (api/scheduling.ts) sets status straight to
+  // "pending_confirmation" — "slot_selected" is kept here too defensively,
+  // but was the only value this checked before, which meant a candidate's
+  // own just-picked slot fell through every bucket (not "bookable" since
+  // it's no longer sent/otp_verified, not caught here either) and simply
+  // vanished from the tab — same template still blocked from a fresh
+  // "Find Slots" by templatesInProgress, with nothing to show in its place.
+  const awaiting = pendingInvites.filter(i => i.status === "slot_selected" || i.status === "pending_confirmation");
   const templatesInProgress = new Set(pendingInvites.map(i => i.templateId).filter(Boolean));
   const nextUpcoming = upcoming.find(i => i.status === "scheduled" && i.scheduledDate);
 

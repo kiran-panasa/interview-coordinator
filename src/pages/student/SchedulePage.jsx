@@ -18,7 +18,7 @@ import StudentLayout from "../../components/StudentLayout";
 import Button from "../../components/Button";
 import { callAppsScript } from "../../lib/appsScript";
 import { maskEmail } from "../../utils/strings";
-import { collapseSlotsByDurationGrouped } from "../../utils/slotAvailability";
+import { collapseSlotsByDurationGrouped, mergeSlotsAcrossInterviewers } from "../../utils/slotAvailability";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -42,7 +42,8 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
     const startMin = timeToMinutes(slot.time);
     return startMin >= windowStartMin && startMin <= windowEndMin;
   };
-  return collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60, busyWindowsByInterviewer);
+  const perInterviewer = collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60, busyWindowsByInterviewer);
+  return mergeSlotsAcrossInterviewers(perInterviewer);
 }
 
 
