@@ -49,7 +49,8 @@ const STATUS_STYLE = {
 const INTERVIEW_SECTIONS = [
   { key: "pending_acceptance", label: "Scheduling In Progress", match: i => i.status === "pending_acceptance" },
   { key: "reschedule_requested", label: "Reschedule Requested", match: i => i.status === "scheduled" && i.rescheduleRequested },
-  { key: "scheduled",      label: "Upcoming",            match: i => i.status === "scheduled" && !i.rescheduleRequested },
+  { key: "reschedule_approved", label: "Reschedule Approved", match: i => i.status === "scheduled" && i.rescheduleApproved && !i.rescheduleRequested },
+  { key: "scheduled",      label: "Upcoming",            match: i => i.status === "scheduled" && !i.rescheduleRequested && !i.rescheduleApproved },
   { key: "declined",       label: "Being Rescheduled",   match: i => i.status === "declined" },
   { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
   { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
@@ -59,7 +60,7 @@ const INTERVIEW_SECTIONS = [
 // Sections whose interviews can still be acted on (Join Meet / Request
 // Reschedule) and get the larger, higher-contrast card — everything else
 // (completed/cancelled/etc.) gets the compact, muted "past" card.
-const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "scheduled", "declined"]);
+const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled", "declined"]);
 
 function readCookie(name) {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
@@ -570,22 +571,35 @@ export default function StudentDashboardPage() {
                                   )}
                                 </div>
                                 <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  iv.rescheduleRequested ? "bg-amber-50 text-amber-700 border-amber-200" : (STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200")
+                                  iv.rescheduleRequested ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : iv.rescheduleApproved ? "bg-sky-50 text-sky-700 border-sky-200"
+                                    : (STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200")
                                 }`}>
-                                  {iv.rescheduleRequested ? "Reschedule Requested" : (STATUS_LABEL[iv.status] || iv.status)}
+                                  {iv.rescheduleRequested ? "Reschedule Requested" : iv.rescheduleApproved ? "Reschedule Approved" : (STATUS_LABEL[iv.status] || iv.status)}
                                 </span>
                               </div>
+                              {iv.rescheduleApproved && (
+                                <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 mb-3">
+                                  Your reschedule request was approved — kindly select a slot whenever you're available.
+                                </p>
+                              )}
                               <div className="flex gap-2">
-                                {iv.meetLink && iv.status === "scheduled" && (
+                                {iv.meetLink && iv.status === "scheduled" && !iv.rescheduleApproved && (
                                   <a href={iv.meetLink} target="_blank" rel="noreferrer"
                                     className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
                                     <Video className="w-3.5 h-3.5" /> Join Meet
                                   </a>
                                 )}
-                                {iv.status === "scheduled" && !iv.rescheduleRequested && (
+                                {iv.status === "scheduled" && !iv.rescheduleRequested && !iv.rescheduleApproved && (
                                   <button onClick={() => handleRequestReschedule(iv.id)} disabled={reschedulingId === iv.id}
                                     className="flex items-center justify-center gap-1.5 flex-1 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
                                     <RefreshCw className="w-3.5 h-3.5" /> {reschedulingId === iv.id ? "Submitting…" : "Request Reschedule"}
+                                  </button>
+                                )}
+                                {iv.rescheduleApproved && (
+                                  <button onClick={() => setTab("slots")}
+                                    className="flex items-center justify-center gap-1.5 flex-1 text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                                    <CalendarPlus className="w-3.5 h-3.5" /> Book an Interview
                                   </button>
                                 )}
                               </div>

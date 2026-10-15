@@ -428,15 +428,24 @@ export interface Interview {
   // api/sso-handler.js) — surfaced on the Interviews page next to the
   // status badge and via the "Reschedule Requested" quick filter/sidebar
   // badge (see useRescheduleRequestedInterviews). An admin flips
-  // rescheduleRequested back to false via "Mark Reschedule Handled"
-  // (handleClearRescheduleRequest) once actioned — the reason/requestedAt
-  // are deliberately left in place (not cleared) so the row keeps showing
-  // that this interview was once flagged, in whatever status it's in by
-  // then, instead of that history disappearing the moment it's handled.
+  // rescheduleRequested back to false via "Approve Reschedule"
+  // (handleApproveReschedule in InterviewsPage.jsx), which sets
+  // rescheduleApproved below — the reason/requestedAt are deliberately left
+  // in place (not cleared) so the row keeps showing that this interview was
+  // once flagged, in whatever status it's in by then, instead of that
+  // history disappearing the moment it's approved.
   rescheduleRequested?: boolean;
   rescheduleRequestReason?: string | null;
   rescheduleRequestedAt?: string | null;
   rescheduleRequestResolvedAt?: string | null;
+  // Set once an admin approves a reschedule request — the interview stays
+  // "scheduled" at its OLD date/time (nothing about the actual slot has
+  // changed yet), but the Student Dashboard shows this as its own
+  // "Reschedule Approved" status with a prompt to go pick a new slot from
+  // Book an Interview, and hides the Join Meet button/old meet link since
+  // that old slot is expected to go away. See StudentDashboardPage.jsx.
+  rescheduleApproved?: boolean;
+  rescheduleApprovedAt?: string | null;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];

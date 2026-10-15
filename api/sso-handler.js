@@ -201,6 +201,7 @@ async function me(req, res) {
         scheduledDate: iv.scheduledDate || "", scheduledTime: iv.scheduledTime || "",
         duration: iv.duration || 60, status: iv.status, meetLink: iv.meetLink || "",
         rescheduleRequested: !!iv.rescheduleRequested,
+        rescheduleApproved: !!iv.rescheduleApproved,
         aiReport: iv.aiReport || null,
       };
     })
