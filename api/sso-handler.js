@@ -77,7 +77,9 @@ async function accountsToken(req, res) {
     candidateId: candidate.id, studentUid: userId,
     createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), used: false,
   });
-  return res.status(200).json({ auth_token: token, expires_in: 300 });
+  // Exactly {"auth_token": "..."} per their documented contract — no extra
+  // fields, in case their backend does strict response-schema validation.
+  return res.status(200).json({ auth_token: token });
 }
 
 // ── POST /api/sso/accounts/callback?auth_token=X ───────────────────────────
