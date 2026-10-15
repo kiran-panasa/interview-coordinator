@@ -13,7 +13,7 @@ import {
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
   getActiveAdmins, getCandidate, getInterview,
 } from "../../api/firestore";
-import { scheduleInterviewMeet } from "../../api/interviews";
+import { scheduleInterviewMeet, requestInterviewCancellation } from "../../api/interviews";
 import { getUnratedVerdictDomains } from "../../utils/templateEngine";
 import { callAppsScript } from "../../lib/appsScript";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
@@ -58,6 +58,15 @@ const DECLINE_REASONS = [
   "Other",
 ];
 
+// Same preset+free-text pattern, for an already-accepted/scheduled interview
+// the interviewer now needs cancelled — see openCancelRequestModal.
+const CANCEL_REQUEST_REASONS = [
+  "Personal/health emergency",
+  "Schedule conflict came up",
+  "Candidate asked to reschedule",
+  "Other",
+];
+
 export default function InterviewDetail() {
   const { id } = useParams();
   const [interview, setInterview] = useState(null);
@@ -81,6 +90,9 @@ export default function InterviewDetail() {
   const [declineModalOpen,   setDeclineModalOpen]   = useState(false);
   const [declineReasonPreset, setDeclineReasonPreset] = useState("");
   const [declineReasonText,  setDeclineReasonText]  = useState("");
+  const [cancelRequestModalOpen,   setCancelRequestModalOpen]   = useState(false);
+  const [cancelReasonPreset, setCancelReasonPreset] = useState("");
+  const [cancelReasonText,  setCancelReasonText]  = useState("");
 
   // tick every minute so the "Mark as Completed" gate re-evaluates when time passes
   useEffect(() => {
@@ -297,6 +309,55 @@ export default function InterviewDetail() {
     setSaving(false);
   };
 
+  // Reason shown here too, same as notifyAdminsInterviewDeclined above, so an
+  // admin can see why right from their inbox and decide whether to cancel
+  // outright or reassign instead — the persisted cancelRequestReason is what
+  // shows up on the Interviews page for anyone reviewing it later.
+  const notifyAdminsCancellationRequested = async (iv, reason) => {
+    try {
+      const activeAdmins = await getActiveAdmins();
+      const admins = resolveActionAdminRecipients(activeAdmins, iv.createdBy);
+      if (!admins.length || !APPS_SCRIPT_URL) return;
+      const round = iv.round || iv.templateName || "Interview";
+      const subject = `${iv.interviewerName || "Interviewer"} requested cancellation — interview with ${iv.candidateName}`;
+      const body =
+        "Hi {{name}},\n\n" +
+        `${iv.interviewerName || "The interviewer"} has asked to cancel the interview with ${iv.candidateName}:\n\n` +
+        `• Candidate:   ${iv.candidateName}\n` +
+        `• Round:       ${round}\n` +
+        `• Date:        ${formatDate(iv.scheduledDate)}\n` +
+        `• Time:        ${iv.scheduledTime}\n` +
+        `• Reason:      ${reason}\n\n` +
+        `Please review and cancel (or reassign a different interviewer) from the Interviews page:\n${window.location.origin}/admin/interviews\n\n` +
+        "— NxtWave Interview Coordinator";
+      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "sendEmail", subject, body,
+        recipients: admins.map(a => ({ email: a.email, name: a.displayName || "" })),
+      });
+    } catch (e) {
+      console.error("Failed to notify admins of cancellation request:", e);
+    }
+  };
+
+  const openCancelRequestModal = () => {
+    setCancelReasonPreset("");
+    setCancelReasonText("");
+    setCancelRequestModalOpen(true);
+  };
+
+  const cancelRequestReasonValue = cancelReasonPreset === "Other" ? cancelReasonText.trim() : cancelReasonPreset;
+
+  const handleRequestCancellation = async () => {
+    if (!cancelRequestReasonValue) return; // Confirm button is disabled without one, but guard anyway
+    setSaving(true);
+    await requestInterviewCancellation(id, cancelRequestReasonValue);
+    setInterview(iv => ({ ...iv, cancelRequestReason: cancelRequestReasonValue, cancelRequestedAt: new Date().toISOString() }));
+    setToast({ message: "Cancellation requested — an admin will review and action it shortly." });
+    setCancelRequestModalOpen(false);
+    notifyAdminsCancellationRequested(interview, cancelRequestReasonValue);
+    setSaving(false);
+  };
+
   const handleCandidateJoined = async () => {
     setSaving(true);
     await markCandidateAttendance(id, true);
@@ -484,6 +545,7 @@ export default function InterviewDetail() {
   const isNoShow          = attended === false;
   const showEvaluation    = isCompleted || (isScheduled && !showAttendanceGate && !isNoShow);
   const canComplete       = hasFeedback && pastTime && attended === true;
+  const canRequestCancellation = isScheduled && !pastTime;
 
   const totalQuestions = template?.questionIds?.length || 0;
   const askedCount      = interview.questionsAsked?.length || 0;
@@ -653,6 +715,28 @@ export default function InterviewDetail() {
               className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
               <XCircle className="w-4 h-4" /> Decline
             </button>
+          </div>
+        </motion.div>
+      )}
+
+      {/* ── Request Cancellation — for an already-scheduled interview, before it starts ── */}
+      {canRequestCancellation && !interview.cancelRequestReason && (
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-white border border-gray-100 rounded-2xl p-5 mb-5 flex items-center justify-between gap-3">
+          <p className="text-xs text-gray-400">Need this interview cancelled instead?</p>
+          <button onClick={openCancelRequestModal} disabled={saving}
+            className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-4 py-1.5 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors flex-shrink-0">
+            <XCircle className="w-3.5 h-3.5" /> Request Cancellation
+          </button>
+        </motion.div>
+      )}
+      {canRequestCancellation && interview.cancelRequestReason && (
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-5 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-red-700">Cancellation requested</p>
+            <p className="text-xs text-red-400 mt-0.5">Reason: {interview.cancelRequestReason} — awaiting admin action.</p>
           </div>
         </motion.div>
       )}
@@ -1011,6 +1095,57 @@ export default function InterviewDetail() {
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {saving ? "Declining…" : "Confirm Decline"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Request Cancellation — reason is mandatory, either a preset pick or free text under "Other" */}
+      <Modal open={cancelRequestModalOpen} onClose={() => setCancelRequestModalOpen(false)} title="Request Cancellation">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            This asks an admin to cancel the interview. It stays <span className="font-semibold text-emerald-700">Scheduled</span> until
+            they review and action it — you'll see it here as pending until then.
+          </p>
+          <div>
+            <label className={labelCls}>Reason</label>
+            <select
+              value={cancelReasonPreset}
+              onChange={e => setCancelReasonPreset(e.target.value)}
+              className={inputCls}
+            >
+              <option value="" disabled>Select a reason…</option>
+              {CANCEL_REQUEST_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          {cancelReasonPreset === "Other" && (
+            <div>
+              <label className={labelCls}>Please specify</label>
+              <textarea
+                value={cancelReasonText}
+                onChange={e => setCancelReasonText(e.target.value)}
+                rows={3}
+                placeholder="Describe why this interview needs to be cancelled…"
+                className={inputCls}
+              />
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setCancelRequestModalOpen(false)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleRequestCancellation}
+              disabled={!cancelRequestReasonValue || saving}
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+                cancelRequestReasonValue
+                  ? "bg-red-600 text-white shadow-soft hover:bg-red-700"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? "Submitting…" : "Submit Request"}
             </button>
           </div>
         </div>

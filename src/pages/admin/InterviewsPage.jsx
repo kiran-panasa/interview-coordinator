@@ -935,20 +935,34 @@ export default function InterviewsPage() {
       const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
       await markSlotFree(iv.interviewerId, slotId).catch(() => {});
 
-      const recipients = [
-        iv.candidateEmail   && { email: iv.candidateEmail,   name: iv.candidateName   || "Candidate" },
-        iv.interviewerEmail && { email: iv.interviewerEmail, name: iv.interviewerName || "Panelist"  },
-      ].filter(Boolean);
-      if (APPS_SCRIPT_URL && recipients.length) {
+      // Candidate and interviewer get different wording — the candidate is
+      // told the team will follow up to reschedule, but that line doesn't
+      // belong in the interviewer's copy (they're not the one waiting on a
+      // new slot), so these go as two separate sends rather than one shared
+      // body for both recipients.
+      const subject = `Interview Cancelled: ${iv.round || iv.templateName || "Interview"}`;
+      if (APPS_SCRIPT_URL && iv.candidateEmail) {
         callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
           action:  "sendEmail",
-          subject: `Interview Cancelled: ${iv.round || iv.templateName || "Interview"}`,
+          subject,
+          body:
+            `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
+            `Round: ${iv.round || iv.templateName || "Interview"}\n` +
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
+            `Our team will connect with you again shortly.\n\n— NxtWave Team`,
+          recipients: [{ email: iv.candidateEmail, name: iv.candidateName || "Candidate" }],
+        }).catch(() => {});
+      }
+      if (APPS_SCRIPT_URL && iv.interviewerEmail) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject,
           body:
             `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
             `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
             `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
             `If you have any questions, please reach out to the interview coordination team.\n\n— NxtWave Team`,
-          recipients,
+          recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || "Panelist" }],
         }).catch(() => {});
       }
 
@@ -1785,6 +1799,11 @@ export default function InterviewsPage() {
                       {iv.declineReason}
                     </p>
                   )}
+                  {iv.status !== "cancelled" && iv.cancelRequestReason && (
+                    <p className="text-[11px] text-red-500 mt-1 max-w-[160px] truncate" title={`Interviewer asked to cancel: ${iv.cancelRequestReason}`}>
+                      ⚠ Cancel requested: {iv.cancelRequestReason}
+                    </p>
+                  )}
                   {iv.status === "declined" && iv.reassignedTo && (() => {
                     // Best-effort — only resolves a name if the new interview
                     // also falls within the currently-loaded date range.
@@ -1953,10 +1972,11 @@ export default function InterviewsPage() {
                       show: iv.archived === true,
                     },
                     {
-                      label: "Cancel",
+                      label: iv.cancelRequestReason ? "Cancel (Interviewer Requested)" : "Cancel",
                       onClick: () => handleCancel(iv),
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
                       danger: true,
+                      highlight: !!iv.cancelRequestReason,
                     },
                     { label: "Delete", onClick: () => handleDelete(iv), danger: true },
                   ]} />

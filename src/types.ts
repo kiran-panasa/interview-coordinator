@@ -415,6 +415,14 @@ export interface Interview {
   // The inverse — set on the newly-created interview, pointing back at the
   // declined one it was reassigned from.
   reassignedFrom?: string;
+  // Set when an interviewer asks to cancel an already-scheduled interview
+  // (see openCancelRequestModal/handleRequestCancellation in
+  // InterviewDetail.jsx) — status is left as "scheduled" so an admin still
+  // has to review and action it via the normal Cancel flow
+  // (markInterviewCancelled), which clears both fields again. Shown next to
+  // the status badge on the Interviews page so the reason isn't lost.
+  cancelRequestReason?: string;
+  cancelRequestedAt?: string;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];

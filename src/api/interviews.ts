@@ -155,6 +155,22 @@ export async function markInterviewCancelled(id: string): Promise<void> {
     candidateJoined: deleteField(),
     attendanceMarkedAt: deleteField(),
     partialCompletionReason: deleteField(),
+    cancelRequestReason: deleteField(),
+    cancelRequestedAt: deleteField(),
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+// Interviewer-initiated request to cancel a scheduled interview (e.g. a
+// personal emergency) — see openCancelRequestModal/handleRequestCancellation
+// in InterviewDetail.jsx. Only persists the reason for admin visibility on
+// the Interviews page; status is left exactly as-is, since actually cancelling
+// (and notifying both parties) still goes through markInterviewCancelled once
+// an admin reviews it.
+export async function requestInterviewCancellation(id: string, reason: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", id), {
+    cancelRequestReason: reason,
+    cancelRequestedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
 }
