@@ -53,21 +53,55 @@ function underTokenRateLimit(ip) {
   entry.count++;
   return entry.count <= 30;
 }
+// TEMPORARY — logs every real call Forms makes to this endpoint (whatever
+// they send, whatever we return) to its own Firestore collection, so this
+// can be diagnosed directly from the Firebase console instead of needing
+// Forms' own server logs, which aren't available to us. Safe to remove
+// once the integration is confirmed working.
+async function logTokenAttempt(db, fields) {
+  try {
+    await db.collection("ssoTokenRequestLog").add({ at: new Date().toISOString(), ...fields });
+  } catch { /* never let logging break the real response */ }
+}
+
 async function accountsToken(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  const db = getDb();
+  if (req.method !== "POST") {
+    await logTokenAttempt(db, { outcome: "method_not_allowed", method: req.method });
+    return res.status(405).json({ error: "method_not_allowed" });
+  }
   const apiKey = req.headers["x-api-key"];
-  if (!apiKey || !process.env.FORMS_SSO_API_KEY || apiKey !== process.env.FORMS_SSO_API_KEY) {
+  const keyMatches = !!apiKey && !!process.env.FORMS_SSO_API_KEY && apiKey === process.env.FORMS_SSO_API_KEY;
+  if (!keyMatches) {
+    await logTokenAttempt(db, {
+      outcome: "unauthorized",
+      apiKeyReceived: apiKey ? `${apiKey.slice(0, 6)}…(len ${apiKey.length})` : null,
+      contentType: req.headers["content-type"] || null,
+      rawBody: typeof req.body === "object" ? JSON.stringify(req.body) : String(req.body || ""),
+    });
     return res.status(401).json({ error: "unauthorized" });
   }
   const ip = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
-  if (!underTokenRateLimit(ip)) return res.status(429).json({ error: "rate_limited" });
+  if (!underTokenRateLimit(ip)) {
+    await logTokenAttempt(db, { outcome: "rate_limited", ip });
+    return res.status(429).json({ error: "rate_limited" });
+  }
 
   const userId = String(req.body?.user_id || "").trim();
-  if (!userId) return res.status(400).json({ error: "invalid_parameter", message: "user_id is required." });
+  if (!userId) {
+    await logTokenAttempt(db, {
+      outcome: "invalid_parameter",
+      contentType: req.headers["content-type"] || null,
+      rawBody: typeof req.body === "object" ? JSON.stringify(req.body) : String(req.body || ""),
+    });
+    return res.status(400).json({ error: "invalid_parameter", message: "user_id is required." });
+  }
 
-  const db = getDb();
   const snap = await db.collection("candidates").where("uid", "==", userId).get();
-  if (snap.size !== 1) return res.status(404).json({ error: "student_not_found" });
+  if (snap.size !== 1) {
+    await logTokenAttempt(db, { outcome: "student_not_found", userId, matchCount: snap.size });
+    return res.status(404).json({ error: "student_not_found" });
+  }
   const candidate = snap.docs[0];
 
   const token = randomToken();
@@ -77,6 +111,7 @@ async function accountsToken(req, res) {
     candidateId: candidate.id, studentUid: userId,
     createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), used: false,
   });
+  await logTokenAttempt(db, { outcome: "success", userId, candidateId: candidate.id });
   // Exactly {"auth_token": "..."} per their documented contract — no extra
   // fields, in case their backend does strict response-schema validation.
   return res.status(200).json({ auth_token: token });
