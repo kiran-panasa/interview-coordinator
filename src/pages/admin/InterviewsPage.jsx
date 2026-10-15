@@ -26,7 +26,7 @@ import {
   getAllInterviews, getInterview,
   ensureRoundExists, seedDefaultRoundsOnce,
 } from "../../api/firestore";
-import { useInterviewsInDateRange, useRescheduleRequestedInterviews } from "../../hooks/subscriptions";
+import { useInterviewsInDateRange, useRescheduleRequestedInterviews, useRescheduleApprovedInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers, useRounds, useVendors, QK } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -116,11 +116,13 @@ export default function InterviewsPage() {
   // Unscoped by date — a student's reschedule request (see
   // requestReschedule in api/sso-handler.js) can land on an interview well
   // outside whatever date window is currently selected above, so finding it
-  // would otherwise mean guessing the right range first. Backs both the
-  // "Reschedule Requested" quick filter below and the sidebar nav badge
-  // (AdminLayout.jsx).
+  // would otherwise mean guessing the right range first. Back both the
+  // "Reschedule Requested"/"Reschedule Approved" quick tabs below and (for
+  // requested) the sidebar nav badge (AdminLayout.jsx).
   const [filterRescheduleOnly, setFilterRescheduleOnly] = useState(false);
+  const [filterApprovedOnly,   setFilterApprovedOnly]   = useState(false);
   const rescheduleRequestedAll = useRescheduleRequestedInterviews();
+  const rescheduleApprovedAll  = useRescheduleApprovedInterviews();
 
   // Auto-heals rows stuck with an eventId but no meetLink — Google creates
   // the Meet room a little after the Calendar event, and occasionally later
@@ -1346,18 +1348,21 @@ export default function InterviewsPage() {
   // zero results, which reads as "search is broken" rather than "search
   // worked, but you're on the wrong tab."
   const ivrKey = (i) => i.interviewerId || i.interviewerEmail || "";
+  const bypassDateRange = filterRescheduleOnly || filterApprovedOnly;
   const filtered = useMemo(() => {
-    // Reschedule Requested bypasses the date window entirely (and the
-    // archived/program scoping workingSet/programWorkingSet apply) — the
-    // whole point is finding these regardless of which date range happens
-    // to be selected. Other filters (status/interviewer/vendor/template/
-    // search) still narrow it further on top.
+    // Reschedule Requested/Approved bypass the date window entirely (and
+    // the archived/program scoping workingSet/programWorkingSet apply) —
+    // the whole point is finding these regardless of which date range
+    // happens to be selected. Other filters (status/interviewer/vendor/
+    // template/search) still narrow it further on top.
     const base = filterRescheduleOnly
       ? rescheduleRequestedAll
-      : candSearch.trim() ? workingSet : programWorkingSet;
+      : filterApprovedOnly
+        ? rescheduleApprovedAll
+        : candSearch.trim() ? workingSet : programWorkingSet;
     return base.filter(i => {
       if (filterStatus !== "All" && i.status !== filterStatus) return false;
-      if (!filterRescheduleOnly) {
+      if (!bypassDateRange) {
         if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
         if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
       }
@@ -1371,7 +1376,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail, filterRescheduleOnly, rescheduleRequestedAll]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail, filterRescheduleOnly, rescheduleRequestedAll, filterApprovedOnly, rescheduleApprovedAll, bypassDateRange]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -1659,6 +1664,44 @@ export default function InterviewsPage() {
         </div>
       )}
 
+      {/* ── Quick View Tabs — same underline-tab style as Program Tabs above.
+         "Completed" is just a shortcut for the Status dropdown's own
+         "completed" option; Reschedule Requested/Approved bypass the date
+         range entirely (see bypassDateRange in the filtered useMemo) since
+         those can land on an interview outside whatever window is
+         selected. ── */}
+      <div className="flex border-b border-gray-200 mb-5">
+        {[
+          { id: "all",                   label: "All",                   count: workingSet.length },
+          { id: "completed",             label: "Completed",             count: workingSet.filter(i => i.status === "completed").length },
+          { id: "reschedule_requested",  label: "Reschedule Requested",  count: rescheduleRequestedAll.length },
+          { id: "reschedule_approved",   label: "Reschedule Approved",   count: rescheduleApprovedAll.length },
+        ].map(tab => {
+          const isActive = tab.id === "reschedule_requested" ? filterRescheduleOnly
+            : tab.id === "reschedule_approved" ? filterApprovedOnly
+            : tab.id === "completed" ? (filterStatus === "completed" && !filterRescheduleOnly && !filterApprovedOnly)
+            : (filterStatus === "All" && !filterRescheduleOnly && !filterApprovedOnly);
+          return (
+            <button key={tab.id} onClick={() => {
+              setFilterRescheduleOnly(tab.id === "reschedule_requested");
+              setFilterApprovedOnly(tab.id === "reschedule_approved");
+              setFilterStatus(tab.id === "completed" ? "completed" : "All");
+              setIvrPage(1);
+            }}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+                isActive
+                  ? "border-brand-600 text-brand-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}>
+              {tab.label}
+              <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                isActive ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
+              }`}>{tab.count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filters */}
       <div className="flex gap-3 mb-5 flex-wrap items-center">
         <div className="relative">
@@ -1708,26 +1751,11 @@ export default function InterviewsPage() {
           <option value="All">All Vendors</option>
           {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
-        {/* Bypasses the date range above entirely — see the filtered useMemo —
-           so a reschedule request on an interview outside the selected
-           window is still findable with one click instead of guessing dates. */}
-        <button onClick={() => { setFilterRescheduleOnly(v => !v); setIvrPage(1); }}
-          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
-            filterRescheduleOnly
-              ? "bg-red-50 text-red-700 border-red-200"
-              : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
-          }`}>
-          Reschedule Requested
-          {rescheduleRequestedAll.length > 0 && (
-            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
-              filterRescheduleOnly ? "bg-red-600 text-white" : "bg-red-100 text-red-600"
-            }`}>{rescheduleRequestedAll.length}</span>
-          )}
-        </button>
-        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch || filterRescheduleOnly) && (
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch || filterRescheduleOnly || filterApprovedOnly) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
-            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setFilterRescheduleOnly(false); setIvrPage(1);
+            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch("");
+            setFilterRescheduleOnly(false); setFilterApprovedOnly(false); setIvrPage(1);
           }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
