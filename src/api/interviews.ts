@@ -847,6 +847,27 @@ export function subscribeToInterviewsInDateRange(
   );
 }
 
+// Unscoped by date range (unlike subscribeToInterviewsInDateRange above) —
+// a student can flag a reschedule request (see requestReschedule in
+// api/sso-handler.js) for an interview scheduled well outside whatever date
+// window an admin happens to have the Interviews page set to, so this needs
+// its own always-on query to surface them (badge on the Interviews nav item
+// + the "Reschedule Requested" quick filter on InterviewsPage.jsx), the
+// same way usePendingScheduleInvites already does for candidate bookings.
+export function subscribeToRescheduleRequestedInterviews(
+  callback: (interviews: Interview[]) => void
+): () => void {
+  const q = query(
+    collection(db, "interviews"),
+    where("rescheduleRequested", "==", true)
+  );
+  return onSnapshot(
+    q,
+    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview))),
+    err => reportFirestoreListenerError("interviews:rescheduleRequested", err)
+  );
+}
+
 // Live single-interview subscription — used by the Interviewer Portal's
 // interview-detail page so an admin's edit (reschedule, panelist swap, etc.)
 // shows up immediately instead of only on the next page load.

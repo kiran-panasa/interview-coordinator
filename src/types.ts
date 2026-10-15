@@ -423,6 +423,15 @@ export interface Interview {
   // declineReason are for their own statuses.
   cancelReason?: string;
   cancelledBy?: "interviewer" | "admin";
+  // Set by the student themselves via "Request Reschedule" on the Student
+  // Dashboard (POST /api/sso/interviews/request-reschedule in
+  // api/sso-handler.js) — surfaced on the Interviews page next to the
+  // status badge and via the "Reschedule Requested" quick filter/sidebar
+  // badge (see useRescheduleRequestedInterviews), and cleared by an admin
+  // via handleClearRescheduleRequest once actioned.
+  rescheduleRequested?: boolean;
+  rescheduleRequestReason?: string | null;
+  rescheduleRequestedAt?: string | null;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];

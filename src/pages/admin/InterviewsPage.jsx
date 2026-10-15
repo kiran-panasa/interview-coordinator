@@ -26,7 +26,7 @@ import {
   getAllInterviews, getInterview,
   ensureRoundExists, seedDefaultRoundsOnce,
 } from "../../api/firestore";
-import { useInterviewsInDateRange } from "../../hooks/subscriptions";
+import { useInterviewsInDateRange, useRescheduleRequestedInterviews } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers, useRounds, useVendors, QK } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -112,6 +112,15 @@ export default function InterviewsPage() {
   const [filterDateFrom, setFilterDateFrom] = useState(yesterdayIso());
   const [filterDateTo,   setFilterDateTo]   = useState(todayIso());
   const interviews = useInterviewsInDateRange(filterDateFrom, filterDateTo);
+
+  // Unscoped by date — a student's reschedule request (see
+  // requestReschedule in api/sso-handler.js) can land on an interview well
+  // outside whatever date window is currently selected above, so finding it
+  // would otherwise mean guessing the right range first. Backs both the
+  // "Reschedule Requested" quick filter below and the sidebar nav badge
+  // (AdminLayout.jsx).
+  const [filterRescheduleOnly, setFilterRescheduleOnly] = useState(false);
+  const rescheduleRequestedAll = useRescheduleRequestedInterviews();
 
   // Auto-heals rows stuck with an eventId but no meetLink — Google creates
   // the Meet room a little after the Calendar event, and occasionally later
@@ -923,6 +932,27 @@ export default function InterviewsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, interviews]);
 
+  // ── Reschedule requests (student-flagged, see requestReschedule in
+  //    api/sso-handler.js) ─────────────────────────────────────────────────
+
+  // Dismisses the flag once an admin has acted on it — either by actually
+  // rescheduling (Edit, below) or by sending a fresh nudge from Nudge →
+  // Candidates so the student can pick their own new slot. Doesn't change
+  // status/date itself; this just clears the "needs attention" marker so it
+  // drops off the badge/quick-filter above.
+  const handleClearRescheduleRequest = async (iv) => {
+    try {
+      await updateInterview(iv.id, {
+        rescheduleRequested: false,
+        rescheduleRequestReason: null,
+        rescheduleRequestedAt: null,
+      });
+      setToast({ message: "Reschedule request cleared." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
 
   const handleCancel = async (iv) => {
@@ -1312,11 +1342,20 @@ export default function InterviewsPage() {
   // worked, but you're on the wrong tab."
   const ivrKey = (i) => i.interviewerId || i.interviewerEmail || "";
   const filtered = useMemo(() => {
-    const base = candSearch.trim() ? workingSet : programWorkingSet;
+    // Reschedule Requested bypasses the date window entirely (and the
+    // archived/program scoping workingSet/programWorkingSet apply) — the
+    // whole point is finding these regardless of which date range happens
+    // to be selected. Other filters (status/interviewer/vendor/template/
+    // search) still narrow it further on top.
+    const base = filterRescheduleOnly
+      ? rescheduleRequestedAll
+      : candSearch.trim() ? workingSet : programWorkingSet;
     return base.filter(i => {
       if (filterStatus !== "All" && i.status !== filterStatus) return false;
-      if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
-      if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
+      if (!filterRescheduleOnly) {
+        if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
+        if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
+      }
       if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
       if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
       if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
@@ -1327,7 +1366,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail, filterRescheduleOnly, rescheduleRequestedAll]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -1664,10 +1703,26 @@ export default function InterviewsPage() {
           <option value="All">All Vendors</option>
           {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch) && (
+        {/* Bypasses the date range above entirely — see the filtered useMemo —
+           so a reschedule request on an interview outside the selected
+           window is still findable with one click instead of guessing dates. */}
+        <button onClick={() => { setFilterRescheduleOnly(v => !v); setIvrPage(1); }}
+          className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+            filterRescheduleOnly
+              ? "bg-red-50 text-red-700 border-red-200"
+              : "border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300"
+          }`}>
+          Reschedule Requested
+          {rescheduleRequestedAll.length > 0 && (
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+              filterRescheduleOnly ? "bg-red-600 text-white" : "bg-red-100 text-red-600"
+            }`}>{rescheduleRequestedAll.length}</span>
+          )}
+        </button>
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch || filterRescheduleOnly) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
-            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setIvrPage(1);
+            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setFilterRescheduleOnly(false); setIvrPage(1);
           }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
@@ -1805,6 +1860,12 @@ export default function InterviewsPage() {
                       {iv.cancelledBy === "interviewer" ? "By interviewer: " : ""}{iv.cancelReason}
                     </p>
                   )}
+                  {iv.rescheduleRequested && (
+                    <p className="text-[11px] text-amber-600 mt-1 max-w-[160px] truncate"
+                      title={`Candidate asked to reschedule: ${iv.rescheduleRequestReason || "—"}`}>
+                      ⏰ Reschedule: {iv.rescheduleRequestReason || "—"}
+                    </p>
+                  )}
                   {iv.status === "declined" && iv.reassignedTo && (() => {
                     // Best-effort — only resolves a name if the new interview
                     // also falls within the currently-loaded date range.
@@ -1840,6 +1901,12 @@ export default function InterviewsPage() {
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
+                    {
+                      label: "Mark Reschedule Handled",
+                      onClick: () => handleClearRescheduleRequest(iv),
+                      show: !!iv.rescheduleRequested,
+                      highlight: true,
+                    },
                     {
                       label: "Reassign Interviewer",
                       onClick: () => openReassign(iv),

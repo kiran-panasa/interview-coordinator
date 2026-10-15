@@ -3,7 +3,10 @@ import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
 import { useMemo, useEffect, useRef } from "react";
-import { useUnreadUserNotifications, useAdhocQuestions, usePendingScheduleInvites, usePendingInboundRequests } from "../hooks/subscriptions";
+import {
+  useUnreadUserNotifications, useAdhocQuestions, usePendingScheduleInvites, usePendingInboundRequests,
+  useRescheduleRequestedInterviews,
+} from "../hooks/subscriptions";
 import { useActiveAdmins } from "../hooks/queries";
 import { createNotification, markInboundRequestNotified } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
@@ -37,6 +40,7 @@ export default function AdminLayout() {
   const adhocQs           = useAdhocQuestions();
   const pendingInvites    = usePendingScheduleInvites();
   const inboundRequests   = usePendingInboundRequests();
+  const rescheduleRequests = useRescheduleRequestedInterviews();
   // Targeted equality-only fetch — avoids reading the entire users
   // collection just to find who to notify below.
   const { data: activeAdmins = [] } = useActiveAdmins();
@@ -44,6 +48,7 @@ export default function AdminLayout() {
   const pendingBookings  = pendingInvites.length;
   const pendingAdhoc     = adhocQs.filter(q => q.status === "pending").length;
   const pendingInbound   = inboundRequests.filter(r => r.status === "pending").length;
+  const pendingReschedules = rescheduleRequests.length;
   const nudgeBadge       = unreadResponses + pendingBookings;
 
   // Fires an in-app notification to every active admin the first time a new
@@ -93,7 +98,8 @@ export default function AdminLayout() {
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || role}</p>
           {nav.map(item => {
-            const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0);
+            const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0)
+              || (item.to === "/admin/interviews" && pendingReschedules > 0);
             const Icon = item.icon;
             return (
               <NavLink key={item.to} to={item.to}
@@ -121,6 +127,11 @@ export default function AdminLayout() {
                 {item.to === "/admin/questions" && pendingAdhoc > 0 && (
                   <span className="text-[10px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                     {pendingAdhoc}
+                  </span>
+                )}
+                {item.to === "/admin/interviews" && pendingReschedules > 0 && (
+                  <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {pendingReschedules}
                   </span>
                 )}
               </NavLink>
