@@ -228,6 +228,10 @@ export default function SchedulePage() {
     setBusy(false);
   };
 
+  // Beyond this email, a booking is also already visible live in-app —
+  // bookSlotForCandidate flips the invite to "pending_confirmation", which
+  // subscribeToPendingScheduleInvites (badge on the admin's Nudge nav item,
+  // and the Candidates tab list) picks up immediately.
   const notifyAdminsBookingPending = async () => {
     try {
       const activeAdmins = await getActiveAdmins();

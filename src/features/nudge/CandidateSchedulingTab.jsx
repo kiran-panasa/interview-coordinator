@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
-  CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck, Search,
+  CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck, Search, History,
 } from "lucide-react";
 import { formatDate, formatDateTime } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
@@ -9,7 +9,7 @@ import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, freeSlotsHeldByInvite, createInterview, getTemplate, createNotification,
   logInviteHistory, getPreInterviewResources, updateCandidate,
-  ensureRoundExists,
+  ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory,
 } from "../../api/firestore";
 import { scheduleInterviewMeet } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
@@ -91,6 +91,12 @@ export default function CandidateSchedulingTab({
   const [resendingId,    setResendingId]    = useState(null);
   const [deletingId,     setDeletingId]     = useState(null);
   const [copiedId,       setCopiedId]       = useState(null);
+  // "Nudge History" — every invite ever sent to this candidate (across all
+  // rounds/templates, not just the current one), each with its own
+  // sent/resent/confirmed/cancelled timeline — see openNudgeHistory.
+  const [historyFor,     setHistoryFor]     = useState(null); // { candidateName, candidateEmail } | null
+  const [historyInvites, setHistoryInvites] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [candSearch,     setCandSearch]     = useState("");
   // Bulk Select by List — paste a batch of emails/UIDs (from a sheet, a
   // program roster, wherever) to check them all in one go instead of
@@ -604,6 +610,29 @@ export default function CandidateSchedulingTab({
     navigator.clipboard.writeText(link);
     setCopiedId(inv.id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Every invite this candidate has ever been sent, across every round —
+  // resending reuses the same invite doc (see handleResendInvite above), so
+  // a single candidate+round pair never grows its own list of docs just
+  // from being nudged repeatedly; this instead pulls every scheduleInvites
+  // doc for their email (one per round normally) and, for each, its own
+  // sent/resent/confirmed/cancelled timeline from the history subcollection,
+  // merged into one timeline so "how many times has this candidate been
+  // nudged" has an actual answer.
+  const openNudgeHistory = async (inv) => {
+    setHistoryFor({ candidateName: inv.candidateName, candidateEmail: inv.candidateEmail });
+    setHistoryLoading(true);
+    try {
+      const allInvites = await getScheduleInvitesByEmail(inv.candidateEmail);
+      const withHistory = await Promise.all(allInvites.map(async i => ({
+        ...i, history: await getInviteHistory(i.id).catch(() => []),
+      })));
+      setHistoryInvites(withHistory);
+    } catch {
+      setHistoryInvites([]);
+    }
+    setHistoryLoading(false);
   };
 
   const handleExportLinks = () => {
@@ -1141,6 +1170,10 @@ export default function CandidateSchedulingTab({
                             disabled: resendingId === inv.id || deletingId === inv.id || ["confirmed", "cancelled"].includes(inv.status),
                           },
                           {
+                            label: "Nudge History",
+                            onClick: () => openNudgeHistory(inv),
+                          },
+                          {
                             label: deletingId === inv.id ? "Deleting…" : "Delete",
                             onClick: () => handleDeleteInvite(inv),
                             danger: true,
@@ -1364,6 +1397,45 @@ export default function CandidateSchedulingTab({
               </button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      <Modal open={!!historyFor} onClose={() => setHistoryFor(null)} title={`Nudge History — ${historyFor?.candidateName || ""}`} wide>
+        {historyFor && (
+          historyLoading ? (
+            <p className="text-sm text-gray-400 text-center py-8">Loading…</p>
+          ) : historyInvites.length === 0 ? (
+            <div className="text-center py-10">
+              <History className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">No invites have been sent to this candidate yet.</p>
+            </div>
+          ) : (
+            <div className="space-y-4 max-h-[28rem] overflow-y-auto pr-1">
+              {historyInvites.map(inv => (
+                <div key={inv.id} className="border border-gray-100 rounded-xl p-4">
+                  <div className="flex items-center justify-between gap-3 mb-2.5">
+                    <p className="text-sm font-semibold text-gray-800">{inv.round || inv.templateName || "Interview"}</p>
+                    <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_BADGE[inv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                      {STATUS_LABEL[inv.status] || inv.status}
+                    </span>
+                  </div>
+                  {inv.history.length === 0 ? (
+                    <p className="text-xs text-gray-400">No events recorded.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {inv.history.map(h => (
+                        <p key={h.id} className="text-xs text-gray-600">
+                          <span className="text-gray-400">{formatDateTime(h.at)}</span>{" — "}
+                          <span className="font-semibold text-gray-700">{STATUS_LABEL[h.status] || h.status}</span>
+                          {h.note ? <span className="text-gray-400"> · {h.note}</span> : null}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
         )}
       </Modal>
     </div>

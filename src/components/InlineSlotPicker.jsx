@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Loader2, CalendarCheck2, RefreshCw, User2 } from "lucide-react";
+import { Loader2, CalendarCheck2, RefreshCw } from "lucide-react";
 import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes } from "../utils/dates";
 import {
   updateScheduleInvite, getAvailableSlots, bookSlotForCandidate, getActiveAdmins,
@@ -25,9 +25,9 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
 
 // The same slot-browse-and-book experience as SchedulePage.jsx's "Pick a
 // Slot" step, minus the email+OTP steps (the SSO session already proved
-// who the student is) — plus a date-first picker and visible panelist
-// names per slot, so it's clear WHO each time belongs to instead of a flat
-// list of times from however many interviewers are pooled together.
+// who the student is) — plus a date-first picker. Panelist identity is
+// never shown here, same privacy stance as the public SchedulePage.jsx
+// link flow — the candidate only ever sees a date and a time.
 export default function InlineSlotPicker({ invite, onBooked }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,6 +61,10 @@ export default function InlineSlotPicker({ invite, onBooked }) {
     } catch { /* best-effort */ }
   };
 
+  // Beyond this email, a booking is also already visible live in-app —
+  // bookSlotForCandidate flips the invite to "pending_confirmation", which
+  // subscribeToPendingScheduleInvites (badge on the admin's Nudge nav item,
+  // and the Candidates tab list) picks up immediately.
   const notifyAdminsBookingPending = async (inv, sel) => {
     try {
       const activeAdmins = await getActiveAdmins();
@@ -125,7 +129,7 @@ export default function InlineSlotPicker({ invite, onBooked }) {
         selected.interviewerId, selected.slotId, invite.id,
         selected.date, selected.time, invite.duration || 60
       );
-      setBooked({ date: selected.date, time: selected.time, interviewerName: selected.interviewerName });
+      setBooked({ date: selected.date, time: selected.time });
       notifyAdminsBookingPending(invite, selected);
       onBooked?.();
     } catch (e) {
@@ -148,7 +152,6 @@ export default function InlineSlotPicker({ invite, onBooked }) {
         <div>
           <p className="text-sm font-bold text-emerald-800">Slot reserved — {formatDateLong(booked.date)} · {booked.time}</p>
           <p className="text-xs text-emerald-600 mt-0.5">
-            {booked.interviewerName ? `With ${booked.interviewerName} — ` : ""}
             Pending admin confirmation. You'll get a Meet invite by email once confirmed.
           </p>
         </div>
@@ -180,13 +183,7 @@ export default function InlineSlotPicker({ invite, onBooked }) {
     );
   }
 
-  // Grouped by interviewer within the selected date, so it's clear WHO
-  // each time slot belongs to instead of one undifferentiated time list.
   const slotsForDate = bookableSlots.filter(s => s.date === activeDate);
-  const byInterviewer = slotsForDate.reduce((acc, s) => {
-    (acc[s.interviewerName || "Interviewer"] ||= []).push(s);
-    return acc;
-  }, {});
 
   return (
     <div className="space-y-4">
@@ -209,41 +206,32 @@ export default function InlineSlotPicker({ invite, onBooked }) {
         ))}
       </div>
 
-      <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-        {Object.entries(byInterviewer).map(([name, daySlots]) => (
-          <div key={name}>
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 mb-1.5">
-              <User2 className="w-3.5 h-3.5 text-gray-400" /> {name}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {daySlots.map(s => {
-                const isSelected = selected?.slotId === s.slotId && selected?.interviewerId === s.interviewerId;
-                const slotStart  = parseInterviewStart(s.date, s.time);
-                const isPastSlot = slotStart ? slotStart < new Date() : false;
-                const isDisabled = s.isBooked || isPastSlot;
-                return (
-                  <button key={`${s.interviewerId}-${s.slotId}`}
-                    onClick={() => { if (!isDisabled) setSelected(s); }}
-                    title={s.isBooked ? "Already booked" : isPastSlot ? "Already passed" : undefined}
-                    className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
-                      isDisabled
-                        ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
-                        : isSelected
-                          ? "bg-brand-600 text-white border-brand-600"
-                          : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
-                    }`}>
-                    {s.time}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto pr-1">
+        {slotsForDate.map(s => {
+          const isSelected = selected?.slotId === s.slotId && selected?.interviewerId === s.interviewerId;
+          const slotStart  = parseInterviewStart(s.date, s.time);
+          const isPastSlot = slotStart ? slotStart < new Date() : false;
+          const isDisabled = s.isBooked || isPastSlot;
+          return (
+            <button key={`${s.interviewerId}-${s.slotId}`}
+              onClick={() => { if (!isDisabled) setSelected(s); }}
+              title={s.isBooked ? "Already booked" : isPastSlot ? "Already passed" : undefined}
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+                isDisabled
+                  ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
+                  : isSelected
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
+              }`}>
+              {s.time}
+            </button>
+          );
+        })}
       </div>
 
       {selected && (
         <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 text-sm text-brand-800 font-medium">
-          Selected: {formatDateLong(selected.date)} · {selected.time} with {selected.interviewerName}
+          Selected: {formatDateLong(selected.date)} · {selected.time}
         </div>
       )}
       <Button variant="primary" onClick={handleBook} disabled={!selected || busy} className="w-full">

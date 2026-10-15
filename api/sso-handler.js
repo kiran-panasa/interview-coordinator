@@ -20,6 +20,19 @@ import { sendSmsOtp } from "./_lib/sms.js";
 
 const SECURE = process.env.NODE_ENV === "production";
 
+// How much longer, past an invite's own expiresAt, a candidate can still
+// book it from the authenticated Student Dashboard (Slot Overview tab)
+// even after the emailed/magic link itself would call it expired — the
+// link has no server-side enforcement of its own, so this is the one place
+// that actually draws a hard line. After this, the invite is dropped from
+// /me's pendingInvites (so it stops showing as bookable) and selfBook stops
+// treating it as still-open (so "Find Slots" starts a fresh one instead of
+// being stuck on a dead invite forever).
+const BOOKING_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+function isPastGrace(invite) {
+  return !!invite.expiresAt && new Date(invite.expiresAt).getTime() + BOOKING_GRACE_MS < Date.now();
+}
+
 export default async function handler(req, res) {
   const route = String(req.query.route || "");
 
@@ -172,10 +185,11 @@ async function me(req, res) {
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(inv => !["confirmed", "cancelled"].includes(inv.status))
     .filter(inv => inv.templateId && assignedTemplateIds.has(inv.templateId))
+    .filter(inv => !isPastGrace(inv))
     .map(inv => ({
       id: inv.id, inviteToken: inv.inviteToken || "", templateId: inv.templateId || "", templateName: inv.templateName || "",
       round: inv.round || "", status: inv.status,
-      dateRangeStart: inv.dateRangeStart || "", dateRangeEnd: inv.dateRangeEnd || "",
+      dateRangeStart: inv.dateRangeStart || "", dateRangeEnd: inv.dateRangeEnd || "", expiresAt: inv.expiresAt || "",
     }));
 
   const interviewsSnap = await db.collection("interviews").where("candidateId", "==", session.candidateId).get();
@@ -356,14 +370,17 @@ async function selfBook(req, res) {
   }
 
   // Reuse an existing still-open invite for this template rather than
-  // creating a duplicate if the student already started one.
+  // creating a duplicate if the student already started one — but not one
+  // that's sat unbooked well past its own window (isPastGrace), since that's
+  // effectively abandoned and reusing it would just hand back the same
+  // dead-end invite forever instead of giving the student a fresh 7-day one.
   const existingSnap = await db.collection("scheduleInvites")
     .where("candidateId", "==", session.candidateId)
     .where("templateId", "==", templateId)
     .get();
   const existing = existingSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .find(inv => !["confirmed", "cancelled"].includes(inv.status));
+    .find(inv => !["confirmed", "cancelled"].includes(inv.status) && !isPastGrace(inv));
   if (existing) {
     return res.status(200).json({ success: true, inviteId: existing.id, reused: true });
   }
