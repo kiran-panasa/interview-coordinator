@@ -3,6 +3,17 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { lazyWithRetry as lazy } from "./utils/lazyWithRetry";
 
+// Lazy like every other component below — a static top-level import here
+// pulled ErrorBoundary (and its Button/lucide-react/Sentry logger deps)
+// into the main eagerly-loaded entry bundle for every single visitor
+// (~130KB extra on first paint, before login, for everyone — not just
+// students), which defeats the whole "fix slow page load" point. Lazy
+// keeps it out of the eager bundle exactly like AdminLayout/InterviewerLayout
+// below, at the cost of a brief moment without crash protection while its
+// chunk downloads — a non-issue in practice since Suspense's PageFallback
+// is already showing during that same window.
+const ErrorBoundary = lazy(() => import("./components/ErrorBoundary"));
+
 const LoginPage     = lazy(() => import("./pages/auth/LoginPage"));
 const PendingPage   = lazy(() => import("./pages/auth/PendingPage"));
 
@@ -135,11 +146,16 @@ function AppRoutes() {
           <Route path="about"          element={<InterviewerAboutPage />} />
         </Route>
 
-        {/* Public student pages — no auth required */}
-        <Route path="/student/schedule"  element={<SchedulePage />} />
-        <Route path="/student/portal"    element={<CandidatePortal />} />
-        <Route path="/student/dashboard" element={<StudentDashboardPage />} />
-        <Route path="/sso/callback"      element={<SsoCallbackPage />} />
+        {/* Public student pages — no auth required. Unlike Admin/Interviewer,
+           these have no shared layout component to hang a boundary off of
+           (AdminLayout/InterviewerLayout wrap their own <Outlet/>), so each
+           route is wrapped directly here instead — otherwise a throw in a
+           page's own render-body code (before its JSX return) has nothing
+           above it in the tree to catch it and white-screens the tab. */}
+        <Route path="/student/schedule"  element={<ErrorBoundary><SchedulePage /></ErrorBoundary>} />
+        <Route path="/student/portal"    element={<ErrorBoundary><CandidatePortal /></ErrorBoundary>} />
+        <Route path="/student/dashboard" element={<ErrorBoundary><StudentDashboardPage /></ErrorBoundary>} />
+        <Route path="/sso/callback"      element={<ErrorBoundary><SsoCallbackPage /></ErrorBoundary>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
