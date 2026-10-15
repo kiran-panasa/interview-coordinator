@@ -204,6 +204,16 @@ async function me(req, res) {
       timeRangeStart: inv.timeRangeStart || "",
       timeRangeEnd: inv.timeRangeEnd || "",
       interviewerIds: inv.interviewerIds || null,
+      // Also read directly off the invite by InlineSlotPicker.jsx, for the
+      // admin-notification emails it sends on booking/no-slots — without
+      // these the emails literally said "undefined has selected a slot..."
+      // (candidateName), and resolveActionAdminRecipients had no actor to
+      // scope to so it fell back to broadcasting every active admin instead
+      // of just the one who sent/owns this invite (sentBy). noSlotsNotifiedAt
+      // is the guard against re-sending that same email every refresh.
+      candidateName: inv.candidateName || "",
+      sentBy: inv.sentBy || "",
+      noSlotsNotifiedAt: inv.noSlotsNotifiedAt || "",
     }));
 
   const interviewsSnap = await db.collection("interviews").where("candidateId", "==", session.candidateId).get();
