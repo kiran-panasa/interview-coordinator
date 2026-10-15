@@ -868,24 +868,6 @@ export function subscribeToRescheduleRequestedInterviews(
   );
 }
 
-// Same shape as subscribeToRescheduleRequestedInterviews above, for the
-// "Reschedule Approved" quick tab on InterviewsPage.jsx — an admin may want
-// to find these to check whether the candidate has actually picked a new
-// slot yet, regardless of what date range is currently selected.
-export function subscribeToRescheduleApprovedInterviews(
-  callback: (interviews: Interview[]) => void
-): () => void {
-  const q = query(
-    collection(db, "interviews"),
-    where("rescheduleApproved", "==", true)
-  );
-  return onSnapshot(
-    q,
-    snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview))),
-    err => reportFirestoreListenerError("interviews:rescheduleApproved", err)
-  );
-}
-
 // Live single-interview subscription — used by the Interviewer Portal's
 // interview-detail page so an admin's edit (reschedule, panelist swap, etc.)
 // shows up immediately instead of only on the next page load.

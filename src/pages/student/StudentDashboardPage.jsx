@@ -103,6 +103,7 @@ export default function StudentDashboardPage() {
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
+  const [activeInterviewTab, setActiveInterviewTab] = useState("all");
 
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
@@ -556,7 +557,44 @@ export default function StudentDashboardPage() {
                   </Card>
                 ) : (
                   <>
-                    {INTERVIEW_SECTIONS.map(section => {
+                    {/* Quick-view tabs — one per status plus "All", same
+                       underline-tab style used elsewhere in the app, so
+                       jumping straight to e.g. Reschedule Requested doesn't
+                       mean scrolling past every other section first. */}
+                    <div className="flex border-b border-gray-200 mb-2 overflow-x-auto">
+                      {[{ key: "all", label: "All" }, ...INTERVIEW_SECTIONS].map(tab => {
+                        const count = tab.key === "all" ? interviews.length : interviews.filter(tab.match).length;
+                        const isActiveTab = activeInterviewTab === tab.key;
+                        return (
+                          <button key={tab.key} onClick={() => setActiveInterviewTab(tab.key)}
+                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors flex-shrink-0 ${
+                              isActiveTab
+                                ? "border-brand-600 text-brand-600"
+                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            }`}>
+                            {tab.label}
+                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                              isActiveTab ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
+                            }`}>{count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {(activeInterviewTab === "all"
+                      ? INTERVIEW_SECTIONS
+                      : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
+                    ).every(section => interviews.filter(section.match).length === 0) && (
+                      <Card className="flex flex-col items-center justify-center py-10">
+                        <Inbox className="w-8 h-8 text-gray-200 mb-2" />
+                        <p className="text-sm text-gray-400">Nothing here yet.</p>
+                      </Card>
+                    )}
+
+                    {(activeInterviewTab === "all"
+                      ? INTERVIEW_SECTIONS
+                      : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
+                    ).map(section => {
                       const items = interviews.filter(section.match);
                       if (items.length === 0) return null;
                       const isActive = ACTIVE_SECTION_KEYS.has(section.key);
