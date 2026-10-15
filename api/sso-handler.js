@@ -100,7 +100,10 @@ async function accountsToken(req, res) {
   const snap = await db.collection("candidates").where("uid", "==", userId).get();
   if (snap.size !== 1) {
     await logTokenAttempt(db, { outcome: "student_not_found", userId, matchCount: snap.size });
-    return res.status(404).json({ error: "student_not_found" });
+    return res.status(404).json({
+      error: "student_not_found",
+      message: "No access — this student ID isn't recognized. Please check with the Interview Coordinator admin team.",
+    });
   }
   const candidate = snap.docs[0];
 
