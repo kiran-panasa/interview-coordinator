@@ -253,7 +253,13 @@ export default function StudentDashboardPage() {
 
   const { candidate, templates = [], interviews = [], pendingInvites = [] } = data;
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
-  const past     = interviews.filter(i => !["pending_acceptance", "scheduled", "declined"].includes(i.status));
+  // All upcoming interviews with a confirmed date, soonest first — previously
+  // this picked the first array match regardless of date, so a 16th could
+  // sit hidden behind a 17th that happened to come first in query order.
+  const upcomingScheduled = upcoming
+    .filter(i => i.scheduledDate)
+    .slice()
+    .sort((a, b) => `${a.scheduledDate}T${a.scheduledTime || ""}`.localeCompare(`${b.scheduledDate}T${b.scheduledTime || ""}`));
   // Still within its booking window and not yet picked — the only kind
   // that's actually expandable into a slot picker.
   const todayStr = todayIso();
@@ -271,12 +277,14 @@ export default function StudentDashboardPage() {
   // "Find Slots" by templatesInProgress, with nothing to show in its place.
   const awaiting = pendingInvites.filter(i => i.status === "slot_selected" || i.status === "pending_confirmation");
   const templatesInProgress = new Set(pendingInvites.map(i => i.templateId).filter(Boolean));
-  const nextUpcoming = upcoming.find(i => i.status === "scheduled" && i.scheduledDate);
-
   const NavButton = ({ item }) => {
     const Icon = item.icon;
     const active = tab === item.id;
-    const badge = item.id === "slots" ? bookable.length : item.id === "interviews" ? upcoming.length : 0;
+    // Matches exactly what each tab renders by default — the slots badge
+    // is every card shown under Book an Interview (bookable + awaiting +
+    // missed, now combined into one list), and the interviews badge is
+    // the same total the "All" quick-tab shows under My Interviews.
+    const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length) : item.id === "interviews" ? interviews.length : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
       <button onClick={() => setTab(item.id)}
@@ -342,37 +350,37 @@ export default function StudentDashboardPage() {
                   <p className="text-sm text-gray-500 mt-0.5">Here's where things stand with your interviews.</p>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <Card className="p-5">
-                    <p className="text-2xl font-bold text-gray-900">{bookable.length}</p>
-                    <p className="text-xs text-gray-400 font-medium mt-0.5">Ready to Book</p>
-                  </Card>
-                  <Card className="p-5">
-                    <p className="text-2xl font-bold text-gray-900">{upcoming.length}</p>
-                    <p className="text-xs text-gray-400 font-medium mt-0.5">Upcoming</p>
-                  </Card>
-                  <Card className="p-5">
-                    <p className="text-2xl font-bold text-gray-900">{past.length}</p>
-                    <p className="text-xs text-gray-400 font-medium mt-0.5">Completed</p>
-                  </Card>
+                <div>
+                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
+                    Upcoming {upcomingScheduled.length > 0 && <span className="text-gray-300">({upcomingScheduled.length})</span>}
+                  </p>
+                  {upcomingScheduled.length === 0 ? (
+                    <Card className="flex flex-col items-center justify-center py-10">
+                      <CalendarClock className="w-8 h-8 text-gray-200 mb-2" />
+                      <p className="text-sm text-gray-400">No upcoming interviews right now.</p>
+                    </Card>
+                  ) : (
+                    <div className="space-y-3">
+                      {upcomingScheduled.map(iv => (
+                        <Card key={iv.id} className="p-5 flex items-center justify-between gap-3 flex-wrap">
+                          <div>
+                            <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                            <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
+                              <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
+                            </p>
+                          </div>
+                          {iv.meetLink && (
+                            <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                              className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors flex-shrink-0">
+                              <Video className="w-3.5 h-3.5" /> Join Meet
+                            </a>
+                          )}
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </div>
-
-                {nextUpcoming && (
-                  <Card className="p-6 max-w-md">
-                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Next Up</p>
-                    <p className="font-bold text-gray-900">{interviewTitle(nextUpcoming)}</p>
-                    <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
-                      <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                      {formatDate(nextUpcoming.scheduledDate)} · {nextUpcoming.scheduledTime} · {nextUpcoming.duration}m
-                    </p>
-                    {nextUpcoming.meetLink && (
-                      <a href={nextUpcoming.meetLink} target="_blank" rel="noreferrer"
-                        className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors mt-4">
-                        <Video className="w-3.5 h-3.5" /> Join Meet
-                      </a>
-                    )}
-                  </Card>
-                )}
 
               </div>
             )}
