@@ -16,7 +16,7 @@ export interface User {
   status: UserStatus;
   templateIds?: string[];
   skills?: string[];
-  phoneNumber?: string;
+  phone?: string;
   // Which outsourcing vendor this interviewer belongs to (see api/vendors.ts)
   // — admin-managed grouping used to filter/report Interviews and
   // Interviewer Stats by vendor. Absent for in-house interviewers and for

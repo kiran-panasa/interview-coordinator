@@ -207,7 +207,7 @@ export default function VendorDashboardPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100">
-                            {["Name", "Email", "Interviews"].map(h => (
+                            {["Name", "Email", "Phone", "Skills", "Interviews"].map(h => (
                               <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                             ))}
                           </tr>
@@ -217,10 +217,14 @@ export default function VendorDashboardPage() {
                             const skillNames = resolvedSkillNames(interviewer);
                             return (
                             <tr key={interviewer.id} className="hover:bg-gray-50/70 transition-colors">
+                              <td className="px-4 py-3 font-semibold text-gray-900">{interviewer.displayName || "—"}</td>
+                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.email}</td>
+                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.phone || "—"}</td>
                               <td className="px-4 py-3">
-                                <p className="font-semibold text-gray-900">{interviewer.displayName || "—"}</p>
-                                {skillNames.length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1 max-w-[280px]">
+                                {skillNames.length === 0 ? (
+                                  <span className="text-xs text-gray-300">—</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1 max-w-[320px]">
                                     {skillNames.map(name => (
                                       <span key={name} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
                                         {name}
@@ -229,7 +233,6 @@ export default function VendorDashboardPage() {
                                   </div>
                                 )}
                               </td>
-                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.email}</td>
                               <td className="px-4 py-3 text-gray-600">{ivrInterviews.length}</td>
                             </tr>
                             );

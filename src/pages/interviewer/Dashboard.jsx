@@ -12,7 +12,7 @@ import StatCard from "../../components/ui/StatCard";
 import { SkeletonStatCards, SkeletonRows } from "../../components/Skeleton";
 
 function PhoneNudge({ userProfile }) {
-  const hasPhone = !!(userProfile?.phone || userProfile?.phoneNumber);
+  const hasPhone = !!userProfile?.phone;
   if (hasPhone) return null;
   return (
     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6">
