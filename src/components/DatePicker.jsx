@@ -57,7 +57,17 @@ export default function DatePicker({
     const p = parseIso(value);
     setViewDate(p ? new Date(p.y, p.m, 1) : viewDate);
     const rect = triggerRef.current.getBoundingClientRect();
-    setCoords({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+    // Popover is a fixed w-64 (256px) — always anchoring to the trigger's
+    // LEFT edge clipped off-screen whenever the trigger itself sits near
+    // the right edge of the viewport (e.g. a "To" date filter at the end of
+    // a filter bar). Flip to anchor off the trigger's RIGHT edge instead
+    // when it would otherwise overflow, same idea as a native select/menu.
+    const POPOVER_WIDTH = 256;
+    let left = rect.left;
+    if (left + POPOVER_WIDTH > window.innerWidth - 8) {
+      left = Math.max(8, rect.right - POPOVER_WIDTH);
+    }
+    setCoords({ top: rect.bottom + 6, left, width: rect.width });
     setOpen(true);
   };
 

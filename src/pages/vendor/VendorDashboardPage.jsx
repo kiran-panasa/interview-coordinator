@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Pencil, Check, X,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Pencil, Check, X, Search,
 } from "lucide-react";
 import { formatDate, formatDateLong } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
@@ -73,6 +73,7 @@ export default function VendorDashboardPage() {
   // elsewhere in the app, rather than the backward-looking stats default.
   const [slotDateFrom, setSlotDateFrom] = useState(todayIso());
   const [slotDateTo,   setSlotDateTo]   = useState(inDays(7));
+  const [slotSearch,   setSlotSearch]   = useState("");
 
   const vendorId = userProfile?.vendorContactFor;
 
@@ -226,7 +227,7 @@ export default function VendorDashboardPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100">
-                            {["Name", "Email", "Phone", "Skills", "Status", "Interviews"].map(h => (
+                            {["Name", "Email", "Phone", "Status", "Interviews"].map(h => (
                               <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                             ))}
                           </tr>
@@ -234,7 +235,18 @@ export default function VendorDashboardPage() {
                         <tbody className="divide-y divide-gray-50">
                           {byInterviewer.map(({ interviewer, interviews: ivrInterviews }) => (
                             <tr key={interviewer.id} className="hover:bg-gray-50/70 transition-colors">
-                              <td className="px-4 py-3 font-semibold text-gray-900">{interviewer.displayName || "—"}</td>
+                              <td className="px-4 py-3">
+                                <p className="font-semibold text-gray-900">{interviewer.displayName || "—"}</p>
+                                {(interviewer.skills || []).length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1 max-w-[220px]">
+                                    {interviewer.skills.map(id => (
+                                      <span key={id} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                        {skillNameById.get(id) || id}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.email}</td>
                               <td className="px-4 py-3 text-gray-500 font-mono text-xs">
                                 {editingPhoneId === interviewer.id ? (
@@ -262,19 +274,6 @@ export default function VendorDashboardPage() {
                                     {interviewer.phoneNumber || "—"}
                                     <Pencil className="w-3 h-3 text-gray-300 group-hover:text-gray-500" />
                                   </button>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                {(interviewer.skills || []).length === 0 ? (
-                                  <span className="text-xs text-gray-300">—</span>
-                                ) : (
-                                  <div className="flex flex-wrap gap-1 max-w-[220px]">
-                                    {(interviewer.skills || []).map(id => (
-                                      <span key={id} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
-                                        {skillNameById.get(id) || id}
-                                      </span>
-                                    ))}
-                                  </div>
                                 )}
                               </td>
                               <td className="px-4 py-3">
@@ -344,25 +343,40 @@ export default function VendorDashboardPage() {
                 </div>
               )}
 
-              {tab === "slots" && (
+              {tab === "slots" && (() => {
+                const filteredSlotInterviewers = interviewers.filter(ivr =>
+                  !slotSearch.trim() || (ivr.displayName || ivr.email || "").toLowerCase().includes(slotSearch.trim().toLowerCase())
+                );
+                return (
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <h1 className="text-xl font-bold text-gray-900 tracking-tight">Slot Overview</h1>
                       <p className="text-sm text-gray-500 mt-0.5">
-                        {formatDate(slotDateFrom)} to {formatDate(slotDateTo)}, across {interviewers.length} panelist{interviewers.length !== 1 ? "s" : ""}.
+                        {formatDate(slotDateFrom)} to {formatDate(slotDateTo)}, across {filteredSlotInterviewers.length} panelist{filteredSlotInterviewers.length !== 1 ? "s" : ""}
+                        {slotSearch.trim() ? ` matching "${slotSearch.trim()}"` : ""}.
                       </p>
                     </div>
-                    <DateFilterBar from={slotDateFrom} to={slotDateTo} setFrom={setSlotDateFrom} setTo={setSlotDateTo} />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input type="text" value={slotSearch} onChange={e => setSlotSearch(e.target.value)}
+                          placeholder="Search panelist…"
+                          className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                      </div>
+                      <DateFilterBar from={slotDateFrom} to={slotDateTo} setFrom={setSlotDateFrom} setTo={setSlotDateTo} />
+                    </div>
                   </div>
-                  {interviewers.length === 0 ? (
+                  {filteredSlotInterviewers.length === 0 ? (
                     <Card className="flex flex-col items-center justify-center py-14">
                       <CalendarRange className="w-8 h-8 text-gray-200 mb-2" />
-                      <p className="text-sm text-gray-400">No panelists assigned to this vendor yet.</p>
+                      <p className="text-sm text-gray-400">
+                        {interviewers.length === 0 ? "No panelists assigned to this vendor yet." : "No panelist matches that search."}
+                      </p>
                     </Card>
                   ) : (
                     <div className="space-y-4">
-                      {interviewers.map(ivr => {
+                      {filteredSlotInterviewers.map(ivr => {
                         const slots = (slotsByInterviewer[ivr.id] || [])
                           .filter(s => s.date >= slotDateFrom && s.date <= slotDateTo)
                           .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
@@ -413,7 +427,8 @@ export default function VendorDashboardPage() {
                     </div>
                   )}
                 </div>
-              )}
+                );
+              })()}
             </>
           )}
         </div>
