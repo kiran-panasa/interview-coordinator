@@ -52,6 +52,11 @@ export interface Invite {
   name?: string;
   phone?: string;
   role: UserRole;
+  // Only meaningful when role === "vendor" — which vendor this brand-new
+  // account is the contact for, carried over onto the new User doc's own
+  // vendorContactFor on signup (see AuthContext.jsx's invite-consuming
+  // loadProfile). Irrelevant for every other role.
+  vendorId?: string;
   status: "pending" | "accepted" | "revoked";
   createdAt: string;
 }

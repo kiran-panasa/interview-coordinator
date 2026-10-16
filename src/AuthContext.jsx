@@ -35,6 +35,11 @@ export function AuthProvider({ children }) {
         phone:       invite?.phone || null,
         role:        isBootstrap ? "admin"      : (invite ? (invite.role || "interviewer") : null),
         status:      isBootstrap ? "active"     : (invite ? "active"      : "pending"),
+        // Only ever present on a "vendor"-role invite (see the Settings ->
+        // Invite modal's "Which Vendor?" picker) — carries straight over so
+        // a brand-new vendor-only account lands with Vendor Dashboard
+        // access already in place, no separate admin step needed after signup.
+        vendorContactFor: invite?.vendorId || null,
         createdAt:   new Date().toISOString(),
       }).catch(e => logError(e, { label: "createUserProfile", uid: user.uid }));
       if (invite) {

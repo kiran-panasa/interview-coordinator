@@ -31,7 +31,7 @@ import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 
-const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer" };
+const BLANK_INVITE = { name: "", phone: "", email: "", role: "interviewer", vendorId: "" };
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
@@ -398,14 +398,20 @@ export default function SettingsPage() {
     setInviteError("");
     if (!inviteForm.name.trim()) { setInviteError("Name is required."); return; }
     if (!inviteForm.email.trim()) { setInviteError("Email is required."); return; }
+    if (inviteForm.role === "vendor" && !inviteForm.vendorId) { setInviteError("Pick which vendor this is a contact for."); return; }
     const alreadyInvited = invites.find(
       i => i.email === inviteForm.email.toLowerCase().trim() && i.status === "pending"
     );
     if (alreadyInvited) { setInviteError("This email already has a pending invite."); return; }
     setInviteSaving(true);
     try {
-      const id = await createInvite(inviteForm);
-      const created = { id, ...inviteForm, email: inviteForm.email.toLowerCase().trim(), status: "pending", createdAt: new Date().toISOString() };
+      // vendorId is only meaningful for role "vendor" — omitted otherwise
+      // (Firestore rejects an explicit undefined value) so it never lingers
+      // on an invite doc for an unrelated role.
+      const { vendorId, ...rest } = inviteForm;
+      const payload = inviteForm.role === "vendor" ? inviteForm : rest;
+      const id = await createInvite(payload);
+      const created = { id, ...payload, email: inviteForm.email.toLowerCase().trim(), status: "pending", createdAt: new Date().toISOString() };
       await refetchInvites();
       setSavedInvite(created);
       setInviteForm(BLANK_INVITE);
@@ -836,6 +842,16 @@ export default function SettingsPage() {
                 ))}
               </div>
             </div>
+            {inviteForm.role === "vendor" && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">Which Vendor? <span className="text-red-400">*</span></label>
+                <select value={inviteForm.vendorId} onChange={e => setInviteForm(f => ({ ...f, vendorId: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="">Select a vendor…</option>
+                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </div>
+            )}
             {inviteError && <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{inviteError}</p>}
             <p className="text-xs text-gray-400">After saving, you'll get a signup link to share with the interviewer.</p>
             <div className="flex gap-3 pt-1">
