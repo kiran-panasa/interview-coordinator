@@ -72,8 +72,45 @@ function readCookie(name) {
 }
 
 function Card({ children, className = "" }) {
-  return <div className={`bg-white rounded-2xl border border-gray-100 shadow-soft ${className}`}>{children}</div>;
+  return <div className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md transition-shadow duration-200 ${className}`}>{children}</div>;
 }
+
+// Per-nav-item accent color — gives each section of the dashboard its own
+// identity (icon chip color, active-state tint) instead of everything
+// sharing the same flat brand blue.
+const ACCENT_CHIP = {
+  indigo:  "bg-indigo-50 text-indigo-600",
+  violet:  "bg-violet-50 text-violet-600",
+  emerald: "bg-emerald-50 text-emerald-600",
+  amber:   "bg-amber-50 text-amber-600",
+};
+const ACCENT_CHIP_ACTIVE = {
+  indigo:  "bg-indigo-600 text-white",
+  violet:  "bg-violet-600 text-white",
+  emerald: "bg-emerald-600 text-white",
+  amber:   "bg-amber-600 text-white",
+};
+const ACCENT_BORDER = {
+  indigo:  "border-l-indigo-500",
+  violet:  "border-l-violet-500",
+  emerald: "border-l-emerald-500",
+  amber:   "border-l-amber-500",
+  sky:     "border-l-sky-500",
+  orange:  "border-l-orange-400",
+  blue:    "border-l-blue-500",
+  gray:    "border-l-gray-300",
+};
+// Left-border accent per My Interviews section, matched to that section's
+// status badge color so the two reinforce each other at a glance.
+const SECTION_ACCENT = {
+  pending_acceptance:   "amber",
+  scheduled:             "blue",
+  completed:              "emerald",
+  reschedule_requested:   "amber",
+  reschedule_approved:    "sky",
+  partially_completed:    "sky",
+  cancelled:               "gray",
+};
 
 // templateName and round can differ (e.g. templateName "Frontend
 // Development", round "Technical Round 1") — showing only one or the other
@@ -86,10 +123,10 @@ function interviewTitle(iv) {
 }
 
 const NAV = [
-  { id: "overview", label: "Overview",      icon: LayoutGrid },
-  { id: "details",  label: "My Details",    icon: User },
-  { id: "slots",    label: "Book an Interview", icon: CalendarPlus },
-  { id: "interviews", label: "My Interviews", icon: ListChecks },
+  { id: "overview", label: "Overview",      icon: LayoutGrid, accent: "indigo" },
+  { id: "details",  label: "My Details",    icon: User, accent: "violet" },
+  { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
+  { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
 ];
 
 export default function StudentDashboardPage() {
@@ -288,11 +325,13 @@ export default function StudentDashboardPage() {
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
       <button onClick={() => setTab(item.id)}
-        className={`relative flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-          active ? "bg-brand-50 text-brand-700" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+        className={`relative flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+          active ? "bg-gradient-to-r from-brand-50 to-violet-50/70 text-brand-700 shadow-sm" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
         }`}>
-        <span className="relative flex-shrink-0">
-          <Icon className="w-4 h-4" />
+        <span className={`relative flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+          active ? ACCENT_CHIP_ACTIVE[item.accent] : ACCENT_CHIP[item.accent]
+        }`}>
+          <Icon className="w-3.5 h-3.5" />
           {hasNew && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />}
         </span>
         <span className="flex-1 text-left">{item.label}</span>
@@ -307,11 +346,11 @@ export default function StudentDashboardPage() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50 flex">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50/40 flex">
         {/* Left sidebar */}
         <div className="w-60 bg-white border-r border-gray-100 flex flex-col flex-shrink-0 min-h-screen">
           <div className="flex items-center gap-2 px-5 py-5">
-            <div className="w-7 h-7 bg-gradient-to-br from-brand-600 to-brand-700 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-7 h-7 bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <CalendarCheck2 className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />
             </div>
             <p className="text-sm font-bold text-gray-900 tracking-tight">Interview Coordinator</p>
@@ -345,9 +384,18 @@ export default function StudentDashboardPage() {
 
             {tab === "overview" && (
               <div className="space-y-5">
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Welcome, {candidate.name}</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">Here's where things stand with your interviews.</p>
+                <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 px-6 py-7 text-white shadow-lg">
+                  <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full pointer-events-none" />
+                  <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-white/10 rounded-full pointer-events-none" />
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg font-bold flex-shrink-0">
+                      {(candidate.name || "?").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <h1 className="text-xl font-bold tracking-tight">Welcome, {candidate.name}</h1>
+                      <p className="text-sm text-white/80 mt-0.5">Here's where things stand with your interviews.</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div>
@@ -362,13 +410,17 @@ export default function StudentDashboardPage() {
                   ) : (
                     <div className="space-y-3">
                       {upcomingScheduled.map(iv => (
-                        <Card key={iv.id} className="p-5 flex items-center justify-between gap-3 flex-wrap">
-                          <div>
-                            <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
-                            <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
-                              <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                              {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
-                            </p>
+                        <Card key={iv.id} className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${ACCENT_BORDER.indigo}`}>
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                              <CalendarClock className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                              <p className="text-sm font-semibold text-gray-600 mt-0.5">
+                                {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
+                              </p>
+                            </div>
                           </div>
                           {iv.meetLink && (
                             <a href={iv.meetLink} target="_blank" rel="noreferrer"
@@ -390,7 +442,9 @@ export default function StudentDashboardPage() {
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Details</h1>
                 <Card className="p-6">
                   <div className="flex items-center gap-2 mb-4">
-                    <User className="w-4 h-4 text-brand-600" />
+                    <div className="w-8 h-8 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4" />
+                    </div>
                     <p className="text-sm font-bold text-gray-900">Profile</p>
                   </div>
                   <div className="grid grid-cols-2 gap-4 text-sm mb-4">
@@ -433,7 +487,9 @@ export default function StudentDashboardPage() {
 
                 <Card className="p-6">
                   <div className="flex items-center gap-2 mb-3">
-                    <FileText className="w-4 h-4 text-brand-600" />
+                    <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </div>
                     <p className="text-sm font-bold text-gray-900">Resume</p>
                   </div>
                   <p className="text-xs text-gray-400 mb-3">
@@ -463,16 +519,21 @@ export default function StudentDashboardPage() {
             {tab === "slots" && (
               <div className="space-y-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div>
-                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or self-book one of your assigned templates.</p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                      <CalendarPlus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
+                      <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or self-book one of your assigned templates.</p>
+                    </div>
                   </div>
                   {/* Self-book is opt-in via this button rather than an
                      always-visible card — a single template jumps straight
                      to Find Slots, more than one reveals the template
                      picker below instead of a modal. */}
                   {templates.some(t => !templatesInProgress.has(t.id)) && (
-                    <Button variant="secondary" className="flex-shrink-0" disabled={bookingTemplateId != null}
+                    <Button variant="primary" className="flex-shrink-0" disabled={bookingTemplateId != null}
                       onClick={() => {
                         const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
                         if (notStarted.length === 1) { handleSelfBook(notStarted[0].id); return; }
@@ -536,7 +597,7 @@ export default function StudentDashboardPage() {
                     {bookable.map(inv => {
                       const isExpanded = expandedInviteId === inv.id;
                       return (
-                        <Card key={inv.id} className="overflow-hidden">
+                        <Card key={inv.id} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.violet}`}>
                           <button
                             onClick={() => setExpandedInviteId(isExpanded ? null : inv.id)}
                             className="flex items-center justify-between gap-3 w-full px-6 py-4 text-left hover:bg-gray-50/70 transition-colors">
@@ -580,7 +641,7 @@ export default function StudentDashboardPage() {
                       );
                     })}
                     {awaiting.map(inv => (
-                      <Card key={inv.id} className="overflow-hidden">
+                      <Card key={inv.id} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.emerald}`}>
                         <div className="flex items-center justify-between gap-3 px-6 py-4">
                           <div className="flex items-start gap-2 min-w-0">
                             <Clock3 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
@@ -599,7 +660,7 @@ export default function StudentDashboardPage() {
                       </Card>
                     ))}
                     {missed.map(inv => (
-                      <Card key={inv.id} className="overflow-hidden opacity-70">
+                      <Card key={inv.id} className={`overflow-hidden opacity-70 border-l-4 ${ACCENT_BORDER.orange}`}>
                         <div className="flex items-center justify-between gap-3 px-6 py-4">
                           <div className="min-w-0">
                             <p className="text-sm text-gray-700 font-bold truncate">{inv.round || inv.templateName || "Interview"}</p>
@@ -620,7 +681,12 @@ export default function StudentDashboardPage() {
 
             {tab === "interviews" && (
               <div className="space-y-5">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Interviews</h1>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+                    <ListChecks className="w-5 h-5" />
+                  </div>
+                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Interviews</h1>
+                </div>
 
                 {(resources?.videoGuideUrl || resources?.documents?.length > 0) && (
                   <Card className="p-5 bg-amber-50/50 border-amber-200">
@@ -690,13 +756,14 @@ export default function StudentDashboardPage() {
                       const items = interviews.filter(section.match);
                       if (items.length === 0) return null;
                       const isActive = ACTIVE_SECTION_KEYS.has(section.key);
+                      const accent = SECTION_ACCENT[section.key] || "gray";
                       return (
                         <div key={section.key} className="space-y-3">
                           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-4">
                             {section.label} <span className="text-gray-300">({items.length})</span>
                           </p>
                           {items.map(iv => isActive ? (
-                            <Card key={iv.id} className="p-6">
+                            <Card key={iv.id} className={`p-6 border-l-4 ${ACCENT_BORDER[accent]}`}>
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div>
                                   <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
@@ -742,7 +809,7 @@ export default function StudentDashboardPage() {
                               </div>
                             </Card>
                           ) : (
-                            <Card key={iv.id} className="p-5">
+                            <Card key={iv.id} className={`p-5 border-l-4 ${ACCENT_BORDER[accent]}`}>
                               <div className="flex items-center justify-between gap-3">
                                 <div className="opacity-80">
                                   <p className="font-semibold text-gray-700 text-sm">{interviewTitle(iv)}</p>
