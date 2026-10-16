@@ -447,26 +447,6 @@ export default function StudentDashboardPage() {
                   <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or start one of your assigned templates below.</p>
                 </div>
 
-                {(resources?.videoGuideUrl || resources?.documents?.length > 0) && (
-                  <Card className="p-5 bg-amber-50/50 border-amber-200">
-                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-2.5">Before You Book</p>
-                    <div className="flex flex-wrap gap-2">
-                      {resources.videoGuideUrl && (
-                        <a href={resources.videoGuideUrl} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
-                          <PlayCircle className="w-3.5 h-3.5" /> {resources.videoGuideLabel || "Setup Video Guide"}
-                        </a>
-                      )}
-                      {(resources.documents || []).map(doc => (
-                        <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
-                          <FileDown className="w-3.5 h-3.5" /> {doc.label}
-                        </a>
-                      ))}
-                    </div>
-                  </Card>
-                )}
-
                 {/* Assigned templates that haven't been started yet — "Find
                    Slots" kicks off self-book (see handleSelfBook), which
                    turns into one of the expandable cards below once it has
@@ -605,6 +585,26 @@ export default function StudentDashboardPage() {
             {tab === "interviews" && (
               <div className="space-y-5">
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Interviews</h1>
+
+                {(resources?.videoGuideUrl || resources?.documents?.length > 0) && (
+                  <Card className="p-5 bg-amber-50/50 border-amber-200">
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-2.5">Before joining the interview, kindly refer to</p>
+                    <div className="flex flex-wrap gap-2">
+                      {resources.videoGuideUrl && (
+                        <a href={resources.videoGuideUrl} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                          <PlayCircle className="w-3.5 h-3.5" /> {resources.videoGuideLabel || "Setup Video Guide"}
+                        </a>
+                      )}
+                      {(resources.documents || []).map(doc => (
+                        <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                          <FileDown className="w-3.5 h-3.5" /> {doc.label}
+                        </a>
+                      ))}
+                    </div>
+                  </Card>
+                )}
 
                 {interviews.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
