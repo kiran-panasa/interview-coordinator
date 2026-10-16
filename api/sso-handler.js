@@ -214,6 +214,15 @@ async function me(req, res) {
       candidateName: inv.candidateName || "",
       sentBy: inv.sentBy || "",
       noSlotsNotifiedAt: inv.noSlotsNotifiedAt || "",
+      // bookedDate/Time — the slot the candidate actually picked, once
+      // status is pending_confirmation — was missing here too, so the
+      // "awaiting confirmation" card on the dashboard could only say
+      // "a slot was selected," never which one. selfBooked distinguishes a
+      // student-initiated invite from an admin-sent nudge, shown on the
+      // dashboard so it's clear where this invite came from.
+      bookedDate: inv.bookedDate || "",
+      bookedTime: inv.bookedTime || "",
+      selfBooked: !!inv.selfBooked,
     }));
 
   // Matched by candidateId (the normal, correct path) UNIONED with a

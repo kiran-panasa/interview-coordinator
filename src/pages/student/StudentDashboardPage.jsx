@@ -105,6 +105,7 @@ export default function StudentDashboardPage() {
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
+  const [newBookingTemplateId, setNewBookingTemplateId] = useState("");
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
 
   const loadDashboard = async ({ expandInviteId } = {}) => {
@@ -470,18 +471,50 @@ export default function StudentDashboardPage() {
                    Slots" kicks off self-book (see handleSelfBook), which
                    turns into one of the expandable cards below once it has
                    an invite. Templates already in progress are left out
-                   here since they already have a card below. */}
-                {templates.filter(t => !templatesInProgress.has(t.id)).map(t => (
-                  <Card key={t.id} className="p-5 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-bold text-gray-900">{t.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{t.durationMinutes} minutes · open panelist slots for the next 7 days</p>
-                    </div>
-                    <Button variant="primary" onClick={() => handleSelfBook(t.id)} disabled={bookingTemplateId === t.id} className="flex-shrink-0">
-                      {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots"}
-                    </Button>
-                  </Card>
-                ))}
+                   here since they already have a card below. One template
+                   shows its own direct card (nothing to pick); more than
+                   one is a single dropdown + Find Slots instead of a
+                   separate card per template, so the template choice and
+                   the booking action live in one place rather than N
+                   near-identical rows. */}
+                {(() => {
+                  const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
+                  if (notStarted.length === 0) return null;
+                  if (notStarted.length === 1) {
+                    const t = notStarted[0];
+                    return (
+                      <Card className="p-5 flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-gray-900">{t.name}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{t.durationMinutes} minutes · open panelist slots for the next 7 days</p>
+                        </div>
+                        <Button variant="primary" onClick={() => handleSelfBook(t.id)} disabled={bookingTemplateId === t.id} className="flex-shrink-0">
+                          {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots"}
+                        </Button>
+                      </Card>
+                    );
+                  }
+                  const selected = notStarted.find(t => t.id === newBookingTemplateId) || null;
+                  return (
+                    <Card className="p-5">
+                      <p className="font-bold text-gray-900">Start a new booking</p>
+                      <p className="text-xs text-gray-400 mt-0.5 mb-3">You have {notStarted.length} templates ready to start — pick one to see its open slots.</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <select
+                          value={newBookingTemplateId}
+                          onChange={e => setNewBookingTemplateId(e.target.value)}
+                          className="flex-1 min-w-[200px] border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                          <option value="">Select a template…</option>
+                          {notStarted.map(t => <option key={t.id} value={t.id}>{t.name} · {t.durationMinutes}m</option>)}
+                        </select>
+                        <Button variant="primary" onClick={() => handleSelfBook(newBookingTemplateId)}
+                          disabled={!selected || bookingTemplateId === newBookingTemplateId} className="flex-shrink-0">
+                          {bookingTemplateId === newBookingTemplateId ? "Finding Slots…" : "Find Slots"}
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })()}
 
                 {templates.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
@@ -513,12 +546,22 @@ export default function StudentDashboardPage() {
                               {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                               <div className="min-w-0">
                                 <p className="font-bold text-gray-900 truncate">{inv.round || inv.templateName || "Interview"}</p>
-                                {inv.dateRangeStart && (
-                                  <p className="flex items-center gap-1 text-xs text-gray-400 mt-0.5">
-                                    <CalendarClock className="w-3 h-3" />
-                                    Book between {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
-                                  </p>
-                                )}
+                                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                  {inv.dateRangeStart && (
+                                    <p className="flex items-center gap-1 text-xs text-gray-400">
+                                      <CalendarClock className="w-3 h-3" />
+                                      Book between {formatDate(inv.dateRangeStart)} – {formatDate(inv.dateRangeEnd)}
+                                    </p>
+                                  )}
+                                  {/* Where this invite came from — an admin-sent
+                                     nudge vs. you starting it yourself from this
+                                     dashboard (see handleSelfBook/selfBooked). */}
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                                    inv.selfBooked ? "bg-gray-50 text-gray-500 border-gray-200" : "bg-indigo-50 text-indigo-600 border-indigo-200"
+                                  }`}>
+                                    {inv.selfBooked ? "Self-booked" : "Sent via Nudge"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                             <div className="flex items-center gap-2 flex-shrink-0">
@@ -540,9 +583,17 @@ export default function StudentDashboardPage() {
                     })}
                     {awaiting.map(inv => (
                       <Card key={inv.id} className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-sm text-violet-800 font-medium">
-                          <Clock3 className="w-4 h-4 flex-shrink-0" />
-                          {inv.round || inv.templateName} — slot selected, awaiting confirmation.
+                        <div className="flex items-start gap-2">
+                          <Clock3 className="w-4 h-4 flex-shrink-0 text-violet-600 mt-0.5" />
+                          <div>
+                            <p className="text-sm text-violet-800 font-semibold">
+                              {inv.round || inv.templateName} — {inv.bookedDate ? `${formatDate(inv.bookedDate)} · ${inv.bookedTime}` : "slot selected"}, awaiting confirmation.
+                            </p>
+                            <p className="text-xs text-violet-500 mt-0.5">
+                              This is the slot you selected
+                              {inv.selfBooked ? "" : " (sent via Nudge)"} — no changes can be made now. You'll get a confirmation email once an admin approves it.
+                            </p>
+                          </div>
                         </div>
                       </Card>
                     ))}
