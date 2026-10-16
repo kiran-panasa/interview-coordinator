@@ -2,19 +2,94 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Shared helpers ──────────────────────────────────────────────────────
+    // "No users/{uid} doc at all" covers two real, legitimate cases that must
+    // keep their current broad access unchanged: (1) an anonymous Firebase
+    // session (signInAnonymously) used by the public student booking flow
+    // (InlineSlotPicker.jsx/SchedulePage.jsx) to read availability and write
+    // a slot booking — students are never in the `users` collection at all;
+    // (2) a brand-new sign-in that hasn't had its users/{uid} doc created yet
+    // (AuthContext.jsx's loadProfile, mid-flow). Neither has a role to check,
+    // so both are treated the same as "everyone" was treated before this file
+    // added vendor scoping — i.e. no regression for either case.
+    function callerHasProfile() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function callerProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function isPrivilegedRole() {
+      return callerHasProfile()
+        && callerProfile().role in ["admin", "interviewer", "interviewer_content", "content_team"];
+    }
+    function myVendorContactFor() {
+      return callerHasProfile() ? callerProfile().vendorContactFor : null;
+    }
+    // True for every caller that had unrestricted access under the old
+    // blanket rule and must keep it: no profile at all (anonymous/mid-signup,
+    // see above), or an existing privileged role. Only a REGISTERED user
+    // whose role is "vendor" (or an admin/interviewer who is ALSO a vendor
+    // contact, reading outside their own vendor) is newly restricted by the
+    // vendor-scoped checks below.
+    function hadFullAccessBefore() {
+      return request.auth != null && (!callerHasProfile() || isPrivilegedRole());
+    }
+
     // Allow unauthenticated reads on users so the phone-OTP password reset
     // flow can look up an account by phone number before the user is logged in.
     match /users/{userId} {
       allow read: if true;
-      allow create, update: if request.auth != null;
+      // Tightened from "any signed-in user, any uid" to self-only — a
+      // vendor-only account (or any other signed-in session) could otherwise
+      // create/overwrite an arbitrary users/{uid} doc, including its own
+      // with role:"admin", bypassing the invite/pending flow entirely.
+      allow create: if request.auth != null && request.auth.uid == userId;
+      allow update: if request.auth != null && (request.auth.uid == userId || isPrivilegedRole());
       // Hard deletes are no longer used (soft-delete via status:"archived" instead).
       // Keep the rule locked down in case of direct API calls.
       allow delete: if request.auth != null
                     && request.auth.token.email == "kiran.p@nxtwave.tech";
     }
 
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Interviews — a vendor contact may only read interviews whose
+    // (denormalized, see withVendorId in api/interviews.ts) vendorId matches
+    // their own vendorContactFor. Everyone who had full access before
+    // (anonymous/no-profile sessions, every existing role) keeps it
+    // unchanged. Vendor contacts never write interview data — the Vendor
+    // Dashboard is read-only.
+    match /interviews/{interviewId} {
+      allow read: if hadFullAccessBefore()
+        || (myVendorContactFor() != null
+            && resource.data.vendorId == myVendorContactFor());
+      allow write: if hadFullAccessBefore();
+    }
+
+    // Availability (interviewer slots, availability/{interviewerId}/slots/*)
+    // — same vendor scoping, keyed off the slot owner's CURRENT vendorId
+    // (live lookup, not a snapshot, since there's nothing to denormalize
+    // onto a slot doc itself). Read-only for vendor contacts, same as
+    // interviews above; the interviewer themself (and every previously-full-
+    // access caller, including anonymous student booking sessions) keeps
+    // read+write exactly as before.
+    match /availability/{interviewerId}/{document=**} {
+      allow read: if hadFullAccessBefore()
+        || request.auth.uid == interviewerId
+        || (myVendorContactFor() != null
+            && exists(/databases/$(database)/documents/users/$(interviewerId))
+            && get(/databases/$(database)/documents/users/$(interviewerId)).data.vendorId == myVendorContactFor());
+      allow write: if hadFullAccessBefore() || request.auth.uid == interviewerId;
+    }
+
+    // Everything else — unchanged from before: any signed-in user, full
+    // access. "users", "interviews", and "availability" are carved out above
+    // (Firestore evaluates every matching rule and allows if ANY of them
+    // does, so this collection list must stay in sync with the match blocks
+    // above or a new vendor-sensitive collection would silently fall through
+    // to this permissive default instead of being scoped).
+    match /{collection}/{document=**} {
+      allow read, write: if request.auth != null
+        && !(collection in ["users", "interviews", "availability"]);
     }
   }
 }
