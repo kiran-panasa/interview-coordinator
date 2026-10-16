@@ -64,6 +64,8 @@ const INTERVIEW_SECTIONS = [
 // (completed/cancelled/etc.) gets the compact, muted "past" card.
 const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled"]);
 
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+
 function readCookie(name) {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
   return match ? decodeURIComponent(match[1]) : "";
@@ -106,6 +108,7 @@ export default function StudentDashboardPage() {
   const [aiReportInterview, setAiReportInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
   const [newBookingTemplateId, setNewBookingTemplateId] = useState("");
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
 
   const loadDashboard = async ({ expandInviteId } = {}) => {
@@ -219,6 +222,8 @@ export default function StudentDashboardPage() {
       if (res.ok) {
         await loadDashboard({ expandInviteId: json.inviteId });
         setTab("slots");
+        setShowTemplatePicker(false);
+        setNewBookingTemplateId("");
       } else {
         alert("Couldn't start booking for this template. Please try again.");
       }
@@ -249,7 +254,14 @@ export default function StudentDashboardPage() {
   const { candidate, templates = [], interviews = [], pendingInvites = [] } = data;
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
   const past     = interviews.filter(i => !["pending_acceptance", "scheduled", "declined"].includes(i.status));
-  const bookable = pendingInvites.filter(i => ["sent", "otp_verified"].includes(i.status));
+  // Still within its booking window and not yet picked — the only kind
+  // that's actually expandable into a slot picker.
+  const todayStr = todayIso();
+  const bookableAll = pendingInvites.filter(i => ["sent", "otp_verified"].includes(i.status));
+  const bookable = bookableAll.filter(i => !i.dateRangeEnd || i.dateRangeEnd >= todayStr);
+  // Window ran out before the candidate picked a slot — shown as "Missed",
+  // no slot list, nothing left to act on.
+  const missed = bookableAll.filter(i => i.dateRangeEnd && i.dateRangeEnd < todayStr);
   // bookSlotForCandidate (api/scheduling.ts) sets status straight to
   // "pending_confirmation" — "slot_selected" is kept here too defensively,
   // but was the only value this checked before, which meant a candidate's
@@ -442,42 +454,35 @@ export default function StudentDashboardPage() {
 
             {tab === "slots" && (
               <div className="space-y-5">
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or start one of your assigned templates below.</p>
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div>
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Book an Interview</h1>
+                    <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or self-book one of your assigned templates.</p>
+                  </div>
+                  {/* Self-book is opt-in via this button rather than an
+                     always-visible card — a single template jumps straight
+                     to Find Slots, more than one reveals the template
+                     picker below instead of a modal. */}
+                  {templates.some(t => !templatesInProgress.has(t.id)) && (
+                    <Button variant="secondary" className="flex-shrink-0" disabled={bookingTemplateId != null}
+                      onClick={() => {
+                        const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
+                        if (notStarted.length === 1) { handleSelfBook(notStarted[0].id); return; }
+                        setShowTemplatePicker(v => !v);
+                      }}>
+                      <CalendarPlus className="w-4 h-4 mr-1.5 inline" />
+                      {bookingTemplateId ? "Finding Slots…" : "Self Book an Interview"}
+                    </Button>
+                  )}
                 </div>
 
-                {/* Assigned templates that haven't been started yet — "Find
-                   Slots" kicks off self-book (see handleSelfBook), which
-                   turns into one of the expandable cards below once it has
-                   an invite. Templates already in progress are left out
-                   here since they already have a card below. One template
-                   shows its own direct card (nothing to pick); more than
-                   one is a single dropdown + Find Slots instead of a
-                   separate card per template, so the template choice and
-                   the booking action live in one place rather than N
-                   near-identical rows. */}
-                {(() => {
+                {showTemplatePicker && (() => {
                   const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
-                  if (notStarted.length === 0) return null;
-                  if (notStarted.length === 1) {
-                    const t = notStarted[0];
-                    return (
-                      <Card className="p-5 flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-bold text-gray-900">{t.name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">{t.durationMinutes} minutes · open panelist slots for the next 7 days</p>
-                        </div>
-                        <Button variant="primary" onClick={() => handleSelfBook(t.id)} disabled={bookingTemplateId === t.id} className="flex-shrink-0">
-                          {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots"}
-                        </Button>
-                      </Card>
-                    );
-                  }
+                  if (notStarted.length <= 1) return null;
                   const selected = notStarted.find(t => t.id === newBookingTemplateId) || null;
                   return (
                     <Card className="p-5">
-                      <p className="font-bold text-gray-900">Start a new booking</p>
+                      <p className="font-bold text-gray-900">Select a template</p>
                       <p className="text-xs text-gray-400 mt-0.5 mb-3">You have {notStarted.length} templates ready to start — pick one to see its open slots.</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <select
@@ -501,12 +506,12 @@ export default function StudentDashboardPage() {
                     <CalendarPlus className="w-8 h-8 text-gray-200 mb-2" />
                     <p className="text-sm text-gray-400">No templates assigned yet — check back later or contact the admin team.</p>
                   </Card>
-                ) : bookable.length === 0 && awaiting.length === 0 ? (
+                ) : bookable.length === 0 && awaiting.length === 0 && missed.length === 0 ? (
                   // Only worth a card of its own when there's an in-progress
                   // template with nothing actionable (e.g. awaiting admin
                   // confirmation covers it) — if nothing's in progress at
-                  // all, the "Find Slots" cards above already are the call
-                  // to action, so this would just be a redundant message.
+                  // all, the "Self Book an Interview" button above is
+                  // already the call to action, so this would be redundant.
                   templatesInProgress.size > 0 && (
                     <Card className="flex flex-col items-center justify-center py-10">
                       <CalendarRange className="w-8 h-8 text-gray-200 mb-2" />
@@ -515,6 +520,11 @@ export default function StudentDashboardPage() {
                   )
                 ) : (
                   <>
+                    {/* One unified list, ordered actionable-first: still
+                       bookable, already booked (awaiting confirmation),
+                       then missed (window closed, nothing ever picked) —
+                       each kind gets its own status badge so there's no
+                       ambiguity about what still needs action. */}
                     {bookable.map(inv => {
                       const isExpanded = expandedInviteId === inv.id;
                       return (
@@ -562,18 +572,36 @@ export default function StudentDashboardPage() {
                       );
                     })}
                     {awaiting.map(inv => (
-                      <Card key={inv.id} className="px-6 py-4">
-                        <div className="flex items-start gap-2">
-                          <Clock3 className="w-4 h-4 flex-shrink-0 text-violet-600 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-violet-800 font-semibold">
-                              {inv.round || inv.templateName} — {inv.bookedDate ? `${formatDate(inv.bookedDate)} · ${inv.bookedTime}` : "slot selected"}, awaiting confirmation.
-                            </p>
-                            <p className="text-xs text-violet-500 mt-0.5">
-                              This is the slot you selected
-                              {inv.selfBooked ? "" : " (sent via Nudge)"} — no changes can be made now. You'll get a confirmation email once an admin approves it.
+                      <Card key={inv.id} className="overflow-hidden">
+                        <div className="flex items-center justify-between gap-3 px-6 py-4">
+                          <div className="flex items-start gap-2 min-w-0">
+                            <Clock3 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
+                            <div className="min-w-0">
+                              <p className="text-sm text-gray-900 font-bold truncate">{inv.round || inv.templateName || "Interview"}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {inv.bookedDate ? `${formatDate(inv.bookedDate)} · ${inv.bookedTime}` : "Slot selected"} — no changes can be made now.
+                                You'll get a confirmation email once an admin approves it.
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-semibold border px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border-emerald-200 flex-shrink-0">
+                            Slot Booked
+                          </span>
+                        </div>
+                      </Card>
+                    ))}
+                    {missed.map(inv => (
+                      <Card key={inv.id} className="overflow-hidden opacity-70">
+                        <div className="flex items-center justify-between gap-3 px-6 py-4">
+                          <div className="min-w-0">
+                            <p className="text-sm text-gray-700 font-bold truncate">{inv.round || inv.templateName || "Interview"}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Booking window ended {formatDate(inv.dateRangeEnd)} — no slot was selected in time.
                             </p>
                           </div>
+                          <span className="text-[11px] font-semibold border px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border-orange-200 flex-shrink-0">
+                            Missed
+                          </span>
                         </div>
                       </Card>
                     ))}
