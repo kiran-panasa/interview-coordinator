@@ -3,14 +3,16 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Medal, Award,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Medal, Award, Download,
 } from "lucide-react";
 import { formatDate, formatDateLong } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
 import { getInterviewsForVendor } from "../../api/interviews";
 import { getSlotsForInterviewers } from "../../api/availability";
 import { getSkills } from "../../api/skills";
+import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
 import DatePicker from "../../components/DatePicker";
+import SkillsSelect from "../../components/SkillsSelect";
 
 const NAV = [
   { id: "panelists",   label: "Panelists",       icon: Users },
@@ -88,6 +90,7 @@ export default function VendorDashboardPage() {
   const [slotDateTo,   setSlotDateTo]   = useState(inDays(7));
   const [slotSearch,   setSlotSearch]   = useState("");
   const [statsSearch,  setStatsSearch]  = useState("");
+  const [statsDurations, setStatsDurations] = useState([]);
   const [panelistSearch, setPanelistSearch] = useState("");
   // Weekly/Monthly toggle for the Leaderboard tab — its own period concept,
   // distinct from the Panelists/Stats date-range filter above.
@@ -132,10 +135,6 @@ export default function VendorDashboardPage() {
   }
 
   const statsInterviews = interviews.filter(iv => iv.scheduledDate >= statsDateFrom && iv.scheduledDate <= statsDateTo);
-  const statusCounts = statsInterviews.reduce((acc, iv) => {
-    acc[iv.status] = (acc[iv.status] || 0) + 1;
-    return acc;
-  }, {});
   const byInterviewer = interviewers.map(ivr => ({
     interviewer: ivr,
     interviews: statsInterviews.filter(iv => iv.interviewerId === ivr.id),
@@ -146,6 +145,63 @@ export default function VendorDashboardPage() {
   // a raw, meaningless id string instead of just being left out.
   const skillNameById = new Map(skills.map(s => [s.id, s.name]));
   const resolvedSkillNames = (ivr) => (ivr.skills || []).map(id => skillNameById.get(id)).filter(Boolean);
+
+  // Distinct durations actually scheduled in this vendor's own interviews —
+  // same "derive, don't hardcode" pattern as the admin Interviewer
+  // Statistics page, so a new duration shows up the moment it's used.
+  const statsDurationOptions = [...new Set(statsInterviews.map(iv => iv.duration || 60))]
+    .sort((a, b) => a - b)
+    .map(d => ({ id: String(d), name: `${d} mins` }));
+  const statsDurationFiltered = statsInterviews.filter(iv => !statsDurations.length || statsDurations.includes(String(iv.duration || 60)));
+
+  // Detailed per-panelist breakdown, same shape/columns as the admin
+  // Interviewer Statistics page (src/pages/admin/InterviewerStatsPage.jsx)
+  // so exportInterviewerStats can be reused as-is. Simplified from that
+  // page in one way: it doesn't credit a resumed interview's earlier
+  // session(s) back to whichever interviewer originally ran them if the
+  // interview has since been reassigned to someone else — a rare edge
+  // case, left for a future pass if it turns out to matter here too.
+  const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "declined"];
+  const formatBreakdownCell = (count, byDuration) => {
+    const entries = Object.entries(byDuration).filter(([, n]) => n > 0).sort(([a], [b]) => Number(a) - Number(b));
+    if (entries.length <= 1) return String(count);
+    return entries.map(([mins, n]) => `${mins}m: ${n}`).join(", ");
+  };
+  const detailedStats = interviewers
+    .filter(ivr => !statsSearch.trim() || (ivr.displayName || ivr.email || "").toLowerCase().includes(statsSearch.trim().toLowerCase()))
+    .map(ivr => {
+      const row = { email: ivr.email, name: ivr.displayName || ivr.email };
+      COUNT_FIELDS.forEach(f => { row[f] = 0; row[`${f}ByDuration`] = {}; });
+      const bump = (field, duration) => {
+        row[field]++;
+        const d = duration || 60;
+        row[`${field}ByDuration`][d] = (row[`${field}ByDuration`][d] || 0) + 1;
+      };
+      statsDurationFiltered.filter(iv => iv.interviewerId === ivr.id).forEach(iv => {
+        if (iv.status === "completed") {
+          if (iv.resumedFromPartial) bump("completedResumed", iv.duration);
+          else bump("completed", iv.duration);
+        }
+        else if (iv.status === "partially_completed") bump("partiallyCompleted", iv.duration);
+        else if (iv.status === "cancelled") bump("cancelled", iv.duration);
+        else if (iv.status === "no_show") bump("noShow", iv.duration);
+        else if (iv.status === "declined") bump("declined", iv.duration);
+      });
+      COUNT_FIELDS.forEach(f => { row[`${f}Display`] = formatBreakdownCell(row[f], row[`${f}ByDuration`]); });
+      return row;
+    });
+  const detailedTotals = (() => {
+    const acc = { email: "", name: "" };
+    COUNT_FIELDS.forEach(f => { acc[f] = 0; acc[`${f}ByDuration`] = {}; });
+    detailedStats.forEach(r => {
+      COUNT_FIELDS.forEach(f => {
+        acc[f] += r[f];
+        Object.entries(r[`${f}ByDuration`]).forEach(([d, n]) => { acc[`${f}ByDuration`][d] = (acc[`${f}ByDuration`][d] || 0) + n; });
+      });
+    });
+    COUNT_FIELDS.forEach(f => { acc[`${f}Display`] = formatBreakdownCell(acc[f], acc[`${f}ByDuration`]); });
+    return acc;
+  })();
 
   const DateFilterBar = ({ from, to, setFrom, setTo }) => (
     <div className="flex items-center gap-2">
@@ -284,22 +340,38 @@ export default function VendorDashboardPage() {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h1 className="text-xl font-bold text-gray-900 tracking-tight">Interview Statistics</h1>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                        <input type="text" value={statsSearch} onChange={e => setStatsSearch(e.target.value)}
-                          placeholder="Search panelist…"
-                          className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
-                      </div>
+                    <button onClick={() => exportInterviewerStats(detailedStats, detailedTotals, `${vendor?.name || "vendor"}_interview_statistics`)}
+                      disabled={detailedStats.length === 0}
+                      className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                      <Download className="w-3.5 h-3.5" /> Download
+                    </button>
+                  </div>
+
+                  <div className="flex items-end gap-3 flex-wrap bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+                    <div className="relative">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Panelist</label>
+                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-[34px] pointer-events-none" />
+                      <input type="text" value={statsSearch} onChange={e => setStatsSearch(e.target.value)}
+                        placeholder="Search panelist…"
+                        className="border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Date Range</label>
                       <DateFilterBar from={statsDateFrom} to={statsDateTo} setFrom={setStatsDateFrom} setTo={setStatsDateTo} />
                     </div>
+                    <div className="w-44">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
+                      <SkillsSelect skills={statsDurationOptions} value={statsDurations} onChange={setStatsDurations}
+                        placeholder="All Durations" searchPlaceholder="Search durations…" />
+                    </div>
                   </div>
+
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
-                      { label: "Total",     value: statsInterviews.length,                 style: "text-gray-900" },
-                      { label: "Scheduled", value: statusCounts.scheduled || 0,            style: "text-blue-600" },
-                      { label: "Completed", value: (statusCounts.completed || 0) + (statusCounts.partially_completed || 0), style: "text-emerald-600" },
-                      { label: "No Show",   value: statusCounts.no_show || 0,              style: "text-orange-600" },
+                      { label: "Total",     value: statsDurationFiltered.length,                 style: "text-gray-900" },
+                      { label: "Scheduled", value: statsDurationFiltered.filter(iv => iv.status === "scheduled").length, style: "text-blue-600" },
+                      { label: "Completed", value: detailedTotals.completed + detailedTotals.completedResumed + detailedTotals.partiallyCompleted, style: "text-emerald-600" },
+                      { label: "No Show",   value: detailedTotals.noShow,              style: "text-orange-600" },
                     ].map(s => (
                       <Card key={s.label} className="p-5">
                         <p className={`text-2xl font-bold ${s.style}`}>{s.value}</p>
@@ -309,36 +381,52 @@ export default function VendorDashboardPage() {
                   </div>
 
                   <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-6">By Panelist</p>
-                  <Card className="overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-100">
-                          {["Panelist", "Scheduled", "Completed", "Cancelled", "No-show", "Total"].map(h => (
-                            <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-50">
-                        {byInterviewer
-                          .filter(({ interviewer }) =>
-                            !statsSearch.trim() || (interviewer.displayName || interviewer.email || "").toLowerCase().includes(statsSearch.trim().toLowerCase())
-                          )
-                          .map(({ interviewer, interviews: ivrInterviews }) => {
-                          const c = ivrInterviews.reduce((acc, iv) => { acc[iv.status] = (acc[iv.status] || 0) + 1; return acc; }, {});
-                          return (
-                            <tr key={interviewer.id} className="hover:bg-gray-50/70 transition-colors">
-                              <td className="px-4 py-3 font-semibold text-gray-900">{interviewer.displayName || interviewer.email}</td>
-                              <td className="px-4 py-3 text-gray-600">{c.scheduled || 0}</td>
-                              <td className="px-4 py-3 text-gray-600">{(c.completed || 0) + (c.partially_completed || 0)}</td>
-                              <td className="px-4 py-3 text-gray-600">{c.cancelled || 0}</td>
-                              <td className="px-4 py-3 text-gray-600">{c.no_show || 0}</td>
-                              <td className="px-4 py-3 font-semibold text-gray-900">{ivrInterviews.length}</td>
+                  {detailedStats.length === 0 ? (
+                    <Card className="flex flex-col items-center justify-center py-14">
+                      <LayoutGrid className="w-8 h-8 text-gray-200 mb-2" />
+                      <p className="text-sm text-gray-400">No panelists match the current filters.</p>
+                    </Card>
+                  ) : (
+                    <Card className="overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-100">
+                              {["Panelist", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Declined"].map((h, i) => (
+                                <th key={h} className={`text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap ${i === 0 ? "text-left" : "text-right"}`}>
+                                  {h}
+                                </th>
+                              ))}
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </Card>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {detailedStats.map(r => (
+                              <tr key={r.email} className="hover:bg-gray-50/70 transition-colors">
+                                <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{r.name}</td>
+                                <td className="px-4 py-3 text-right text-emerald-700 font-semibold whitespace-nowrap">{r.completedDisplay}</td>
+                                <td className="px-4 py-3 text-right text-sky-700 font-semibold whitespace-nowrap" title="Finished off a Partially Completed interview — kept separate from a full interview">{r.completedResumedDisplay}</td>
+                                <td className="px-4 py-3 text-right text-amber-700 font-semibold whitespace-nowrap">{r.partiallyCompletedDisplay}</td>
+                                <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{r.cancelledDisplay}</td>
+                                <td className="px-4 py-3 text-right text-orange-600 whitespace-nowrap">{r.noShowDisplay}</td>
+                                <td className="px-4 py-3 text-right text-red-600 whitespace-nowrap">{r.declinedDisplay}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t-2 border-gray-200 bg-gray-50/60">
+                              <td className="px-4 py-3 font-bold text-gray-900 whitespace-nowrap">Total</td>
+                              <td className="px-4 py-3 text-right font-bold text-emerald-700 whitespace-nowrap">{detailedTotals.completedDisplay}</td>
+                              <td className="px-4 py-3 text-right font-bold text-sky-700 whitespace-nowrap">{detailedTotals.completedResumedDisplay}</td>
+                              <td className="px-4 py-3 text-right font-bold text-amber-700 whitespace-nowrap">{detailedTotals.partiallyCompletedDisplay}</td>
+                              <td className="px-4 py-3 text-right font-bold text-gray-500 whitespace-nowrap">{detailedTotals.cancelledDisplay}</td>
+                              <td className="px-4 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{detailedTotals.noShowDisplay}</td>
+                              <td className="px-4 py-3 text-right font-bold text-red-600 whitespace-nowrap">{detailedTotals.declinedDisplay}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </Card>
+                  )}
                 </div>
               )}
 
