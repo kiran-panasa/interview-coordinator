@@ -162,9 +162,13 @@ export default function VendorDashboardPage() {
   // interview has since been reassigned to someone else — a rare edge
   // case, left for a future pass if it turns out to matter here too.
   const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "declined"];
+  // "60m: 2, 90m: 4" always shows which duration(s) the count is made up of
+  // — previously collapsed to a bare number ("1") whenever a panelist's
+  // count for this column only spanned one duration, which left it
+  // ambiguous whether that single interview was 60 or 90 minutes.
   const formatBreakdownCell = (count, byDuration) => {
     const entries = Object.entries(byDuration).filter(([, n]) => n > 0).sort(([a], [b]) => Number(a) - Number(b));
-    if (entries.length <= 1) return String(count);
+    if (entries.length === 0) return String(count);
     return entries.map(([mins, n]) => `${mins}m: ${n}`).join(", ");
   };
   const detailedStats = interviewers

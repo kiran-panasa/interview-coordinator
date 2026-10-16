@@ -138,12 +138,13 @@ export default function InterviewerStatsPage() {
     byDur[d] = (byDur[d] || 0) + 1;
   };
 
-  // "60m: 2, 90m: 4" when a panelist's count for this column spans more than
-  // one duration, otherwise just the plain number — most panelists only
-  // ever run one duration, so their cell stays exactly as before.
+  // "60m: 2, 90m: 4" always shows which duration(s) the count is made up of
+  // — previously collapsed to a bare number ("1") whenever a panelist's
+  // count for this column only spanned one duration, which left it
+  // ambiguous whether that single interview was 60 or 90 minutes.
   const formatBreakdownCell = (count, byDuration) => {
     const entries = Object.entries(byDuration).filter(([, n]) => n > 0).sort(([a], [b]) => Number(a) - Number(b));
-    if (entries.length <= 1) return String(count);
+    if (entries.length === 0) return String(count);
     return entries.map(([mins, n]) => `${mins}m: ${n}`).join(", ");
   };
 
