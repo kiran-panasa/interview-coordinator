@@ -111,6 +111,18 @@ const SECTION_ACCENT = {
   partially_completed:    "sky",
   cancelled:               "gray",
 };
+// Each My Interviews quick-view tab gets its own color so the band reads
+// at a glance instead of every tab/badge looking the same gray/blue.
+const TAB_COLORS = {
+  all:                    { text: "text-indigo-600",  border: "border-indigo-600",  badgeBg: "bg-indigo-100",  badgeText: "text-indigo-700" },
+  pending_acceptance:     { text: "text-amber-600",   border: "border-amber-600",   badgeBg: "bg-amber-100",   badgeText: "text-amber-700" },
+  scheduled:              { text: "text-blue-600",    border: "border-blue-600",    badgeBg: "bg-blue-100",    badgeText: "text-blue-700" },
+  completed:              { text: "text-emerald-600", border: "border-emerald-600", badgeBg: "bg-emerald-100", badgeText: "text-emerald-700" },
+  reschedule_requested:   { text: "text-orange-600",  border: "border-orange-600",  badgeBg: "bg-orange-100",  badgeText: "text-orange-700" },
+  reschedule_approved:    { text: "text-sky-600",     border: "border-sky-600",     badgeBg: "bg-sky-100",     badgeText: "text-sky-700" },
+  partially_completed:    { text: "text-teal-600",    border: "border-teal-600",    badgeBg: "bg-teal-100",    badgeText: "text-teal-700" },
+  cancelled:              { text: "text-gray-500",    border: "border-gray-400",    badgeBg: "bg-gray-200",    badgeText: "text-gray-600" },
+};
 
 // templateName and round can differ (e.g. templateName "Frontend
 // Development", round "Technical Round 1") — showing only one or the other
@@ -744,25 +756,22 @@ export default function StudentDashboardPage() {
                   </Card>
                 ) : (
                   <>
-                    {/* Quick-view tabs — one per status plus "All", same
-                       underline-tab style used elsewhere in the app, so
-                       jumping straight to e.g. Reschedule Requested doesn't
-                       mean scrolling past every other section first. */}
+                    {/* Quick-view tabs — one per status plus "All", each
+                       with its own color (matched to that status's badge
+                       elsewhere) so the band reads at a glance instead of
+                       every tab looking the same. */}
                     <div className="flex border-b border-gray-200 mb-2 overflow-x-auto">
                       {[{ key: "all", label: "All" }, ...INTERVIEW_SECTIONS].map(tab => {
                         const count = tab.key === "all" ? interviews.length : interviews.filter(tab.match).length;
                         const isActiveTab = activeInterviewTab === tab.key;
+                        const c = TAB_COLORS[tab.key] || TAB_COLORS.cancelled;
                         return (
                           <button key={tab.key} onClick={() => setActiveInterviewTab(tab.key)}
                             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors flex-shrink-0 ${
-                              isActiveTab
-                                ? "border-brand-600 text-brand-600"
-                                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                              isActiveTab ? `${c.border} ${c.text}` : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                             }`}>
                             {tab.label}
-                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-                              isActiveTab ? "bg-brand-100 text-brand-700" : "bg-gray-100 text-gray-500"
-                            }`}>{count}</span>
+                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${c.badgeBg} ${c.badgeText}`}>{count}</span>
                           </button>
                         );
                       })}
