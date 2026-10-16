@@ -3,18 +3,20 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Pencil, Check, X,
 } from "lucide-react";
 import { formatDate, formatDateLong } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
 import { getInterviewsForVendor } from "../../api/interviews";
 import { getSlotsForInterviewers } from "../../api/availability";
+import { getSkills } from "../../api/skills";
+import { updateUser } from "../../api/users";
 import DatePicker from "../../components/DatePicker";
 
 const NAV = [
   { id: "panelists", label: "Panelists",       icon: Users },
-  { id: "stats",     label: "Interview Stats", icon: LayoutGrid },
   { id: "slots",     label: "Slot Overview",   icon: CalendarRange },
+  { id: "stats",     label: "Interview Stats", icon: LayoutGrid },
 ];
 
 function Card({ children, className = "" }) {
@@ -54,6 +56,12 @@ export default function VendorDashboardPage() {
   const [interviewers, setInterviewers] = useState([]);
   const [interviews, setInterviews] = useState([]);
   const [slotsByInterviewer, setSlotsByInterviewer] = useState({});
+  const [skills, setSkills] = useState([]);
+  // Inline phone-edit state for the Panelists table — id of the row
+  // currently being edited, and its in-progress value.
+  const [editingPhoneId, setEditingPhoneId] = useState(null);
+  const [editingPhoneValue, setEditingPhoneValue] = useState("");
+  const [savingPhone, setSavingPhone] = useState(false);
 
   // Shared by Panelists (interview counts) and Interview Stats — both are
   // "how much activity happened" views over the same historical window.
@@ -72,14 +80,16 @@ export default function VendorDashboardPage() {
     if (!vendorId) { setLoading(false); return; }
     (async () => {
       setLoading(true);
-      const [v, ivrs, ivs] = await Promise.all([
+      const [v, ivrs, ivs, sk] = await Promise.all([
         getVendor(vendorId),
         getVendorInterviewers(vendorId),
         getInterviewsForVendor(vendorId),
+        getSkills().catch(() => []),
       ]);
       setVendor(v);
       setInterviewers(ivrs);
       setInterviews(ivs);
+      setSkills(sk);
       const slots = await getSlotsForInterviewers(ivrs.map(i => i.id)).catch(() => ({}));
       setSlotsByInterviewer(slots);
       setLoading(false);
@@ -111,6 +121,26 @@ export default function VendorDashboardPage() {
     interviewer: ivr,
     interviews: statsInterviews.filter(iv => iv.interviewerId === ivr.id),
   }));
+  const skillNameById = new Map(skills.map(s => [s.id, s.name]));
+
+  const startEditPhone = (ivr) => {
+    setEditingPhoneId(ivr.id);
+    setEditingPhoneValue(ivr.phoneNumber || "");
+  };
+  const cancelEditPhone = () => { setEditingPhoneId(null); setEditingPhoneValue(""); };
+  const saveEditPhone = async (ivrId) => {
+    setSavingPhone(true);
+    try {
+      // Firestore rules allow a vendor contact to update exactly
+      // phoneNumber/updatedAt on a user from their own vendor — nothing else.
+      await updateUser(ivrId, { phoneNumber: editingPhoneValue.trim(), updatedAt: new Date().toISOString() });
+      setInterviewers(prev => prev.map(u => u.id === ivrId ? { ...u, phoneNumber: editingPhoneValue.trim() } : u));
+      cancelEditPhone();
+    } catch (e) {
+      alert("Couldn't save phone number: " + e.message);
+    }
+    setSavingPhone(false);
+  };
 
   const DateFilterBar = ({ from, to, setFrom, setTo }) => (
     <div className="flex items-center gap-2">
@@ -196,7 +226,7 @@ export default function VendorDashboardPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100">
-                            {["Name", "Email", "Phone", "Status", "Interviews"].map(h => (
+                            {["Name", "Email", "Phone", "Skills", "Status", "Interviews"].map(h => (
                               <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                             ))}
                           </tr>
@@ -206,7 +236,47 @@ export default function VendorDashboardPage() {
                             <tr key={interviewer.id} className="hover:bg-gray-50/70 transition-colors">
                               <td className="px-4 py-3 font-semibold text-gray-900">{interviewer.displayName || "—"}</td>
                               <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.email}</td>
-                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.phoneNumber || "—"}</td>
+                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                                {editingPhoneId === interviewer.id ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="tel"
+                                      autoFocus
+                                      value={editingPhoneValue}
+                                      onChange={e => setEditingPhoneValue(e.target.value)}
+                                      onKeyDown={e => { if (e.key === "Enter") saveEditPhone(interviewer.id); if (e.key === "Escape") cancelEditPhone(); }}
+                                      className="border border-gray-300 rounded-lg px-2 py-1 text-xs w-32 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                                    />
+                                    <button onClick={() => saveEditPhone(interviewer.id)} disabled={savingPhone}
+                                      className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50">
+                                      <Check className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button onClick={cancelEditPhone} disabled={savingPhone}
+                                      className="p-1 text-gray-400 hover:bg-gray-100 rounded-lg disabled:opacity-50">
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button onClick={() => startEditPhone(interviewer)}
+                                    className="group inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
+                                    {interviewer.phoneNumber || "—"}
+                                    <Pencil className="w-3 h-3 text-gray-300 group-hover:text-gray-500" />
+                                  </button>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                {(interviewer.skills || []).length === 0 ? (
+                                  <span className="text-xs text-gray-300">—</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1 max-w-[220px]">
+                                    {(interviewer.skills || []).map(id => (
+                                      <span key={id} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                        {skillNameById.get(id) || id}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-4 py-3">
                                 <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${
                                   interviewer.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-400 border-gray-200"
@@ -325,8 +395,9 @@ export default function VendorDashboardPage() {
                                     <div className="flex flex-wrap gap-1.5">
                                       {g.slots.map(s => (
                                         <span key={s.id}
+                                          title={s.isBooked ? "Already booked" : "Open"}
                                           className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
-                                            s.isBooked ? "bg-gray-50 text-gray-300 border-gray-100" : "bg-white text-gray-700 border-gray-200"
+                                            s.isBooked ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200"
                                           }`}>
                                           {s.time}
                                         </span>
