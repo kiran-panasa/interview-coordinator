@@ -68,6 +68,7 @@ export default function VendorDashboardPage() {
   const [slotDateFrom, setSlotDateFrom] = useState(todayIso());
   const [slotDateTo,   setSlotDateTo]   = useState(inDays(7));
   const [slotSearch,   setSlotSearch]   = useState("");
+  const [statsSearch,  setStatsSearch]  = useState("");
 
   const vendorId = userProfile?.vendorContactFor;
 
@@ -248,7 +249,15 @@ export default function VendorDashboardPage() {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <h1 className="text-xl font-bold text-gray-900 tracking-tight">Interview Statistics</h1>
-                    <DateFilterBar from={statsDateFrom} to={statsDateTo} setFrom={setStatsDateFrom} setTo={setStatsDateTo} />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input type="text" value={statsSearch} onChange={e => setStatsSearch(e.target.value)}
+                          placeholder="Search panelist…"
+                          className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                      </div>
+                      <DateFilterBar from={statsDateFrom} to={statsDateTo} setFrom={setStatsDateFrom} setTo={setStatsDateTo} />
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     {[
@@ -275,7 +284,11 @@ export default function VendorDashboardPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {byInterviewer.map(({ interviewer, interviews: ivrInterviews }) => {
+                        {byInterviewer
+                          .filter(({ interviewer }) =>
+                            !statsSearch.trim() || (interviewer.displayName || interviewer.email || "").toLowerCase().includes(statsSearch.trim().toLowerCase())
+                          )
+                          .map(({ interviewer, interviews: ivrInterviews }) => {
                           const c = ivrInterviews.reduce((acc, iv) => { acc[iv.status] = (acc[iv.status] || 0) + 1; return acc; }, {});
                           return (
                             <tr key={interviewer.id} className="hover:bg-gray-50/70 transition-colors">
@@ -356,7 +369,7 @@ export default function VendorDashboardPage() {
                               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                                 {byDate.map(g => (
                                   <div key={g.date}>
-                                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">{formatDateLong(g.date)}</p>
+                                    <p className="inline-block text-xs font-bold text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1 uppercase tracking-wide mb-2">{formatDateLong(g.date)}</p>
                                     <div className="flex flex-wrap gap-1.5">
                                       {g.slots.map(s => (
                                         <span key={s.id}
