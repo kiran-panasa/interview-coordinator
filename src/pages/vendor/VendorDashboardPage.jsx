@@ -540,20 +540,23 @@ export default function VendorDashboardPage() {
                 ];
 
                 return (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div>
-                      <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-                        <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
-                      </h1>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        Ranked by completed interviews, {formatDate(range.from)} to {formatDate(range.to)}.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+                // Constrained + centered rather than stretched to the full
+                // page width — at full width the rank/name sat far on the
+                // left and the count way out on the right with a huge empty
+                // gap between them; a leaderboard reads better as a single
+                // focused column than a stretched-out table-like row.
+                <div className="max-w-2xl mx-auto space-y-5">
+                  <div className="text-center">
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center justify-center gap-2">
+                      <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
+                    </h1>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      Ranked by completed interviews, {formatDate(range.from)} to {formatDate(range.to)}.
+                    </p>
+                    <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-xl p-1 mt-4 w-fit mx-auto">
                       {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
                         <button key={id} onClick={() => setLeaderboardPeriod(id)}
-                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
                             leaderboardPeriod === id ? "bg-white text-orange-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
                           }`}>
                           {label}
@@ -583,7 +586,7 @@ export default function VendorDashboardPage() {
                               <p className="font-semibold text-gray-900 truncate">{row.interviewer.displayName || row.interviewer.email}</p>
                               <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} this {leaderboardPeriod}</p>
                             </div>
-                            <div className="text-right flex-shrink-0">
+                            <div className="text-center flex-shrink-0 w-16">
                               <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
                               <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Completed</p>
                             </div>
