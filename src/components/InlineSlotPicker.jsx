@@ -220,7 +220,7 @@ export default function InlineSlotPicker({ invite, onBooked }) {
             <button key={`${s.interviewerId}-${s.slotId}`}
               onClick={() => { if (!isDisabled) setSelected(s); }}
               title={s.isBooked ? "Already booked" : isPastSlot ? "Already passed" : undefined}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors ${
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors flex flex-col items-center leading-tight ${
                 isDisabled
                   ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                   : isSelected
@@ -228,15 +228,21 @@ export default function InlineSlotPicker({ invite, onBooked }) {
                     : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
               }`}>
               {s.time}
+              {/* Visible label, not just a hover tooltip — easy to miss on
+                 a greyed-out button, especially on mobile where hover
+                 doesn't exist at all. */}
+              {s.isBooked && <span className="text-[9px] font-bold uppercase tracking-wide">Booked</span>}
             </button>
           );
         })}
       </div>
 
-      {selected && (
+      {selected ? (
         <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 text-sm text-brand-800 font-medium">
           Selected: {formatDateLong(selected.date)} · {selected.time}
         </div>
+      ) : (
+        <p className="text-xs text-gray-400 text-center">Select a slot above to continue.</p>
       )}
       <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy}>
         {busy ? "Booking…" : "Confirm This Slot"}
