@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Upload, UserPlus, Users, Mail, Copy, Check, Shield, User as UserIcon, BookOpen, Sparkles, Search } from "lucide-react";
+import { Upload, UserPlus, Users, Mail, Copy, Check, Shield, User as UserIcon, BookOpen, Sparkles, Search, Building2 } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
@@ -11,6 +11,7 @@ const ALL_ROLES = [
   { value: "admin",               label: "Admin" },
   { value: "content_team",        label: "Content Team" },
   { value: "interviewer_content", label: "Interviewer + Content" },
+  { value: "vendor",              label: "Vendor" },
 ];
 
 function roleBadge(role) {
@@ -30,6 +31,12 @@ function roleBadge(role) {
     <span className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-full">
       <Sparkles className="w-2.5 h-2.5" />
       Interviewer + Content
+    </span>
+  );
+  if (role === "vendor") return (
+    <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2 py-0.5 rounded-full">
+      <Building2 className="w-2.5 h-2.5" />
+      Vendor
     </span>
   );
   return (
@@ -54,6 +61,7 @@ export default function UserManagementTab({
   currentUser,
   copiedId, copyLink,
   approve, reject, changeRole, revoke,
+  vendors, setVendorContact,
   openEditProfile,
   handleRemoveInvite, handleEditInviteEmail,
   onOpenInviteModal, onOpenCSV,
@@ -119,7 +127,7 @@ export default function UserManagementTab({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {["Name", "Email", "Role", ""].map(h => (
+                    {["Name", "Email", "Role", "Vendor Contact", ""].map(h => (
                       <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                     ))}
                   </tr>
@@ -144,6 +152,7 @@ export default function UserManagementTab({
                           {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
                       </td>
+                      <td className="px-4 py-3 text-xs text-gray-300">—</td>
                       <td className="px-4 py-3">
                         <KebabMenu actions={[
                           { label: saving[u.id] ? "Approving…" : "Approve", onClick: () => approve(u), highlight: true, disabled: saving[u.id] },
@@ -174,6 +183,19 @@ export default function UserManagementTab({
                             {ALL_ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                           </select>
                         )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {/* Additive — doesn't touch u.role, see setVendorContact in
+                           SettingsPage.jsx. Lets an existing admin/interviewer also
+                           become one vendor's contact without losing their own access. */}
+                        <select
+                          value={u.vendorContactFor || ""}
+                          disabled={saving[u.id]}
+                          onChange={e => setVendorContact(u, e.target.value)}
+                          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 disabled:opacity-60 cursor-pointer">
+                          <option value="">None</option>
+                          {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                        </select>
                       </td>
                       <td className="px-4 py-3">
                         <KebabMenu actions={[

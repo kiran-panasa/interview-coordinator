@@ -41,6 +41,7 @@ const ROLE_OPTIONS = [
   { value: "admin",               label: "Admin",                 desc: "Full access — manage interviews, candidates, users" },
   { value: "content_team",        label: "Content Team",          desc: "Access to Templates page only" },
   { value: "interviewer_content", label: "Interviewer + Content", desc: "Can conduct interviews AND access Templates" },
+  { value: "vendor",              label: "Vendor",                desc: "No other access — only the Vendor Dashboard for one vendor. For an existing admin/interviewer who also needs vendor access, use the Vendor Contact column below instead of this role." },
 ];
 
 const ALL_ROLES = [
@@ -48,6 +49,7 @@ const ALL_ROLES = [
   { value: "admin",               label: "Admin" },
   { value: "content_team",        label: "Content Team" },
   { value: "interviewer_content", label: "Interviewer + Content" },
+  { value: "vendor",              label: "Vendor" },
 ];
 
 
@@ -245,6 +247,22 @@ export default function SettingsPage() {
     await updateUser(u.id, { role: newRole });
     await refetchUsers();
     setToast({ message: `${u.displayName || u.email} is now ${label}.` });
+    setSavingFor(u.id, false);
+  };
+
+  // Additive — does NOT touch u.role, so an existing admin/interviewer keeps
+  // their normal dashboard and just gains a Vendor Dashboard link in their
+  // nav for this one vendor (see VendorGuard/App.jsx). Setting it back to
+  // "" clears vendorContactFor and removes that access.
+  const setVendorContact = async (u, vendorId) => {
+    setSavingFor(u.id, true);
+    await updateUser(u.id, { vendorContactFor: vendorId || null });
+    await refetchUsers();
+    setToast({
+      message: vendorId
+        ? `${u.displayName || u.email} is now the vendor contact for ${vendors.find(v => v.id === vendorId)?.name || "this vendor"}.`
+        : `${u.displayName || u.email} is no longer a vendor contact.`,
+    });
     setSavingFor(u.id, false);
   };
 
@@ -702,6 +720,7 @@ export default function SettingsPage() {
           currentUser={currentUser}
           copiedId={copiedId} copyLink={copyLink}
           approve={approve} reject={reject} changeRole={changeRole} revoke={revoke}
+          vendors={vendors} setVendorContact={setVendorContact}
           openEditProfile={openEditProfile}
           handleRemoveInvite={handleRemoveInvite} handleEditInviteEmail={handleEditInviteEmail}
           onOpenInviteModal={() => { setSavedInvite(null); setInviteForm(BLANK_INVITE); setInviteError(""); setShowInviteModal(true); }}
