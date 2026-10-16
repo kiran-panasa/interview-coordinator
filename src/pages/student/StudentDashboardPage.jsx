@@ -314,6 +314,24 @@ export default function StudentDashboardPage() {
   // "Find Slots" by templatesInProgress, with nothing to show in its place.
   const awaiting = pendingInvites.filter(i => i.status === "slot_selected" || i.status === "pending_confirmation");
   const templatesInProgress = new Set(pendingInvites.map(i => i.templateId).filter(Boolean));
+  // Overview's "Upcoming" list — confirmed interviews plus slots already
+  // picked but still waiting on admin confirmation, merged into one
+  // soonest-first list. A slot the candidate already picked (via Nudge or
+  // self-book) is "upcoming" from their point of view even before an admin
+  // has signed off on it, so it belongs here too, not just in the Book an
+  // Interview tab.
+  const upcomingCombined = [
+    ...upcomingScheduled.map(iv => ({
+      id: iv.id, title: interviewTitle(iv), date: iv.scheduledDate, time: iv.scheduledTime,
+      duration: iv.duration, meetLink: iv.meetLink, pending: false,
+    })),
+    ...awaiting.map(inv => ({
+      id: inv.id, title: inv.round || inv.templateName || "Interview", date: inv.bookedDate, time: inv.bookedTime,
+      duration: inv.duration, meetLink: null, pending: true,
+    })),
+  ]
+    .filter(x => x.date)
+    .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
   const NavButton = ({ item }) => {
     const Icon = item.icon;
     const active = tab === item.id;
@@ -399,30 +417,41 @@ export default function StudentDashboardPage() {
                 </div>
 
                 <div>
-                  <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">
-                    Upcoming {upcomingScheduled.length > 0 && <span className="text-gray-300">({upcomingScheduled.length})</span>}
-                  </p>
-                  {upcomingScheduled.length === 0 ? (
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Upcoming</p>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                      {upcomingCombined.length}
+                    </span>
+                  </div>
+                  {upcomingCombined.length === 0 ? (
                     <Card className="flex flex-col items-center justify-center py-10">
                       <CalendarClock className="w-8 h-8 text-gray-200 mb-2" />
                       <p className="text-sm text-gray-400">No upcoming interviews right now.</p>
                     </Card>
                   ) : (
                     <div className="space-y-3">
-                      {upcomingScheduled.map(iv => (
-                        <Card key={iv.id} className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${ACCENT_BORDER.indigo}`}>
+                      {upcomingCombined.map(iv => (
+                        <Card key={iv.id} className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${
+                          iv.pending ? ACCENT_BORDER.emerald : ACCENT_BORDER.indigo
+                        }`}>
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center flex-shrink-0">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                              iv.pending ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"
+                            }`}>
                               <CalendarClock className="w-5 h-5" />
                             </div>
                             <div>
-                              <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                              <p className="font-bold text-gray-900">{iv.title}</p>
                               <p className="text-sm font-semibold text-gray-600 mt-0.5">
-                                {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
+                                {formatDate(iv.date)} · {iv.time}{iv.duration ? ` · ${iv.duration}m` : ""}
                               </p>
                             </div>
                           </div>
-                          {iv.meetLink && (
+                          {iv.pending ? (
+                            <span className="text-[11px] font-semibold border px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border-emerald-200 flex-shrink-0">
+                              Slot Booked — Pending Confirmation
+                            </span>
+                          ) : iv.meetLink && (
                             <a href={iv.meetLink} target="_blank" rel="noreferrer"
                               className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors flex-shrink-0">
                               <Video className="w-3.5 h-3.5" /> Join Meet
