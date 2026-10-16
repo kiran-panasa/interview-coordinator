@@ -3,14 +3,13 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Pencil, Check, X, Search,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search,
 } from "lucide-react";
 import { formatDate, formatDateLong } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
 import { getInterviewsForVendor } from "../../api/interviews";
 import { getSlotsForInterviewers } from "../../api/availability";
 import { getSkills } from "../../api/skills";
-import { updateUser } from "../../api/users";
 import DatePicker from "../../components/DatePicker";
 
 const NAV = [
@@ -57,11 +56,6 @@ export default function VendorDashboardPage() {
   const [interviews, setInterviews] = useState([]);
   const [slotsByInterviewer, setSlotsByInterviewer] = useState({});
   const [skills, setSkills] = useState([]);
-  // Inline phone-edit state for the Panelists table — id of the row
-  // currently being edited, and its in-progress value.
-  const [editingPhoneId, setEditingPhoneId] = useState(null);
-  const [editingPhoneValue, setEditingPhoneValue] = useState("");
-  const [savingPhone, setSavingPhone] = useState(false);
 
   // Shared by Panelists (interview counts) and Interview Stats — both are
   // "how much activity happened" views over the same historical window.
@@ -122,26 +116,12 @@ export default function VendorDashboardPage() {
     interviewer: ivr,
     interviews: statsInterviews.filter(iv => iv.interviewerId === ivr.id),
   }));
+  // Only skill IDs that actually resolve to a name from the skills
+  // collection — an interviewer's skills array can carry a stale id
+  // (skill since renamed/deleted elsewhere) that would otherwise render as
+  // a raw, meaningless id string instead of just being left out.
   const skillNameById = new Map(skills.map(s => [s.id, s.name]));
-
-  const startEditPhone = (ivr) => {
-    setEditingPhoneId(ivr.id);
-    setEditingPhoneValue(ivr.phoneNumber || "");
-  };
-  const cancelEditPhone = () => { setEditingPhoneId(null); setEditingPhoneValue(""); };
-  const saveEditPhone = async (ivrId) => {
-    setSavingPhone(true);
-    try {
-      // Firestore rules allow a vendor contact to update exactly
-      // phoneNumber/updatedAt on a user from their own vendor — nothing else.
-      await updateUser(ivrId, { phoneNumber: editingPhoneValue.trim(), updatedAt: new Date().toISOString() });
-      setInterviewers(prev => prev.map(u => u.id === ivrId ? { ...u, phoneNumber: editingPhoneValue.trim() } : u));
-      cancelEditPhone();
-    } catch (e) {
-      alert("Couldn't save phone number: " + e.message);
-    }
-    setSavingPhone(false);
-  };
+  const resolvedSkillNames = (ivr) => (ivr.skills || []).map(id => skillNameById.get(id)).filter(Boolean);
 
   const DateFilterBar = ({ from, to, setFrom, setTo }) => (
     <div className="flex items-center gap-2">
@@ -227,65 +207,33 @@ export default function VendorDashboardPage() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100">
-                            {["Name", "Email", "Phone", "Status", "Interviews"].map(h => (
+                            {["Name", "Email", "Interviews"].map(h => (
                               <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                          {byInterviewer.map(({ interviewer, interviews: ivrInterviews }) => (
+                          {byInterviewer.map(({ interviewer, interviews: ivrInterviews }) => {
+                            const skillNames = resolvedSkillNames(interviewer);
+                            return (
                             <tr key={interviewer.id} className="hover:bg-gray-50/70 transition-colors">
                               <td className="px-4 py-3">
                                 <p className="font-semibold text-gray-900">{interviewer.displayName || "—"}</p>
-                                {(interviewer.skills || []).length > 0 && (
-                                  <div className="flex flex-wrap gap-1 mt-1 max-w-[220px]">
-                                    {interviewer.skills.map(id => (
-                                      <span key={id} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
-                                        {skillNameById.get(id) || id}
+                                {skillNames.length > 0 && (
+                                  <div className="flex flex-wrap gap-1 mt-1 max-w-[280px]">
+                                    {skillNames.map(name => (
+                                      <span key={name} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                        {name}
                                       </span>
                                     ))}
                                   </div>
                                 )}
                               </td>
                               <td className="px-4 py-3 text-gray-500 font-mono text-xs">{interviewer.email}</td>
-                              <td className="px-4 py-3 text-gray-500 font-mono text-xs">
-                                {editingPhoneId === interviewer.id ? (
-                                  <div className="flex items-center gap-1.5">
-                                    <input
-                                      type="tel"
-                                      autoFocus
-                                      value={editingPhoneValue}
-                                      onChange={e => setEditingPhoneValue(e.target.value)}
-                                      onKeyDown={e => { if (e.key === "Enter") saveEditPhone(interviewer.id); if (e.key === "Escape") cancelEditPhone(); }}
-                                      className="border border-gray-300 rounded-lg px-2 py-1 text-xs w-32 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                                    />
-                                    <button onClick={() => saveEditPhone(interviewer.id)} disabled={savingPhone}
-                                      className="p-1 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50">
-                                      <Check className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button onClick={cancelEditPhone} disabled={savingPhone}
-                                      className="p-1 text-gray-400 hover:bg-gray-100 rounded-lg disabled:opacity-50">
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button onClick={() => startEditPhone(interviewer)}
-                                    className="group inline-flex items-center gap-1.5 hover:text-gray-800 transition-colors">
-                                    {interviewer.phoneNumber || "—"}
-                                    <Pencil className="w-3 h-3 text-gray-300 group-hover:text-gray-500" />
-                                  </button>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${
-                                  interviewer.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-gray-100 text-gray-400 border-gray-200"
-                                }`}>
-                                  {interviewer.status === "active" ? "Active" : interviewer.status}
-                                </span>
-                              </td>
                               <td className="px-4 py-3 text-gray-600">{ivrInterviews.length}</td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </Card>
