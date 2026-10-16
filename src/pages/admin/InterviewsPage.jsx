@@ -16,7 +16,7 @@ import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, reopenNoShowInterview,
-  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, deleteInterview,
+  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, markSlotFree,
   getTemplate, importCompletedInterview, importScheduledInterview, markInterviewPartiallyCompleted,
@@ -168,6 +168,11 @@ export default function InterviewsPage() {
   // One-time backfill so historical interviews (created before
   // programId/programName was snapshotted at creation time) get it too.
   useEffect(() => { backfillProgramInfoOnce().catch(err => console.error("Program info backfill failed:", err)); }, []);
+  // Self-guarding — see backfillVendorIdOnce in src/api/interviews.ts.
+  // One-time backfill so historical interviews (created before vendorId
+  // was snapshotted at creation time) get it too — needed for the Vendor
+  // Dashboard's Firestore rules to correctly scope these older interviews.
+  useEffect(() => { backfillVendorIdOnce().catch(err => console.error("Vendor ID backfill failed:", err)); }, []);
   // Self-guarding — see seedDefaultRoundsOnce in src/api/rounds.ts. Seeds
   // the new admin-managed rounds collection with the old hardcoded round
   // lists once, so nothing existing admins relied on disappears.

@@ -88,6 +88,25 @@ async function withProgramInfo<T extends {
   return program ? { ...data, programId: program.id, programName: program.name } : { ...data, programId: template.program };
 }
 
+// Denormalizes the interviewer's CURRENT vendor membership (User.vendorId)
+// onto the interview at write time — this is what lets a Vendor Dashboard's
+// Firestore security rules check resource.data.vendorId directly against
+// the caller's own vendorContactFor, without a second cross-document get()
+// in the rule itself. Recomputed whenever interviewerId is set/changed, so
+// reassigning an interview to a different interviewer keeps it in sync;
+// intentionally NOT kept live-updated if an interviewer's own vendorId
+// changes later — same "snapshot at the relevant moment" tradeoff
+// candidateUid/programInfo above already make. See backfillVendorIdOnce for
+// interviews created before this existed.
+async function withVendorId<T extends { interviewerId?: string; vendorId?: string | null }>(
+  data: T
+): Promise<T> {
+  if (!data.interviewerId) return data;
+  const userSnap = await getDoc(doc(db, "users", data.interviewerId));
+  const vendorId = userSnap.exists() ? (userSnap.data() as { vendorId?: string | null }).vendorId : null;
+  return { ...data, vendorId: vendorId || null };
+}
+
 export async function createInterview(
   data: Omit<Interview, "id" | "status" | "createdAt"> & { status?: InterviewStatus }
 ): Promise<string> {
@@ -106,7 +125,7 @@ export async function createInterview(
     }
   }
   const ref = await addDoc(collection(db, "interviews"), {
-    ...(await withProgramInfo(await withCandidateUid(rest))),
+    ...(await withVendorId(await withProgramInfo(await withCandidateUid(rest)))),
     status: status || "pending_acceptance",
     createdAt: new Date().toISOString(),
   });
@@ -126,8 +145,12 @@ export async function updateInterview(
       throw new Error(`This date is blocked${blocked.reason ? `: ${blocked.reason}` : ""}. Please choose another date.`);
     }
   }
+  // Only re-resolves vendorId when interviewerId is actually part of this
+  // update (e.g. Reassign Interviewer) — skipped on every other edit so a
+  // routine field change doesn't cost an extra read.
+  const withVendor = data.interviewerId ? await withVendorId(data) : data;
   await updateDoc(doc(db, "interviews", id), {
-    ...data, updatedAt: new Date().toISOString(),
+    ...withVendor, updatedAt: new Date().toISOString(),
   });
 }
 
@@ -771,11 +794,47 @@ export async function backfillProgramInfoOnce(): Promise<void> {
   await setDoc(markerRef, { completedAt: new Date().toISOString(), count: targets.length });
 }
 
+// One-time, self-guarding backfill for interviews created BEFORE
+// withVendorId (above) started snapshotting the interviewer's vendor
+// membership onto the interview doc — needed for the Vendor Dashboard's
+// Firestore rules to correctly scope these older interviews too, not just
+// ones scheduled after this existed. Same settings-marker-doc guard as the
+// backfills above, runs once total.
+export async function backfillVendorIdOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "vendorIdBackfill");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const usersSnap = await getDocs(collection(db, "users"));
+  const vendorIdByUserId = new Map<string, string>(
+    usersSnap.docs
+      .filter(d => !!(d.data() as { vendorId?: string | null }).vendorId)
+      .map(d => [d.id, (d.data() as { vendorId?: string }).vendorId as string])
+  );
+
+  const snap = await getDocs(collection(db, "interviews"));
+  const targets = snap.docs.filter(d => {
+    const data = d.data() as Interview;
+    return !data.vendorId && !!data.interviewerId && vendorIdByUserId.has(data.interviewerId);
+  });
+
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    for (const d of targets.slice(i, i + 450)) {
+      const data = d.data() as Interview;
+      batch.update(d.ref, { vendorId: vendorIdByUserId.get(data.interviewerId as string) });
+    }
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: new Date().toISOString(), count: targets.length });
+}
+
 export async function importScheduledInterview(
   data: Omit<Interview, "id" | "status" | "feedback" | "candidateJoined" | "attendanceMarkedAt" | "questionsAsked" | "questionRemarks" | "createdAt" | "updatedAt">
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
-    ...(await withProgramInfo(await withCandidateUid(data))),
+    ...(await withVendorId(await withProgramInfo(await withCandidateUid(data)))),
     status: "pending_acceptance",
     candidateJoined: false,
     questionsAsked: [],
@@ -794,7 +853,7 @@ export async function importCompletedInterview(
   partialCompletionReason: string | null = null
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
-    ...(await withProgramInfo(await withCandidateUid(data))),
+    ...(await withVendorId(await withProgramInfo(await withCandidateUid(data)))),
     status: partialCompletionReason ? "partially_completed" : "completed",
     ...(partialCompletionReason ? { partialCompletionReason } : {}),
     candidateJoined: true,

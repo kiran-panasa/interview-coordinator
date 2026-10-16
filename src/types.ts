@@ -1,6 +1,11 @@
 // ── Users & Auth ──────────────────────────────────────────────────────────────
 
-export type UserRole = "admin" | "interviewer" | "interviewer_content" | "content_team";
+// "vendor" is a standalone role for someone with no other access at all —
+// e.g. a vendor-side point of contact who isn't also an admin/interviewer.
+// An EXISTING admin/interviewer instead gets Vendor Dashboard access
+// additively via vendorContactFor below, without their own role ever
+// changing — see ROLE.VENDOR in constants/roles.js.
+export type UserRole = "admin" | "interviewer" | "interviewer_content" | "content_team" | "vendor";
 export type UserStatus = "active" | "inactive" | "pending";
 
 export interface User {
@@ -15,15 +20,26 @@ export interface User {
   // Which outsourcing vendor this interviewer belongs to (see api/vendors.ts)
   // — admin-managed grouping used to filter/report Interviews and
   // Interviewer Stats by vendor. Absent for in-house interviewers and for
-  // any non-interviewer account.
+  // any non-interviewer account. Does NOT by itself grant Vendor Dashboard
+  // access — that's vendorContactFor below, a separate concept (an
+  // interviewer can belong to a vendor without being that vendor's contact,
+  // and a vendor's contact doesn't have to also be one of its interviewers).
   vendorId?: string | null;
+  // Set when this person is a designated point of contact for a vendor —
+  // grants access to the Vendor Dashboard (/vendor/dashboard), scoped to
+  // that one vendor's interviewers/interviews/slots. Additive: an admin or
+  // interviewer with this set keeps their normal role's access too, they
+  // just also get a Vendor Dashboard link in their nav. A brand-new person
+  // with role "vendor" and no other role has ONLY this access.
+  vendorContactFor?: string | null;
   createdAt?: string;
 }
 
 // An outsourcing vendor an interviewer can be grouped under (Settings →
-// General → Vendors) — purely a label for filtering/reporting; it grants no
-// access of its own and has no login. Membership lives on User.vendorId
-// (one vendor per interviewer), not on the vendor doc itself.
+// General → Vendors) — purely a label for filtering/reporting; membership
+// (User.vendorId) grants no access of its own. A vendor CAN have a login
+// via a designated contact (User.vendorContactFor), which is a separate,
+// admin-assigned concept from membership — see User above.
 export interface Vendor {
   id: string;
   name: string;
@@ -366,6 +382,13 @@ export interface Interview {
   interviewerId: string;
   interviewerEmail: string;
   interviewerName?: string;
+  // Snapshotted from the interviewer's own vendor membership (User.vendorId)
+  // at write time — lets the Vendor Dashboard's Firestore security rules
+  // check this directly against a vendor contact's own vendorContactFor
+  // without a second cross-document lookup in the rule itself. See
+  // withVendorId in api/interviews.ts and backfillVendorIdOnce for
+  // historical rows; null/absent for in-house (non-vendor) interviewers.
+  vendorId?: string | null;
   templateId?: string;
   templateName?: string;
   // Snapshotted from the template's own Program assignment (Template.program

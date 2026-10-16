@@ -3,6 +3,12 @@ export const ROLE = {
   INTERVIEWER:          "interviewer",
   INTERVIEWER_CONTENT:  "interviewer_content",
   CONTENT_TEAM:         "content_team",
+  // Standalone role for someone with no other access in the app at all —
+  // e.g. a vendor-side point of contact who isn't also an admin/interviewer.
+  // An EXISTING admin/interviewer instead gets vendor access additively via
+  // User.vendorContactFor (see types.ts) without their role ever changing —
+  // this role value only exists for the brand-new-person case.
+  VENDOR:                "vendor",
 };
 
 export const ROLE_LABELS = {
@@ -10,6 +16,7 @@ export const ROLE_LABELS = {
   interviewer:          "Interviewer",
   interviewer_content:  "Interviewer + Content",
   content_team:         "Content Team",
+  vendor:                "Vendor",
 };
 
 // Roles that have access to the /admin section
