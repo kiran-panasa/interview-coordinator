@@ -47,6 +47,16 @@ export async function getInterviewerInterviews(interviewerEmail: string): Promis
   return docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 }
 
+// This vendor's own interviews (keyed off the denormalized vendorId, see
+// withVendorId/backfillVendorIdOnce above) — the Vendor Dashboard's data
+// source for Interview Stats, enforced server-side by firestore.rules too,
+// not just this query's own scoping.
+export async function getInterviewsForVendor(vendorId: string): Promise<Interview[]> {
+  const snap = await getDocs(query(collection(db, "interviews"), where("vendorId", "==", vendorId)));
+  const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Interview));
+  return docs.sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
+}
+
 export async function getInterview(id: string): Promise<Interview | null> {
   const snap = await getDoc(doc(db, "interviews", id));
   return snap.exists() ? { id: snap.id, ...snap.data() } as Interview : null;

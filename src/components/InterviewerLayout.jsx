@@ -8,7 +8,7 @@ import { checkAndSendFeedbackNudges } from "../services/nudge.service";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
-  LayoutDashboard, CalendarClock, Clock3, Bell, UserCircle, Info, FileText, LogOut, UserCog2,
+  LayoutDashboard, CalendarClock, Clock3, Bell, UserCircle, Info, FileText, LogOut, UserCog2, Building2,
 } from "lucide-react";
 
 const NAV = [
@@ -21,12 +21,19 @@ const NAV = [
 ];
 
 const TEMPLATES_NAV = { to: "/admin/templates", label: "Templates", icon: FileText };
+const VENDOR_NAV = { to: "/vendor/dashboard", label: "Vendor View", icon: Building2 };
 
 export default function InterviewerLayout() {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const role = userProfile?.role || "interviewer";
-  const nav = role === "interviewer_content" ? [...NAV, TEMPLATES_NAV] : NAV;
+  const nav = [
+    ...(role === "interviewer_content" ? [...NAV, TEMPLATES_NAV] : NAV),
+    // Additive — appended whenever this interviewer is ALSO a vendor's
+    // contact (see setVendorContact in SettingsPage.jsx), on top of their
+    // normal interviewer nav, not instead of it.
+    ...(userProfile?.vendorContactFor ? [VENDOR_NAV] : []),
+  ];
 
   const notifications = useUnreadUserNotifications(currentUser?.uid);
   const unread = notifications.filter(n =>

@@ -13,7 +13,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
   LayoutDashboard, Users, UserCog, FileText, Bell, Inbox,
-  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3,
+  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2,
 } from "lucide-react";
 
 const ALL_NAV = [
@@ -34,7 +34,14 @@ export default function AdminLayout() {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
   const role = userProfile?.role || "admin";
-  const nav = useMemo(() => ALL_NAV.filter(item => item.roles.includes(role)), [role]);
+  // Additive, not role-gated like the rest of ALL_NAV — appended whenever
+  // this admin is ALSO a vendor's contact (see setVendorContact in
+  // SettingsPage.jsx), on top of their normal admin nav, not instead of it.
+  const nav = useMemo(() => {
+    const base = ALL_NAV.filter(item => item.roles.includes(role));
+    if (!userProfile?.vendorContactFor) return base;
+    return [...base, { to: "/vendor/dashboard", label: "Vendor View", icon: Building2 }];
+  }, [role, userProfile?.vendorContactFor]);
 
   const notifications     = useUnreadUserNotifications(currentUser?.uid);
   const adhocQs           = useAdhocQuestions();

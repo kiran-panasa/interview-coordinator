@@ -1,14 +1,30 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDocs, addDoc, updateDoc, deleteDoc, writeBatch,
+  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc, writeBatch,
   query, orderBy, onSnapshot, where,
 } from "firebase/firestore";
-import type { Vendor } from "../types";
+import type { Vendor, User } from "../types";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 export async function getVendors(): Promise<Vendor[]> {
   const snap = await getDocs(query(collection(db, "vendors"), orderBy("name")));
   return snap.docs.map(d => ({ id: d.id, ...d.data() } as Vendor));
+}
+
+// Single-vendor lookup — used by the Vendor Dashboard to resolve its own
+// vendor's display name from the viewer's own vendorContactFor, without
+// reading the full vendors collection (see VendorDashboardPage.jsx).
+export async function getVendor(id: string): Promise<Vendor | null> {
+  const snap = await getDoc(doc(db, "vendors", id));
+  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Vendor) : null;
+}
+
+// This vendor's current interviewer roster — the same query
+// setVendorMembers/deleteVendor above already use internally, exposed here
+// for the Vendor Dashboard (a vendor contact's own scoped "Panelists" view).
+export async function getVendorInterviewers(vendorId: string): Promise<User[]> {
+  const snap = await getDocs(query(collection(db, "users"), where("vendorId", "==", vendorId)));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as User));
 }
 
 export function subscribeToVendors(callback: (vendors: Vendor[]) => void): () => void {

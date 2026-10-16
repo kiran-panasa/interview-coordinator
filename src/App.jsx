@@ -44,6 +44,8 @@ const CandidatePortal      = lazy(() => import("./pages/student/CandidatePortal"
 const SsoCallbackPage      = lazy(() => import("./pages/student/SsoCallbackPage"));
 const StudentDashboardPage = lazy(() => import("./pages/student/StudentDashboardPage"));
 
+const VendorDashboardPage  = lazy(() => import("./pages/vendor/VendorDashboardPage"));
+
 import { ADMIN_ROLES } from "./constants/roles";
 
 const PageFallback = () => (
@@ -87,6 +89,10 @@ function RootRedirect() {
   if (userProfile.role === "admin") return <Navigate to="/admin/dashboard" replace />;
   if (userProfile.role === "content_team") return <Navigate to="/admin/templates" replace />;
   if (userProfile.role === "interviewer_content") return <Navigate to="/interviewer/dashboard" replace />;
+  // Standalone vendor-only account (no other role) — an existing
+  // admin/interviewer who's ALSO a vendor contact keeps landing on their
+  // normal dashboard above; this only applies to role === "vendor" itself.
+  if (userProfile.role === "vendor") return <Navigate to="/vendor/dashboard" replace />;
   return <Navigate to="/interviewer/dashboard" replace />;
 }
 
@@ -105,6 +111,20 @@ function InterviewerGuard({ children }) {
   if (!currentUser) return <Navigate to="/login" replace />;
   if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
   if (userProfile.role !== "interviewer" && userProfile.role !== "interviewer_content") return <Navigate to="/admin/templates" replace />;
+  return children;
+}
+
+// Additive, not role-exclusive — allows role === "vendor" (the standalone
+// vendor-only account) OR anyone with vendorContactFor set (an existing
+// admin/interviewer also designated a vendor's contact, see
+// setVendorContact in SettingsPage.jsx), on top of whatever their own role
+// already grants them.
+function VendorGuard({ children }) {
+  const { currentUser, userProfile, authLoading } = useAuth();
+  if (authLoading) return <AuthGate />;
+  if (!currentUser) return <Navigate to="/login" replace />;
+  if (!userProfile || userProfile.status !== "active") return <Navigate to="/pending" replace />;
+  if (userProfile.role !== "vendor" && !userProfile.vendorContactFor) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -145,6 +165,12 @@ function AppRoutes() {
           <Route path="notifications"  element={<NotificationsPage />} />
           <Route path="about"          element={<InterviewerAboutPage />} />
         </Route>
+
+        {/* Vendor — self-contained single page (builds its own sidebar/tabs
+           inline), same pattern as StudentDashboardPage, so no separate
+           layout component is needed for what's currently 3 small scoped
+           views (Panelists, Interview Stats, Slot Overview). */}
+        <Route path="/vendor/dashboard" element={<VendorGuard><ErrorBoundary><VendorDashboardPage /></ErrorBoundary></VendorGuard>} />
 
         {/* Public student pages — no auth required. Unlike Admin/Interviewer,
            these have no shared layout component to hang a boundary off of
