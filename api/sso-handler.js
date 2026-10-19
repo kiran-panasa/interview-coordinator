@@ -256,9 +256,21 @@ async function me(req, res) {
   const invitesSnap = await db.collection("scheduleInvites").where("candidateId", "==", session.candidateId).get();
   const pendingInvites = invitesSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(inv => !["confirmed", "cancelled"].includes(inv.status))
-    .filter(inv => inv.templateId && assignedTemplateIds.has(inv.templateId))
-    .filter(inv => !isPastGrace(inv))
+    // "confirmed" is superseded by the real Interview doc it created (see
+    // handleConfirmBooking in CandidateSchedulingTab.jsx) — nothing to show
+    // here once that exists. A REJECTED booking (status "cancelled" with a
+    // rejectionReason — the only path that ever sets this combination, see
+    // handleRejectBooking) is kept, not dropped, so the candidate can still
+    // see it under My Interviews' Cancelled section with the reason, even
+    // though they already got an email about it when it happened — losing
+    // it from pendingInvites otherwise meant it just vanished from the
+    // dashboard with no trace once the admin acted on it. A withdrawn
+    // nudge or an expired never-booked invite (cancelled, no reason, or
+    // past its own grace window) still has no reason to stick around.
+    .filter(inv => inv.status !== "confirmed")
+    .filter(inv => inv.status === "cancelled"
+      ? !!inv.rejectionReason
+      : inv.templateId && assignedTemplateIds.has(inv.templateId) && !isPastGrace(inv))
     .map(inv => ({
       id: inv.id, inviteToken: inv.inviteToken || "", templateId: inv.templateId || "", templateName: inv.templateName || "",
       round: inv.round || "", status: inv.status,
@@ -296,6 +308,7 @@ async function me(req, res) {
       bookedDate: inv.bookedDate || "",
       bookedTime: inv.bookedTime || "",
       selfBooked: !!inv.selfBooked,
+      rejectionReason: inv.rejectionReason || "",
     }));
 
   // Matched by candidateId (the normal, correct path) UNIONED with a
@@ -334,6 +347,7 @@ async function me(req, res) {
         integrityScore: iv.feedback?.integrityScore ?? null,
         finalScore: iv.feedback?.finalVerdict ?? null,
         integrityAnswers: iv.feedback?.domains?.integrity || null,
+        cancelReason: iv.cancelReason || "",
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));

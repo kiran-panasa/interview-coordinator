@@ -28,6 +28,7 @@ function writeSeenInviteIds(ids) {
 const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
   scheduled:           "Scheduled",
+  pending_confirmation: "Pending Confirmation",
   completed:            "Completed",
   partially_completed:  "Partially Completed",
   cancelled:            "Cancelled",
@@ -36,6 +37,7 @@ const STATUS_LABEL = {
 };
 const STATUS_STYLE = {
   pending_acceptance: "bg-amber-50 text-amber-700 border-amber-200",
+  pending_confirmation: "bg-violet-50 text-violet-700 border-violet-200",
   scheduled:           "bg-blue-50 text-blue-700 border-blue-200",
   completed:            "bg-emerald-50 text-emerald-700 border-emerald-200",
   partially_completed:  "bg-sky-50 text-sky-700 border-sky-200",
@@ -53,6 +55,7 @@ const STATUS_STYLE = {
 // "Missed" (no_show) has no tab at all — a student who didn't show up
 // already knows; it's not something they need a dedicated view to track.
 const INTERVIEW_SECTIONS = [
+  { key: "pending_confirmation", label: "Pending Confirmation", match: i => i.status === "pending_confirmation" },
   { key: "pending_acceptance", label: "Scheduling In Progress", match: i => i.status === "pending_acceptance" },
   { key: "scheduled",      label: "Scheduled",            match: i => i.status === "scheduled" && !i.rescheduleRequested && !i.rescheduleApproved },
   { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
@@ -64,7 +67,11 @@ const INTERVIEW_SECTIONS = [
 // Sections whose interviews can still be acted on (Join Meet / Request
 // Reschedule) and get the larger, higher-contrast card — everything else
 // (completed/cancelled/etc.) gets the compact, muted "past" card.
-const ACTIVE_SECTION_KEYS = new Set(["pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled"]);
+// "Pending Confirmation" has no action to take (just waiting on an admin),
+// but it's still an active, not-yet-resolved state, so it gets the larger
+// card too — none of that card's action buttons key off this status, so
+// none render, it just reads as more prominent than a done/dead entry.
+const ACTIVE_SECTION_KEYS = new Set(["pending_confirmation", "pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled"]);
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 
@@ -107,6 +114,7 @@ const ACCENT_BORDER = {
 // Left-border accent per My Interviews section, matched to that section's
 // status badge color so the two reinforce each other at a glance.
 const SECTION_ACCENT = {
+  pending_confirmation: "violet",
   pending_acceptance:   "amber",
   scheduled:             "blue",
   completed:              "emerald",
@@ -119,6 +127,7 @@ const SECTION_ACCENT = {
 // at a glance instead of every tab/badge looking the same gray/blue.
 const TAB_COLORS = {
   all:                    { text: "text-indigo-600",  border: "border-indigo-600",  badgeBg: "bg-indigo-100",  badgeText: "text-indigo-700" },
+  pending_confirmation:   { text: "text-violet-600",  border: "border-violet-600",  badgeBg: "bg-violet-100",  badgeText: "text-violet-700" },
   pending_acceptance:     { text: "text-amber-600",   border: "border-amber-600",   badgeBg: "bg-amber-100",   badgeText: "text-amber-700" },
   scheduled:              { text: "text-blue-600",    border: "border-blue-600",    badgeBg: "bg-blue-100",    badgeText: "text-blue-700" },
   completed:              { text: "text-emerald-600", border: "border-emerald-600", badgeBg: "bg-emerald-100", badgeText: "text-emerald-700" },
@@ -499,6 +508,35 @@ export default function StudentDashboardPage() {
   const templatesInProgress = new Set(
     awaiting.filter(i => i.selfBooked).map(i => i.templateId).filter(Boolean)
   );
+  // An admin rejecting a picked slot (handleRejectBooking in
+  // CandidateSchedulingTab.jsx) sets the invite's status to "cancelled"
+  // with a rejectionReason — the candidate already gets an email about it,
+  // but without this it just silently disappeared from the dashboard too
+  // (pendingInvites drops "cancelled" by definition), with no trace of
+  // what happened or why.
+  const rejectedInvites = pendingInvites.filter(i => i.status === "cancelled" && i.rejectionReason);
+  // My Interviews shows real Interview records PLUS two kinds of
+  // ScheduleInvite that never became one: still-awaiting-confirmation
+  // (shown as their own "Pending Confirmation" section) and rejected
+  // (folded into the existing Cancelled section, with the reason). Shaped
+  // to match what INTERVIEW_SECTIONS/the card rendering below expects so
+  // both flow through the exact same sections/sorting/quick-tabs as real
+  // interviews, rather than needing a parallel rendering path.
+  const interviewsWithPending = [
+    ...interviews,
+    ...awaiting.map(inv => ({
+      id: inv.id, templateName: inv.templateName, round: inv.round || inv.templateName,
+      scheduledDate: inv.bookedDate || "", scheduledTime: inv.bookedTime || "", duration: inv.duration,
+      status: "pending_confirmation", meetLink: "", rescheduleRequested: false, rescheduleApproved: false,
+      aiReport: null, integrityScore: null, finalScore: null, cancelReason: "",
+    })),
+    ...rejectedInvites.map(inv => ({
+      id: inv.id, templateName: inv.templateName, round: inv.round || inv.templateName,
+      scheduledDate: "", scheduledTime: "", duration: inv.duration,
+      status: "cancelled", meetLink: "", rescheduleRequested: false, rescheduleApproved: false,
+      aiReport: null, integrityScore: null, finalScore: null, cancelReason: inv.rejectionReason,
+    })),
+  ];
   // Overview's "Upcoming" list — confirmed interviews plus slots already
   // picked but still waiting on admin confirmation, merged into one
   // soonest-first list. A slot the candidate already picked (via Nudge or
@@ -521,7 +559,7 @@ export default function StudentDashboardPage() {
   const overviewStats = [
     { label: "Scheduled", value: interviews.filter(i => i.status === "scheduled").length, icon: CalendarClock, chip: "bg-blue-50 text-blue-600" },
     { label: "Completed", value: interviews.filter(i => i.status === "completed").length,  icon: CheckCircle2,  chip: "bg-emerald-50 text-emerald-600" },
-    { label: "Cancelled", value: interviews.filter(i => i.status === "cancelled").length,  icon: XCircle,       chip: "bg-gray-100 text-gray-500" },
+    { label: "Cancelled", value: interviews.filter(i => i.status === "cancelled").length + rejectedInvites.length, icon: XCircle, chip: "bg-gray-100 text-gray-500" },
   ];
   const NavButton = ({ item }) => {
     const Icon = item.icon;
@@ -531,7 +569,7 @@ export default function StudentDashboardPage() {
     // missed, now combined into one list), and the interviews badge is
     // the same total the "All" quick-tab shows under My Interviews.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
-      : item.id === "interviews" ? interviews.length
+      : item.id === "interviews" ? interviewsWithPending.length
       : item.id === "help" ? queries.filter(q => q.status === "replied").length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
@@ -1002,7 +1040,7 @@ export default function StudentDashboardPage() {
                   </Card>
                 )}
 
-                {interviews.length === 0 ? (
+                {interviewsWithPending.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
                     <Inbox className="w-8 h-8 text-gray-200 mb-2" />
                     <p className="text-sm text-gray-400">No interviews yet.</p>
@@ -1015,7 +1053,7 @@ export default function StudentDashboardPage() {
                        every tab looking the same. */}
                     <div className="flex border-b border-gray-200 mb-2 overflow-x-auto">
                       {[{ key: "all", label: "All" }, ...INTERVIEW_SECTIONS].map(tab => {
-                        const count = tab.key === "all" ? interviews.length : interviews.filter(tab.match).length;
+                        const count = tab.key === "all" ? interviewsWithPending.length : interviewsWithPending.filter(tab.match).length;
                         const isActiveTab = activeInterviewTab === tab.key;
                         const c = TAB_COLORS[tab.key] || TAB_COLORS.cancelled;
                         return (
@@ -1033,7 +1071,7 @@ export default function StudentDashboardPage() {
                     {(activeInterviewTab === "all"
                       ? INTERVIEW_SECTIONS
                       : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
-                    ).every(section => interviews.filter(section.match).length === 0) && (
+                    ).every(section => interviewsWithPending.filter(section.match).length === 0) && (
                       <Card className="flex flex-col items-center justify-center py-10">
                         <Inbox className="w-8 h-8 text-gray-200 mb-2" />
                         <p className="text-sm text-gray-400">Nothing here yet.</p>
@@ -1049,7 +1087,7 @@ export default function StudentDashboardPage() {
                       // from Firestore in), which could put a 24th before a
                       // 20th. Undated items (shouldn't normally happen for
                       // these statuses) sort last rather than disappearing.
-                      const items = interviews.filter(section.match).slice().sort((a, b) => {
+                      const items = interviewsWithPending.filter(section.match).slice().sort((a, b) => {
                         const da = a.scheduledDate ? `${a.scheduledDate}T${a.scheduledTime || ""}` : "";
                         const db = b.scheduledDate ? `${b.scheduledDate}T${b.scheduledTime || ""}` : "";
                         if (!da && !db) return 0;
@@ -1118,6 +1156,9 @@ export default function StudentDashboardPage() {
                                   <p className="font-semibold text-gray-700 text-sm">{interviewTitle(iv)}</p>
                                   {iv.scheduledDate && (
                                     <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
+                                  )}
+                                  {iv.cancelReason && (
+                                    <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
