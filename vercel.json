@@ -12,6 +12,8 @@
     { "source": "/api/sso/interviews/request-reschedule", "destination": "/api/sso-handler?route=interviews/request-reschedule" },
     { "source": "/api/sso/interviews/self-book-start", "destination": "/api/sso-handler?route=interviews/self-book-start" },
     { "source": "/api/sso/interviews/self-book", "destination": "/api/sso-handler?route=interviews/self-book" },
+    { "source": "/api/sso/queries/create",    "destination": "/api/sso-handler?route=queries/create" },
+    { "source": "/api/sso/queries/reply",     "destination": "/api/sso-handler?route=queries/reply" },
     {
       "source": "/(.*)",
       "destination": "/index.html"

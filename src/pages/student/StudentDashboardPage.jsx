@@ -6,9 +6,9 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText, RefreshCw,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, LifeBuoy, UserX, HelpCircle, Send,
 } from "lucide-react";
-import { formatDate, parseInterviewStart } from "../../utils/dates";
+import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
 import { getPreInterviewResources } from "../../api/firestore";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
 import AiReportModal from "../../features/interviews/AiReportModal";
@@ -85,12 +85,14 @@ const ACCENT_CHIP = {
   violet:  "bg-violet-50 text-violet-600",
   emerald: "bg-emerald-50 text-emerald-600",
   amber:   "bg-amber-50 text-amber-600",
+  rose:    "bg-rose-50 text-rose-600",
 };
 const ACCENT_CHIP_ACTIVE = {
   indigo:  "bg-indigo-600 text-white",
   violet:  "bg-violet-600 text-white",
   emerald: "bg-emerald-600 text-white",
   amber:   "bg-amber-600 text-white",
+  rose:    "bg-rose-600 text-white",
 };
 const ACCENT_BORDER = {
   indigo:  "border-l-indigo-500",
@@ -141,7 +143,22 @@ const NAV = [
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
   { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
   { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
+  { id: "help",      label: "Help",           icon: LifeBuoy, accent: "rose" },
 ];
+
+// Mirrors QUERY_CATEGORIES in api/sso-handler.js's createQuery.
+const QUERY_CATEGORIES = [
+  { id: "ai_report",        label: "AI Report Not Generated", icon: Sparkles },
+  { id: "panelist_no_show", label: "Panelist Didn't Join",     icon: UserX },
+  { id: "slot_doubt",       label: "Slot Doubt",                icon: CalendarRange },
+  { id: "other",             label: "Other",                     icon: HelpCircle },
+];
+const QUERY_STATUS_STYLE = {
+  open:    "bg-amber-50 text-amber-700 border-amber-200",
+  replied: "bg-sky-50 text-sky-700 border-sky-200",
+  closed:  "bg-gray-100 text-gray-500 border-gray-200",
+};
+const QUERY_STATUS_LABEL = { open: "Open", replied: "Replied", closed: "Closed" };
 
 export default function StudentDashboardPage() {
   const navigate = useNavigate();
@@ -168,6 +185,15 @@ export default function StudentDashboardPage() {
   // without picking a slot leaves nothing behind.
   const [selfBookDraft, setSelfBookDraft] = useState(null);
   const expandedCardRef = useRef(null);
+
+  // Help tab — raising a new query, and replying within an existing thread.
+  const [queryCategory, setQueryCategory] = useState("ai_report");
+  const [queryInterviewId, setQueryInterviewId] = useState("");
+  const [queryMessage, setQueryMessage] = useState("");
+  const [submittingQuery, setSubmittingQuery] = useState(false);
+  const [expandedQueryId, setExpandedQueryId] = useState(null);
+  const [queryReplyDrafts, setQueryReplyDrafts] = useState({});
+  const [sendingQueryReply, setSendingQueryReply] = useState(null);
 
   // The expanded "Ready to Book" card behaves like a popover, not a
   // permanent section — it should collapse itself if the candidate leaves
@@ -347,6 +373,52 @@ export default function StudentDashboardPage() {
     }
   };
 
+  const handleSubmitQuery = async () => {
+    if (!queryMessage.trim()) return;
+    setSubmittingQuery(true);
+    try {
+      const res = await fetch("/api/sso/queries/create", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        body: JSON.stringify({
+          category: queryCategory,
+          message: queryMessage.trim(),
+          interviewId: queryInterviewId || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || "Please try again.");
+      setQueryMessage("");
+      setQueryInterviewId("");
+      await loadDashboard();
+    } catch (e) {
+      alert("Couldn't send your query: " + e.message);
+    }
+    setSubmittingQuery(false);
+  };
+
+  const handleReplyToQuery = async (queryId) => {
+    const text = (queryReplyDrafts[queryId] || "").trim();
+    if (!text) return;
+    setSendingQueryReply(queryId);
+    try {
+      const res = await fetch("/api/sso/queries/reply", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        body: JSON.stringify({ queryId, message: text }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || "Please try again.");
+      setQueryReplyDrafts(d => ({ ...d, [queryId]: "" }));
+      await loadDashboard();
+    } catch (e) {
+      alert("Couldn't send your reply: " + e.message);
+    }
+    setSendingQueryReply(null);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-50/40 to-gray-50 flex items-center justify-center">
@@ -365,7 +437,7 @@ export default function StudentDashboardPage() {
     );
   }
 
-  const { candidate, templates = [], interviews = [], pendingInvites = [] } = data;
+  const { candidate, templates = [], interviews = [], pendingInvites = [], queries = [] } = data;
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
   // All upcoming interviews with a confirmed date that hasn't already
   // passed, soonest first — previously this picked the first array match
@@ -445,7 +517,10 @@ export default function StudentDashboardPage() {
     // is every card shown under Book an Interview (bookable + awaiting +
     // missed, now combined into one list), and the interviews badge is
     // the same total the "All" quick-tab shows under My Interviews.
-    const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length) : item.id === "interviews" ? interviews.length : 0;
+    const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
+      : item.id === "interviews" ? interviews.length
+      : item.id === "help" ? queries.filter(q => q.status === "replied").length
+      : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
       <button onClick={() => setTab(item.id)}
@@ -1061,6 +1136,122 @@ export default function StudentDashboardPage() {
                       );
                     })}
                   </>
+                )}
+              </div>
+            )}
+
+            {tab === "help" && (
+              <div className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+                    <LifeBuoy className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Help</h1>
+                    <p className="text-sm text-gray-500 mt-0.5">Raise a query and the admin team will reply here.</p>
+                  </div>
+                </div>
+
+                <Card className="p-5">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">What's this about?</p>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {QUERY_CATEGORIES.map(c => (
+                      <button key={c.id} onClick={() => setQueryCategory(c.id)}
+                        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                          queryCategory === c.id ? "bg-rose-600 text-white border-rose-600" : "bg-white text-gray-600 border-gray-200 hover:border-rose-300"
+                        }`}>
+                        <c.icon className="w-3.5 h-3.5" /> {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  {interviews.length > 0 && (
+                    <div className="mb-4">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1.5">Related Interview (optional)</label>
+                      <select value={queryInterviewId} onChange={e => setQueryInterviewId(e.target.value)}
+                        className="w-full max-w-sm border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
+                        <option value="">None</option>
+                        {interviews.map(iv => (
+                          <option key={iv.id} value={iv.id}>{interviewTitle(iv)}{iv.scheduledDate ? ` — ${formatDate(iv.scheduledDate)}` : ""}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Your Message</label>
+                  <textarea
+                    value={queryMessage}
+                    onChange={e => setQueryMessage(e.target.value)}
+                    placeholder="Describe what's going on…"
+                    rows={3}
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors resize-none"
+                  />
+                  <Button variant="primary" className="mt-3" onClick={handleSubmitQuery} disabled={submittingQuery || !queryMessage.trim()}>
+                    {submittingQuery ? "Sending…" : "Send Query"}
+                  </Button>
+                </Card>
+
+                {queries.length > 0 && (
+                  <div className="space-y-2.5">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Your Queries</p>
+                    {queries.map(q => {
+                      const isExpanded = expandedQueryId === q.id;
+                      const meta = QUERY_CATEGORIES.find(c => c.id === q.category) || QUERY_CATEGORIES[3];
+                      const lastMessage = q.messages?.[q.messages.length - 1];
+                      return (
+                        <Card key={q.id} className="overflow-hidden">
+                          <button onClick={() => setExpandedQueryId(isExpanded ? null : q.id)}
+                            className="flex items-center justify-between gap-3 w-full px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
+                            <div className="flex items-center gap-3 min-w-0">
+                              {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                              <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+                                <meta.icon className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-900 truncate">{meta.label}</p>
+                                <p className="text-xs text-gray-400 truncate mt-0.5">{lastMessage?.text}</p>
+                              </div>
+                            </div>
+                            <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${QUERY_STATUS_STYLE[q.status] || QUERY_STATUS_STYLE.open}`}>
+                              {QUERY_STATUS_LABEL[q.status] || q.status}
+                            </span>
+                          </button>
+                          {isExpanded && (
+                            <div className="px-5 pb-5 pt-1 border-t border-gray-50 space-y-3">
+                              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                {(q.messages || []).map((m, i) => (
+                                  <div key={i} className={`flex ${m.from === "student" ? "justify-end" : "justify-start"}`}>
+                                    <div className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm ${
+                                      m.from === "student" ? "bg-rose-600 text-white" : "bg-gray-100 text-gray-800"
+                                    }`}>
+                                      <p className="whitespace-pre-wrap">{m.text}</p>
+                                      <p className={`text-[10px] mt-1 ${m.from === "student" ? "text-white/60" : "text-gray-400"}`}>
+                                        {m.from === "admin" ? (m.byName || "Admin team") : "You"} · {formatDateTime(m.at)}
+                                      </p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              {q.status !== "closed" && (
+                                <div className="flex items-end gap-2 pt-1">
+                                  <textarea
+                                    value={queryReplyDrafts[q.id] || ""}
+                                    onChange={e => setQueryReplyDrafts(d => ({ ...d, [q.id]: e.target.value }))}
+                                    placeholder="Reply…"
+                                    rows={2}
+                                    className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors resize-none"
+                                  />
+                                  <Button variant="primary" icon={Send} className="flex-shrink-0"
+                                    onClick={() => handleReplyToQuery(q.id)}
+                                    disabled={sendingQueryReply === q.id || !(queryReplyDrafts[q.id] || "").trim()}>
+                                    {sendingQueryReply === q.id ? "Sending…" : "Send"}
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}

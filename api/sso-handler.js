@@ -1,4 +1,5 @@
 import { getDb } from "./_lib/firebaseAdmin.js";
+import { FieldValue } from "firebase-admin/firestore";
 import { randomToken } from "./_lib/ssoSession.js";
 import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
@@ -49,6 +50,8 @@ export default async function handler(req, res) {
       case "interviews/request-reschedule": return await requestReschedule(req, res);
       case "interviews/self-book-start": return await selfBookStart(req, res);
       case "interviews/self-book": return await selfBook(req, res);
+      case "queries/create":       return await createQuery(req, res);
+      case "queries/reply":        return await replyToQuery(req, res);
       default:                  return res.status(404).json({ error: "not_found" });
     }
   } catch (err) {
@@ -335,9 +338,17 @@ async function me(req, res) {
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 
+  // Support queries the candidate raised ("AI report not generated",
+  // "panelist didn't join", etc.) — see queries/create and queries/reply
+  // below, and QueriesPage.jsx on the admin side.
+  const queriesSnap = await db.collection("studentQueries").where("candidateId", "==", session.candidateId).get();
+  const queries = queriesSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+
   return res.status(200).json({
     candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: programName, resumeLink: candidate.resumeLink || "" },
-    templates, interviews, pendingInvites,
+    templates, interviews, pendingInvites, queries,
   });
 }
 
@@ -638,4 +649,77 @@ async function selfBook(req, res) {
   });
 
   return res.status(200).json({ success: true, inviteId: ref.id });
+}
+
+// ── POST /api/sso/queries/create ─────────────────────────────────────────────
+// Lets a candidate raise a support query from the Student Dashboard — "AI
+// report not generated", "panelist didn't join the call", "slot doubt", or
+// anything else — without needing their own Firestore write access (every
+// student-facing mutation on this dashboard goes through this SSO session-
+// authenticated backend, same as self-book/request-reschedule above, not
+// direct client Firestore writes). Shows up on the admin's Student Queries
+// page (src/pages/admin/QueriesPage.jsx); an admin's reply flows back into
+// `queries` in the /api/sso/me response above.
+const QUERY_CATEGORIES = ["ai_report", "panelist_no_show", "slot_doubt", "other"];
+async function createQuery(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
+  const session = await getValidSession(req);
+  if (!session) return res.status(401).json({ error: "no_session" });
+
+  const category = QUERY_CATEGORIES.includes(req.body?.category) ? req.body.category : "other";
+  const message = String(req.body?.message || "").trim();
+  const interviewId = req.body?.interviewId ? String(req.body.interviewId).trim() : null;
+  if (!message) return res.status(400).json({ error: "invalid_parameter", message: "Please enter a message." });
+
+  const db = getDb();
+  const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
+  if (!candidateSnap.exists) return res.status(404).json({ error: "candidate_not_found" });
+  const candidate = candidateSnap.data();
+
+  const now = new Date().toISOString();
+  const ref = await db.collection("studentQueries").add({
+    candidateId: session.candidateId,
+    candidateName: candidate.name,
+    candidateEmail: candidate.email,
+    candidateUid: candidate.uid || "",
+    category,
+    interviewId,
+    status: "open",
+    createdAt: now,
+    updatedAt: now,
+    messages: [{ from: "student", text: message, at: now }],
+  });
+  return res.status(200).json({ success: true, queryId: ref.id });
+}
+
+// ── POST /api/sso/queries/reply ──────────────────────────────────────────────
+// A candidate continuing their own thread after an admin's reply — not the
+// admin's side of the reply, which is a plain client Firestore write from
+// QueriesPage.jsx (the admin already has full Firestore access via Auth).
+async function replyToQuery(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
+  const session = await getValidSession(req);
+  if (!session) return res.status(401).json({ error: "no_session" });
+
+  const queryId = String(req.body?.queryId || "").trim();
+  const message = String(req.body?.message || "").trim();
+  if (!queryId || !message) return res.status(400).json({ error: "invalid_parameter" });
+
+  const db = getDb();
+  const ref = db.collection("studentQueries").doc(queryId);
+  const snap = await ref.get();
+  // Scoped to the caller's OWN query — a candidateId mismatch is treated
+  // identically to not-found, never leaking whether some other id exists.
+  if (!snap.exists || snap.data().candidateId !== session.candidateId) {
+    return res.status(404).json({ error: "not_found" });
+  }
+  const now = new Date().toISOString();
+  await ref.update({
+    messages: FieldValue.arrayUnion({ from: "student", text: message, at: now }),
+    status: "open",
+    updatedAt: now,
+  });
+  return res.status(200).json({ success: true });
 }

@@ -46,6 +46,38 @@ export interface Vendor {
   createdAt: string;
 }
 
+// ── Student Queries ───────────────────────────────────────────────────────────
+// Support queries a candidate raises from the Student Dashboard ("AI report
+// not generated", "panelist didn't join the call", "slot doubt", or
+// anything else) — written/replied-to on the student side via the SSO
+// session-authenticated backend (api/sso-handler.js's queries/create and
+// queries/reply, never a direct client Firestore write from an anonymous
+// session), and read/replied-to on the admin side via plain Firestore
+// (src/api/studentQueries.ts, src/pages/admin/QueriesPage.jsx).
+export type QueryCategory = "ai_report" | "panelist_no_show" | "slot_doubt" | "other";
+export type QueryStatus = "open" | "replied" | "closed";
+
+export interface QueryMessage {
+  from: "student" | "admin";
+  text: string;
+  at: string;
+  byName?: string; // set on admin messages — who replied
+}
+
+export interface StudentQuery {
+  id: string;
+  candidateId: string;
+  candidateName: string;
+  candidateEmail: string;
+  candidateUid?: string;
+  category: QueryCategory;
+  interviewId?: string | null;
+  status: QueryStatus;
+  messages: QueryMessage[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Invite {
   id: string;
   email: string;
