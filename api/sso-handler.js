@@ -126,14 +126,50 @@ async function accountsToken(req, res) {
     const loose = allSnap.docs.filter(d => (d.data().uid || "").trim().toLowerCase() === userId.toLowerCase());
     if (loose.length === 1) { candidate = loose[0]; fallbackUsed = true; }
   }
+  // Some candidates' stored uid is simply the WRONG value, not a
+  // formatting slip — confirmed by cases where editing a candidate's uid
+  // to exactly match this log's userId made login work immediately.
+  // Forms' own user_id is a UUID tied to the student's Accounts login,
+  // which an admin has no way to know when typing a uid in by hand. Phone
+  // number is far more likely to agree across both systems, so it's tried
+  // as a last resort — matched on the last 10 digits only, to ignore
+  // country-code/formatting differences — and the candidate's uid is
+  // self-healed to the correct value so this candidate never needs this
+  // fallback again.
+  let healedUid = false;
   if (!candidate) {
-    await logTokenAttempt(db, { outcome: "student_not_found", userId, matchCount: snap.size });
+    const bodyPhone = String(req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.mobile_number || "").trim();
+    const digits = bodyPhone.replace(/\D/g, "").slice(-10);
+    if (digits.length === 10) {
+      const allSnap = await db.collection("candidates").get();
+      const phoneMatches = allSnap.docs.filter(d => (d.data().phone || "").replace(/\D/g, "").slice(-10) === digits);
+      if (phoneMatches.length === 1) {
+        candidate = phoneMatches[0];
+        fallbackUsed = true;
+        await candidate.ref.update({ uid: userId }).catch(() => {});
+        healedUid = true;
+      }
+    }
+  }
+  if (!candidate) {
+    await logTokenAttempt(db, {
+      outcome: "student_not_found", userId, matchCount: snap.size,
+      // Full request body, not just user_id — the goal is to see what
+      // else Forms actually sends (phone? email?) so the fallback above
+      // can be widened if this still isn't enough to resolve someone.
+      rawBody: typeof req.body === "object" ? JSON.stringify(req.body) : String(req.body || ""),
+    });
     return res.status(404).json({
       error: "student_not_found",
       message: "No access — you're not registered. Please connect with your team.",
     });
   }
-  if (fallbackUsed) await logTokenAttempt(db, { outcome: "success_via_loose_uid_match", userId, candidateId: candidate.id });
+  if (fallbackUsed) {
+    await logTokenAttempt(db, {
+      outcome: healedUid ? "success_via_phone_match_uid_healed" : "success_via_loose_uid_match",
+      userId, candidateId: candidate.id,
+    });
+  }
 
   const token = randomToken();
   const createdAt = new Date();
