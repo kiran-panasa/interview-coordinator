@@ -213,6 +213,19 @@ export default function StudentDashboardPage() {
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [expandedInviteId]);
 
+  // Queries aren't live-subscribed (the Help tab reads them off the same
+  // one-shot /api/sso/me fetch as everything else — an anonymous student
+  // session has no direct Firestore access to studentQueries at all, see
+  // firestore.rules), so an admin's reply wouldn't show up here until the
+  // candidate happened to reload the page. Light polling while this tab is
+  // actually open is the cheapest way to make a reply feel like it arrives
+  // on its own, without needing a live listener this session can't have.
+  useEffect(() => {
+    if (tab !== "help") return;
+    const id = setInterval(() => { loadDashboard(); }, 15000);
+    return () => clearInterval(id);
+  }, [tab]);
+
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
       const res = await fetch("/api/sso/me", { credentials: "include" });

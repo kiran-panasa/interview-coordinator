@@ -5,7 +5,7 @@ import { useAuth } from "../AuthContext";
 import { useMemo, useEffect, useRef } from "react";
 import {
   useUnreadUserNotifications, useAdhocQuestions, usePendingScheduleInvites, usePendingInboundRequests,
-  useRescheduleRequestedInterviews,
+  useRescheduleRequestedInterviews, useStudentQueries,
 } from "../hooks/subscriptions";
 import { useActiveAdmins } from "../hooks/queries";
 import { createNotification, markInboundRequestNotified } from "../api/firestore";
@@ -49,6 +49,7 @@ export default function AdminLayout() {
   const pendingInvites    = usePendingScheduleInvites();
   const inboundRequests   = usePendingInboundRequests();
   const rescheduleRequests = useRescheduleRequestedInterviews();
+  const studentQueries    = useStudentQueries();
   // Targeted equality-only fetch — avoids reading the entire users
   // collection just to find who to notify below.
   const { data: activeAdmins = [] } = useActiveAdmins();
@@ -57,6 +58,10 @@ export default function AdminLayout() {
   const pendingAdhoc     = adhocQs.filter(q => q.status === "pending").length;
   const pendingInbound   = inboundRequests.filter(r => r.status === "pending").length;
   const pendingReschedules = rescheduleRequests.length;
+  // "open" covers both a brand-new query and one a student just replied
+  // again on — either way it's sitting there needing an admin's attention,
+  // same meaning as "open" on the Student Queries page's own filter tabs.
+  const openQueries       = studentQueries.filter(q => q.status === "open").length;
   const nudgeBadge       = unreadResponses + pendingBookings;
 
   // Fires an in-app notification to every active admin the first time a new
@@ -107,7 +112,7 @@ export default function AdminLayout() {
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || role}</p>
           {nav.map(item => {
             const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0)
-              || (item.to === "/admin/interviews" && pendingReschedules > 0);
+              || (item.to === "/admin/interviews" && pendingReschedules > 0) || (item.to === "/admin/queries" && openQueries > 0);
             const Icon = item.icon;
             return (
               <NavLink key={item.to} to={item.to}
@@ -140,6 +145,11 @@ export default function AdminLayout() {
                 {item.to === "/admin/interviews" && pendingReschedules > 0 && (
                   <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                     {pendingReschedules}
+                  </span>
+                )}
+                {item.to === "/admin/queries" && openQueries > 0 && (
+                  <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {openQueries}
                   </span>
                 )}
               </NavLink>
