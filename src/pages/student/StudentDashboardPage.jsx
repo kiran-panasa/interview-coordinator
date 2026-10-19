@@ -312,10 +312,13 @@ export default function StudentDashboardPage() {
         // reflects the new range immediately instead of looking stale.
         loadDashboard();
       } else {
-        alert("Couldn't start booking for this template. Please try again.");
+        // Surfaces the actual failure (e.g. template_not_assigned) instead
+        // of a generic message that looks identical whether the request
+        // never reached the server or was rejected for a specific reason.
+        alert(`Couldn't start booking for this template (${json?.error || res.status}). Please try again.`);
       }
-    } catch {
-      alert("Couldn't start booking for this template. Please try again.");
+    } catch (e) {
+      alert(`Couldn't start booking for this template — ${e?.message || "network error"}. Please try again.`);
     }
     setBookingTemplateId(null);
   };
