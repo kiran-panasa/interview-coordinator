@@ -910,6 +910,53 @@ export default function InterviewsPage() {
     handleViewAiReport(latest);
   };
 
+  // Alternate generator alongside the Gemini path above (handleViewAiReport)
+  // — for a report that never showed up (transcript came through but Gemini
+  // never produced one, or an admin just wants a second take). Apps Script
+  // still owns fetching the transcript's actual TEXT (it already has read
+  // access to the Google Doc; this app has no Google credentials of its
+  // own), via a "getTranscriptText" action — /api/generate-ai-report only
+  // turns that text into the report, with no Google access needed server-side.
+  const handleGenerateWithClaude = async (ivArg) => {
+    const iv = ivArg || aiReportTarget;
+    if (!iv) return;
+    setAiReportLoading(true);
+    setAiReportStatus(null);
+    try {
+      const transcriptUrl = await resolveTranscriptUrl_(iv);
+      const textResult = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+        action: "getTranscriptText",
+        transcriptUrl,
+      });
+      if (textResult?.status !== "ready" || !textResult.text) {
+        throw new Error(textResult?.message || textResult?.error || "Couldn't read the transcript's text content.");
+      }
+
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/generate-ai-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({
+          transcriptText: textResult.text,
+          candidateName:  iv.candidateName,
+          round:          iv.round || iv.templateName || "Interview",
+          templateName:   iv.templateName || "",
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json?.message || `HTTP ${res.status}`);
+      }
+
+      const aiReport = { ...json.report, generatedAt: new Date().toISOString() };
+      await updateInterview(iv.id, { aiReport });
+      setAiReportTarget({ ...iv, aiReport });
+    } catch (e) {
+      setToast({ message: "Couldn't generate report with Claude: " + e.message, type: "error" });
+    }
+    setAiReportLoading(false);
+  };
+
   // Backs the "AI Report" link column in the Download Feedback export — a
   // deep link of the form /admin/interviews?aiReport=<id> opens this page
   // and auto-opens that interview's AI Report modal, instead of the export
@@ -2155,6 +2202,7 @@ export default function InterviewsPage() {
         onClose={() => setAiReportTarget(null)}
         onRegenerate={handleRegenerateAiReport}
         onRetry={handleRetryAiReport}
+        onGenerateWithClaude={() => handleGenerateWithClaude(aiReportTarget)}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

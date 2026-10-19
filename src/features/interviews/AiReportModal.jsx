@@ -45,7 +45,7 @@ const SectionHeader = ({ icon: Icon, children }) => (
   </h3>
 );
 
-export default function AiReportModal({ interview, loading, status, onClose, onRegenerate, onRetry, readOnly = false }) {
+export default function AiReportModal({ interview, loading, status, onClose, onRegenerate, onRetry, onGenerateWithClaude, readOnly = false }) {
   const report = interview?.aiReport;
   const decisionMeta = report ? (DECISION_META[report.decision] || { label: report.decisionLabel, cls: "bg-gray-50 text-gray-700 border-gray-200", icon: Sparkles }) : null;
   const DecisionIcon = decisionMeta?.icon;
@@ -72,9 +72,16 @@ export default function AiReportModal({ interview, loading, status, onClose, onR
             </div>
             <p className="text-sm font-bold text-gray-900">{STATUS_COPY[status.status]?.title || "Not ready yet"}</p>
             <p className="text-xs text-gray-500 max-w-sm">{status.message || STATUS_COPY[status.status]?.body}</p>
-            <Button variant="primary" icon={RefreshCw} onClick={onRetry} className="mt-2">
-              Check Again
-            </Button>
+            <div className="flex items-center gap-2 mt-2">
+              <Button variant="primary" icon={RefreshCw} onClick={onRetry}>
+                Check Again
+              </Button>
+              {!readOnly && onGenerateWithClaude && (
+                <Button variant="secondary" icon={Sparkles} onClick={onGenerateWithClaude}>
+                  Generate with Claude
+                </Button>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -206,6 +213,12 @@ export default function AiReportModal({ interview, loading, status, onClose, onR
                     className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
                     <RefreshCw className="w-3 h-3" /> Regenerate report
                   </button>
+                  {onGenerateWithClaude && (
+                    <button onClick={onGenerateWithClaude}
+                      className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                      <Sparkles className="w-3 h-3" /> Regenerate with Claude
+                    </button>
+                  )}
                   {/* Same canonical /admin/interviews?aiReport=<id> deep link the
                       Download Feedback export uses in its AI Report column —
                       opening it re-shows this exact report, no regeneration. */}
