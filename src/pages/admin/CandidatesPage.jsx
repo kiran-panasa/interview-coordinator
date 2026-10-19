@@ -68,27 +68,59 @@ function parseCandidatesCSV(text) {
   return { rows, errors };
 }
 
-function downloadSampleCSV() {
-  const content = [
+// Live template/program names instead of a fictional example — the
+// "templates" column must match an exact name already in the system (see
+// handleCSVImport's templateMap lookup), so a made-up placeholder name was
+// actively misleading rather than just a cosmetic stand-in. Pulling from
+// whatever templates/programs actually exist right now also means the
+// sample never goes stale as templates get added/renamed — no hardcoded
+// list to keep in sync by hand.
+function downloadSampleCSV(templates = [], programs = []) {
+  const programName = programs[0]?.name || "NIAT";
+  const sampleTemplates = templates.slice(0, 2).map(t => t.name);
+  const templatesCell = sampleTemplates.length ? sampleTemplates.join("|") : "";
+  const rows = [
     "uid,name,phone,email,program,templates,resumeLink,notes",
-    "STU-2024-001,John Doe,+91 98765 43210,john.doe@example.com,NIAT,Product Mastery - Novice|Systems Mastery - Novice || V1,https://drive.google.com/file/sample,Strong candidate",
-    "STU-2024-002,Jane Smith,+91 98765 43211,jane.smith@example.com,Academy,,,",
-  ].join("\n");
-  const blob = new Blob([content], { type: "text/csv" });
+    `STU-2024-001,John Doe,+91 98765 43210,john.doe@example.com,${programName},${templatesCell},https://drive.google.com/file/sample,Strong candidate`,
+    "STU-2024-002,Jane Smith,+91 98765 43211,jane.smith@example.com,,,,",
+  ];
+  // Every template currently in the system, for quick reference while
+  // filling in the real rows above — not itself a data row (blank uid, so
+  // handleCSVFile's parser would reject it as "Name is required" rather
+  // than silently importing a junk candidate if someone forgets to delete
+  // this section before uploading).
+  if (templates.length) {
+    rows.push("", "# Available template names — copy the exact spelling into the templates column:");
+    templates.forEach(t => rows.push(`# ${t.name}${t.program ? ` (program: ${programs.find(p => p.id === t.program)?.name || t.program})` : ""}`));
+  }
+  const blob = new Blob([rows.join("\n")], { type: "text/csv" });
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "candidates_sample.csv" });
   a.click();
 }
 
-function downloadSampleExcel() {
+function downloadSampleExcel(templates = [], programs = []) {
+  const programName = programs[0]?.name || "NIAT";
+  const sampleTemplates = templates.slice(0, 2).map(t => t.name);
+  const templatesCell = sampleTemplates.length ? sampleTemplates.join("|") : "";
   const rows = [
-    { uid: "STU-2024-001", name: "John Doe", phone: "+91 98765 43210", email: "john.doe@example.com", program: "NIAT", templates: "Product Mastery - Novice|Systems Mastery - Novice || V1", resumeLink: "https://drive.google.com/file/sample", notes: "Strong candidate" },
-    { uid: "STU-2024-002", name: "Jane Smith", phone: "+91 98765 43211", email: "jane.smith@example.com", program: "Academy", templates: "", resumeLink: "", notes: "" },
+    { uid: "STU-2024-001", name: "John Doe", phone: "+91 98765 43210", email: "john.doe@example.com", program: programName, templates: templatesCell, resumeLink: "https://drive.google.com/file/sample", notes: "Strong candidate" },
+    { uid: "STU-2024-002", name: "Jane Smith", phone: "+91 98765 43211", email: "jane.smith@example.com", program: "", templates: "", resumeLink: "", notes: "" },
   ];
   const header = ["uid", "name", "phone", "email", "program", "templates", "resumeLink", "notes"];
   const ws = XLSX.utils.json_to_sheet(rows, { header });
   ws["!cols"] = [{ wch: 16 }, { wch: 20 }, { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 48 }, { wch: 36 }, { wch: 24 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Candidates");
+  // Second sheet, purely a reference — every template name currently in
+  // the system to copy-paste from, kept out of the main data sheet so it
+  // can never be mistaken for (or accidentally re-imported as) a row.
+  if (templates.length) {
+    const programNameById = new Map(programs.map(p => [p.id, p.name]));
+    const refRows = templates.map(t => ({ "Template Name": t.name, "Program": t.program ? (programNameById.get(t.program) || t.program) : "" }));
+    const refWs = XLSX.utils.json_to_sheet(refRows, { header: ["Template Name", "Program"] });
+    refWs["!cols"] = [{ wch: 40 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, refWs, "Available Templates");
+  }
   XLSX.writeFile(wb, "candidates_sample.xlsx");
 }
 
@@ -821,15 +853,30 @@ export default function CandidatesPage() {
               <br />Re-uploading with just <span className="font-mono">uid</span>/<span className="font-mono">email</span> + <span className="font-mono">templates</span> filled in (other columns blank) adds those templates to the matching existing candidate without touching anything else — choose "Update existing + add new" below.
             </p>
             <div className="flex gap-2">
-              <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={downloadSampleExcel}
+              <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={() => downloadSampleExcel(templates, programs)}
                 className="!text-emerald-700 !border-emerald-200 hover:!bg-emerald-50">
                 Download Excel (.xlsx)
               </Button>
-              <Button variant="secondary" size="sm" icon={FileText} onClick={downloadSampleCSV}
+              <Button variant="secondary" size="sm" icon={FileText} onClick={() => downloadSampleCSV(templates, programs)}
                 className="!text-brand-600 !border-brand-200 hover:!bg-brand-50">
                 Download CSV
               </Button>
             </div>
+            {templates.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                {/* Live, not baked into a downloaded file — always reflects
+                   whatever templates exist right now, so there's nothing to
+                   re-download just because a template got added/renamed. */}
+                <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Available template names (exact spelling, for the templates column):</p>
+                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                  {templates.map(t => (
+                    <span key={t.id} className="text-[11px] font-mono bg-white text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full">
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {isLoading ? (
