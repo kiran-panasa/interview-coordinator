@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2,
+  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
@@ -243,6 +243,8 @@ export default function InterviewsPage() {
   const [downloadingFeedback, setDownloadingFeedback] = useState(false);
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
+  const [bulkAiGenerating,  setBulkAiGenerating]  = useState(false);
+  const [bulkAiProgress,    setBulkAiProgress]    = useState(null); // { done, total }
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
   const [historyModal,      setHistoryModal]      = useState(null); // interview
   const [historyEntries,    setHistoryEntries]    = useState([]);
@@ -910,51 +912,96 @@ export default function InterviewsPage() {
     handleViewAiReport(latest);
   };
 
+  // Shared core, used by both the single-interview button (below) and the
+  // bulk "Generate Missing AI Reports" action — fetches the transcript TEXT
+  // via Apps Script's "getTranscriptText" action (it already has read
+  // access to the Google Doc; this app has no Google credentials of its
+  // own) and turns it into a report via /api/generate-ai-report, then
+  // writes it onto the interview. Throws (caller decides how to surface
+  // the failure) rather than swallowing it, so the bulk loop can tell
+  // "no transcript yet" apart from "Claude call failed" per interview.
+  const generateClaudeReportFor = async (iv) => {
+    const transcriptUrl = await resolveTranscriptUrl_(iv);
+    const textResult = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+      action: "getTranscriptText",
+      transcriptUrl,
+    });
+    if (textResult?.status !== "ready" || !textResult.text) {
+      const err = new Error(textResult?.message || textResult?.error || "Couldn't read the transcript's text content.");
+      err.noTranscript = true;
+      throw err;
+    }
+
+    const idToken = await currentUser.getIdToken();
+    const res = await fetch("/api/generate-ai-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({
+        transcriptText: textResult.text,
+        candidateName:  iv.candidateName,
+        round:          iv.round || iv.templateName || "Interview",
+        templateName:   iv.templateName || "",
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json?.message || `HTTP ${res.status}`);
+
+    const aiReport = { ...json.report, generatedAt: new Date().toISOString() };
+    await updateInterview(iv.id, { aiReport });
+    return aiReport;
+  };
+
   // Alternate generator alongside the Gemini path above (handleViewAiReport)
   // — for a report that never showed up (transcript came through but Gemini
-  // never produced one, or an admin just wants a second take). Apps Script
-  // still owns fetching the transcript's actual TEXT (it already has read
-  // access to the Google Doc; this app has no Google credentials of its
-  // own), via a "getTranscriptText" action — /api/generate-ai-report only
-  // turns that text into the report, with no Google access needed server-side.
+  // never produced one — e.g. Gemini's own daily quota got exhausted — or
+  // an admin just wants a second take).
   const handleGenerateWithClaude = async (ivArg) => {
     const iv = ivArg || aiReportTarget;
     if (!iv) return;
     setAiReportLoading(true);
     setAiReportStatus(null);
     try {
-      const transcriptUrl = await resolveTranscriptUrl_(iv);
-      const textResult = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action: "getTranscriptText",
-        transcriptUrl,
-      });
-      if (textResult?.status !== "ready" || !textResult.text) {
-        throw new Error(textResult?.message || textResult?.error || "Couldn't read the transcript's text content.");
-      }
-
-      const idToken = await currentUser.getIdToken();
-      const res = await fetch("/api/generate-ai-report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({
-          transcriptText: textResult.text,
-          candidateName:  iv.candidateName,
-          round:          iv.round || iv.templateName || "Interview",
-          templateName:   iv.templateName || "",
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json?.message || `HTTP ${res.status}`);
-      }
-
-      const aiReport = { ...json.report, generatedAt: new Date().toISOString() };
-      await updateInterview(iv.id, { aiReport });
+      const aiReport = await generateClaudeReportFor(iv);
       setAiReportTarget({ ...iv, aiReport });
     } catch (e) {
       setToast({ message: "Couldn't generate report with Claude: " + e.message, type: "error" });
     }
     setAiReportLoading(false);
+  };
+
+  // Bulk sweep over the CURRENT filtered view (same scope Download Feedback
+  // already operates on) — every completed interview missing a report, with
+  // some transcript signal to even attempt one. Sequential, not
+  // Promise.all'd: Apps Script and Claude both have their own rate limits,
+  // and sequential processing is what makes a live "N of M" progress
+  // indicator possible in the first place.
+  const handleBulkGenerateAiReports = async () => {
+    const targets = filtered.filter(iv =>
+      iv.status === "completed" && !iv.aiReport && (iv.transcriptUrl || iv.eventId || iv.meetLink)
+    );
+    if (!targets.length) {
+      setToast({ message: "No completed interviews in the current filter are missing an AI report.", type: "info" });
+      return;
+    }
+    if (!window.confirm(`Generate AI reports with Claude for ${targets.length} interview(s) missing one? This can take a few minutes — please don't close this tab while it runs.`)) return;
+
+    setBulkAiGenerating(true);
+    let succeeded = 0, noTranscript = 0, failed = 0;
+    for (let i = 0; i < targets.length; i++) {
+      setBulkAiProgress({ done: i, total: targets.length });
+      try {
+        await generateClaudeReportFor(targets[i]);
+        succeeded++;
+      } catch (e) {
+        if (e.noTranscript) noTranscript++; else failed++;
+      }
+    }
+    setBulkAiProgress(null);
+    setBulkAiGenerating(false);
+    const parts = [`${succeeded} generated`];
+    if (noTranscript) parts.push(`${noTranscript} skipped (no transcript yet)`);
+    if (failed) parts.push(`${failed} failed`);
+    setToast({ message: parts.join(", ") + ".", type: succeeded ? "success" : "error" });
   };
 
   // Backs the "AI Report" link column in the Download Feedback export — a
@@ -1789,6 +1836,16 @@ export default function InterviewsPage() {
           </button>
         )}
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={handleBulkGenerateAiReports} disabled={bulkAiGenerating}
+            title="Generates reports with Claude for completed interviews in the current filter that are missing one — useful when Gemini's own daily quota runs out"
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            {bulkAiGenerating
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Sparkles className="w-3.5 h-3.5" />}
+            {bulkAiGenerating
+              ? `Generating${bulkAiProgress ? ` ${bulkAiProgress.done + 1} of ${bulkAiProgress.total}` : "…"}`
+              : "Generate Missing AI Reports"}
+          </button>
           <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
             {downloadingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
