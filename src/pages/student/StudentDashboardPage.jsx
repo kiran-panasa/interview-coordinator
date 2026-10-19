@@ -8,7 +8,7 @@ import {
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
   CheckCircle2, XCircle,
 } from "lucide-react";
-import { formatDate } from "../../utils/dates";
+import { formatDate, parseInterviewStart } from "../../utils/dates";
 import { getPreInterviewResources } from "../../api/firestore";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
 import AiReportModal from "../../features/interviews/AiReportModal";
@@ -357,11 +357,19 @@ export default function StudentDashboardPage() {
 
   const { candidate, templates = [], interviews = [], pendingInvites = [] } = data;
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
-  // All upcoming interviews with a confirmed date, soonest first — previously
-  // this picked the first array match regardless of date, so a 16th could
-  // sit hidden behind a 17th that happened to come first in query order.
+  // All upcoming interviews with a confirmed date that hasn't already
+  // passed, soonest first — previously this picked the first array match
+  // regardless of date, so a 16th could sit hidden behind a 17th that
+  // happened to come first in query order. A "scheduled" interview whose
+  // time already passed (an interviewer never got around to marking it
+  // completed/no-show) isn't actually upcoming anymore, so it's excluded
+  // here rather than confusingly shown as something still to come.
+  const now = new Date();
   const upcomingScheduled = upcoming
-    .filter(i => i.scheduledDate)
+    .filter(i => i.scheduledDate && (() => {
+      const start = parseInterviewStart(i.scheduledDate, i.scheduledTime);
+      return !start || start >= now;
+    })())
     .slice()
     .sort((a, b) => `${a.scheduledDate}T${a.scheduledTime || ""}`.localeCompare(`${b.scheduledDate}T${b.scheduledTime || ""}`));
   // Still within its booking window and not yet picked — the only kind
@@ -927,7 +935,19 @@ export default function StudentDashboardPage() {
                       ? INTERVIEW_SECTIONS
                       : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
                     ).map(section => {
-                      const items = interviews.filter(section.match);
+                      // Date-wise, soonest/earliest first — items had no
+                      // defined order before (whatever order they came back
+                      // from Firestore in), which could put a 24th before a
+                      // 20th. Undated items (shouldn't normally happen for
+                      // these statuses) sort last rather than disappearing.
+                      const items = interviews.filter(section.match).slice().sort((a, b) => {
+                        const da = a.scheduledDate ? `${a.scheduledDate}T${a.scheduledTime || ""}` : "";
+                        const db = b.scheduledDate ? `${b.scheduledDate}T${b.scheduledTime || ""}` : "";
+                        if (!da && !db) return 0;
+                        if (!da) return 1;
+                        if (!db) return -1;
+                        return da.localeCompare(db);
+                      });
                       if (items.length === 0) return null;
                       const isActive = ACTIVE_SECTION_KEYS.has(section.key);
                       const accent = SECTION_ACCENT[section.key] || "gray";
