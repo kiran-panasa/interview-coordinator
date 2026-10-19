@@ -610,8 +610,11 @@ export default function StudentDashboardPage() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50/40 flex">
-        {/* Left sidebar */}
-        <div className="w-60 bg-white border-r border-gray-100 flex flex-col flex-shrink-0 min-h-screen">
+        {/* Left sidebar — sticky to the viewport (not min-h-screen, which
+           only sets a floor and still scrolls away with the page once the
+           main content grows taller than one screen) so nav/profile/sign-out
+           stay in place while only the content on the right scrolls. */}
+        <div className="w-60 bg-white border-r border-gray-100 flex flex-col flex-shrink-0 sticky top-0 h-screen overflow-y-auto scrollbar-thin">
           <div className="flex items-center gap-2 px-5 py-5">
             <div className="w-7 h-7 bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <CalendarCheck2 className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />
@@ -1074,19 +1077,23 @@ export default function StudentDashboardPage() {
                   </Card>
                 ) : (
                   <>
-                    {/* Quick-view tabs — one per status plus "All", each
-                       with its own color (matched to that status's badge
-                       elsewhere) so the band reads at a glance instead of
-                       every tab looking the same. */}
-                    <div className="flex border-b border-gray-200 mb-2 overflow-x-auto">
+                    {/* Quick-view tabs — one per status plus "All", as a
+                       segmented pill control (matching the toggle style used
+                       elsewhere, e.g. the Leaderboard period switch) instead
+                       of a plain underline band — the active tab gets a
+                       solid white pill + its own status color, so it's
+                       unmistakable which section is showing versus the old
+                       thin-underline style where every inactive tab looked
+                       identically gray. */}
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 mb-3 overflow-x-auto">
                       {[{ key: "all", label: "All" }, ...INTERVIEW_SECTIONS].map(tab => {
                         const count = tab.key === "all" ? interviewsWithPending.length : interviewsWithPending.filter(tab.match).length;
                         const isActiveTab = activeInterviewTab === tab.key;
                         const c = TAB_COLORS[tab.key] || TAB_COLORS.cancelled;
                         return (
                           <button key={tab.key} onClick={() => setActiveInterviewTab(tab.key)}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors flex-shrink-0 ${
-                              isActiveTab ? `${c.border} ${c.text}` : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all flex-shrink-0 ${
+                              isActiveTab ? `bg-white shadow-soft ${c.text}` : "text-gray-500 hover:text-gray-700 hover:bg-white/60"
                             }`}>
                             {tab.label}
                             <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${c.badgeBg} ${c.badgeText}`}>{count}</span>
