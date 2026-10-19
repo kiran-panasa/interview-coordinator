@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Download, X, BarChart3 } from "lucide-react";
+import { Download, X, BarChart3, Trophy, Medal, Award } from "lucide-react";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/queries";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
@@ -13,6 +13,33 @@ import SkillsSelect from "../../components/SkillsSelect";
 // unbounded.
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function firstOfMonthIso() { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); }
+// This ISO week (Monday–Sunday) and this calendar month, both containing
+// "today" — used by the Leaderboard view's Weekly/Monthly toggle, same
+// pattern as the vendor dashboard's own leaderboard.
+function thisWeekRange() {
+  const now = new Date();
+  const day = now.getDay(); // 0 = Sunday .. 6 = Saturday
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now); monday.setDate(now.getDate() + diffToMonday);
+  const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+  const iso = d => d.toISOString().slice(0, 10);
+  return { from: iso(monday), to: iso(sunday) };
+}
+function thisMonthRange() {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const iso = d => d.toISOString().slice(0, 10);
+  return { from: iso(first), to: iso(last) };
+}
+// First name kept, everything after it masked — e.g. "Kopal Rastogi" ->
+// "Kopal *****" — so the leaderboard (visible dashboard-wide, not just to
+// the interviewer's own vendor) doesn't expose full interviewer identities.
+function maskName(fullName) {
+  if (!fullName) return fullName;
+  const parts = fullName.trim().split(/\s+/);
+  return parts.length <= 1 ? parts[0] : `${parts[0]} *****`;
+}
 
 // The only statuses this report counts — a candidate's still-pending/
 // scheduled interviews aren't meaningful here, so they're excluded from
@@ -31,6 +58,7 @@ const RELEVANT_STATUSES = STATUS_OPTIONS.map(s => s.id);
 const inputCls = "border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500";
 
 export default function InterviewerStatsPage() {
+  const [view, setView] = useState("stats");
   const [dateFrom,     setDateFrom]     = useState(firstOfMonthIso());
   const [dateTo,       setDateTo]       = useState(todayIso());
   const interviews       = useInterviewsInDateRange(dateFrom, dateTo);
@@ -38,6 +66,13 @@ export default function InterviewerStatsPage() {
   const { data: programs  = [] } = usePrograms();
   const { data: usersAll  = [] } = useUsers();
   const { data: vendors   = [] } = useVendors();
+
+  // Leaderboard — its own Weekly/Monthly window, independent of the Stats
+  // tab's date filter above, and ranks every active interviewer across
+  // every vendor (no vendor filter here, unlike the Stats table).
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState("week");
+  const leaderboardRange = leaderboardPeriod === "week" ? thisWeekRange() : thisMonthRange();
+  const leaderboardInterviews = useInterviewsInDateRange(leaderboardRange.from, leaderboardRange.to);
 
   const [programIds,   setProgramIds]   = useState([]);
   const [statuses,     setStatuses]     = useState([]);
@@ -220,6 +255,22 @@ export default function InterviewerStatsPage() {
     return withDisplays(acc);
   }, [interviewerStats]);
 
+  // Ranked by COMPLETED interviews (actual work done) in the period — total
+  // (every status) shown alongside as secondary context, not the ranking
+  // metric itself, so a panelist with a lot of no-shows/cancellations
+  // doesn't outrank one who actually completed more interviews. Same
+  // ranking rule as the vendor dashboard's own leaderboard.
+  const leaderboardRanked = useMemo(() => {
+    const activeInterviewers = usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active");
+    return activeInterviewers
+      .map(ivr => {
+        const ivrInterviews = leaderboardInterviews.filter(iv => iv.interviewerEmail === ivr.email);
+        const completed = ivrInterviews.filter(iv => ["completed", "partially_completed"].includes(iv.status)).length;
+        return { interviewer: ivr, completed, total: ivrInterviews.length };
+      })
+      .sort((a, b) => b.completed - a.completed || b.total - a.total);
+  }, [usersAll, leaderboardInterviews]);
+
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
     programIds.length || statuses.length || templateIds.length || interviewerEmails.length || vendorIds.length || durations.length;
   const clearFilters = () => {
@@ -234,15 +285,87 @@ export default function InterviewerStatsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviewer Statistics</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Interviewer-wise interview counts by status ({dateFrom} – {dateTo}) — widen the date range below for a longer report
+            {view === "stats"
+              ? `Interviewer-wise interview counts by status (${dateFrom} – ${dateTo}) — widen the date range below for a longer report`
+              : "Ranked by completed interviews across every vendor — names shown first-name-only for privacy"}
           </p>
         </div>
-        <button onClick={() => exportInterviewerStats(interviewerStats, totals)} disabled={interviewerStats.length === 0}
-          className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-          <Download className="w-3.5 h-3.5" /> Download
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            {[["stats", "Stats", BarChart3], ["leaderboard", "Leaderboard", Trophy]].map(([id, label, Icon]) => (
+              <button key={id} onClick={() => setView(id)}
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                  view === id ? "bg-white text-brand-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
+                }`}>
+                <Icon className="w-3.5 h-3.5" /> {label}
+              </button>
+            ))}
+          </div>
+          {view === "stats" && (
+            <button onClick={() => exportInterviewerStats(interviewerStats, totals)} disabled={interviewerStats.length === 0}
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <Download className="w-3.5 h-3.5" /> Download
+            </button>
+          )}
+        </div>
       </motion.div>
 
+      {view === "leaderboard" ? (() => {
+        const RANK_STYLE = [
+          { icon: Trophy, badge: "bg-gradient-to-br from-amber-400 to-yellow-500 text-white", card: "border-amber-200 bg-amber-50/60" },
+          { icon: Medal,  badge: "bg-gradient-to-br from-gray-300 to-gray-400 text-white",    card: "border-gray-200 bg-gray-50/60" },
+          { icon: Award,  badge: "bg-gradient-to-br from-orange-400 to-amber-700 text-white", card: "border-orange-200 bg-orange-50/40" },
+        ];
+        return (
+          <div className="max-w-2xl mx-auto space-y-5">
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-xl p-1 w-fit mx-auto">
+                {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
+                  <button key={id} onClick={() => setLeaderboardPeriod(id)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                      leaderboardPeriod === id ? "bg-white text-orange-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 mt-3">{leaderboardRange.from} – {leaderboardRange.to}</p>
+            </div>
+
+            {leaderboardRanked.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-14">
+                <Trophy className="w-8 h-8 text-gray-200 mb-2" />
+                <p className="text-sm text-gray-400">No active interviewers yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {leaderboardRanked.map((row, i) => {
+                  const style = RANK_STYLE[i];
+                  const RankIcon = style?.icon;
+                  return (
+                    <div key={row.interviewer.id} className={`bg-white rounded-2xl border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${
+                        style ? style.badge : "bg-gray-100 text-gray-500"
+                      }`}>
+                        {RankIcon ? <RankIcon className="w-5 h-5" /> : i + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 truncate">{maskName(row.interviewer.displayName) || row.interviewer.email}</p>
+                        <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} this {leaderboardPeriod}</p>
+                      </div>
+                      <div className="text-center flex-shrink-0 w-16">
+                        <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Completed</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })() : (
+      <>
       {/* Filters */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
         className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 mb-5">
@@ -337,6 +460,8 @@ export default function InterviewerStatsPage() {
           </table>
         )}
       </motion.div>
+      </>
+      )}
     </div>
   );
 }
