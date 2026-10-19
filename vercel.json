@@ -19,6 +19,12 @@
       "destination": "/index.html"
     }
   ],
+  "crons": [
+    { "path": "/api/cron/generate-ai-reports", "schedule": "30 20 * * *" }
+  ],
+  "functions": {
+    "api/cron/generate-ai-reports.js": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/assets/(.*)",
