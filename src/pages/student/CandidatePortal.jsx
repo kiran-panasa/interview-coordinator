@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, LogIn, Smartphone } from "lucide-react";
+import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, LogIn, Smartphone, AlertTriangle } from "lucide-react";
 import { formatDate } from "../../utils/dates";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
 import {
@@ -70,8 +70,21 @@ const stepMotion = {
   transition: { duration: 0.25, ease: "easeOut" },
 };
 
+// backendCallback (api/sso-handler.js) redirects HERE with ?sso_error=... on
+// a failed token exchange — previously silently dropped, so a student whose
+// sign-in link expired or got reused (e.g. a link-preview bot pre-fetching
+// it) just landed back on the plain sign-in page with zero explanation.
+const SSO_ERROR_COPY = {
+  token_expired: "That sign-in link expired before you finished — tap \"Sign In via Academy Account\" again to get a fresh one.",
+  token_already_used: "That sign-in link was already used — tap \"Sign In via Academy Account\" again to get a fresh one.",
+  invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Academy Account\" again.",
+  student_not_found: "We couldn't find your account. Please check with your team.",
+};
+
 export default function CandidatePortal() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const ssoError = searchParams.get("sso_error");
   const [step,       setStep]       = useState("mobile");
   const [email,      setEmail]      = useState("");
   const [emailError, setEmailError] = useState("");
@@ -208,6 +221,12 @@ export default function CandidatePortal() {
       <AnimatePresence mode="wait">
         {step === "mobile" && (
           <motion.div key="mobile" {...stepMotion}>
+            {ssoError && (
+              <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 max-w-md mx-auto">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" strokeWidth={2} />
+                <p className="text-xs text-amber-800">{SSO_ERROR_COPY[ssoError] || "Something went wrong signing you in. Please try again."}</p>
+              </div>
+            )}
             <Card>
               <div className="text-center mb-8">
                 <div className="w-12 h-12 rounded-2xl bg-brand-50 flex items-center justify-center mx-auto mb-4">

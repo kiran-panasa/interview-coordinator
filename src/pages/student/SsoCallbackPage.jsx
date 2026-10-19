@@ -3,6 +3,9 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, AlertTriangle } from "lucide-react";
 import StudentLayout from "../../components/StudentLayout";
 
+const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
+const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
+
 // Lands here when Forms redirects the browser back with a one-time token
 // (the "frontend callback" path — see the SSO spec, Section 3). Exchanges
 // it for a session, then moves on to the dashboard.
@@ -41,10 +44,17 @@ export default function SsoCallbackPage() {
             <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
             <h2 className="text-lg font-bold text-gray-900">Sign-in failed</h2>
             <p className="text-sm text-gray-500 mt-1.5">
-              {error === "token_expired" ? "This sign-in link has expired — go back and try again."
-                : error === "token_already_used" ? "This sign-in link was already used — go back and try again."
-                : "Something went wrong signing you in. Please try again."}
+              {error === "token_expired" ? "This sign-in link has expired."
+                : error === "token_already_used" ? "This sign-in link was already used."
+                : error === "student_not_found" ? "We couldn't find your account — please check with your team."
+                : "Something went wrong signing you in."}
             </p>
+            {FORMS_SSO_LINK_ID && (
+              <a href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
+                className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors mt-4">
+                Try Signing In Again
+              </a>
+            )}
           </>
         ) : (
           <>

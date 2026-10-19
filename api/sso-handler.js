@@ -67,11 +67,13 @@ function underTokenRateLimit(ip) {
   entry.count++;
   return entry.count <= 30;
 }
-// TEMPORARY — logs every real call Forms makes to this endpoint (whatever
-// they send, whatever we return) to its own Firestore collection, so this
-// can be diagnosed directly from the Firebase console instead of needing
-// Forms' own server logs, which aren't available to us. Safe to remove
-// once the integration is confirmed working.
+// TEMPORARY — logs every real call Forms makes to accountsToken, AND every
+// callback exchange attempt (accountsCallback/backendCallback) whether it
+// succeeds or fails, to its own Firestore collection — so the whole
+// mint-token -> redirect -> exchange chain is diagnosable directly from the
+// Firebase console (filter by candidateId/userId) instead of needing Forms'
+// own server logs, which aren't available to us. Safe to remove once the
+// integration is confirmed working end to end.
 async function logTokenAttempt(db, fields) {
   try {
     await db.collection("ssoTokenRequestLog").add({ at: new Date().toISOString(), ...fields });
@@ -135,7 +137,12 @@ async function accountsToken(req, res) {
 
   const token = randomToken();
   const createdAt = new Date();
-  const expiresAt = new Date(createdAt.getTime() + 5 * 60 * 1000);
+  // 15 minutes, not 5 — Forms can show its own interstitial UI between OTP
+  // success and actually redirecting the browser back here, and this token
+  // is single-use regardless, so a longer window costs nothing but gives
+  // real-world redirect delays (slow network, a "continue" tap) more room
+  // before a student lands on "This sign-in link has expired".
+  const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
   await db.collection("ssoLoginTokens").doc(token).set({
     candidateId: candidate.id, studentUid: userId,
     createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), used: false,
@@ -147,12 +154,21 @@ async function accountsToken(req, res) {
 }
 
 // ── POST /api/sso/accounts/callback?auth_token=X ───────────────────────────
-// Frontend-driven exchange, called by the /sso/callback React page.
+// Frontend-driven exchange, called by the /sso/callback React page. Logs to
+// the same ssoTokenRequestLog collection as accountsToken above — a token
+// can be minted successfully there and still fail here (expired/already
+// used/invalid), which otherwise left no trace anywhere diagnosable from
+// the Firebase console.
 async function accountsCallback(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  const db = getDb();
   const authToken = String(req.query?.auth_token || "");
   const result = await exchangeTokenForSession(authToken);
-  if (result.error) return res.status(401).json({ error: result.error });
+  if (result.error) {
+    await logTokenAttempt(db, { outcome: `callback_${result.error}`, authTokenPrefix: authToken.slice(0, 8) });
+    return res.status(401).json({ error: result.error });
+  }
+  await logTokenAttempt(db, { outcome: "callback_success", sessionId: result.sessionId });
   setSessionCookies(res, result.sessionId, result.csrfToken, { secure: SECURE });
   return res.status(200).json({ success: true });
 }
@@ -161,9 +177,14 @@ async function accountsCallback(req, res) {
 // Backend-driven exchange — redirects the browser straight to the dashboard.
 async function backendCallback(req, res) {
   if (req.method !== "GET") return res.status(405).json({ error: "method_not_allowed" });
+  const db = getDb();
   const authToken = String(req.query?.auth_token || "");
   const result = await exchangeTokenForSession(authToken);
-  if (result.error) return res.redirect(302, `/student/portal?sso_error=${encodeURIComponent(result.error)}`);
+  if (result.error) {
+    await logTokenAttempt(db, { outcome: `callback_${result.error}`, authTokenPrefix: authToken.slice(0, 8) });
+    return res.redirect(302, `/student/portal?sso_error=${encodeURIComponent(result.error)}`);
+  }
+  await logTokenAttempt(db, { outcome: "callback_success", sessionId: result.sessionId });
   setSessionCookies(res, result.sessionId, result.csrfToken, { secure: SECURE });
   return res.redirect(302, "/student/dashboard");
 }
