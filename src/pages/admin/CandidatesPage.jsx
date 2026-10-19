@@ -368,22 +368,60 @@ export default function CandidatesPage() {
     const programMap  = new Map(programs.map(p  => [p.name.toLowerCase(),  p.id]));
     const templateMap = new Map(templates.map(t => [t.name.toLowerCase(), t.id]));
 
-    const results = await Promise.all(csvPreview.map(async (row) => {
+    // The same candidate can legitimately appear across many rows — one row
+    // per template/round for them (e.g. row 5 and row 50 are the same
+    // student, each naming a different template) — meant to collapse into
+    // ONE candidate with every template named for them, not a duplicate per
+    // row. Grouped by uid/email BEFORE processing, so this also sidesteps a
+    // real race: without grouping, the concurrent Promise.all below reads
+    // `candidates` as a single stale snapshot, so two rows for a BRAND NEW
+    // candidate would each fail to find the other's not-yet-created doc and
+    // create two separate candidates; two rows for an EXISTING candidate
+    // would each overwrite templateIds with just their own one row's
+    // template, with whichever finishes last silently winning.
+    const groups = new Map();
+    const order = [];
+    csvPreview.forEach((row, i) => {
+      const key = (row.uid && row.uid.toLowerCase()) || (row.email && row.email.toLowerCase()) || `__row_${i}`;
+      if (!groups.has(key)) { groups.set(key, { ...row, templateNames: [] }); order.push(key); }
+      const g = groups.get(key);
+      (row.templateNames || []).forEach(name => { if (!g.templateNames.includes(name)) g.templateNames.push(name); });
+      // First non-blank value for every other field wins — a later row for
+      // the same candidate in a templates-only follow-up CSV typically
+      // leaves name/phone/etc. blank, which must never blank out a value
+      // an earlier row for that same person already supplied.
+      for (const f of ["name", "uid", "email", "phone", "resumeLink", "notes", "programName"]) {
+        if (!g[f] && row[f]) g[f] = row[f];
+      }
+    });
+
+    const results = await Promise.all(order.map(async (key) => {
+      const row = groups.get(key);
       try {
         const { programName, templateNames, ...rest } = row;
-        const resolvedProgram   = programMap.get(programName.toLowerCase()) || "";
-        const resolvedTemplates = (templateNames || [])
-          .map(name => templateMap.get(name.toLowerCase()))
-          .filter(Boolean);
-        const payload  = { ...rest, program: resolvedProgram, templateIds: resolvedTemplates };
+        const resolvedProgram = programName ? (programMap.get(programName.toLowerCase()) || "") : "";
+        const newTemplateIds = [...new Set(
+          templateNames.map(name => templateMap.get(name.toLowerCase())).filter(Boolean)
+        )];
         const existing = findExisting(row);
         if (existing) {
-          if (mode === "replace") {
-            await updateCandidate(existing.id, payload);
-            return { type: "updated", row: { id: existing.id, ...payload } };
-          }
-          return { type: "skipped" };
+          if (mode !== "replace") return { type: "skipped" };
+          // Templates always MERGE onto whatever the candidate already has
+          // — this is explicitly an "assign more templates to existing
+          // students" pass, never a wipe of templates a prior import (or
+          // the admin, by hand) already assigned. Every other field only
+          // overwrites when the CSV actually supplied a value, so a
+          // templates-only follow-up CSV (blank name/phone/program columns)
+          // can't blank out real data on the existing record.
+          const mergedTemplateIds = [...new Set([...(existing.templateIds || []), ...newTemplateIds])];
+          const fieldUpdates = {};
+          for (const [k, v] of Object.entries(rest)) if (v) fieldUpdates[k] = v;
+          if (resolvedProgram) fieldUpdates.program = resolvedProgram;
+          fieldUpdates.templateIds = mergedTemplateIds;
+          await updateCandidate(existing.id, fieldUpdates);
+          return { type: "updated", row: { id: existing.id, ...existing, ...fieldUpdates } };
         } else {
+          const payload = { ...rest, program: resolvedProgram, templateIds: newTemplateIds };
           const createdAt = new Date().toISOString();
           const id = await createCandidate({ ...payload, createdBy: currentUser.uid });
           return { type: "created", row: { id, ...payload, createdAt, createdBy: currentUser.uid } };
@@ -779,7 +817,8 @@ export default function CandidatesPage() {
             <p className="text-sm font-semibold text-gray-700 mb-0.5">Template format</p>
             <p className="text-xs text-gray-400 mb-3">
               Columns: <span className="font-mono">uid, name, phone, email, program, templates, resumeLink, notes</span>
-              <br />Use <span className="font-mono">|</span> to separate multiple templates (e.g. <span className="font-mono">Template A|Template B</span>). Program and template values must match exact names in the system.
+              <br />Use <span className="font-mono">|</span> to separate multiple templates on one row (e.g. <span className="font-mono">Template A|Template B</span>) — or repeat the same uid/email across several rows, one template per row; either way, matching rows for the same candidate are combined. Program and template values must match exact names in the system.
+              <br />Re-uploading with just <span className="font-mono">uid</span>/<span className="font-mono">email</span> + <span className="font-mono">templates</span> filled in (other columns blank) adds those templates to the matching existing candidate without touching anything else — choose "Update existing + add new" below.
             </p>
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={downloadSampleExcel}
