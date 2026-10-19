@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
 import {
@@ -80,8 +81,18 @@ function readCookie(name) {
 }
 
 function Card({ children, className = "", innerRef }) {
-  return <div ref={innerRef} className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md transition-shadow duration-200 ${className}`}>{children}</div>;
+  return <div ref={innerRef} className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${className}`}>{children}</div>;
 }
+
+// Same entrance pattern every admin page already uses (fadeUp + staggered
+// custom index) — the Student Dashboard never had it, so every tab just
+// snapped into place with no motion at all. Applied at the tab-content
+// level (whole tab fades/slides in on switch) and per-card where a list is
+// rendered, for a consistent, polished feel across every tab.
+const fadeUp = {
+  hidden:  { opacity: 0, y: 12 },
+  visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: Math.min(i * 0.05, 0.3), duration: 0.3, ease: "easeOut" } }),
+};
 
 // Per-nav-item accent color — gives each section of the dashboard its own
 // identity (icon chip color, active-state tint) instead of everything
@@ -608,7 +619,11 @@ export default function StudentDashboardPage() {
             <p className="text-sm font-bold text-gray-900 tracking-tight">Interview Coordinator</p>
           </div>
           <div className="px-3 space-y-1 flex-1">
-            {NAV.map(item => <NavButton key={item.id} item={item} />)}
+            {NAV.map((item, i) => (
+              <motion.div key={item.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}>
+                <NavButton item={item} />
+              </motion.div>
+            ))}
           </div>
           <div className="px-3 pb-5 pt-3 border-t border-gray-100 mt-3">
             <div className="flex items-center gap-2.5 px-2.5 py-2 mb-1">
@@ -635,7 +650,7 @@ export default function StudentDashboardPage() {
           <div className="px-8 py-8">
 
             {tab === "overview" && (
-              <div className="space-y-5">
+              <motion.div key="overview" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 px-6 py-7 text-white shadow-lg">
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full pointer-events-none" />
                   <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-white/10 rounded-full pointer-events-none" />
@@ -651,16 +666,18 @@ export default function StudentDashboardPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {overviewStats.map(s => (
-                    <Card key={s.label} className="p-5 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide truncate">{s.label}</p>
-                        <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
-                      </div>
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${s.chip}`}>
-                        <s.icon className="w-4 h-4" />
-                      </div>
-                    </Card>
+                  {overviewStats.map((s, i) => (
+                    <motion.div key={s.label} initial="hidden" animate="visible" custom={i + 1} variants={fadeUp}>
+                      <Card className="p-5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide truncate">{s.label}</p>
+                          <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+                        </div>
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${s.chip}`}>
+                          <s.icon className="w-4 h-4" />
+                        </div>
+                      </Card>
+                    </motion.div>
                   ))}
                 </div>
 
@@ -678,44 +695,46 @@ export default function StudentDashboardPage() {
                     </Card>
                   ) : (
                     <div className="space-y-3">
-                      {upcomingCombined.map(iv => (
-                        <Card key={iv.id} className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${
-                          iv.pending ? ACCENT_BORDER.emerald : ACCENT_BORDER.indigo
-                        }`}>
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                              iv.pending ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"
-                            }`}>
-                              <CalendarClock className="w-5 h-5" />
+                      {upcomingCombined.map((iv, i) => (
+                        <motion.div key={iv.id} initial="hidden" animate="visible" custom={i + 4} variants={fadeUp}>
+                          <Card className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${
+                            iv.pending ? ACCENT_BORDER.emerald : ACCENT_BORDER.indigo
+                          }`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                iv.pending ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"
+                              }`}>
+                                <CalendarClock className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <p className="font-bold text-gray-900">{iv.title}</p>
+                                <p className="text-sm font-semibold text-gray-600 mt-0.5">
+                                  {formatDate(iv.date)} · {iv.time}{iv.duration ? ` · ${iv.duration}m` : ""}
+                                </p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-bold text-gray-900">{iv.title}</p>
-                              <p className="text-sm font-semibold text-gray-600 mt-0.5">
-                                {formatDate(iv.date)} · {iv.time}{iv.duration ? ` · ${iv.duration}m` : ""}
-                              </p>
-                            </div>
-                          </div>
-                          {iv.pending ? (
-                            <span className="text-[11px] font-semibold border px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border-emerald-200 flex-shrink-0">
-                              Slot Booked — Pending Confirmation
-                            </span>
-                          ) : iv.meetLink && (
-                            <a href={iv.meetLink} target="_blank" rel="noreferrer"
-                              className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors flex-shrink-0">
-                              <Video className="w-3.5 h-3.5" /> Join Meet
-                            </a>
-                          )}
-                        </Card>
+                            {iv.pending ? (
+                              <span className="text-[11px] font-semibold border px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border-emerald-200 flex-shrink-0">
+                                Slot Booked — Pending Confirmation
+                              </span>
+                            ) : iv.meetLink && (
+                              <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                                className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors flex-shrink-0">
+                                <Video className="w-3.5 h-3.5" /> Join Meet
+                              </a>
+                            )}
+                          </Card>
+                        </motion.div>
                       ))}
                     </div>
                   )}
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
             {tab === "details" && (
-              <div className="space-y-5 max-w-2xl">
+              <motion.div key="details" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Details</h1>
                 <Card className="p-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -790,11 +809,11 @@ export default function StudentDashboardPage() {
                     </a>
                   )}
                 </Card>
-              </div>
+              </motion.div>
             )}
 
             {tab === "slots" && (
-              <div className="space-y-5">
+              <motion.div key="slots" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
@@ -908,10 +927,11 @@ export default function StudentDashboardPage() {
                        then missed (window closed, nothing ever picked) —
                        each kind gets its own status badge so there's no
                        ambiguity about what still needs action. */}
-                    {bookable.map(inv => {
+                    {bookable.map((inv, i) => {
                       const isExpanded = expandedInviteId === inv.id;
                       return (
-                        <Card key={inv.id} innerRef={isExpanded ? expandedCardRef : undefined} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.violet}`}>
+                        <motion.div key={inv.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}>
+                        <Card innerRef={isExpanded ? expandedCardRef : undefined} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.violet}`}>
                           <button
                             onClick={async () => {
                               if (isExpanded) { setExpandedInviteId(null); return; }
@@ -972,10 +992,12 @@ export default function StudentDashboardPage() {
                             </div>
                           )}
                         </Card>
+                        </motion.div>
                       );
                     })}
-                    {awaiting.map(inv => (
-                      <Card key={inv.id} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.emerald}`}>
+                    {awaiting.map((inv, i) => (
+                      <motion.div key={inv.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}>
+                      <Card className={`overflow-hidden border-l-4 ${ACCENT_BORDER.emerald}`}>
                         <div className="flex items-center justify-between gap-3 px-6 py-4">
                           <div className="flex items-start gap-2 min-w-0">
                             <Clock3 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" />
@@ -992,9 +1014,11 @@ export default function StudentDashboardPage() {
                           </span>
                         </div>
                       </Card>
+                      </motion.div>
                     ))}
-                    {missed.map(inv => (
-                      <Card key={inv.id} className={`overflow-hidden opacity-70 border-l-4 ${ACCENT_BORDER.orange}`}>
+                    {missed.map((inv, i) => (
+                      <motion.div key={inv.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}>
+                      <Card className={`overflow-hidden opacity-70 border-l-4 ${ACCENT_BORDER.orange}`}>
                         <div className="flex items-center justify-between gap-3 px-6 py-4">
                           <div className="min-w-0">
                             <p className="text-sm text-gray-700 font-bold truncate">{inv.round || inv.templateName || "Interview"}</p>
@@ -1007,14 +1031,15 @@ export default function StudentDashboardPage() {
                           </span>
                         </div>
                       </Card>
+                      </motion.div>
                     ))}
                   </>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {tab === "interviews" && (
-              <div className="space-y-5">
+              <motion.div key="interviews" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
                     <ListChecks className="w-5 h-5" />
@@ -1193,11 +1218,11 @@ export default function StudentDashboardPage() {
                     })}
                   </>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {tab === "help" && (
-              <div className="space-y-5">
+              <motion.div key="help" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
                     <LifeBuoy className="w-5 h-5" />
@@ -1309,7 +1334,7 @@ export default function StudentDashboardPage() {
                     })}
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
 
           </div>
