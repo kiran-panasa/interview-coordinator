@@ -6,6 +6,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText, RefreshCw,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
+  CheckCircle2, AlertCircle, XCircle,
 } from "lucide-react";
 import { formatDate } from "../../utils/dates";
 import { getPreInterviewResources } from "../../api/firestore";
@@ -344,6 +345,16 @@ export default function StudentDashboardPage() {
   ]
     .filter(x => x.date)
     .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
+  // Overview's summary cards — "Action Needed" is anything that requires
+  // the candidate to actually do something next: a slot still waiting to
+  // be picked, or a reschedule that was approved and needs a new slot.
+  const rescheduleNeedsSlot = interviews.filter(i => i.rescheduleApproved && !i.rescheduleRequested).length;
+  const overviewStats = [
+    { label: "Scheduled",     value: interviews.filter(i => i.status === "scheduled").length, icon: CalendarClock, chip: "bg-blue-50 text-blue-600" },
+    { label: "Completed",     value: interviews.filter(i => i.status === "completed").length,  icon: CheckCircle2,  chip: "bg-emerald-50 text-emerald-600" },
+    { label: "Action Needed", value: bookable.length + rescheduleNeedsSlot,                    icon: AlertCircle,   chip: "bg-amber-50 text-amber-600" },
+    { label: "Cancelled",     value: interviews.filter(i => i.status === "cancelled").length,  icon: XCircle,       chip: "bg-gray-100 text-gray-500" },
+  ];
   const NavButton = ({ item }) => {
     const Icon = item.icon;
     const active = tab === item.id;
@@ -426,6 +437,20 @@ export default function StudentDashboardPage() {
                       <p className="text-sm text-white/80 mt-0.5">Here's where things stand with your interviews.</p>
                     </div>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {overviewStats.map(s => (
+                    <Card key={s.label} className="p-5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide truncate">{s.label}</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+                      </div>
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 ${s.chip}`}>
+                        <s.icon className="w-4 h-4" />
+                      </div>
+                    </Card>
+                  ))}
                 </div>
 
                 <div>
