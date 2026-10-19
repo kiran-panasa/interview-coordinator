@@ -29,7 +29,14 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
 // who the student is) — plus a date-first picker. Panelist identity is
 // never shown here, same privacy stance as the public SchedulePage.jsx
 // link flow — the candidate only ever sees a date and a time.
-export default function InlineSlotPicker({ invite, onBooked }) {
+//
+// `invite` can be "virtual" — no `.id` yet (self-book's draft preview,
+// see StudentDashboardPage's selfBookDraft) — so nothing gets written to
+// Firestore just for browsing slots. `ensureInvite`, if provided, is
+// called once, right before the actual booking write, to create the real
+// ScheduleInvite and return `{ id, duration }` to book against. Abandoning
+// the picker without confirming a slot then leaves nothing behind at all.
+export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [slots, setSlots] = useState([]);
@@ -95,7 +102,10 @@ export default function InlineSlotPicker({ invite, onBooked }) {
       );
       setSlots(s);
       setBusyWindowsByInterviewer(bw);
-      if (!forceRefresh && computeBookableSlots(invite, s, bw).length === 0) notifyAdminsNoSlotsAvailable(invite);
+      // Only worth emailing admins about once a real invite exists to
+      // reference — a virtual (not-yet-created) draft has no id to attach
+      // the notification/flag to.
+      if (!forceRefresh && invite.id && computeBookableSlots(invite, s, bw).length === 0) notifyAdminsNoSlotsAvailable(invite);
       return { s, bw };
     } catch {
       setSlots([]);
@@ -106,7 +116,7 @@ export default function InlineSlotPicker({ invite, onBooked }) {
   useEffect(() => {
     (async () => {
       setLoading(true);
-      if (invite.status === "sent") {
+      if (invite.id && invite.status === "sent") {
         await updateScheduleInvite(invite.id, { status: "otp_verified" }).catch(() => {});
       }
       await fetchSlots(false);
@@ -126,12 +136,20 @@ export default function InlineSlotPicker({ invite, onBooked }) {
     if (!selected) return;
     setBusy(true);
     try {
+      let realInvite = invite;
+      if (!realInvite.id && ensureInvite) {
+        // Creates the ScheduleInvite only now, right before it's actually
+        // needed — if this fails or the candidate never gets here, nothing
+        // was ever written.
+        realInvite = await ensureInvite();
+        if (!realInvite) { setBusy(false); return; } // ensureInvite already reported its own error
+      }
       await bookSlotForCandidate(
-        selected.interviewerId, selected.slotId, invite.id,
-        selected.date, selected.time, invite.duration || 60
+        selected.interviewerId, selected.slotId, realInvite.id,
+        selected.date, selected.time, realInvite.duration || 60
       );
       setBooked({ date: selected.date, time: selected.time });
-      notifyAdminsBookingPending(invite, selected);
+      notifyAdminsBookingPending(realInvite, selected);
       onBooked?.();
     } catch (e) {
       if (e.message.includes("already booked") || e.message.includes("already passed")) {

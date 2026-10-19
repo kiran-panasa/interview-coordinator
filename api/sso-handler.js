@@ -47,6 +47,7 @@ export default async function handler(req, res) {
       case "otp/verify":        return await otpVerify(req, res);
       case "profile/resume":    return await updateResume(req, res);
       case "interviews/request-reschedule": return await requestReschedule(req, res);
+      case "interviews/self-book-start": return await selfBookStart(req, res);
       case "interviews/self-book": return await selfBook(req, res);
       default:                  return res.status(404).json({ error: "not_found" });
     }
@@ -434,15 +435,89 @@ async function findSkillMatchedInterviewerIds(db, templateSkills) {
   return matched;
 }
 
+// Shared by selfBookStart (read-only preview) and selfBook (actually
+// creates the invite) — validates the template is really assigned to this
+// candidate, and finds any still-open invite for it worth reusing instead
+// of creating a duplicate (not one that's sat unbooked well past its own
+// window — isPastGrace — since that's effectively abandoned and reusing it
+// would just hand back the same dead-end invite forever instead of a fresh
+// 7-day one).
+async function resolveSelfBookTarget(db, session, templateId) {
+  const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
+  if (!candidateSnap.exists) return { error: "candidate_not_found", status: 404 };
+  const candidate = candidateSnap.data();
+  if (!(candidate.templateIds || []).includes(templateId)) {
+    return { error: "template_not_assigned", status: 403 };
+  }
+
+  const existingSnap = await db.collection("scheduleInvites")
+    .where("candidateId", "==", session.candidateId)
+    .where("templateId", "==", templateId)
+    .get();
+  const existing = existingSnap.docs
+    .map(d => ({ id: d.id, ...d.data() }))
+    .find(inv => !["confirmed", "cancelled"].includes(inv.status) && !isPastGrace(inv));
+  if (existing) return { candidate, existing };
+
+  const templateSnap = await db.collection("interviewTemplates").doc(templateId).get();
+  if (!templateSnap.exists) return { error: "template_not_found", status: 404 };
+  const template = templateSnap.data();
+
+  const matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
+  const now = new Date();
+  const dateRangeStart = now.toISOString().slice(0, 10);
+  const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dateRangeEnd = endDate.toISOString().slice(0, 10);
+  const expiresAt = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  return {
+    candidate,
+    draft: {
+      templateId, templateName: template.name, program: template.program || candidate.program || "",
+      round: template.name, duration: template.durationMinutes || 60,
+      dateRangeStart, dateRangeEnd, expiresAt,
+      ...(matchedInterviewerIds ? { interviewerIds: matchedInterviewerIds } : {}),
+    },
+  };
+}
+
+// ── POST /api/sso/interviews/self-book-start ─────────────────────────────────
+// Read-only — creates nothing. Returns everything InlineSlotPicker needs to
+// show live slots for a template the student picked from "Self Book an
+// Interview" (duration/date-range/eligible interviewers), without writing a
+// ScheduleInvite until they actually confirm a slot (see selfBook below and
+// InlineSlotPicker's ensureInvite). Previously the invite was created the
+// moment a template was picked, which meant abandoning the picker without
+// choosing a slot left a dangling "Ready to Book" entry behind forever.
+async function selfBookStart(req, res) {
+  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  const session = await getValidSession(req);
+  if (!session) return res.status(401).json({ error: "no_session" });
+  const templateId = String(req.body?.templateId || "").trim();
+  if (!templateId) return res.status(400).json({ error: "invalid_parameter" });
+
+  const db = getDb();
+  const result = await resolveSelfBookTarget(db, session, templateId);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.existing) {
+    const inv = result.existing;
+    return res.status(200).json({
+      inviteId: inv.id, templateId, templateName: inv.templateName, duration: inv.duration,
+      dateRangeStart: inv.dateRangeStart, dateRangeEnd: inv.dateRangeEnd,
+      interviewerIds: inv.interviewerIds || null,
+    });
+  }
+  return res.status(200).json({ inviteId: null, ...result.draft });
+}
+
 // ── POST /api/sso/interviews/self-book ───────────────────────────────────────
-// Lets a student proactively volunteer for one of their OWN assigned
-// templates (candidate.templateIds — checked server-side, never trusting
-// the client) instead of waiting for an admin-sent invite. Creates a
-// ScheduleInvite the same shape admin-created ones have, pre-verified
-// (status "otp_verified") since the SSO session already proved identity.
-// Scoped to interviewers matching the template's Required Skills when any
-// are set (see findSkillMatchedInterviewerIds) — same interviewerIds field
-// an admin's manual "Select Panelists" picker already uses, so
+// Actually creates the ScheduleInvite — called at CONFIRM time (see
+// InlineSlotPicker's ensureInvite), not when the template is first picked.
+// Creates the same shape admin-created invites have, pre-verified (status
+// "otp_verified") since the SSO session already proved identity. Scoped to
+// interviewers matching the template's Required Skills when any are set
+// (see findSkillMatchedInterviewerIds) — same interviewerIds field an
+// admin's manual "Select Panelists" picker already uses, so
 // getAvailableSlots (src/api/availability.ts) needs no changes to respect it.
 async function selfBook(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
@@ -454,60 +529,31 @@ async function selfBook(req, res) {
   if (!templateId) return res.status(400).json({ error: "invalid_parameter" });
 
   const db = getDb();
-  const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
-  if (!candidateSnap.exists) return res.status(404).json({ error: "candidate_not_found" });
-  const candidate = candidateSnap.data();
-  if (!(candidate.templateIds || []).includes(templateId)) {
-    return res.status(403).json({ error: "template_not_assigned" });
-  }
+  const result = await resolveSelfBookTarget(db, session, templateId);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.existing) return res.status(200).json({ success: true, inviteId: result.existing.id, reused: true });
 
-  // Reuse an existing still-open invite for this template rather than
-  // creating a duplicate if the student already started one — but not one
-  // that's sat unbooked well past its own window (isPastGrace), since that's
-  // effectively abandoned and reusing it would just hand back the same
-  // dead-end invite forever instead of giving the student a fresh 7-day one.
-  const existingSnap = await db.collection("scheduleInvites")
-    .where("candidateId", "==", session.candidateId)
-    .where("templateId", "==", templateId)
-    .get();
-  const existing = existingSnap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .find(inv => !["confirmed", "cancelled"].includes(inv.status) && !isPastGrace(inv));
-  if (existing) {
-    return res.status(200).json({ success: true, inviteId: existing.id, reused: true });
-  }
-
-  const templateSnap = await db.collection("interviewTemplates").doc(templateId).get();
-  if (!templateSnap.exists) return res.status(404).json({ error: "template_not_found" });
-  const template = templateSnap.data();
-
-  const matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
-
+  const { candidate, draft } = result;
   const now = new Date();
-  const dateRangeStart = now.toISOString().slice(0, 10);
-  const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const dateRangeEnd = endDate.toISOString().slice(0, 10);
-  const expiresAt = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
-
   const ref = await db.collection("scheduleInvites").add({
     candidateId: session.candidateId,
     candidateUid: candidate.uid || "",
     candidateEmail: candidate.email,
     candidateName: candidate.name,
-    templateId,
-    templateName: template.name,
-    program: template.program || candidate.program || "",
-    round: template.name,
-    duration: template.durationMinutes || 60,
-    dateRangeStart,
-    dateRangeEnd,
+    templateId: draft.templateId,
+    templateName: draft.templateName,
+    program: draft.program,
+    round: draft.round,
+    duration: draft.duration,
+    dateRangeStart: draft.dateRangeStart,
+    dateRangeEnd: draft.dateRangeEnd,
     status: "otp_verified",
     inviteToken: randomToken(16),
     selfBooked: true,
-    ...(matchedInterviewerIds ? { interviewerIds: matchedInterviewerIds } : {}),
+    ...(draft.interviewerIds ? { interviewerIds: draft.interviewerIds } : {}),
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
-    expiresAt,
+    expiresAt: draft.expiresAt,
   });
 
   return res.status(200).json({ success: true, inviteId: ref.id });

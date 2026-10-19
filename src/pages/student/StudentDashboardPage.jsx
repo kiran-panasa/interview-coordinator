@@ -161,6 +161,10 @@ export default function StudentDashboardPage() {
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
   const [checkingInviteId, setCheckingInviteId] = useState(null);
+  // The active self-book-in-progress draft — no ScheduleInvite exists for
+  // it yet (see handleSelfBook / ensureSelfBookInvite), so abandoning it
+  // without picking a slot leaves nothing behind.
+  const [selfBookDraft, setSelfBookDraft] = useState(null);
   const expandedCardRef = useRef(null);
 
   // The expanded "Ready to Book" card behaves like a popover, not a
@@ -168,7 +172,7 @@ export default function StudentDashboardPage() {
   // it without picking a slot, instead of silently staying open forever
   // (so it's unexpectedly still expanded next time they land back here).
   useEffect(() => {
-    if (tab !== "slots") setExpandedInviteId(null);
+    if (tab !== "slots") { setExpandedInviteId(null); setSelfBookDraft(null); }
   }, [tab]);
   useEffect(() => {
     if (!expandedInviteId) return;
@@ -279,18 +283,24 @@ export default function StudentDashboardPage() {
     setReschedulingId(null);
   };
 
+  // Read-only — fetches what the slot picker needs (duration/date-range/
+  // eligible interviewers) without creating a ScheduleInvite. If one's
+  // already in progress for this template (e.g. a previous session's draft
+  // that did get confirmed, or got interrupted after ensureSelfBookInvite
+  // ran), self-book-start hands back that real invite instead so it's
+  // resumed rather than duplicated.
   const handleSelfBook = async (templateId) => {
     setBookingTemplateId(templateId);
     try {
-      const res = await fetch("/api/sso/interviews/self-book", {
+      const res = await fetch("/api/sso/interviews/self-book-start", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ templateId }),
       });
       const json = await res.json();
       if (res.ok) {
-        await loadDashboard({ expandInviteId: json.inviteId });
+        setSelfBookDraft(json);
         setTab("slots");
         setShowTemplatePicker(false);
         setNewBookingTemplateId("");
@@ -301,6 +311,30 @@ export default function StudentDashboardPage() {
       alert("Couldn't start booking for this template. Please try again.");
     }
     setBookingTemplateId(null);
+  };
+
+  // Passed to InlineSlotPicker as `ensureInvite` — only called right before
+  // the candidate actually confirms a slot, so a draft that's never
+  // confirmed never creates a ScheduleInvite at all.
+  const ensureSelfBookInvite = async () => {
+    if (!selfBookDraft) return null;
+    if (selfBookDraft.inviteId) {
+      return { id: selfBookDraft.inviteId, duration: selfBookDraft.duration, round: selfBookDraft.templateName, candidateName: data?.candidate?.name };
+    }
+    try {
+      const res = await fetch("/api/sso/interviews/self-book", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
+        body: JSON.stringify({ templateId: selfBookDraft.templateId }),
+      });
+      const json = await res.json();
+      if (!res.ok) { alert("Couldn't confirm this booking. Please try again."); return null; }
+      return { id: json.inviteId, duration: selfBookDraft.duration, round: selfBookDraft.templateName, candidateName: data?.candidate?.name };
+    } catch {
+      alert("Couldn't confirm this booking. Please try again.");
+      return null;
+    }
   };
 
   if (loading) {
@@ -331,9 +365,13 @@ export default function StudentDashboardPage() {
     .slice()
     .sort((a, b) => `${a.scheduledDate}T${a.scheduledTime || ""}`.localeCompare(`${b.scheduledDate}T${b.scheduledTime || ""}`));
   // Still within its booking window and not yet picked — the only kind
-  // that's actually expandable into a slot picker.
+  // that's actually expandable into a slot picker. Self-booked invites are
+  // excluded here — they're never left sitting around unbooked anymore
+  // (see selfBookDraft/ensureSelfBookInvite), so this list is Nudge-sent
+  // invites only; a self-booked one only ever shows up once it's actually
+  // "awaiting" below.
   const todayStr = todayIso();
-  const bookableAll = pendingInvites.filter(i => ["sent", "otp_verified"].includes(i.status));
+  const bookableAll = pendingInvites.filter(i => ["sent", "otp_verified"].includes(i.status) && !i.selfBooked);
   const bookable = bookableAll.filter(i => !i.dateRangeEnd || i.dateRangeEnd >= todayStr);
   // Window ran out before the candidate picked a slot — shown as "Missed",
   // no slot list, nothing left to act on.
@@ -664,12 +702,37 @@ export default function StudentDashboardPage() {
                   );
                 })()}
 
+                {/* The active self-book draft — no ScheduleInvite exists
+                   for this yet (see ensureSelfBookInvite), so Cancel or
+                   navigating away (useEffect above) leaves nothing behind. */}
+                {selfBookDraft && (
+                  <Card className={`overflow-hidden border-l-4 ${ACCENT_BORDER.emerald}`}>
+                    <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-50">
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900 truncate">{selfBookDraft.templateName}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Pick a slot below to confirm — nothing is booked until you do.</p>
+                      </div>
+                      <button onClick={() => setSelfBookDraft(null)}
+                        className="text-xs font-semibold text-gray-400 hover:text-gray-600 px-2.5 py-1 rounded-lg hover:bg-gray-50 flex-shrink-0 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                    <div className="px-6 pb-6 pt-1">
+                      <InlineSlotPicker
+                        invite={{ ...selfBookDraft, id: selfBookDraft.inviteId }}
+                        ensureInvite={ensureSelfBookInvite}
+                        onBooked={() => window.location.reload()}
+                      />
+                    </div>
+                  </Card>
+                )}
+
                 {templates.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
                     <CalendarPlus className="w-8 h-8 text-gray-200 mb-2" />
                     <p className="text-sm text-gray-400">No templates assigned yet — check back later or contact the admin team.</p>
                   </Card>
-                ) : bookable.length === 0 && awaiting.length === 0 && missed.length === 0 ? (
+                ) : bookable.length === 0 && awaiting.length === 0 && missed.length === 0 && !selfBookDraft ? (
                   // Only worth a card of its own when there's an in-progress
                   // template with nothing actionable (e.g. awaiting admin
                   // confirmation covers it) — if nothing's in progress at

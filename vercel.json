@@ -10,6 +10,7 @@
     { "source": "/api/sso/otp/verify",        "destination": "/api/sso-handler?route=otp/verify" },
     { "source": "/api/sso/profile/resume",    "destination": "/api/sso-handler?route=profile/resume" },
     { "source": "/api/sso/interviews/request-reschedule", "destination": "/api/sso-handler?route=interviews/request-reschedule" },
+    { "source": "/api/sso/interviews/self-book-start", "destination": "/api/sso-handler?route=interviews/self-book-start" },
     { "source": "/api/sso/interviews/self-book", "destination": "/api/sso-handler?route=interviews/self-book" },
     {
       "source": "/(.*)",
