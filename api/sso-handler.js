@@ -261,12 +261,17 @@ async function me(req, res) {
     .map(d => {
       const iv = d.data();
       return {
-        id: d.id, templateName: iv.templateName || "", round: iv.round || "",
+        id: d.id, candidateName: candidate.name, templateName: iv.templateName || "", round: iv.round || "",
         scheduledDate: iv.scheduledDate || "", scheduledTime: iv.scheduledTime || "",
         duration: iv.duration || 60, status: iv.status, meetLink: iv.meetLink || "",
         rescheduleRequested: !!iv.rescheduleRequested,
         rescheduleApproved: !!iv.rescheduleApproved,
         aiReport: iv.aiReport || null,
+        // Only the two summary numbers — not the full feedback blob (raw
+        // per-domain interviewer comments), which isn't meant for the
+        // candidate to see directly.
+        integrityScore: iv.feedback?.integrityScore ?? null,
+        finalScore: iv.feedback?.finalVerdict ?? null,
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
@@ -457,7 +462,21 @@ async function resolveSelfBookTarget(db, session, templateId) {
   const existing = existingSnap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .find(inv => !["confirmed", "cancelled"].includes(inv.status) && !isPastGrace(inv));
-  if (existing) return { candidate, existing };
+  if (existing) {
+    // Self Book is the candidate's escape hatch for "none of the dates on
+    // offer actually work for me" — including when the existing invite is
+    // a Nudge-sent one with a narrower window than self-book's usual 7
+    // days. Widen that SAME invite's dateRangeEnd rather than creating a
+    // second, parallel invite for the same template (which would leave two
+    // open requests for one round once either got booked).
+    const minEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    if (existing.dateRangeEnd && existing.dateRangeEnd < minEnd) {
+      await db.collection("scheduleInvites").doc(existing.id)
+        .update({ dateRangeEnd: minEnd, updatedAt: new Date().toISOString() });
+      existing.dateRangeEnd = minEnd;
+    }
+    return { candidate, existing };
+  }
 
   const templateSnap = await db.collection("interviewTemplates").doc(templateId).get();
   if (!templateSnap.exists) return { error: "template_not_found", status: 404 };
@@ -482,13 +501,16 @@ async function resolveSelfBookTarget(db, session, templateId) {
 }
 
 // ── POST /api/sso/interviews/self-book-start ─────────────────────────────────
-// Read-only — creates nothing. Returns everything InlineSlotPicker needs to
-// show live slots for a template the student picked from "Self Book an
+// Creates no NEW invite — returns everything InlineSlotPicker needs to show
+// live slots for a template the student picked from "Self Book an
 // Interview" (duration/date-range/eligible interviewers), without writing a
-// ScheduleInvite until they actually confirm a slot (see selfBook below and
-// InlineSlotPicker's ensureInvite). Previously the invite was created the
-// moment a template was picked, which meant abandoning the picker without
-// choosing a slot left a dangling "Ready to Book" entry behind forever.
+// fresh ScheduleInvite until they actually confirm a slot (see selfBook
+// below and InlineSlotPicker's ensureInvite). Previously the invite was
+// created the moment a template was picked, which meant abandoning the
+// picker without choosing a slot left a dangling "Ready to Book" entry
+// behind forever. If the template already has an existing invite (e.g. a
+// Nudge-sent one with a narrower window), this CAN widen that invite's
+// dateRangeEnd — see resolveSelfBookTarget — but never creates a new doc.
 async function selfBookStart(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
   const session = await getValidSession(req);

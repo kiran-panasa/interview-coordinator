@@ -304,6 +304,11 @@ export default function StudentDashboardPage() {
         setTab("slots");
         setShowTemplatePicker(false);
         setNewBookingTemplateId("");
+        // If this template already had a Nudge invite, self-book-start just
+        // widened its date range server-side — refresh so that invite's
+        // "Book between" card (if it's also shown in the Ready to Book list)
+        // reflects the new range immediately instead of looking stale.
+        loadDashboard();
       } else {
         alert("Couldn't start booking for this template. Please try again.");
       }
@@ -392,7 +397,13 @@ export default function StudentDashboardPage() {
   // vanished from the tab — same template still blocked from a fresh
   // "Find Slots" by templatesInProgress, with nothing to show in its place.
   const awaiting = pendingInvites.filter(i => i.status === "slot_selected" || i.status === "pending_confirmation");
-  const templatesInProgress = new Set(pendingInvites.map(i => i.templateId).filter(Boolean));
+  // Only counts SELF-booked invites — a Nudge-sent one no longer blocks
+  // Self Book for the same template. Clicking Self Book on a template that
+  // already has a Nudge invite widens that same invite's date range
+  // instead of creating a duplicate (see selfBookStart/resolveSelfBookTarget
+  // in api/sso-handler.js) — this is deliberately the candidate's escape
+  // hatch for "none of the dates the admin offered actually work for me".
+  const templatesInProgress = new Set(pendingInvites.filter(i => i.selfBooked).map(i => i.templateId).filter(Boolean));
   // Overview's "Upcoming" list — confirmed interviews plus slots already
   // picked but still waiting on admin confirmation, merged into one
   // soonest-first list. A slot the candidate already picked (via Nudge or
@@ -1004,14 +1015,24 @@ export default function StudentDashboardPage() {
                             </Card>
                           ) : (
                             <Card key={iv.id} className={`p-5 border-l-4 ${ACCENT_BORDER[accent]}`}>
-                              <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div className="opacity-80">
                                   <p className="font-semibold text-gray-700 text-sm">{interviewTitle(iv)}</p>
                                   {iv.scheduledDate && (
                                     <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+                                  {iv.finalScore != null && (
+                                    <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                                      Final Score: {Number(iv.finalScore).toFixed(1)}/5
+                                    </span>
+                                  )}
+                                  {iv.integrityScore != null && (
+                                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                      Integrity: {Number(iv.integrityScore).toFixed(1)}/5
+                                    </span>
+                                  )}
                                   {iv.aiReport && (
                                     <button onClick={() => setAiReportInterview(iv)}
                                       className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-brand-200 bg-brand-50 px-2.5 py-1 rounded-full hover:bg-brand-100 transition-colors">
