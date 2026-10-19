@@ -5,39 +5,13 @@ import { useAuth } from "../../AuthContext";
 import { useStudentQueries } from "../../hooks/subscriptions";
 import { replyToQueryAsAdmin, updateQueryStatus } from "../../api/studentQueries";
 import { formatDateTime } from "../../utils/dates";
-import { callAppsScript } from "../../lib/appsScript";
 import Button from "../../components/Button";
 import Toast from "../../components/Toast";
-
-const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
-const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
 };
-
-// Students have no push/in-app notification channel while they're off the
-// dashboard (no persistent login, no device token) — email is the only way
-// to actually reach them when an admin replies, same reasoning as every
-// other candidate-facing event in this app (booking confirmations, no-
-// slots-available) already going out by email instead of staying purely
-// in-app. Best-effort — a failed send never blocks the reply itself from
-// going through.
-async function notifyCandidateOfReply(q, replyText) {
-  if (!APPS_SCRIPT_URL || !q.candidateEmail) return;
-  try {
-    await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-      action: "sendEmail",
-      subject: `Reply to your query: ${CATEGORY_META[q.category]?.label || "Support"}`,
-      body:
-        "Hi {{name}},\n\n" +
-        `The admin team replied to your query:\n\n"${replyText}"\n\n` +
-        `Sign in to your dashboard to view the full conversation or reply:\n${window.location.origin}/student/portal\n\n— NxtWave Interview Coordinator`,
-      recipients: [{ email: q.candidateEmail, name: q.candidateName || "" }],
-    });
-  } catch { /* best-effort */ }
-}
 
 // Mirrors QUERY_CATEGORIES in api/sso-handler.js's createQuery — label/icon
 // pair for each, so a category never shows as a bare machine-readable key.
@@ -73,9 +47,7 @@ function QueryThread({ q, onReplied, setToast }) {
     setSending(true);
     try {
       const byName = userProfile?.displayName || userProfile?.email || "Admin";
-      const text = reply.trim();
-      await replyToQueryAsAdmin(q.id, text, byName);
-      notifyCandidateOfReply(q, text);
+      await replyToQueryAsAdmin(q.id, reply.trim(), byName);
       setReply("");
       onReplied?.();
     } catch (e) {
