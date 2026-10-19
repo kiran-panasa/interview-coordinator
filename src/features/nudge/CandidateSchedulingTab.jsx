@@ -145,6 +145,22 @@ export default function CandidateSchedulingTab({
     return order.map(name => ({ name, members: buckets.get(name) }));
   }, [activeInterviewers, vendorNameById, panelistSearch]);
 
+  // Soft default, not an enforced restriction — self-book (api/sso-handler.js's
+  // findSkillMatchedInterviewerIds) already auto-scopes to interviewers whose
+  // skills cover every skill the template requires; Nudge had no equivalent
+  // at all, leaving it entirely to the admin to remember who's qualified.
+  // This surfaces the same match as a one-click suggestion in the panelist
+  // picker instead, so the admin can still hand-pick or override for
+  // exceptions (e.g. a trusted interviewer working outside their tagged
+  // skills) rather than being hard-blocked from choosing anyone else.
+  const selectedTemplateSkills = templates.find(t => t.id === filterTemplate)?.skills || [];
+  const skillMatchedInterviewers = useMemo(() => {
+    if (!selectedTemplateSkills.length) return [];
+    return activeInterviewers.filter(u => selectedTemplateSkills.every(s => (u.skills || []).includes(s)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeInterviewers, selectedTemplateSkills.join(",")]);
+  const skillMatchedIds = useMemo(() => new Set(skillMatchedInterviewers.map(u => u.id)), [skillMatchedInterviewers]);
+
   const togglePanelist = (id) => setPanelistIds(prev =>
     prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
   );
@@ -830,6 +846,17 @@ export default function CandidateSchedulingTab({
               {panelistIds.length ? "Edit selection" : "Choose panelists…"}
             </button>
           </div>
+          {skillMatchedInterviewers.length > 0 && (
+            <div className="flex items-center justify-between gap-3 bg-violet-50 border border-violet-200 rounded-lg px-3 py-2 mb-2">
+              <p className="text-xs text-violet-700">
+                <span className="font-semibold">{skillMatchedInterviewers.length} interviewer{skillMatchedInterviewers.length !== 1 ? "s" : ""}</span> match this template's required skills.
+              </p>
+              <button type="button" onClick={() => setPanelistIds(skillMatchedInterviewers.map(u => u.id))}
+                className="text-xs font-semibold text-violet-700 hover:underline flex-shrink-0">
+                Use matched panelists
+              </button>
+            </div>
+          )}
           <div
             onClick={() => setPanelistPickerOpen(true)}
             className="min-h-[42px] w-full max-w-2xl border border-gray-200 rounded-xl px-3 py-2 flex flex-wrap gap-1.5 cursor-pointer bg-white hover:border-gray-300 transition-colors"
@@ -882,10 +909,15 @@ export default function CandidateSchedulingTab({
                   <label key={u.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 cursor-pointer transition-colors">
                     <input type="checkbox" checked={panelistIds.includes(u.id)} onChange={() => togglePanelist(u.id)}
                       className="accent-brand-600 flex-shrink-0" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm text-gray-900 truncate">{u.displayName || u.email}</p>
                       <p className="text-xs text-gray-400 truncate">{u.email}</p>
                     </div>
+                    {skillMatchedIds.has(u.id) && (
+                      <span className="text-[10px] font-semibold text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        Skill match
+                      </span>
+                    )}
                   </label>
                 ))}
               </div>
