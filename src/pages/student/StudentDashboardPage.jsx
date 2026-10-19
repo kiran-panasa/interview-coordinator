@@ -52,8 +52,6 @@ const STATUS_STYLE = {
 // rather than kept as its own tab — from the candidate's side both mean the
 // same thing ("this round is being re-arranged, a new slot is coming"), just
 // triggered from different sides (candidate request vs interviewer decline).
-// "Missed" (no_show) has no tab at all — a student who didn't show up
-// already knows; it's not something they need a dedicated view to track.
 const INTERVIEW_SECTIONS = [
   { key: "pending_confirmation", label: "Pending Confirmation", match: i => i.status === "pending_confirmation" },
   { key: "pending_acceptance", label: "Scheduling In Progress", match: i => i.status === "pending_acceptance" },
@@ -62,6 +60,7 @@ const INTERVIEW_SECTIONS = [
   { key: "reschedule_requested", label: "Reschedule Requested", match: i => i.status === "scheduled" && i.rescheduleRequested },
   { key: "reschedule_approved", label: "Reschedule Approved", match: i => (i.status === "scheduled" && i.rescheduleApproved && !i.rescheduleRequested) || i.status === "declined" },
   { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
+  { key: "no_show",        label: "Missed",               match: i => i.status === "no_show" },
   { key: "cancelled",      label: "Cancelled",           match: i => i.status === "cancelled" },
 ];
 // Sections whose interviews can still be acted on (Join Meet / Request
@@ -110,6 +109,7 @@ const ACCENT_BORDER = {
   orange:  "border-l-orange-400",
   blue:    "border-l-blue-500",
   gray:    "border-l-gray-300",
+  rose:    "border-l-rose-400",
 };
 // Left-border accent per My Interviews section, matched to that section's
 // status badge color so the two reinforce each other at a glance.
@@ -121,6 +121,7 @@ const SECTION_ACCENT = {
   reschedule_requested:   "amber",
   reschedule_approved:    "sky",
   partially_completed:    "sky",
+  no_show:                 "rose",
   cancelled:               "gray",
 };
 // Each My Interviews quick-view tab gets its own color so the band reads
@@ -134,6 +135,7 @@ const TAB_COLORS = {
   reschedule_requested:   { text: "text-orange-600",  border: "border-orange-600",  badgeBg: "bg-orange-100",  badgeText: "text-orange-700" },
   reschedule_approved:    { text: "text-sky-600",     border: "border-sky-600",     badgeBg: "bg-sky-100",     badgeText: "text-sky-700" },
   partially_completed:    { text: "text-teal-600",    border: "border-teal-600",    badgeBg: "bg-teal-100",    badgeText: "text-teal-700" },
+  no_show:                { text: "text-rose-600",    border: "border-rose-600",    badgeBg: "bg-rose-100",    badgeText: "text-rose-700" },
   cancelled:              { text: "text-gray-500",    border: "border-gray-400",    badgeBg: "bg-gray-200",    badgeText: "text-gray-600" },
 };
 
