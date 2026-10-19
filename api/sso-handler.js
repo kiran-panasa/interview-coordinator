@@ -267,11 +267,13 @@ async function me(req, res) {
         rescheduleRequested: !!iv.rescheduleRequested,
         rescheduleApproved: !!iv.rescheduleApproved,
         aiReport: iv.aiReport || null,
-        // Only the two summary numbers — not the full feedback blob (raw
-        // per-domain interviewer comments), which isn't meant for the
-        // candidate to see directly.
+        // The two summary numbers, plus the Integrity checklist's own
+        // answers (for the detailed breakdown popup) — not the rest of the
+        // feedback blob (raw per-domain interviewer comments on technical
+        // performance etc.), which isn't meant for the candidate to see.
         integrityScore: iv.feedback?.integrityScore ?? null,
         finalScore: iv.feedback?.finalVerdict ?? null,
+        integrityAnswers: iv.feedback?.domains?.integrity || null,
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));

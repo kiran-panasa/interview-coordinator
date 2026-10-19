@@ -12,6 +12,7 @@ import { formatDate, parseInterviewStart } from "../../utils/dates";
 import { getPreInterviewResources } from "../../api/firestore";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
 import AiReportModal from "../../features/interviews/AiReportModal";
+import IntegrityDetailModal from "../../features/interviews/IntegrityDetailModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import Button from "../../components/Button";
 
@@ -156,6 +157,7 @@ export default function StudentDashboardPage() {
   const [newInviteIds, setNewInviteIds] = useState(new Set());
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
+  const [integrityInterview, setIntegrityInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
   const [newBookingTemplateId, setNewBookingTemplateId] = useState("");
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
@@ -1029,9 +1031,10 @@ export default function StudentDashboardPage() {
                                     </span>
                                   )}
                                   {iv.integrityScore != null && (
-                                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                    <button onClick={() => setIntegrityInterview(iv)}
+                                      className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors">
                                       Integrity: {Number(iv.integrityScore).toFixed(1)}/5
-                                    </span>
+                                    </button>
                                   )}
                                   {iv.aiReport && (
                                     <button onClick={() => setAiReportInterview(iv)}
@@ -1064,6 +1067,10 @@ export default function StudentDashboardPage() {
         status={null}
         readOnly
         onClose={() => setAiReportInterview(null)}
+      />
+      <IntegrityDetailModal
+        interview={integrityInterview}
+        onClose={() => setIntegrityInterview(null)}
       />
     </ErrorBoundary>
   );
