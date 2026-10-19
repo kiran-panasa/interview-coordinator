@@ -610,21 +610,33 @@ export default function StudentDashboardPage() {
                       <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or self-book one of your assigned templates.</p>
                     </div>
                   </div>
-                  {/* Self-book is opt-in via this button rather than an
-                     always-visible card — a single template jumps straight
+                  {/* Always visible rather than silently disappearing once
+                     every assigned template already has an invite in
+                     progress — a single remaining template jumps straight
                      to Find Slots, more than one reveals the template
-                     picker below instead of a modal. */}
-                  {templates.some(t => !templatesInProgress.has(t.id)) && (
-                    <Button variant="primary" className="flex-shrink-0" disabled={bookingTemplateId != null}
-                      onClick={() => {
-                        const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
-                        if (notStarted.length === 1) { handleSelfBook(notStarted[0].id); return; }
-                        setShowTemplatePicker(v => !v);
-                      }}>
-                      <CalendarPlus className="w-4 h-4 mr-1.5 inline" />
-                      {bookingTemplateId ? "Finding Slots…" : "Self Book an Interview"}
-                    </Button>
-                  )}
+                     picker below instead of a modal, and none left just
+                     explains why instead of looking like the button never
+                     existed. */}
+                  {(() => {
+                    const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
+                    const disabled = bookingTemplateId != null || notStarted.length === 0;
+                    return (
+                      <Button variant="primary" className="flex-shrink-0" disabled={disabled}
+                        title={notStarted.length === 0
+                          ? (templates.length === 0
+                              ? "No templates assigned to you yet"
+                              : "All your assigned templates already have a booking in progress")
+                          : undefined}
+                        onClick={() => {
+                          if (notStarted.length === 0) return;
+                          if (notStarted.length === 1) { handleSelfBook(notStarted[0].id); return; }
+                          setShowTemplatePicker(v => !v);
+                        }}>
+                        <CalendarPlus className="w-4 h-4 mr-1.5 inline" />
+                        {bookingTemplateId ? "Finding Slots…" : "Self Book an Interview"}
+                      </Button>
+                    );
+                  })()}
                 </div>
 
                 {showTemplatePicker && (() => {
