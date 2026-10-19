@@ -111,14 +111,26 @@ async function accountsToken(req, res) {
   }
 
   const snap = await db.collection("candidates").where("uid", "==", userId).get();
-  if (snap.size !== 1) {
+  let candidate = snap.size === 1 ? snap.docs[0] : null;
+  let fallbackUsed = false;
+  // Firestore's "==" is exact — a UID saved with invisible leading/trailing
+  // whitespace, or differing only in case, looks identical to an admin on
+  // screen but silently never matches here. Only runs on the already-slow
+  // not-found path (never the common case), and only trusts the fallback
+  // when it resolves to exactly one candidate, same as the exact match.
+  if (!candidate && snap.size === 0) {
+    const allSnap = await db.collection("candidates").get();
+    const loose = allSnap.docs.filter(d => (d.data().uid || "").trim().toLowerCase() === userId.toLowerCase());
+    if (loose.length === 1) { candidate = loose[0]; fallbackUsed = true; }
+  }
+  if (!candidate) {
     await logTokenAttempt(db, { outcome: "student_not_found", userId, matchCount: snap.size });
     return res.status(404).json({
       error: "student_not_found",
       message: "No access — you're not registered. Please connect with your team.",
     });
   }
-  const candidate = snap.docs[0];
+  if (fallbackUsed) await logTokenAttempt(db, { outcome: "success_via_loose_uid_match", userId, candidateId: candidate.id });
 
   const token = randomToken();
   const createdAt = new Date();

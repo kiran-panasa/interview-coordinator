@@ -234,18 +234,23 @@ export default function CandidatesPage() {
 
   const handleSave = async () => {
     if (!form.name.trim()) return setToast({ message: "Name is required.", type: "error" });
+    // Untrimmed whitespace here is invisible in the UI but breaks the exact
+    // Firestore match (candidates.uid === the Forms/Accounts user_id) that
+    // the SSO login flow depends on — a pasted UID with a trailing space
+    // looks identical on screen yet silently never logs the student in.
+    const cleanForm = { ...form, uid: form.uid.trim(), name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim() };
     setSaving(true);
     try {
       if (editTarget) {
-        await updateCandidate(editTarget.id, form);
-        patchFullList(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...form } : c));
-        setPageItems(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...form } : c)
+        await updateCandidate(editTarget.id, cleanForm);
+        patchFullList(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...cleanForm } : c));
+        setPageItems(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...cleanForm } : c)
           .filter(c => c.id !== editTarget.id || activeProgram === "all" || c.program === activeProgram));
         setToast({ message: "Candidate updated." });
       } else {
         const createdAt = new Date().toISOString();
-        const id = await createCandidate({ ...form, createdBy: currentUser.uid });
-        const newCandidate = { id, ...form, createdAt, createdBy: currentUser.uid };
+        const id = await createCandidate({ ...cleanForm, createdBy: currentUser.uid });
+        const newCandidate = { id, ...cleanForm, createdAt, createdBy: currentUser.uid };
         patchFullList(prev => [newCandidate, ...prev]);
         // Only show it in the scoped page view if it actually belongs on
         // the tab currently being viewed.
@@ -659,6 +664,9 @@ export default function CandidatesPage() {
             <div>
               <label className={labelCls}>UID</label>
               <input value={form.uid} onChange={e => setField("uid", e.target.value)} placeholder="e.g. STU-2024-001" className={inputCls} />
+              <p className="text-[11px] text-gray-400 mt-1">
+                If this candidate will log in via the Forms/SSO link, this must exactly match their Accounts user ID — not a roll number you choose yourself.
+              </p>
             </div>
             <div>
               <label className={labelCls}>Full Name *</label>
