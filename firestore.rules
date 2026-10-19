@@ -81,15 +81,28 @@ service cloud.firestore {
       allow write: if hadFullAccessBefore() || request.auth.uid == interviewerId;
     }
 
+    // Student support queries — unlike every other collection, an anonymous
+    // (no-profile) session must NOT get access here. The Student Dashboard
+    // never writes this collection directly: creating a query and replying
+    // to one both go through the SSO session-authenticated backend
+    // (api/sso-handler.js's queries/create and queries/reply, Admin SDK,
+    // bypasses rules entirely), specifically so one student can't read or
+    // write another's queries via the client SDK. Only staff with an actual
+    // privileged role get direct read/write (the admin UI, QueriesPage.jsx).
+    match /studentQueries/{queryId} {
+      allow read, write: if isPrivilegedRole();
+    }
+
     // Everything else — unchanged from before: any signed-in user, full
-    // access. "users", "interviews", and "availability" are carved out above
-    // (Firestore evaluates every matching rule and allows if ANY of them
-    // does, so this collection list must stay in sync with the match blocks
-    // above or a new vendor-sensitive collection would silently fall through
-    // to this permissive default instead of being scoped).
+    // access. "users", "interviews", "availability", and "studentQueries"
+    // are carved out above (Firestore evaluates every matching rule and
+    // allows if ANY of them does, so this collection list must stay in sync
+    // with the match blocks above or a new sensitive collection would
+    // silently fall through to this permissive default instead of being
+    // scoped).
     match /{collection}/{document=**} {
       allow read, write: if request.auth != null
-        && !(collection in ["users", "interviews", "availability"]);
+        && !(collection in ["users", "interviews", "availability", "studentQueries"]);
     }
   }
 }
