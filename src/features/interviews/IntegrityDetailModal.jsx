@@ -3,16 +3,34 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import Modal from "../../components/Modal";
 import { getInterviewIntegrity } from "../../api/interviewIntegrity";
 
-// Same 3-option scale every Interview Integrity checklist field uses
-// (INTEGRITY_OPTIONS in utils/templateEngine.js) — scores are fixed
-// (5/3/1), independent of whatever admins have renamed the field labels
-// to, so this is safe to keep in sync with that convention rather than
-// re-deriving it from the live settings doc.
-const SCORE_STYLE = {
-  5: { cls: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  3: { cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  1: { cls: "bg-red-50 text-red-700 border-red-200" },
-};
+// Admins can rename/rescale each field's options freely (Templates page's
+// "Interview Integrity" tab) — assuming a fixed score->color mapping (e.g.
+// 5=green) broke the moment a field's options didn't literally use 5/3/1,
+// which is exactly what showed every "Yes" (the actually-good answer) in
+// red. Color is derived relative to that FIELD's own option set instead —
+// its highest score is always green, lowest is always red, anything in
+// between is amber — so it reads correctly no matter what scores/labels an
+// admin configures.
+function colorForOption(field, score) {
+  const scores = (field.options || []).map(o => Number(o.score)).filter(n => !isNaN(n));
+  if (!scores.length || score == null) return "bg-gray-100 text-gray-500 border-gray-200";
+  const max = Math.max(...scores);
+  const min = Math.min(...scores);
+  const s = Number(score);
+  if (max === min) return "bg-amber-50 text-amber-700 border-amber-200";
+  if (s === max) return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (s === min) return "bg-red-50 text-red-700 border-red-200";
+  return "bg-amber-50 text-amber-700 border-amber-200";
+}
+
+// Overall rating banner — tiered by the actual score instead of a fixed
+// color, so a perfect 5.0 reads as reassuring green rather than the same
+// amber/orange tone used for a middling or poor score.
+function bannerGradient(score) {
+  if (score >= 4) return "from-emerald-600 to-teal-600";
+  if (score >= 2.5) return "from-amber-600 to-orange-600";
+  return "from-red-600 to-rose-600";
+}
 
 export default function IntegrityDetailModal({ interview, onClose }) {
   const [domainFields, setDomainFields] = useState(null);
@@ -41,7 +59,7 @@ export default function IntegrityDetailModal({ interview, onClose }) {
       ) : (
         <div className="space-y-4">
           {interview?.integrityScore != null && (
-            <div className="bg-gradient-to-r from-amber-600 to-orange-600 rounded-2xl p-5 text-white shadow-popover">
+            <div className={`bg-gradient-to-r ${bannerGradient(Number(interview.integrityScore))} rounded-2xl p-5 text-white shadow-popover`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
@@ -68,7 +86,7 @@ export default function IntegrityDetailModal({ interview, onClose }) {
                   <div key={f.id} className="flex items-center justify-between gap-3 bg-gray-50 rounded-xl px-4 py-3">
                     <p className="text-sm text-gray-700">{f.label}</p>
                     {option ? (
-                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${SCORE_STYLE[option.score]?.cls || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                      <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border flex-shrink-0 ${colorForOption(f, option.score)}`}>
                         {option.label}
                       </span>
                     ) : (

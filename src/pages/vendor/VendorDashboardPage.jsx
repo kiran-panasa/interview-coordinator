@@ -322,7 +322,7 @@ export default function VendorDashboardPage() {
                                 ) : (
                                   <div className="flex flex-wrap gap-1 max-w-[320px]">
                                     {skillNames.map(name => (
-                                      <span key={name} className="text-[10px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                                      <span key={name} className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">
                                         {name}
                                       </span>
                                     ))}
