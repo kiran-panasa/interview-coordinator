@@ -36,6 +36,7 @@ const MyInterviewsPage     = lazy(() => import("./pages/interviewer/MyInterviews
 const InterviewDetail      = lazy(() => import("./pages/interviewer/InterviewDetail"));
 const InterviewQuestions   = lazy(() => import("./pages/interviewer/InterviewQuestions"));
 const AvailabilityPage     = lazy(() => import("./pages/interviewer/AvailabilityPage"));
+const InterviewerLeaderboardPage = lazy(() => import("./pages/interviewer/LeaderboardPage"));
 const ProfilePage          = lazy(() => import("./pages/interviewer/ProfilePage"));
 const NotificationsPage    = lazy(() => import("./pages/interviewer/NotificationsPage"));
 const InterviewerAboutPage = lazy(() => import("./pages/interviewer/AboutPage"));
@@ -161,6 +162,7 @@ function AppRoutes() {
           <Route path="interviews/:id" element={<InterviewDetail />} />
           <Route path="interviews/:id/questions" element={<InterviewQuestions />} />
           <Route path="availability" element={<AvailabilityPage />} />
+          <Route path="leaderboard"    element={<InterviewerLeaderboardPage />} />
           <Route path="profile"        element={<ProfilePage />} />
           <Route path="notifications"  element={<NotificationsPage />} />
           <Route path="about"          element={<InterviewerAboutPage />} />
