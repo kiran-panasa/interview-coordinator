@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -72,8 +72,8 @@ function readCookie(name) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function Card({ children, className = "" }) {
-  return <div className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md transition-shadow duration-200 ${className}`}>{children}</div>;
+function Card({ children, className = "", innerRef }) {
+  return <div ref={innerRef} className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md transition-shadow duration-200 ${className}`}>{children}</div>;
 }
 
 // Per-nav-item accent color — gives each section of the dashboard its own
@@ -160,6 +160,25 @@ export default function StudentDashboardPage() {
   const [newBookingTemplateId, setNewBookingTemplateId] = useState("");
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
+  const expandedCardRef = useRef(null);
+
+  // The expanded "Ready to Book" card behaves like a popover, not a
+  // permanent section — it should collapse itself if the candidate leaves
+  // it without picking a slot, instead of silently staying open forever
+  // (so it's unexpectedly still expanded next time they land back here).
+  useEffect(() => {
+    if (tab !== "slots") setExpandedInviteId(null);
+  }, [tab]);
+  useEffect(() => {
+    if (!expandedInviteId) return;
+    const onPointerDown = (e) => {
+      if (expandedCardRef.current && !expandedCardRef.current.contains(e.target)) {
+        setExpandedInviteId(null);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [expandedInviteId]);
 
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
@@ -659,7 +678,7 @@ export default function StudentDashboardPage() {
                     {bookable.map(inv => {
                       const isExpanded = expandedInviteId === inv.id;
                       return (
-                        <Card key={inv.id} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.violet}`}>
+                        <Card key={inv.id} innerRef={isExpanded ? expandedCardRef : undefined} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.violet}`}>
                           <button
                             onClick={() => setExpandedInviteId(isExpanded ? null : inv.id)}
                             className="flex items-center justify-between gap-3 w-full px-6 py-4 text-left hover:bg-gray-50/70 transition-colors">
