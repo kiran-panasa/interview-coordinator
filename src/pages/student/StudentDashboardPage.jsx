@@ -402,13 +402,18 @@ export default function StudentDashboardPage() {
   // vanished from the tab — same template still blocked from a fresh
   // "Find Slots" by templatesInProgress, with nothing to show in its place.
   const awaiting = pendingInvites.filter(i => i.status === "slot_selected" || i.status === "pending_confirmation");
-  // Only counts SELF-booked invites — a Nudge-sent one no longer blocks
-  // Self Book for the same template. Clicking Self Book on a template that
-  // already has a Nudge invite widens that same invite's date range
-  // instead of creating a duplicate (see selfBookStart/resolveSelfBookTarget
-  // in api/sso-handler.js) — this is deliberately the candidate's escape
-  // hatch for "none of the dates the admin offered actually work for me".
-  const templatesInProgress = new Set(pendingInvites.filter(i => i.selfBooked).map(i => i.templateId).filter(Boolean));
+  // Only counts self-booked invites that are ACTUALLY booked (in the
+  // `awaiting` set above) — a Nudge-sent one no longer blocks Self Book for
+  // the same template (clicking it widens that invite instead of creating
+  // a duplicate — see selfBookStart/resolveSelfBookTarget in
+  // api/sso-handler.js), and neither does a self-booked invite that was
+  // abandoned before a slot was ever picked: those no longer show in the
+  // "Ready to Book" list at all (self-booked ones only appear there once
+  // actually booked), so counting them here would permanently disable Self
+  // Book for that template with no visible invite left to explain why.
+  const templatesInProgress = new Set(
+    awaiting.filter(i => i.selfBooked).map(i => i.templateId).filter(Boolean)
+  );
   // Overview's "Upcoming" list — confirmed interviews plus slots already
   // picked but still waiting on admin confirmation, merged into one
   // soonest-first list. A slot the candidate already picked (via Nudge or
