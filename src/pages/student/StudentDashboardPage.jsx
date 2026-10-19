@@ -160,6 +160,7 @@ export default function StudentDashboardPage() {
   const [newBookingTemplateId, setNewBookingTemplateId] = useState("");
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
+  const [checkingInviteId, setCheckingInviteId] = useState(null);
   const expandedCardRef = useRef(null);
 
   // The expanded "Ready to Book" card behaves like a popover, not a
@@ -680,8 +681,22 @@ export default function StudentDashboardPage() {
                       return (
                         <Card key={inv.id} innerRef={isExpanded ? expandedCardRef : undefined} className={`overflow-hidden border-l-4 ${ACCENT_BORDER.violet}`}>
                           <button
-                            onClick={() => setExpandedInviteId(isExpanded ? null : inv.id)}
-                            className="flex items-center justify-between gap-3 w-full px-6 py-4 text-left hover:bg-gray-50/70 transition-colors">
+                            onClick={async () => {
+                              if (isExpanded) { setExpandedInviteId(null); return; }
+                              // Re-sync before expanding — this invite may have
+                              // already been booked from the emailed link since
+                              // the dashboard last loaded. Expanding straight
+                              // from stale data would let the candidate pick a
+                              // slot for a request that's no longer open; a
+                              // fresh fetch here means they either get the live
+                              // slot picker or see it's already "Slot Booked"
+                              // below, never a stale picker that fails on confirm.
+                              setCheckingInviteId(inv.id);
+                              await loadDashboard({ expandInviteId: inv.id });
+                              setCheckingInviteId(null);
+                            }}
+                            disabled={checkingInviteId === inv.id}
+                            className="flex items-center justify-between gap-3 w-full px-6 py-4 text-left hover:bg-gray-50/70 transition-colors disabled:cursor-wait">
                             <div className="flex items-center gap-2 min-w-0">
                               {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                               <div className="min-w-0">
@@ -708,9 +723,15 @@ export default function StudentDashboardPage() {
                               {newInviteIds.has(inv.id) && (
                                 <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">NEW</span>
                               )}
-                              <span className="text-[11px] font-semibold border px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border-violet-200">
-                                Ready to Book
-                              </span>
+                              {checkingInviteId === inv.id ? (
+                                <span className="flex items-center gap-1 text-[11px] font-semibold border px-2 py-0.5 rounded-full bg-gray-50 text-gray-500 border-gray-200">
+                                  <Loader2 className="w-3 h-3 animate-spin" /> Checking…
+                                </span>
+                              ) : (
+                                <span className="text-[11px] font-semibold border px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border-violet-200">
+                                  Ready to Book
+                                </span>
+                              )}
                             </div>
                           </button>
                           {isExpanded && (
