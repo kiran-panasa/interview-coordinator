@@ -48,9 +48,9 @@ export default function ImportModal({
   csvText, setCsvText,
   parsedRows, setParsedRows,
   dlTemplateId, setDlTemplateId,
-  templates,
+  templates, interviewers = [], rounds = [], DURATIONS = [],
   handleParseCSV, handleImport, importing,
-  downloadImportTemplate,
+  downloadImportTemplate, downloadImportTemplateExcel,
 }) {
   const firstErrorRowRef = useRef(null);
   const firstWarnRowRef  = useRef(null);
@@ -81,6 +81,7 @@ export default function ImportModal({
                   ["templateName",     "Yes", "Product Mastery - Novice"],
                   ["date",             "Yes", "15/06/2026 or 2026-06-15"],
                   ["time",             "Yes", "10:00 AM or 14:30"],
+                  ["duration",         "No",  "Minutes, e.g. 60 — defaults to the template's own duration if left blank"],
                   ["round",            "No",  "Round 1 (default)"],
                   ["verdict",          "No",  "Proceed / Hold / Reject — omit to create as scheduled (pending)"],
                   ["notes",            "No",  "Overall feedback notes"],
@@ -105,23 +106,72 @@ export default function ImportModal({
           </div>
 
           <div className="mt-3 pt-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500 mb-2">Download a ready-to-fill CSV with domain columns for a specific template:</p>
-            <div className="flex gap-2">
+            <p className="text-xs text-gray-500 mb-2">Download a ready-to-fill sheet with domain columns for a specific template:</p>
+            <div className="flex gap-2 flex-wrap">
               <select
                 value={dlTemplateId}
                 onChange={e => setDlTemplateId(e.target.value)}
-                className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+                className="flex-1 min-w-[180px] border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
                 <option value="">— Select template —</option>
                 {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
               <Button
-                variant="primary" size="sm" icon={Download}
+                variant="secondary" size="sm" icon={Download}
                 disabled={!dlTemplateId}
                 onClick={() => downloadImportTemplate(templates.find(t => t.id === dlTemplateId))}>
                 Download CSV
               </Button>
+              {/* Excel version carries a second "Help" tab — every panelist's
+                 name + email, every template/round name, and the date/time
+                 format — pulled live from what's actually in the system
+                 right now, so it's never out of date for scheduling across
+                 several different templates in one sitting. */}
+              <Button
+                variant="primary" size="sm" icon={Download}
+                disabled={!dlTemplateId}
+                onClick={() => downloadImportTemplateExcel(templates.find(t => t.id === dlTemplateId), interviewers, templates, rounds, DURATIONS)}>
+                Download Excel (with Help sheet)
+              </Button>
             </div>
           </div>
+
+          {/* Quick on-screen reference — same info as the Help sheet, visible
+             without downloading anything. Collapsed by default so it
+             doesn't crowd out the format table above. */}
+          <details className="mt-3 pt-3 border-t border-gray-200">
+            <summary className="text-xs font-semibold text-brand-600 cursor-pointer hover:text-brand-700 select-none">
+              Show panelists &amp; round names
+            </summary>
+            <div className="mt-2 grid sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">
+                  Panelists ({interviewers.length}) — name → email for the interviewerEmail column
+                </p>
+                <div className="max-h-32 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                  {interviewers.length === 0
+                    ? <p className="text-xs text-gray-400 px-2 py-1.5">No active interviewers yet.</p>
+                    : interviewers.map(u => (
+                      <p key={u.id} className="text-xs text-gray-600 px-2 py-1 flex items-center justify-between gap-2">
+                        <span className="truncate">{u.displayName || "—"}</span>
+                        <span className="font-mono text-[11px] text-gray-400 truncate">{u.email}</span>
+                      </p>
+                    ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">
+                  Round Names ({rounds.length}) — for the round column
+                </p>
+                <div className="max-h-32 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
+                  {rounds.length === 0
+                    ? <p className="text-xs text-gray-400 px-2 py-1.5">No rounds configured yet — any value you type is accepted.</p>
+                    : rounds.map(r => (
+                      <p key={r.id || r.name} className="text-xs text-gray-600 px-2 py-1">{r.name}</p>
+                    ))}
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
 
         {/* CSV input */}
@@ -144,7 +194,7 @@ export default function ImportModal({
             rows={6}
             value={csvText}
             onChange={e => { setCsvText(e.target.value); setParsedRows(null); }}
-            placeholder={"candidateEmail,interviewerEmail,templateName,date,time,round,verdict,notes,meetingLink,meetingRecordingLink\njohn@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,Round 1,Proceed,Good candidate,https://meet.google.com/abc-defg-hij,"}
+            placeholder={"candidateEmail,interviewerEmail,templateName,date,time,duration,round,verdict,notes,meetingLink,meetingRecordingLink\njohn@example.com,interviewer@nxtwave.tech,Product Mastery - Novice,15/06/2026,10:00 AM,60,Round 1,Proceed,Good candidate,https://meet.google.com/abc-defg-hij,"}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
           />
         </div>
@@ -190,7 +240,7 @@ export default function ImportModal({
                 <table className="w-full text-xs min-w-[700px]">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {["#", "Action", "Candidate", "Interviewer", "Template", "Date", "Time", "Round", "Verdict", "Feedback", ""].map(h => (
+                      {["#", "Action", "Candidate", "Interviewer", "Template", "Date", "Time", "Duration", "Round", "Verdict", "Feedback", ""].map(h => (
                         <th key={h} className="text-left font-semibold text-gray-400 uppercase tracking-wide px-3 py-2">{h}</th>
                       ))}
                     </tr>
@@ -232,6 +282,9 @@ export default function ImportModal({
                           </td>
                           <td className="px-3 py-2 text-gray-600">
                             {row.resolved.scheduledTime || <span className="text-red-500">{row.raw.time}</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {row.resolved.duration ? `${row.resolved.duration}m` : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">{row.raw.round}</td>
                           <td className="px-3 py-2">

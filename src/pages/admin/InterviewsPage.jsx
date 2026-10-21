@@ -8,7 +8,7 @@ import {
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
 import { collapseSlotsByDuration } from "../../utils/slotAvailability";
-import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
+import { parseImportCSV, parseLinksCSV, downloadImportTemplate, downloadImportTemplateExcel, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
 import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview, correctInterviewStatus } from "../../api/interviews";
@@ -1317,12 +1317,13 @@ export default function InterviewsPage() {
     const results = await Promise.all(validRows.map(async (row) => {
       try {
         const {
-          candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback,
+          candidate, interviewer, template, scheduledDate, scheduledTime, duration, verdict, domainData, hasDomainFeedback,
           existingInterview, meetingLink, meetingRecordingLink,
         } = row.resolved;
         const linkFields = {
           ...(meetingLink          ? { meetLink: meetingLink }                     : {}),
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+          ...(duration              ? { duration }                                 : {}),
         };
 
         // Row matches an interview that already exists (completed or still
@@ -1361,6 +1362,7 @@ export default function InterviewsPage() {
           round:    row.raw.round,
           meetLink: meetingLink || "",
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+          ...(duration              ? { duration }                                 : {}),
         };
         if (verdict || hasDomainFeedback) {
           const { feedback, partialCompletionReason } = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);
@@ -2232,9 +2234,10 @@ export default function InterviewsPage() {
         csvText={csvText} setCsvText={setCsvText}
         parsedRows={parsedRows} setParsedRows={setParsedRows}
         dlTemplateId={dlTemplateId} setDlTemplateId={setDlTemplateId}
-        templates={templates}
+        templates={templates} interviewers={interviewers} rounds={rounds} DURATIONS={DURATIONS}
         handleParseCSV={handleParseCSV} handleImport={handleImport} importing={importing}
         downloadImportTemplate={downloadImportTemplate}
+        downloadImportTemplateExcel={downloadImportTemplateExcel}
       />
 
       <UploadLinksModal

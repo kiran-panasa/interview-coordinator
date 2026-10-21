@@ -1,3 +1,4 @@
+import * as XLSX from "xlsx";
 import { splitCSVLines, parseLine } from "./csv";
 import { slugify } from "./strings";
 import { isNotApplicable } from "../services/import.service";
@@ -57,6 +58,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
         templateName:         g("templateName"),
         date:                 g("date"),
         time:                 g("time"),
+        duration:             g("duration"),
         round:                g("round") || "Round 1",
         verdict:              g("verdict"),
         notes:                g("notes"),
@@ -93,8 +95,21 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
 
       const verdict = raw.verdict ? (VERDICT_MAP[raw.verdict.toLowerCase()] || raw.verdict) : "";
 
+      // Optional — same field the single "Schedule Interview" form requires,
+      // but a CSV row can lean on the template's own default instead of
+      // repeating it on every row. An invalid (non-numeric/non-positive)
+      // value falls back the same way, with a warning instead of a hard
+      // error, since it's recoverable rather than blocking the import.
+      let duration = null;
+      if (raw.duration) {
+        const n = parseInt(raw.duration, 10);
+        if (isNaN(n) || n <= 0) warnings.push(`Invalid duration "${raw.duration}" — will use the template's default duration instead.`);
+        else duration = n;
+      }
+      if (duration == null && template?.durationMinutes) duration = template.durationMinutes;
+
       const BASE_COLS = new Set([
-        "candidateemail","candidateuid","intervieweremail","templatename","date","time","round","verdict","notes",
+        "candidateemail","candidateuid","intervieweremail","templatename","date","time","duration","round","verdict","notes",
         "meetinglink","meetingrecordinglink",
       ]);
       const domainData = {};
@@ -144,7 +159,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
       return {
         rowNum: i + 2, raw,
         resolved: {
-          candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback,
+          candidate, interviewer, template, scheduledDate, scheduledTime, duration, verdict, domainData, hasDomainFeedback,
           existingInterview,
           meetingLink:          raw.meetingLink,
           meetingRecordingLink: raw.meetingRecordingLink,
@@ -270,16 +285,18 @@ export function downloadLinksTemplate() {
   a.click();
 }
 
-export function downloadImportTemplate(template) {
+// Shared by the CSV and Excel template downloads below — one place for the
+// base + per-domain column set, so the two formats can never drift apart.
+function buildImportTemplateColumns(template) {
   const baseHeaders = [
-    "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes",
+    "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "duration", "round", "verdict", "notes",
     "meetingLink", "meetingRecordingLink",
   ];
   const baseExample = [
     "john.doe@example.com", "",
     "interviewer@nxtwave.tech",
     template?.name || "Product Mastery - Novice",
-    "15/06/2026", "10:00 AM", "Round 1", "Proceed", "Overall interview notes",
+    "15/06/2026", "10:00 AM", String(template?.durationMinutes || 60), "Round 1", "Proceed", "Overall interview notes",
     "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
   ];
 
@@ -328,15 +345,74 @@ export function downloadImportTemplate(template) {
     }
   }
 
+  return { headers: [...baseHeaders, ...domainHeaders], example: [...baseExample, ...domainExample] };
+}
+
+export function downloadImportTemplate(template) {
+  const { headers, example } = buildImportTemplateColumns(template);
   const rows = [
-    [...baseHeaders, ...domainHeaders].join(","),
-    [...baseExample, ...domainExample].map(v => (v.includes(",") || v.includes(" ")) ? `"${v}"` : v).join(","),
+    headers.join(","),
+    example.map(v => (v.includes(",") || v.includes(" ")) ? `"${v}"` : v).join(","),
   ];
 
   const a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" }));
   a.download = template ? `import_${template.name.replace(/\s+/g, "_")}.csv` : "interview_import_template.csv";
   a.click();
+}
+
+// Richer counterpart to downloadImportTemplate — an Excel workbook with the
+// same import columns on sheet 1, plus a live "Help" sheet (sheet 2) pulling
+// directly from whatever interviewers/templates/rounds actually exist right
+// now, so it's never stale and never needs hand-maintaining as those lists
+// change. Lets an admin fill in 30+ rows across different templates/
+// panelists in one sitting without leaving the spreadsheet to look anything
+// up — every valid interviewer email, template name, and round name is
+// right there on the second tab.
+export function downloadImportTemplateExcel(template, interviewers = [], templates = [], rounds = [], DURATIONS = []) {
+  const { headers, example } = buildImportTemplateColumns(template);
+
+  const wb = XLSX.utils.book_new();
+
+  const dataWs = XLSX.utils.aoa_to_sheet([headers, example]);
+  dataWs["!cols"] = headers.map(h => ({ wch: Math.max(14, Math.min(32, h.length + 6)) }));
+  XLSX.utils.book_append_sheet(wb, dataWs, "Import Template");
+
+  // One reference sheet, stacked mini-tables rather than several small tabs
+  // — everything an admin needs while filling in the sheet above, in one
+  // place: who to assign (name + the exact email the interviewerEmail
+  // column needs), which template/round names are valid to type, which
+  // duration values are typical, and the date/time format the parser
+  // expects.
+  const helpRows = [
+    ["Panelists — copy the exact email into the interviewerEmail column"],
+    ["Name", "Email"],
+    ...interviewers.map(u => [u.displayName || "", u.email || ""]),
+    [],
+    ["Evaluation Templates — copy the exact name into the templateName column"],
+    ["Template Name", "Default Duration (min)"],
+    ...templates.map(t => [t.name, t.durationMinutes || ""]),
+    [],
+    ["Round Names — copy the exact name into the round column, or type a new one"],
+    ["Round Name"],
+    ...rounds.map(r => [r.name]),
+    [],
+    ["Typical Durations (minutes) — the duration column accepts any number, these are just common values"],
+    ["Minutes", "Label"],
+    ...DURATIONS.map(d => [d.value, d.label]),
+    [],
+    ["Format Notes"],
+    ["Column", "Expected format"],
+    ["date", "DD/MM/YYYY (e.g. 15/06/2026) or YYYY-MM-DD"],
+    ["time", "10:00 AM / 2:30 PM, or 24-hour like 14:30"],
+    ["duration", "A number of minutes (e.g. 60) — optional, defaults to the template's own duration if left blank"],
+    ["verdict", "Proceed / Hold / Reject — leave blank to import as scheduled (not yet completed)"],
+  ];
+  const helpWs = XLSX.utils.aoa_to_sheet(helpRows);
+  helpWs["!cols"] = [{ wch: 40 }, { wch: 28 }];
+  XLSX.utils.book_append_sheet(wb, helpWs, "Help");
+
+  XLSX.writeFile(wb, template ? `import_${template.name.replace(/\s+/g, "_")}.xlsx` : "interview_import_template.xlsx");
 }
 
 export { callAppsScript } from "../lib/appsScript";
