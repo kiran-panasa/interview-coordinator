@@ -79,7 +79,7 @@ export default function NudgePage() {
   const badgeFor = (id) => id === "interviewers" ? unreadResponses : id === "candidates" ? pendingBookings : id === "pending" ? pendingNudgeCount : 0;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
         className="mb-6"
