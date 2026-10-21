@@ -686,7 +686,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-8 max-w-5xl">
+    <div className="p-8 max-w-5xl mx-auto">
       {/* ── Page header ── */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Settings</h1>
