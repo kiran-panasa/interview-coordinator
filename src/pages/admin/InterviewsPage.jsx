@@ -244,6 +244,7 @@ export default function InterviewsPage() {
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
   const [bulkAiGenerating,  setBulkAiGenerating]  = useState(false);
+  const [bulkAiProgress,    setBulkAiProgress]    = useState(null); // { generated }
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
   const [historyModal,      setHistoryModal]      = useState(null); // interview
   const [historyEntries,    setHistoryEntries]    = useState([]);
@@ -982,26 +983,50 @@ export default function InterviewsPage() {
     if (!window.confirm("Generate AI reports with Claude for completed interviews missing one from the last 14 days? This can take a few minutes — please don't close this tab while it runs.")) return;
 
     setBulkAiGenerating(true);
+    let totalSucceeded = 0, totalNoTranscript = 0, totalFailed = 0, firstError = null, noProgressRounds = 0;
     try {
       const idToken = await currentUser.getIdToken();
-      const res = await fetch("/api/generate-ai-reports-bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json?.message || `HTTP ${res.status}`);
+      // The endpoint only processes a handful of interviews per call (see
+      // the maxPerRun comment in generate-ai-reports-bulk.js) so each
+      // request comfortably finishes inside Vercel's function time limit —
+      // a single big request used to get killed mid-batch by Vercel itself
+      // once Claude's per-interview analysis time added up, which surfaced
+      // client-side as an opaque "Unexpected token... is not valid JSON"
+      // error. Looping here instead lets one click still clear everything.
+      for (let round = 0; round < 25; round++) {
+        setBulkAiProgress({ generated: totalSucceeded });
+        const res = await fetch("/api/generate-ai-reports-bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json?.message || `HTTP ${res.status}`);
 
-      if (!json.attempted) {
+        totalSucceeded += json.succeeded;
+        totalNoTranscript += json.noTranscript;
+        totalFailed += json.failed;
+        if (!firstError && json.errors?.[0]?.message) firstError = json.errors[0].message;
+
+        if (json.attempted < 1) break; // nothing left to do
+        // Stop early if two rounds in a row made zero real progress (e.g.
+        // the same items keep failing for a persistent reason) instead of
+        // burning through all 25 rounds reprocessing the same failures.
+        noProgressRounds = json.succeeded === 0 ? noProgressRounds + 1 : 0;
+        if (noProgressRounds >= 2) break;
+      }
+
+      if (totalSucceeded + totalNoTranscript + totalFailed === 0) {
         setToast({ message: "No completed interviews in the last 14 days are missing an AI report.", type: "info" });
       } else {
-        const parts = [`${json.succeeded} generated`];
-        if (json.noTranscript) parts.push(`${json.noTranscript} skipped (no transcript yet)`);
-        if (json.failed) parts.push(`${json.failed} failed${json.errors?.[0]?.message ? ` (${json.errors[0].message})` : ""}`);
-        setToast({ message: parts.join(", ") + ".", type: json.succeeded ? "success" : "error" });
+        const parts = [`${totalSucceeded} generated`];
+        if (totalNoTranscript) parts.push(`${totalNoTranscript} skipped (no transcript yet)`);
+        if (totalFailed) parts.push(`${totalFailed} failed${firstError ? ` (${firstError})` : ""}`);
+        setToast({ message: parts.join(", ") + ".", type: totalSucceeded ? "success" : "error" });
       }
     } catch (e) {
-      setToast({ message: "Couldn't generate reports: " + e.message, type: "error" });
+      setToast({ message: `Couldn't generate reports (${totalSucceeded} succeeded before this): ` + e.message, type: "error" });
     }
+    setBulkAiProgress(null);
     setBulkAiGenerating(false);
   };
 
@@ -1843,7 +1868,9 @@ export default function InterviewsPage() {
             {bulkAiGenerating
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Sparkles className="w-3.5 h-3.5" />}
-            {bulkAiGenerating ? "Generating…" : "Generate Missing AI Reports"}
+            {bulkAiGenerating
+              ? `Generating${bulkAiProgress?.generated ? ` (${bulkAiProgress.generated} so far)` : "…"}`
+              : "Generate Missing AI Reports"}
           </button>
           <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">

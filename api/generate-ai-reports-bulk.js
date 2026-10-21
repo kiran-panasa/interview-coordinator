@@ -41,9 +41,16 @@ export default async function handler(req, res) {
       appsScriptUrl:    process.env.APPS_SCRIPT_URL,
       appsScriptSecret: process.env.APPS_SCRIPT_SECRET,
       lookbackDays: 14,
-      // Higher than the cron's 15 — an admin clicking this is actively
-      // watching and willing to wait, vs. the cron's own time budget.
-      maxPerRun: 30,
+      // Each interview costs 2-3 slow round trips (Apps Script transcript
+      // fetch/read + a Claude call that alone can take 5-15s) -- a batch
+      // much bigger than this risks blowing past Vercel's 60s maxDuration
+      // partway through, which kills the function and returns Vercel's own
+      // generic error page instead of JSON (that's what the client's
+      // "Unexpected token 'A'..." parse error actually was, NOT an Apps
+      // Script problem). InterviewsPage.jsx's handleBulkGenerateAiReports
+      // loops this endpoint across several small rounds instead of asking
+      // for everything in one request.
+      maxPerRun: 6,
     });
     return res.status(200).json({ success: true, ...result });
   } catch (err) {

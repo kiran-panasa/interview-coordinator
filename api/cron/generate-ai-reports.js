@@ -32,7 +32,11 @@ export default async function handler(req, res) {
       appsScriptUrl:    process.env.APPS_SCRIPT_URL,
       appsScriptSecret: process.env.APPS_SCRIPT_SECRET,
       lookbackDays: 14,
-      maxPerRun: 15,
+      // Kept modest for the same reason as generate-ai-reports-bulk.js's
+      // own maxPerRun — each interview can cost 10+ seconds (Apps Script
+      // round trips + a Claude call), and this function's own maxDuration
+      // is 60s. Leftovers just get picked up by tomorrow's run.
+      maxPerRun: 8,
     });
     return res.status(200).json(result);
   } catch (err) {
