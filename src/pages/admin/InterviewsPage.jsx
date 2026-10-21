@@ -244,7 +244,6 @@ export default function InterviewsPage() {
   const [aiReportTarget,    setAiReportTarget]    = useState(null); // interview being viewed/generated
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
   const [bulkAiGenerating,  setBulkAiGenerating]  = useState(false);
-  const [bulkAiProgress,    setBulkAiProgress]    = useState(null); // { done, total }
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
   const [historyModal,      setHistoryModal]      = useState(null); // interview
   const [historyEntries,    setHistoryEntries]    = useState([]);
@@ -973,39 +972,37 @@ export default function InterviewsPage() {
     setAiReportLoading(false);
   };
 
-  // Bulk sweep over the CURRENT filtered view (same scope Download Feedback
-  // already operates on) — every completed interview missing a report, with
-  // some transcript signal to even attempt one. Sequential, not
-  // Promise.all'd: Apps Script and Claude both have their own rate limits,
-  // and sequential processing is what makes a live "N of M" progress
-  // indicator possible in the first place.
+  // Runs server-side (see /api/generate-ai-reports-bulk.js), scanning the
+  // last 14 days of completed interviews regardless of the admin's current
+  // page filters (date range, interviewer, vendor, etc.) — this used to
+  // sweep the client-side `filtered` array one interview at a time, which
+  // meant it silently missed anything outside whatever date range happened
+  // to be selected on screen.
   const handleBulkGenerateAiReports = async () => {
-    const targets = filtered.filter(iv =>
-      iv.status === "completed" && !iv.aiReport && (iv.transcriptUrl || iv.eventId || iv.meetLink)
-    );
-    if (!targets.length) {
-      setToast({ message: "No completed interviews in the current filter are missing an AI report.", type: "info" });
-      return;
-    }
-    if (!window.confirm(`Generate AI reports with Claude for ${targets.length} interview(s) missing one? This can take a few minutes — please don't close this tab while it runs.`)) return;
+    if (!window.confirm("Generate AI reports with Claude for completed interviews missing one from the last 14 days? This can take a few minutes — please don't close this tab while it runs.")) return;
 
     setBulkAiGenerating(true);
-    let succeeded = 0, noTranscript = 0, failed = 0;
-    for (let i = 0; i < targets.length; i++) {
-      setBulkAiProgress({ done: i, total: targets.length });
-      try {
-        await generateClaudeReportFor(targets[i]);
-        succeeded++;
-      } catch (e) {
-        if (e.noTranscript) noTranscript++; else failed++;
+    try {
+      const idToken = await currentUser.getIdToken();
+      const res = await fetch("/api/generate-ai-reports-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json?.message || `HTTP ${res.status}`);
+
+      if (!json.attempted) {
+        setToast({ message: "No completed interviews in the last 14 days are missing an AI report.", type: "info" });
+      } else {
+        const parts = [`${json.succeeded} generated`];
+        if (json.noTranscript) parts.push(`${json.noTranscript} skipped (no transcript yet)`);
+        if (json.failed) parts.push(`${json.failed} failed${json.errors?.[0]?.message ? ` (${json.errors[0].message})` : ""}`);
+        setToast({ message: parts.join(", ") + ".", type: json.succeeded ? "success" : "error" });
       }
+    } catch (e) {
+      setToast({ message: "Couldn't generate reports: " + e.message, type: "error" });
     }
-    setBulkAiProgress(null);
     setBulkAiGenerating(false);
-    const parts = [`${succeeded} generated`];
-    if (noTranscript) parts.push(`${noTranscript} skipped (no transcript yet)`);
-    if (failed) parts.push(`${failed} failed`);
-    setToast({ message: parts.join(", ") + ".", type: succeeded ? "success" : "error" });
   };
 
   // Backs the "AI Report" link column in the Download Feedback export — a
@@ -1841,14 +1838,12 @@ export default function InterviewsPage() {
         )}
         <div className="ml-auto flex items-center gap-2">
           <button onClick={handleBulkGenerateAiReports} disabled={bulkAiGenerating}
-            title="Generates reports with Claude for completed interviews in the current filter that are missing one — useful when Gemini's own daily quota runs out"
+            title="Generates reports with Claude for completed interviews from the last 14 days that are missing one — useful when Gemini's own daily quota runs out"
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
             {bulkAiGenerating
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Sparkles className="w-3.5 h-3.5" />}
-            {bulkAiGenerating
-              ? `Generating${bulkAiProgress ? ` ${bulkAiProgress.done + 1} of ${bulkAiProgress.total}` : "…"}`
-              : "Generate Missing AI Reports"}
+            {bulkAiGenerating ? "Generating…" : "Generate Missing AI Reports"}
           </button>
           <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">

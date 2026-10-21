@@ -23,7 +23,8 @@
     { "path": "/api/cron/generate-ai-reports", "schedule": "30 20 * * *" }
   ],
   "functions": {
-    "api/cron/generate-ai-reports.js": { "maxDuration": 60 }
+    "api/cron/generate-ai-reports.js": { "maxDuration": 60 },
+    "api/generate-ai-reports-bulk.js": { "maxDuration": 60 }
   },
   "headers": [
     {
