@@ -103,11 +103,11 @@ export default function AdminDashboard() {
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 + idx * 0.03 }}
                   className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50/70 transition-colors"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-gray-900 truncate">{i.candidateName}</p>
                     <p className="text-xs text-gray-500 truncate">{i.round} · {i.interviewerName}</p>
                   </div>
-                  <div className="text-right flex-shrink-0">
+                  <div className="text-right flex-shrink-0 w-24">
                     <p className="text-xs font-medium text-gray-700">{i.scheduledDate}</p>
                     <p className="text-xs text-gray-400">{i.scheduledTime}</p>
                   </div>
