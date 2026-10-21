@@ -5,6 +5,7 @@ import {
   ArrowRight, CalendarClock, UserPlus,
 } from "lucide-react";
 import { useAllInterviews, usePendingUsers } from "../../hooks/queries";
+import { timeToMinutes } from "../../utils/dates";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
 import { SkeletonStatCards, SkeletonRows } from "../../components/Skeleton";
@@ -29,8 +30,14 @@ export default function AdminDashboard() {
   const loaded = !interviewsLoading && !usersLoading;
 
   const today = new Date().toISOString().slice(0, 10);
+  // `interviews` comes back in whatever order the query returned, not
+  // chronological order — sorted here (soonest first, by date then time)
+  // before taking the first 8, so this always shows the NEXT 8 upcoming
+  // interviews rather than the first 8 of an arbitrary order.
   const upcoming = interviews
     .filter(i => i.scheduledDate >= today && i.status !== "cancelled" && i.status !== "declined")
+    .slice()
+    .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate) || timeToMinutes(a.scheduledTime) - timeToMinutes(b.scheduledTime))
     .slice(0, 8);
 
   const stats = {
