@@ -6,7 +6,7 @@ import { usePagination } from "../../hooks/usePagination";
 import { useVendors } from "../../hooks/queries";
 import { compareTimeLabels } from "../../utils/dates";
 import { getBusyWindowsForInterviewers } from "../../api/firestore";
-import { isSlotEffectivelyBooked } from "../../utils/slotAvailability";
+import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 
 
 function today() { return new Date().toISOString().slice(0, 10); }
@@ -97,11 +97,24 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
       }));
   }, [templateInterviewers, ivrSlots, fromDate, toDate]);
 
-  const totalFreeSlots      = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => !isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0), 0), [byDate, busyWindowsByInterviewer]);
-  const totalBookedSlots    = useMemo(() => byDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0), 0), [byDate, busyWindowsByInterviewer]);
-  const interviewersWithSlots = useMemo(() => { const s = new Set(); byDate.forEach(d => d.entries.forEach(e => s.add(e.ivrId))); return s.size; }, [byDate]);
+  // Raw slots are stored at whatever granularity an interviewer submitted
+  // (often 30-minute increments), so counting them 1-for-1 overstates real
+  // interview capacity — two 30-min slots back to back are only ONE bookable
+  // 1-hour interview, not two. Collapsed here per (interviewer, date) by the
+  // selected template's own duration (or 60 minutes when no template is
+  // picked), the same logic InlineSlotPicker/SchedulePage already use to
+  // decide which raw slots are valid interview start times.
+  const effectiveDuration = templates.find(t => t.id === selectedTemplateId)?.durationMinutes || 60;
+  const collapsedByDate = useMemo(() => byDate.map(({ date, entries }) => ({
+    date,
+    entries: entries.map(e => ({ ...e, slots: collapseSlotsByDuration(e.slots, effectiveDuration, busyWindowsByInterviewer) })),
+  })), [byDate, effectiveDuration, busyWindowsByInterviewer]);
 
-  const datePagination = usePagination(byDate);
+  const totalFreeSlots      = useMemo(() => collapsedByDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => !s.isBooked).length, 0), 0), [collapsedByDate]);
+  const totalBookedSlots    = useMemo(() => collapsedByDate.reduce((a, d) => a + d.entries.reduce((b, e) => b + e.slots.filter(s => s.isBooked).length, 0), 0), [collapsedByDate]);
+  const interviewersWithSlots = useMemo(() => { const s = new Set(); collapsedByDate.forEach(d => d.entries.forEach(e => s.add(e.ivrId))); return s.size; }, [collapsedByDate]);
+
+  const datePagination = usePagination(collapsedByDate);
   // Reset to page 1 when filters change
   useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillIds, selectedVendorIds, fromDate, toDate]); // eslint-disable-line
 
@@ -160,7 +173,9 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
 
         <div className={`flex flex-wrap items-center gap-8 mt-5 pt-4 border-t border-gray-100 ${!datesSelected ? "opacity-30 pointer-events-none select-none" : ""}`}>
           <div>
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">Free Slots</p>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide font-semibold">
+              Free Slots <span className="normal-case font-normal text-gray-300">({effectiveDuration}-min)</span>
+            </p>
             <p className="text-2xl font-bold text-gray-900 mt-0.5">{totalFreeSlots}</p>
           </div>
           <div>
@@ -209,8 +224,8 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
         <>
         <div className="space-y-3">
           {datePagination.paged.map(({ date, entries }) => {
-            const freeOnDate   = entries.reduce((a, e) => a + e.slots.filter(s => !isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0);
-            const bookedOnDate = entries.reduce((a, e) => a + e.slots.filter(s => isSlotEffectivelyBooked(s, busyWindowsByInterviewer)).length, 0);
+            const freeOnDate   = entries.reduce((a, e) => a + e.slots.filter(s => !s.isBooked).length, 0);
+            const bookedOnDate = entries.reduce((a, e) => a + e.slots.filter(s => s.isBooked).length, 0);
             const dateLabel = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
               weekday: "long", day: "numeric", month: "long", year: "numeric",
             });
@@ -238,19 +253,16 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
                       <div className="flex flex-wrap gap-1.5">
                         {entry.slots
                           .slice().sort((a, b) => compareTimeLabels(a.time, b.time))
-                          .map(s => {
-                            const booked = isSlotEffectivelyBooked(s, busyWindowsByInterviewer);
-                            return (
-                              <span key={s.id} title={booked ? "Booked — filled by an interview" : "Free"}
-                                className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                                  booked
-                                    ? "bg-orange-50 text-orange-700 border-orange-200"
-                                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                                }`}>
-                                {s.time}{booked ? " · Booked" : ""}
-                              </span>
-                            );
-                          })}
+                          .map(s => (
+                            <span key={s.id} title={s.isBooked ? "Booked — filled by an interview" : `Free — ${effectiveDuration}-minute slot`}
+                              className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                                s.isBooked
+                                  ? "bg-orange-50 text-orange-700 border-orange-200"
+                                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              }`}>
+                              {s.time}{s.isBooked ? " · Booked" : ""}
+                            </span>
+                          ))}
                       </div>
                     </div>
                   ))}
