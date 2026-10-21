@@ -9,13 +9,30 @@ import { generateReportWithClaude } from "./claudeReport.js";
 export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lookbackDays = 14, maxPerRun = 15 }) {
   if (!appsScriptUrl) throw new Error("APPS_SCRIPT_URL is not set (server-side env var, no VITE_ prefix).");
 
-  async function callAppsScriptServer(payload) {
+  async function callAppsScriptServer(payload, attempt = 1) {
     const res = await fetch(appsScriptUrl, {
       method: "POST",
       redirect: "follow",
       body: JSON.stringify({ ...payload, secret: appsScriptSecret }),
     });
-    const json = await res.json();
+    const raw = await res.text();
+    let json;
+    try {
+      json = JSON.parse(raw);
+    } catch {
+      // Apps Script web apps occasionally return a plain-text/HTML "An
+      // error occurred while processing your request" page instead of
+      // JSON -- a known, undocumented transient Google-side glitch, not
+      // something caused by the script itself (its own Executions log
+      // shows these calls completing normally). A short retry clears it
+      // almost every time; if it still fails, surface a snippet of what
+      // Google actually sent back instead of an opaque "Unexpected token".
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1500 * attempt));
+        return callAppsScriptServer(payload, attempt + 1);
+      }
+      throw new Error(`Apps Script returned a non-JSON response: ${raw.slice(0, 200)}`);
+    }
     if (!json.success) throw new Error(json.error || "Apps Script call failed");
     return json;
   }
