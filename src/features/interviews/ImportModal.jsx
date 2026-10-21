@@ -4,6 +4,45 @@ import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 import { formatDate } from "../../utils/dates";
 
+function csvCell(v) {
+  const s = String(v ?? "");
+  return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Lets an admin grab just the broken rows out of a large import instead of
+// re-copying the whole sheet to fix a handful of typos — same base columns
+// the importer itself reads (so it re-parses cleanly once fixed), plus
+// whatever domain feedback columns those specific rows used, plus a
+// reviewOnly "errors" column explaining what to fix (strip it before
+// re-uploading — an unrecognized column is harmless but best removed).
+function downloadInvalidRows(parsedRows) {
+  const invalid = parsedRows.filter(r => r.errors.length > 0);
+  if (!invalid.length) return;
+
+  const baseHeaders = [
+    "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time",
+    "round", "verdict", "notes", "meetingLink", "meetingRecordingLink",
+  ];
+  const domainHeaders = [...new Set(invalid.flatMap(r => Object.keys(r.resolved.domainData || {})))];
+  const headers = [...baseHeaders, ...domainHeaders, "errors (remove this column before re-uploading)"];
+
+  const lines = [headers.join(",")];
+  invalid.forEach(r => {
+    const row = [
+      r.raw.candidateEmail, r.raw.candidateUid, r.raw.interviewerEmail, r.raw.templateName,
+      r.raw.date, r.raw.time, r.raw.round, r.raw.verdict, r.raw.notes, r.raw.meetingLink, r.raw.meetingRecordingLink,
+      ...domainHeaders.map(h => r.resolved.domainData?.[h] || ""),
+      r.errors.join(" | "),
+    ];
+    lines.push(row.map(csvCell).join(","));
+  });
+
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  a.download = "invalid_rows.csv";
+  a.click();
+}
+
 export default function ImportModal({
   open, onClose,
   csvText, setCsvText,
@@ -120,23 +159,32 @@ export default function ImportModal({
         {/* Preview */}
         {parsedRows && (
           <div>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-              Preview — {parsedRows.length} row{parsedRows.length !== 1 ? "s" : ""}
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Preview — {parsedRows.length} row{parsedRows.length !== 1 ? "s" : ""}
+                {parsedRows.filter(r => r.errors.length > 0).length > 0 && (
+                  <button
+                    className="text-red-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-red-700"
+                    onClick={() => firstErrorRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                    · {parsedRows.filter(r => r.errors.length > 0).length} with errors
+                  </button>
+                )}
+                {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 && (
+                  <button
+                    className="text-amber-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-amber-700"
+                    onClick={() => firstWarnRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
+                    · {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length} with warnings
+                  </button>
+                )}
+              </p>
               {parsedRows.filter(r => r.errors.length > 0).length > 0 && (
                 <button
-                  className="text-red-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-red-700"
-                  onClick={() => firstErrorRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
-                  · {parsedRows.filter(r => r.errors.length > 0).length} with errors
+                  onClick={() => downloadInvalidRows(parsedRows)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg transition-colors flex-shrink-0">
+                  <Download className="w-3 h-3" /> Download invalid rows to fix
                 </button>
               )}
-              {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 && (
-                <button
-                  className="text-amber-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-amber-700"
-                  onClick={() => firstWarnRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
-                  · {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length} with warnings
-                </button>
-              )}
-            </p>
+            </div>
             <div className="border border-gray-200 rounded-xl overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs min-w-[700px]">
