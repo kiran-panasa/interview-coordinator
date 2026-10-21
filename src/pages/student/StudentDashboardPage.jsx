@@ -174,34 +174,6 @@ function interviewTitle(iv) {
   return iv.templateName || iv.round || "Interview";
 }
 
-// Stat-tile trend sparkline (standard value+delta+trend contract) for a
-// student's finalScore across their completed, scored interviews. A fixed
-// 0–5 domain (not auto-scaled to the data's own min/max) keeps the line's
-// slope meaningful on its own — auto-scaling would make a 0.2-point wobble
-// look as dramatic as a full swing. The line itself stays in the muted
-// de-emphasis gray; only the current (latest) point is picked out in the
-// brand accent, per the usual sparkline convention of highlighting "now".
-function ScoreSparkline({ points }) {
-  const width = 150, height = 36, padX = 5, padY = 6, domainMax = 5;
-  const xFor = i => (points.length === 1 ? width / 2 : padX + (i * (width - padX * 2)) / (points.length - 1));
-  const yFor = v => height - padY - (v / domainMax) * (height - padY * 2);
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${xFor(i)},${yFor(p.score)}`).join(" ");
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="overflow-visible flex-shrink-0" role="img" aria-label="Score trend across your completed interviews">
-      <path d={linePath} fill="none" stroke="#d1d5db" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      {points.map((p, i) => {
-        const isLast = i === points.length - 1;
-        return (
-          <circle key={i} cx={xFor(i)} cy={yFor(p.score)} r={isLast ? 4 : 3}
-            fill={isLast ? "#4f46e5" : "#d1d5db"} stroke="#fff" strokeWidth="2">
-            <title>{`${p.label}: ${p.score.toFixed(1)}/5${p.date ? ` · ${p.date}` : ""}`}</title>
-          </circle>
-        );
-      })}
-    </svg>
-  );
-}
-
 const NAV = [
   { id: "overview", label: "Overview",      icon: LayoutGrid, accent: "indigo" },
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
@@ -610,19 +582,6 @@ export default function StudentDashboardPage() {
   ]
     .filter(x => x.date)
     .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
-  // Score Trend stat tile — completed, scored interviews oldest-first, so
-  // the sparkline reads left-to-right as "over time" the same way every
-  // other chronological list on this page does.
-  const scoredInterviews = interviews
-    .filter(i => i.status === "completed" && i.finalScore != null)
-    .slice()
-    .sort((a, b) => (a.scheduledDate || "").localeCompare(b.scheduledDate || ""));
-  const scoreTrendPoints = scoredInterviews.map(i => ({
-    score: Number(i.finalScore), label: interviewTitle(i), date: formatDate(i.scheduledDate),
-  }));
-  const scoreDelta = scoreTrendPoints.length >= 2
-    ? scoreTrendPoints[scoreTrendPoints.length - 1].score - scoreTrendPoints[0].score
-    : null;
   // Overview's summary cards.
   const overviewStats = [
     { label: "Scheduled", value: interviews.filter(i => i.status === "scheduled").length, icon: CalendarClock, chip: "bg-blue-50 text-blue-600" },
@@ -738,35 +697,6 @@ export default function StudentDashboardPage() {
                     </motion.div>
                   ))}
                 </div>
-
-                {scoreTrendPoints.length > 0 && (
-                  <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}>
-                    <Card className="p-5">
-                      <div className="flex items-center justify-between gap-4 flex-wrap">
-                        <div>
-                          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">Score Trend</p>
-                          <div className="flex items-baseline gap-2 mt-1 flex-wrap">
-                            <p className="text-2xl font-bold text-gray-900">
-                              {scoreTrendPoints[scoreTrendPoints.length - 1].score.toFixed(1)}
-                              <span className="text-sm text-gray-400 font-semibold">/5</span>
-                            </p>
-                            {scoreDelta != null && (
-                              <span className={`text-xs font-bold ${
-                                scoreDelta > 0 ? "text-emerald-600" : scoreDelta < 0 ? "text-rose-600" : "text-gray-400"
-                              }`}>
-                                {scoreDelta > 0 ? "+" : ""}{scoreDelta.toFixed(1)} vs your first round
-                              </span>
-                            )}
-                          </div>
-                          {scoreTrendPoints.length < 2 && (
-                            <p className="text-xs text-gray-400 mt-1">Complete another scored interview to see your trend.</p>
-                          )}
-                        </div>
-                        {scoreTrendPoints.length >= 2 && <ScoreSparkline points={scoreTrendPoints} />}
-                      </div>
-                    </Card>
-                  </motion.div>
-                )}
 
                 <div>
                   <div className="flex items-center gap-2 mb-2">
