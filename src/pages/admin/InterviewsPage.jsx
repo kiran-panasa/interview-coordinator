@@ -891,8 +891,12 @@ export default function InterviewsPage() {
         throw new Error(result?.message || result?.error || "No report returned.");
       }
     } catch (e) {
-      setToast({ message: "Couldn't generate AI report: " + e.message, type: "error" });
-      setAiReportTarget(null);
+      // Keep the modal open instead of closing it — this is usually Gemini's
+      // daily quota being exhausted (429 RESOURCE_EXHAUSTED), and closing
+      // the modal here meant "Generate with Claude" was never reachable:
+      // that fallback button only renders when `status` is set, which never
+      // happened on this path before.
+      setAiReportStatus({ status: "error", message: e.message });
     }
     setAiReportLoading(false);
   };

@@ -37,6 +37,11 @@ const STATUS_COPY = {
     title: "Recording not found yet",
     body: "We couldn't find a Meet recording/transcript for this interview yet. This can happen right after a call ends — try again shortly.",
   },
+  error: {
+    icon: AlertTriangle,
+    title: "Couldn't generate the report",
+    body: "Something went wrong generating this report automatically.",
+  },
 };
 
 const SectionHeader = ({ icon: Icon, children }) => (
