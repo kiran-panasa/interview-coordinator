@@ -3,12 +3,14 @@ import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles,
+  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles, CalendarPlus,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
 import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
+import { parseBulkScheduleCSV, downloadBulkScheduleTemplate } from "../../utils/bulkSchedule";
+import BulkScheduleModal from "../../features/interviews/BulkScheduleModal";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
 import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview, correctInterviewStatus } from "../../api/interviews";
@@ -238,6 +240,14 @@ export default function InterviewsPage() {
   const [linksCsvText,    setLinksCsvText]    = useState("");
   const [linksParsedRows, setLinksParsedRows] = useState(null);
   const [linksImporting,  setLinksImporting]  = useState(false);
+  // Separate from the Import from Sheet state above — bulk scheduling
+  // always creates new interviews (never upserts onto an existing one),
+  // so it's kept as its own modal/flow rather than another mode of that one.
+  const [showBulkSchedule,       setShowBulkSchedule]       = useState(false);
+  const [bulkScheduleCsvText,    setBulkScheduleCsvText]    = useState("");
+  const [bulkScheduleParsedRows, setBulkScheduleParsedRows] = useState(null);
+  const [bulkScheduling,         setBulkScheduling]         = useState(false);
+  const [bulkScheduleProgress,   setBulkScheduleProgress]   = useState(null); // { done, total }
   const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
   const [recordingLoading,  setRecordingLoading]  = useState({}); // { [interviewId]: true }
   const [downloadingFeedback, setDownloadingFeedback] = useState(false);
@@ -1384,6 +1394,101 @@ export default function InterviewsPage() {
     }
   };
 
+  // ── Bulk Schedule — separate from Import from Sheet above, which stays
+  // exactly as it was for bringing in already-completed interview data.
+  // This always creates brand-new interviews, one real createInterview()
+  // call per row (same function the single "Schedule Interview" button
+  // uses — blocked-date/past-date checks, slot booking, interviewer
+  // notification + email, all included), never an upsert.
+
+  const handleParseBulkScheduleCSV = async () => {
+    const allInterviews = await getAllInterviews().catch(err => {
+      setToast({ message: "Couldn't check existing interviews: " + err.message, type: "error" });
+      return null;
+    });
+    if (!allInterviews) return;
+    const result = parseBulkScheduleCSV(bulkScheduleCsvText, candidates, interviewers, templates, allInterviews);
+    if (result.globalError) { setToast({ message: result.globalError, type: "error" }); return; }
+    setBulkScheduleParsedRows(result.rows);
+  };
+
+  // Sequential, not Promise.all'd — ensureRoundExists can race itself across
+  // concurrent rows naming a brand-new round, and a live "N of M" progress
+  // indicator needs it anyway for a batch that can take a while.
+  const handleBulkSchedule = async () => {
+    const validRows = bulkScheduleParsedRows.filter(r => r.errors.length === 0);
+    setBulkScheduling(true);
+    let succeeded = 0;
+    const failures = [];
+    for (let i = 0; i < validRows.length; i++) {
+      setBulkScheduleProgress({ done: i, total: validRows.length });
+      const row = validRows[i];
+      try {
+        const { candidate, interviewer, template, scheduledDate, scheduledTime, duration } = row.resolved;
+        await ensureRoundExists(row.raw.round, rounds);
+
+        const data = {
+          candidateId:      candidate.id,
+          candidateName:    candidate.name,
+          candidateEmail:   candidate.email,
+          roleAppliedFor:   candidate.roleAppliedFor || "",
+          resumeLink:       candidate.resumeLink || "",
+          interviewerId:    interviewer.id,
+          interviewerEmail: interviewer.email,
+          interviewerName:  interviewer.displayName || interviewer.email,
+          templateId:       template.id,
+          templateName:     template.name,
+          codingProblems:   (template.questions?.coding || []).slice(0, template.codingProblems || 2),
+          theorySubject:    (template.questions?.theory || []).join(", "),
+          scheduledDate, scheduledTime,
+          duration: duration || 60,
+          round:    row.raw.round,
+          notes:    row.raw.notes || "",
+          createdBy: currentUser.uid,
+        };
+
+        const id = await createInterview(data);
+        const slotId = `${scheduledDate}_${scheduledTime.replace(/[: ]/g, "")}`;
+        await markSlotBooked(interviewer.id, slotId, id).catch(() => {});
+
+        createNotification({
+          type:           "interview_approval",
+          recipientId:    interviewer.id,
+          recipientEmail: interviewer.email,
+          interviewId:    id,
+          candidateName:  candidate.name,
+          message:        `You have a new interview with ${candidate.name || "a candidate"} on ${formatDate(scheduledDate)} at ${scheduledTime} — please Accept or Decline.`,
+          status:         "unread",
+        }).catch(() => {});
+        if (APPS_SCRIPT_URL) {
+          callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+            action:  "sendEmail",
+            subject: "Action Required: Interview Assigned",
+            body:
+              `Hi ${interviewer.displayName || "there"},\n\nYou have a new interview scheduled:\n\n` +
+              `Candidate: ${candidate.name || "—"}\nRound: ${row.raw.round}\n` +
+              `Date: ${formatDate(scheduledDate)}\nTime: ${scheduledTime}\n\n` +
+              `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${id}\n\nThank you.`,
+            recipients: [{ email: interviewer.email, name: interviewer.displayName || interviewer.email }],
+          }).catch(() => {});
+        }
+
+        succeeded++;
+      } catch (e) {
+        failures.push(`Row ${row.rowNum}: ${e.message}`);
+      }
+    }
+    setBulkScheduleProgress(null);
+    setBulkScheduling(false);
+    if (failures.length) {
+      console.error("Bulk schedule failures:", failures);
+      setToast({ message: `${succeeded} scheduled, ${failures.length} failed (${failures[0]}).`, type: succeeded ? "info" : "error" });
+    } else {
+      setToast({ message: `${succeeded} interview${succeeded !== 1 ? "s" : ""} scheduled — panelists have been notified.` });
+      setShowBulkSchedule(false); setBulkScheduleCsvText(""); setBulkScheduleParsedRows(null);
+    }
+  };
+
   // ── Upload meeting/recording links for existing interviews ─────────────────
 
   const handleParseLinksCSV = async () => {
@@ -1757,6 +1862,10 @@ export default function InterviewsPage() {
           <Button variant="secondary" icon={Upload}
             onClick={() => { setShowImport(true); setCsvText(""); setParsedRows(null); }}>
             Import from Sheet
+          </Button>
+          <Button variant="secondary" icon={CalendarPlus}
+            onClick={() => { setShowBulkSchedule(true); setBulkScheduleCsvText(""); setBulkScheduleParsedRows(null); }}>
+            Bulk Schedule
           </Button>
           <Button variant="primary" icon={Plus} onClick={openNew}>
             Schedule Interview
@@ -2235,6 +2344,16 @@ export default function InterviewsPage() {
         templates={templates}
         handleParseCSV={handleParseCSV} handleImport={handleImport} importing={importing}
         downloadImportTemplate={downloadImportTemplate}
+      />
+
+      <BulkScheduleModal
+        open={showBulkSchedule} onClose={() => setShowBulkSchedule(false)}
+        csvText={bulkScheduleCsvText} setCsvText={setBulkScheduleCsvText}
+        parsedRows={bulkScheduleParsedRows} setParsedRows={setBulkScheduleParsedRows}
+        interviewers={interviewers} templates={templates} rounds={rounds} DURATIONS={DURATIONS}
+        handleParseCSV={handleParseBulkScheduleCSV} handleBulkSchedule={handleBulkSchedule}
+        scheduling={bulkScheduling} progress={bulkScheduleProgress}
+        downloadBulkScheduleTemplate={downloadBulkScheduleTemplate}
       />
 
       <UploadLinksModal
