@@ -550,16 +550,21 @@ async function resolveSelfBookTarget(db, session, templateId) {
     // Self Book is the candidate's escape hatch for "none of the dates on
     // offer actually work for me" — including when the existing invite is
     // a Nudge-sent one with a narrower window than self-book's usual 7
-    // days. Widen that SAME invite's dateRangeEnd rather than creating a
-    // second, parallel invite for the same template (which would leave two
-    // open requests for one round once either got booked).
+    // days. The slot picker needs a full rolling week to show, but the
+    // invite's OWN dateRangeStart/End is never touched for it — it's what
+    // an admin configured and what the Nudge card on the dashboard reads
+    // directly from Firestore, so widening it here used to make that card
+    // silently show a different (wrong) window than what was actually
+    // sent. Instead, return a copy with an EFFECTIVE range computed
+    // on the fly (never persisted) for the picker to use.
+    const todayStr = new Date().toISOString().slice(0, 10);
     const minEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    if (existing.dateRangeEnd && existing.dateRangeEnd < minEnd) {
-      await db.collection("scheduleInvites").doc(existing.id)
-        .update({ dateRangeEnd: minEnd, updatedAt: new Date().toISOString() });
-      existing.dateRangeEnd = minEnd;
-    }
-    return { candidate, existing };
+    const effective = {
+      ...existing,
+      dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < todayStr) ? todayStr : existing.dateRangeStart,
+      dateRangeEnd: (!existing.dateRangeEnd || existing.dateRangeEnd < minEnd) ? minEnd : existing.dateRangeEnd,
+    };
+    return { candidate, existing: effective };
   }
 
   const templateSnap = await db.collection("interviewTemplates").doc(templateId).get();
@@ -593,8 +598,10 @@ async function resolveSelfBookTarget(db, session, templateId) {
 // created the moment a template was picked, which meant abandoning the
 // picker without choosing a slot left a dangling "Ready to Book" entry
 // behind forever. If the template already has an existing invite (e.g. a
-// Nudge-sent one with a narrower window), this CAN widen that invite's
-// dateRangeEnd — see resolveSelfBookTarget — but never creates a new doc.
+// Nudge-sent one with a narrower window), the returned dateRangeStart/End
+// is a wider EFFECTIVE range computed just for this response — see
+// resolveSelfBookTarget — never written back to that invite's own
+// Firestore doc, and this never creates a new doc either.
 async function selfBookStart(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
   const session = await getValidSession(req);

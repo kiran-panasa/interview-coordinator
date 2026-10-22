@@ -381,10 +381,12 @@ export default function StudentDashboardPage() {
         setTab("slots");
         setShowTemplatePicker(false);
         setNewBookingTemplateId("");
-        // If this template already had a Nudge invite, self-book-start just
-        // widened its date range server-side — refresh so that invite's
-        // "Book between" card (if it's also shown in the Ready to Book list)
-        // reflects the new range immediately instead of looking stale.
+        // If this template already had a Nudge invite, self-book-start
+        // computed a wider EFFECTIVE date range just for this picker
+        // (json.dateRangeStart/End) — the invite's own stored range is
+        // never touched, so its "Book between" card in Ready to Book still
+        // shows exactly what was sent. This refresh is just routine data
+        // sync, not reconciling a changed range.
         loadDashboard();
       } else {
         // Surfaces the actual failure (e.g. template_not_assigned) instead
