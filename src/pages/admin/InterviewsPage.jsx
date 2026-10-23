@@ -538,21 +538,40 @@ export default function InterviewsPage() {
             // Reschedule the EXISTING Calendar event/Meet space in place —
             // never delete+recreate, so the same Meet link stays associated
             // with this interview (single source of truth, no duplicates).
+            // Retried up to 3x — Apps Script occasionally returns a
+            // transient "An error occurred" Google-side glitch unrelated to
+            // the request itself (confirmed earlier via its own Executions
+            // log showing calls completing normally); safe to retry here
+            // specifically because "reschedule" just re-patches the SAME
+            // event to the SAME target state each time, never creating a
+            // duplicate or a second side effect.
+            const rescheduleArgs = {
+              action:              "reschedule",
+              eventId:             currentEventId,
+              date:                form.scheduledDate,
+              startTime:           form.scheduledTime,
+              durationMinutes:     form.duration || 60,
+              candidateEmail:      data.candidateEmail,
+              candidateName:       data.candidateName,
+              interviewerEmail:    data.interviewerEmail,
+              interviewerName:     data.interviewerName,
+              round:               form.round,
+              prevCandidateEmail:  candidateChanged   ? editTarget.candidateEmail   : "",
+              prevInterviewerEmail: interviewerChanged ? editTarget.interviewerEmail : "",
+            };
             try {
-              await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-                action:              "reschedule",
-                eventId:             currentEventId,
-                date:                form.scheduledDate,
-                startTime:           form.scheduledTime,
-                durationMinutes:     form.duration || 60,
-                candidateEmail:      data.candidateEmail,
-                candidateName:       data.candidateName,
-                interviewerEmail:    data.interviewerEmail,
-                interviewerName:     data.interviewerName,
-                round:               form.round,
-                prevCandidateEmail:  candidateChanged   ? editTarget.candidateEmail   : "",
-                prevInterviewerEmail: interviewerChanged ? editTarget.interviewerEmail : "",
-              });
+              let lastErr;
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                  await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, rescheduleArgs);
+                  lastErr = null;
+                  break;
+                } catch (e) {
+                  lastErr = e;
+                  if (attempt < 3) await new Promise(r => setTimeout(r, 1500 * attempt));
+                }
+              }
+              if (lastErr) throw lastErr;
               calendarSyncStatus = "synced";
             } catch (e) {
               calendarSyncStatus = "failed";
@@ -670,7 +689,19 @@ export default function InterviewsPage() {
         }).catch(() => {});
 
         if (calendarSyncStatus === "failed") {
-          setToast({ message: `Interview updated, but the calendar event couldn't be synced: ${calendarSyncError}`, type: "info" });
+          // A toast alone auto-dismisses after 3 seconds regardless of type
+          // — far too easy to miss for a failure this consequential (the
+          // real Google Calendar event is now silently out of sync with
+          // what this app shows: wrong time, wrong attendee, or both).
+          // alert() blocks until acknowledged, matching how other
+          // must-not-miss failures are already surfaced elsewhere in this
+          // app (e.g. InlineSlotPicker's booking failure).
+          alert(
+            `Interview details were saved here, but the actual Google Calendar event could NOT be updated automatically (${calendarSyncError}).\n\n` +
+            `The calendar invite may still show the OLD time and/or panelist. Please check it directly in Google Calendar and fix it manually, ` +
+            `or open this interview's Edit again, change something trivial (e.g. re-pick the same time), and Save to retry the sync.`
+          );
+          setToast({ message: "Interview updated, but the calendar event couldn't be synced — see the alert for what to do.", type: "error" });
         } else {
           setToast({ message: "Interview updated." });
         }
