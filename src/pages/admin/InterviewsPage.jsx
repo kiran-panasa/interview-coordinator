@@ -248,6 +248,7 @@ export default function InterviewsPage() {
   const [bulkScheduleParsedRows, setBulkScheduleParsedRows] = useState(null);
   const [bulkScheduling,         setBulkScheduling]         = useState(false);
   const [bulkScheduleProgress,   setBulkScheduleProgress]   = useState(null); // { done, total }
+  const [bulkScheduleResult,     setBulkScheduleResult]     = useState(null); // { succeeded, failedCount } — last run's outcome, kept visible until the modal is reopened/re-parsed
   const [transcriptLoading, setTranscriptLoading] = useState({}); // { [interviewId]: true }
   const [recordingLoading,  setRecordingLoading]  = useState({}); // { [interviewId]: true }
   const [downloadingFeedback, setDownloadingFeedback] = useState(false);
@@ -1410,6 +1411,7 @@ export default function InterviewsPage() {
     const result = parseBulkScheduleCSV(bulkScheduleCsvText, candidates, interviewers, templates, allInterviews);
     if (result.globalError) { setToast({ message: result.globalError, type: "error" }); return; }
     setBulkScheduleParsedRows(result.rows);
+    setBulkScheduleResult(null);
   };
 
   // Sequential, not Promise.all'd — ensureRoundExists can race itself across
@@ -1419,7 +1421,11 @@ export default function InterviewsPage() {
     const validRows = bulkScheduleParsedRows.filter(r => r.errors.length === 0);
     setBulkScheduling(true);
     let succeeded = 0;
-    const failures = [];
+    // Keeps the full row (not just a string) so a failure can be shown back
+    // in the preview table and exported to fix+retry — a bare error string
+    // gave no way to tell WHICH of e.g. 14 rows actually failed or why,
+    // beyond a transient toast with only the first one.
+    const failedRows = [];
     for (let i = 0; i < validRows.length; i++) {
       setBulkScheduleProgress({ done: i, total: validRows.length });
       const row = validRows[i];
@@ -1475,17 +1481,23 @@ export default function InterviewsPage() {
 
         succeeded++;
       } catch (e) {
-        failures.push(`Row ${row.rowNum}: ${e.message}`);
+        failedRows.push({ ...row, scheduleError: e.message });
       }
     }
     setBulkScheduleProgress(null);
     setBulkScheduling(false);
-    if (failures.length) {
-      console.error("Bulk schedule failures:", failures);
-      setToast({ message: `${succeeded} scheduled, ${failures.length} failed (${failures[0]}).`, type: succeeded ? "info" : "error" });
+    setBulkScheduleResult({ succeeded, failedCount: failedRows.length });
+    if (failedRows.length) {
+      console.error("Bulk schedule failures:", failedRows.map(r => `Row ${r.rowNum}: ${r.scheduleError}`));
+      setToast({ message: `${succeeded} scheduled, ${failedRows.length} failed — see details below.`, type: succeeded ? "info" : "error" });
+      // Replace the preview with ONLY the failed rows, so re-clicking
+      // "Schedule" retries just those instead of re-submitting the whole
+      // original batch and risking a duplicate interview for every row
+      // that already succeeded.
+      setBulkScheduleParsedRows(failedRows);
     } else {
       setToast({ message: `${succeeded} interview${succeeded !== 1 ? "s" : ""} scheduled — panelists have been notified.` });
-      setShowBulkSchedule(false); setBulkScheduleCsvText(""); setBulkScheduleParsedRows(null);
+      setShowBulkSchedule(false); setBulkScheduleCsvText(""); setBulkScheduleParsedRows(null); setBulkScheduleResult(null);
     }
   };
 
@@ -1864,7 +1876,7 @@ export default function InterviewsPage() {
             Import from Sheet
           </Button>
           <Button variant="secondary" icon={CalendarPlus}
-            onClick={() => { setShowBulkSchedule(true); setBulkScheduleCsvText(""); setBulkScheduleParsedRows(null); }}>
+            onClick={() => { setShowBulkSchedule(true); setBulkScheduleCsvText(""); setBulkScheduleParsedRows(null); setBulkScheduleResult(null); }}>
             Bulk Schedule
           </Button>
           <Button variant="primary" icon={Plus} onClick={openNew}>
@@ -2352,7 +2364,7 @@ export default function InterviewsPage() {
         parsedRows={bulkScheduleParsedRows} setParsedRows={setBulkScheduleParsedRows}
         interviewers={interviewers} templates={templates} rounds={rounds} DURATIONS={DURATIONS}
         handleParseCSV={handleParseBulkScheduleCSV} handleBulkSchedule={handleBulkSchedule}
-        scheduling={bulkScheduling} progress={bulkScheduleProgress}
+        scheduling={bulkScheduling} progress={bulkScheduleProgress} result={bulkScheduleResult}
         downloadBulkScheduleTemplate={downloadBulkScheduleTemplate}
       />
 

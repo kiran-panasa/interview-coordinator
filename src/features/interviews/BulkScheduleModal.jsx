@@ -4,17 +4,44 @@ import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 import { formatDate } from "../../utils/dates";
 
+function csvCell(v) {
+  const s = String(v ?? "");
+  return (s.includes(",") || s.includes('"') || s.includes("\n")) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Lets an admin grab just the rows a run actually failed on (a runtime
+// error — blocked date, a slot that got taken mid-batch, etc. — not a
+// validation error, those never reach handleBulkSchedule at all) instead
+// of re-building the whole sheet to find which of e.g. 14 rows it was.
+function downloadFailedRows(failedRows) {
+  if (!failedRows.length) return;
+  const headers = ["candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "duration", "round", "notes", "reason it failed"];
+  const lines = [headers.join(",")];
+  failedRows.forEach(r => {
+    const row = [
+      r.raw.candidateEmail, r.raw.candidateUid, r.raw.interviewerEmail, r.raw.templateName,
+      r.raw.date, r.raw.time, r.raw.duration, r.raw.round, r.raw.notes, r.scheduleError || "",
+    ];
+    lines.push(row.map(csvCell).join(","));
+  });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  a.download = "bulk_schedule_failed_rows.csv";
+  a.click();
+}
+
 export default function BulkScheduleModal({
   open, onClose,
   csvText, setCsvText,
   parsedRows, setParsedRows,
   interviewers, templates, rounds, DURATIONS,
-  handleParseCSV, handleBulkSchedule, scheduling, progress,
+  handleParseCSV, handleBulkSchedule, scheduling, progress, result,
   downloadBulkScheduleTemplate,
 }) {
   const firstErrorRowRef = useRef(null);
   const firstWarnRowRef  = useRef(null);
   const validCount = parsedRows ? parsedRows.filter(r => r.errors.length === 0).length : 0;
+  const failedRows = parsedRows ? parsedRows.filter(r => r.scheduleError) : [];
 
   return (
     <Modal open={open} onClose={onClose} title="Bulk Schedule Interviews" wide>
@@ -154,16 +181,42 @@ export default function BulkScheduleModal({
           Parse &amp; Preview
         </button>
 
+        {/* Last run's outcome — kept visible (not just a toast) so a
+           failure from a batch of e.g. 14 rows doesn't go unnoticed, with
+           a way to grab exactly which rows failed and why. */}
+        {result && (
+          <div className={`flex items-start justify-between gap-3 flex-wrap rounded-lg border px-4 py-3 text-sm ${
+            result.failedCount ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
+          }`}>
+            <div className="flex items-start gap-2">
+              {result.failedCount ? <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" /> : <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+              <p>
+                <span className="font-semibold">{result.succeeded} scheduled successfully.</span>
+                {result.failedCount > 0 && (
+                  <> {result.failedCount} failed — shown below with the reason for each. Fix them (or just retry if it was a transient error) and click "Schedule" again to retry only these.</>
+                )}
+              </p>
+            </div>
+            {result.failedCount > 0 && (
+              <button
+                onClick={() => downloadFailedRows(failedRows)}
+                className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 border border-amber-300 bg-white hover:bg-amber-100 px-2.5 py-1 rounded-lg transition-colors flex-shrink-0">
+                <Download className="w-3 h-3" /> Download failed rows
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Preview */}
         {parsedRows && (
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Preview — {parsedRows.length} row{parsedRows.length !== 1 ? "s" : ""}
-              {parsedRows.filter(r => r.errors.length > 0).length > 0 && (
+              {parsedRows.filter(r => r.errors.length > 0 || r.scheduleError).length > 0 && (
                 <button
                   className="text-red-500 ml-2 underline underline-offset-2 cursor-pointer hover:text-red-700"
                   onClick={() => firstErrorRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}>
-                  · {parsedRows.filter(r => r.errors.length > 0).length} with errors
+                  · {parsedRows.filter(r => r.errors.length > 0 || r.scheduleError).length} with errors
                 </button>
               )}
               {parsedRows.filter(r => r.warnings.length > 0 && r.errors.length === 0).length > 0 && (
@@ -187,7 +240,7 @@ export default function BulkScheduleModal({
                   <tbody className="divide-y divide-gray-50">
                     {(() => { firstErrorRowRef.current = null; firstWarnRowRef.current = null; return null; })()}
                     {parsedRows.map(row => {
-                      const hasErr  = row.errors.length > 0;
+                      const hasErr  = row.errors.length > 0 || !!row.scheduleError;
                       const hasWarn = row.warnings.length > 0 && !hasErr;
                       const setErrRef  = hasErr  && !firstErrorRowRef.current  ? (el => { firstErrorRowRef.current  = el; }) : undefined;
                       const setWarnRef = hasWarn && !firstWarnRowRef.current   ? (el => { firstWarnRowRef.current   = el; }) : undefined;
@@ -220,6 +273,9 @@ export default function BulkScheduleModal({
                           </td>
                           <td className="px-3 py-2 text-gray-600">{row.raw.round}</td>
                           <td className="px-3 py-2">
+                            {row.scheduleError && (
+                              <p className="text-red-600 flex items-center gap-1"><XCircle className="w-3 h-3 flex-shrink-0" /> Failed: {row.scheduleError}</p>
+                            )}
                             {hasErr && (
                               <div className="text-red-600 space-y-0.5">
                                 {row.errors.map((e, i) => <p key={i} className="flex items-center gap-1"><XCircle className="w-3 h-3 flex-shrink-0" /> {e}</p>)}
@@ -230,7 +286,7 @@ export default function BulkScheduleModal({
                                 {row.warnings.map((w, i) => <p key={i} className="flex items-center gap-1"><AlertTriangle className="w-3 h-3 flex-shrink-0" /> {w}</p>)}
                               </div>
                             )}
-                            {!hasErr && !hasWarn && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                            {!hasErr && !hasWarn && !row.scheduleError && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                           </td>
                         </tr>
                       );
