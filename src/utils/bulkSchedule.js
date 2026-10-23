@@ -9,11 +9,30 @@ import { splitCSVLines, parseLine } from "./csv";
 // behavior. That flow stays exactly as it was; this one always CREATES new
 // scheduled interviews and never silently updates an existing record.
 
+// Parses DD/MM/YYYY strictly and validates it's a REAL calendar date —
+// previously accepted any two 1-2 digit numbers with no range check at
+// all, so a US-style date like "10/24/2026" (meant as Oct 24) got silently
+// read as day=10, month=24 and stored as the nonsense string "2026-24-10".
+// That kind of value sorts outside any normal date-range query (so it
+// vanished from the admin's own filtered Interviews list) while still
+// showing up wherever a panelist's own dashboard lists their interviews
+// without date filtering — exactly the "it exists but I can't find it"
+// bug this was built to prevent.
 function normalizeDate(s) {
   if (!s) return null;
   s = s.trim();
   const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, "0")}-${dmy[1].padStart(2, "0")}`;
+  if (dmy) {
+    const day = parseInt(dmy[1], 10), month = parseInt(dmy[2], 10), year = parseInt(dmy[3], 10);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const iso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    // Rejects dates that don't actually exist (31 April, 30 Feb, ...) —
+    // the native Date constructor normalizes those forward into the next
+    // month instead of rejecting them, so compare the round-trip explicitly.
+    const d = new Date(iso + "T00:00:00");
+    if (d.getFullYear() !== year || d.getMonth() + 1 !== month || d.getDate() !== day) return null;
+    return iso;
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   return null;
 }
