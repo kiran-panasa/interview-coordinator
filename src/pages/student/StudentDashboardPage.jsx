@@ -54,6 +54,18 @@ function writeDismissedRejectionIds(ids) {
   try { localStorage.setItem(DISMISSED_REJECTIONS_KEY, JSON.stringify([...ids])); } catch { /* storage unavailable */ }
 }
 
+// "Mark as read" on a notification card — separate from dismissing one by
+// rebooking (above). A read notification stays in the list (it's still
+// unresolved) but stops counting toward the Notifications nav badge.
+const READ_NOTIFICATIONS_KEY = "ic_read_notifications";
+function readReadNotificationIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(READ_NOTIFICATIONS_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function writeReadNotificationIds(ids) {
+  try { localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify([...ids])); } catch { /* storage unavailable */ }
+}
+
 const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
   scheduled:           "Scheduled",
@@ -240,6 +252,7 @@ export default function StudentDashboardPage() {
   const [newInviteIds, setNewInviteIds] = useState(new Set());
   const [newInterviewIds, setNewInterviewIds] = useState(new Set());
   const [dismissedRejectionIds, setDismissedRejectionIds] = useState(() => readDismissedRejectionIds());
+  const [readNotificationIds, setReadNotificationIds] = useState(() => readReadNotificationIds());
   const [expandedFaqIndex, setExpandedFaqIndex] = useState(null);
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
@@ -659,7 +672,7 @@ export default function StudentDashboardPage() {
     // how many have a status change the candidate hasn't seen yet.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
       : item.id === "interviews" ? newInterviewIds.size
-      : item.id === "notifications" ? notifications.length
+      : item.id === "notifications" ? notifications.filter(n => !readNotificationIds.has(n.id)).length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
@@ -823,7 +836,7 @@ export default function StudentDashboardPage() {
             )}
 
             {tab === "details" && (
-              <motion.div key="details" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
+              <motion.div key="details" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Details</h1>
                 <Card className="p-6">
                   <div className="flex items-center gap-2 mb-4">
@@ -1321,7 +1334,7 @@ export default function StudentDashboardPage() {
             )}
 
             {tab === "notifications" && (
-              <motion.div key="notifications" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
+              <motion.div key="notifications" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 tracking-tight">Notifications</h1>
                   <p className="text-sm text-gray-500 mt-0.5">Bookings the admin team had to cancel or couldn't confirm — pick a new slot whenever you're ready.</p>
@@ -1332,15 +1345,20 @@ export default function StudentDashboardPage() {
                     <p className="text-sm text-gray-400">Nothing here right now.</p>
                   </Card>
                 ) : (
-                  <div className="space-y-3">
-                    {notifications.map(n => (
-                      <Card key={n.id} className="p-5 border-l-4 border-l-sky-500">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    {notifications.map(n => {
+                      const isRead = readNotificationIds.has(n.id);
+                      return (
+                      <Card key={n.id} className={`p-5 border-l-4 border-l-sky-500 ${isRead ? "opacity-60" : ""}`}>
                         <div className="flex items-start gap-3">
                           <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
                             <Bell className="w-4 h-4" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-gray-900">{n.title}</p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="font-bold text-gray-900">{n.title}</p>
+                              {!isRead && <span className="w-2 h-2 rounded-full bg-sky-500 flex-shrink-0 mt-1.5" title="Unread" />}
+                            </div>
                             {n.date && (
                               <p className="text-xs text-gray-400 mt-0.5">
                                 Was {formatDate(n.date)} · {n.time}
@@ -1350,33 +1368,46 @@ export default function StudentDashboardPage() {
                               {n.kind === "interview" ? "This interview was cancelled" : "This booking couldn't be confirmed"}
                               {n.reason ? `: ${n.reason}` : "."} Kindly select another slot according to your preferred date.
                             </p>
-                            <Button variant="primary" className="mt-3"
-                              onClick={() => {
-                                if (!n.templateId) {
-                                  alert("Couldn't start rebooking — this has no template on record. Please reach out to the admin team.");
-                                  return;
-                                }
-                                if (n.kind === "invite") {
-                                  const next = new Set(dismissedRejectionIds).add(n.id);
-                                  setDismissedRejectionIds(next);
-                                  writeDismissedRejectionIds(next);
-                                }
-                                handleSelfBook(n.templateId, n.kind === "interview" ? n.id : undefined);
-                              }}
-                              disabled={bookingTemplateId != null}>
-                              {bookingTemplateId === n.templateId ? "Starting…" : "Select a New Slot"}
-                            </Button>
+                            <div className="flex items-center gap-2 flex-wrap mt-3">
+                              <Button variant="primary"
+                                onClick={() => {
+                                  if (!n.templateId) {
+                                    alert("Couldn't start rebooking — this has no template on record. Please reach out to the admin team.");
+                                    return;
+                                  }
+                                  if (n.kind === "invite") {
+                                    const next = new Set(dismissedRejectionIds).add(n.id);
+                                    setDismissedRejectionIds(next);
+                                    writeDismissedRejectionIds(next);
+                                  }
+                                  handleSelfBook(n.templateId, n.kind === "interview" ? n.id : undefined);
+                                }}
+                                disabled={bookingTemplateId != null}>
+                                {bookingTemplateId === n.templateId ? "Starting…" : "Select a New Slot"}
+                              </Button>
+                              {!isRead && (
+                                <button onClick={() => {
+                                  const next = new Set(readNotificationIds).add(n.id);
+                                  setReadNotificationIds(next);
+                                  writeReadNotificationIds(next);
+                                }}
+                                  className="text-sm font-semibold text-gray-500 hover:text-gray-700 px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                                  Mark as read
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </Card>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </motion.div>
             )}
 
             {tab === "faq" && (
-              <motion.div key="faq" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
+              <motion.div key="faq" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 tracking-tight">FAQ</h1>
                   <p className="text-sm text-gray-500 mt-0.5">Common questions about booking and rescheduling interviews.</p>
