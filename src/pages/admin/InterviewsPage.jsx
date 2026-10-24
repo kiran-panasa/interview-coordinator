@@ -14,7 +14,7 @@ import { parseBulkScheduleCSV, downloadBulkScheduleTemplate } from "../../utils/
 import BulkScheduleModal from "../../features/interviews/BulkScheduleModal";
 import { exportFeedbackToExcel } from "../../utils/feedbackExport";
 import { sendInviteConfirmationEmails } from "../../utils/inviteEmails";
-import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview, correctInterviewStatus } from "../../api/interviews";
+import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedInterview, correctInterviewStatus, getInterviewsForCandidateTemplate } from "../../api/interviews";
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
@@ -1683,28 +1683,44 @@ export default function InterviewsPage() {
   // "1st Attempt"/"2nd Attempt"/... — when the SAME candidate has more
   // than one interview for the SAME template (a reschedule, or a genuine
   // retake), labels which attempt this one is instead of two same-named
-  // rows looking like an unexplained duplicate. Computed from `interviews`
-  // (the currently-loaded date range), not the full historical record —
-  // an attempt from well outside the selected date window won't factor in,
-  // so this is "accurate for what's currently in view," not a guaranteed
-  // global count. Only labeled when there's genuinely more than one.
-  const attemptLabelByInterviewId = useMemo(() => {
-    const byKey = new Map();
-    interviews.filter(iv => iv.candidateId && iv.templateId).forEach(iv => {
-      const key = `${iv.candidateId}|${iv.templateId}`;
-      if (!byKey.has(key)) byKey.set(key, []);
-      byKey.get(key).push(iv);
-    });
-    const map = new Map();
-    byKey.forEach(list => {
-      if (list.length < 2) return;
-      list
-        .slice()
-        .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
-        .forEach((iv, i) => map.set(iv.id, ordinalLabel(i + 1)));
-    });
-    return map;
-  }, [interviews]);
+  // rows looking like an unexplained duplicate. This page's own
+  // `interviews` is date-range-scoped, so counting attempts from it alone
+  // could miss an earlier one outside the selected window — instead, for
+  // each unique (candidate, template) pair on the CURRENT page only
+  // (bounded to at most `pageSize` rows, so this stays cheap), a direct
+  // query fetches that pair's FULL history with no date restriction at
+  // all. Only labeled when there's genuinely more than one.
+  const [attemptLabelByInterviewId, setAttemptLabelByInterviewId] = useState(new Map());
+  // Keyed on the actual (candidate, template) pairs present, not
+  // `pagedInterviews` itself — that array gets a new reference on every
+  // live Firestore update in the date range (even an unrelated interview
+  // changing), which would otherwise re-run this query on every such
+  // update instead of only when the pairs on this page genuinely change.
+  const pairsKey = useMemo(() => {
+    const keys = new Set();
+    pagedInterviews.forEach(iv => { if (iv.candidateId && iv.templateId) keys.add(`${iv.candidateId}|${iv.templateId}`); });
+    return [...keys].sort().join(",");
+  }, [pagedInterviews]);
+  useEffect(() => {
+    if (!pairsKey) { setAttemptLabelByInterviewId(new Map()); return; }
+    const pairs = pairsKey.split(",").map(k => { const [candidateId, templateId] = k.split("|"); return { candidateId, templateId }; });
+    let cancelled = false;
+    Promise.all(pairs.map(p => getInterviewsForCandidateTemplate(p.candidateId, p.templateId).catch(() => [])))
+      .then(results => {
+        if (cancelled) return;
+        const map = new Map();
+        results.forEach(list => {
+          if (list.length < 2) return;
+          list
+            .slice()
+            .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
+            .forEach((iv, i) => map.set(iv.id, ordinalLabel(i + 1)));
+        });
+        setAttemptLabelByInterviewId(map);
+      })
+      .catch(() => { if (!cancelled) setAttemptLabelByInterviewId(new Map()); });
+    return () => { cancelled = true; };
+  }, [pairsKey]);
 
   // Interviewers are keyed by account ID (falls back to email for older
   // records without one), and labelled by their current name — so an email

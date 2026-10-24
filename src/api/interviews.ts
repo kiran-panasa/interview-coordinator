@@ -62,6 +62,24 @@ export async function getInterview(id: string): Promise<Interview | null> {
   return snap.exists() ? { id: snap.id, ...snap.data() } as Interview : null;
 }
 
+// Every interview a candidate has for ONE template, with no date
+// restriction — used to compute an accurate "2nd Attempt"/"3rd Attempt"
+// label on the admin Interviews page, whose own `interviews` list is
+// date-range-scoped and so can miss an earlier attempt outside the
+// currently selected window. Two plain equality filters, no composite
+// index needed.
+export async function getInterviewsForCandidateTemplate(
+  candidateId: string,
+  templateId: string
+): Promise<Interview[]> {
+  const snap = await getDocs(query(
+    collection(db, "interviews"),
+    where("candidateId", "==", candidateId),
+    where("templateId", "==", templateId)
+  ));
+  return snap.docs.map(d => ({ ...(d.data() as Interview), id: d.id }));
+}
+
 // Denormalizes the candidate's own external UserID (Candidate.uid, e.g.
 // "STU-2024-001") onto the interview at creation time — same pattern as
 // candidateName/candidateEmail already being snapshotted by callers, done
