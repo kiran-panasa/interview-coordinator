@@ -11,7 +11,7 @@ import {
   logInviteHistory, getPreInterviewResources, updateCandidate,
   ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory,
 } from "../../api/firestore";
-import { scheduleInterviewMeet, linkRescheduledInterview } from "../../api/interviews";
+import { scheduleInterviewMeet, getInterview, markInterviewCancelled, updateInterview } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
@@ -444,11 +444,47 @@ export default function CandidateSchedulingTab({
         // same function picks it up above instead of creating a second one.
         await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
         logInviteHistory(inv.id, "confirmed", "Booking confirmed by admin").catch(() => {});
-        // If this candidate has a cancelled, reschedule-approved interview
-        // for the same template, point it at this new one — best-effort,
-        // never blocks confirming the booking itself.
-        if (inv.templateId) {
-          linkRescheduledInterview(inv.candidateId, inv.templateId, id).catch(() => {});
+
+        // This booking is a "Request Reschedule" from the Student Dashboard
+        // (see handleRequestReschedule there) — no separate admin-approval
+        // step gates it anymore; the candidate picks a new slot right away,
+        // and confirming THAT booking (same step as any self-book) is what
+        // now cancels the OLD interview and links the two together.
+        // Best-effort throughout: never blocks confirming the new booking.
+        if (inv.replacingInterviewId) {
+          (async () => {
+            try {
+              const oldIv = await getInterview(inv.replacingInterviewId);
+              if (oldIv && oldIv.status !== "cancelled") {
+                if (oldIv.eventId) {
+                  await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: oldIv.eventId }).catch(() => {});
+                }
+                if (oldIv.interviewerId && oldIv.scheduledDate && oldIv.scheduledTime) {
+                  const oldSlotId = `${oldIv.scheduledDate}_${oldIv.scheduledTime.replace(/[: ]/g, "")}`;
+                  await markSlotFree(oldIv.interviewerId, oldSlotId).catch(() => {});
+                }
+                await markInterviewCancelled(inv.replacingInterviewId, {
+                  reason: `Rescheduled by candidate — picked a new slot on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`,
+                  cancelledBy: "admin",
+                });
+                if (APPS_SCRIPT_URL && oldIv.interviewerEmail) {
+                  callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+                    action:  "sendEmail",
+                    subject: `Interview Cancelled: ${oldIv.round || oldIv.templateName || "Interview"}`,
+                    body:
+                      `Hi {{name}},\n\nThe following interview has been cancelled — the candidate rescheduled to a new slot:\n\n` +
+                      `Candidate: ${oldIv.candidateName || "—"}\nRound: ${oldIv.round || oldIv.templateName || "Interview"}\n` +
+                      `Date: ${formatDate(oldIv.scheduledDate)}\nTime: ${oldIv.scheduledTime}\n\n` +
+                      `They'll be interviewed at the new time instead — you may be assigned again depending on availability.\n\n— NxtWave Team`,
+                    recipients: [{ email: oldIv.interviewerEmail, name: oldIv.interviewerName || "Panelist" }],
+                  }).catch(() => {});
+                }
+              }
+              await updateInterview(inv.replacingInterviewId, { rescheduledTo: id });
+            } catch (e) {
+              console.error("Failed to cancel/link the rescheduled-from interview:", e);
+            }
+          })();
         }
       }
 

@@ -337,9 +337,20 @@ export default function StudentDashboardPage() {
     setResumeSaving(false);
   };
 
-  const handleRequestReschedule = async (interviewId) => {
+  // No admin-approval gate before picking a new time anymore — the reason
+  // is still recorded (so admin knows why, same endpoint as before), then
+  // this goes straight into the self-book flow for that interview's own
+  // template, with replacingInterviewId carried through so the OLD
+  // interview gets cancelled + linked automatically once an admin
+  // confirms the NEW booking (same confirm step every self-book already
+  // goes through — see handleConfirmBooking in CandidateSchedulingTab.jsx).
+  const handleRequestReschedule = async (interviewId, templateId) => {
     const reason = window.prompt("Why would you like to reschedule this interview? (This goes to the admin team.)");
     if (!reason || !reason.trim()) return;
+    if (!templateId) {
+      alert("Couldn't start rebooking — this interview has no template on record. Please reach out to the admin team.");
+      return;
+    }
     setReschedulingId(interviewId);
     try {
       const res = await fetch("/api/sso/interviews/request-reschedule", {
@@ -353,6 +364,7 @@ export default function StudentDashboardPage() {
           ...d,
           interviews: d.interviews.map(iv => iv.id === interviewId ? { ...iv, rescheduleRequested: true } : iv),
         }));
+        await handleSelfBook(templateId, interviewId);
       } else {
         alert("Couldn't submit your reschedule request. Please try again.");
       }
@@ -368,21 +380,19 @@ export default function StudentDashboardPage() {
   // that did get confirmed, or got interrupted after ensureSelfBookInvite
   // ran), self-book-start hands back that real invite instead so it's
   // resumed rather than duplicated.
-  const handleSelfBook = async (templateId) => {
+  const handleSelfBook = async (templateId, replacingInterviewId) => {
     setBookingTemplateId(templateId);
     try {
       const res = await fetch("/api/sso/interviews/self-book-start", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId }),
+        body: JSON.stringify({ templateId, ...(replacingInterviewId ? { replacingInterviewId } : {}) }),
       });
       const json = await res.json();
       if (res.ok) {
         setSelfBookDraft(json);
         setTab("slots");
-        setShowTemplatePicker(false);
-        setNewBookingTemplateId("");
         // If this template already had a Nudge invite, self-book-start
         // computed a wider EFFECTIVE date range just for this picker
         // (json.dateRangeStart/End) — the invite's own stored range is
@@ -415,7 +425,10 @@ export default function StudentDashboardPage() {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
-        body: JSON.stringify({ templateId: selfBookDraft.templateId }),
+        body: JSON.stringify({
+          templateId: selfBookDraft.templateId,
+          ...(selfBookDraft.replacingInterviewId ? { replacingInterviewId: selfBookDraft.replacingInterviewId } : {}),
+        }),
       });
       const json = await res.json();
       if (!res.ok) { alert("Couldn't confirm this booking. Please try again."); return null; }
@@ -1194,7 +1207,7 @@ export default function StudentDashboardPage() {
                                 {iv.status === "scheduled" && !iv.rescheduleRequested && !iv.rescheduleApproved && (
                                   <KebabMenu actions={[{
                                     label: reschedulingId === iv.id ? "Submitting…" : "Request Reschedule",
-                                    onClick: () => handleRequestReschedule(iv.id),
+                                    onClick: () => handleRequestReschedule(iv.id, iv.templateId),
                                     disabled: reschedulingId === iv.id,
                                   }]} />
                                 )}

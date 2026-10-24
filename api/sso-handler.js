@@ -532,7 +532,7 @@ async function findSkillMatchedInterviewerIds(db, templateSkills) {
 // window — isPastGrace — since that's effectively abandoned and reusing it
 // would just hand back the same dead-end invite forever instead of a fresh
 // 7-day one).
-async function resolveSelfBookTarget(db, session, templateId) {
+async function resolveSelfBookTarget(db, session, templateId, replacingInterviewId) {
   const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
   if (!candidateSnap.exists) return { error: "candidate_not_found", status: 404 };
   const candidate = candidateSnap.data();
@@ -565,6 +565,13 @@ async function resolveSelfBookTarget(db, session, templateId) {
       dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < todayStr) ? todayStr : existing.dateRangeStart,
       dateRangeEnd: (!existing.dateRangeEnd || existing.dateRangeEnd < minEnd) ? minEnd : existing.dateRangeEnd,
     };
+    // Reschedule flow, reusing a pre-existing invite for this template
+    // (uncommon, but possible) — best-effort patch so handleConfirmBooking
+    // still knows to cancel+link the old interview once this gets confirmed.
+    if (replacingInterviewId && !existing.replacingInterviewId) {
+      await db.collection("scheduleInvites").doc(existing.id).update({ replacingInterviewId }).catch(() => {});
+      effective.replacingInterviewId = replacingInterviewId;
+    }
     return { candidate, existing: effective };
   }
 
@@ -586,6 +593,7 @@ async function resolveSelfBookTarget(db, session, templateId) {
       round: template.name, duration: template.durationMinutes || 60,
       dateRangeStart, dateRangeEnd, expiresAt,
       ...(matchedInterviewerIds ? { interviewerIds: matchedInterviewerIds } : {}),
+      ...(replacingInterviewId ? { replacingInterviewId } : {}),
     },
   };
 }
@@ -609,9 +617,14 @@ async function selfBookStart(req, res) {
   if (!session) return res.status(401).json({ error: "no_session" });
   const templateId = String(req.body?.templateId || "").trim();
   if (!templateId) return res.status(400).json({ error: "invalid_parameter" });
+  // Set when this self-book is really a reschedule (see "Request
+  // Reschedule" on the Student Dashboard) — carried through to selfBook
+  // below and ultimately read by handleConfirmBooking (admin side) to
+  // cancel+link the OLD interview once the new one is actually booked.
+  const replacingInterviewId = String(req.body?.replacingInterviewId || "").trim() || null;
 
   const db = getDb();
-  const result = await resolveSelfBookTarget(db, session, templateId);
+  const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId);
   if (result.error) return res.status(result.status).json({ error: result.error });
   if (result.existing) {
     const inv = result.existing;
@@ -619,6 +632,7 @@ async function selfBookStart(req, res) {
       inviteId: inv.id, templateId, templateName: inv.templateName, duration: inv.duration,
       dateRangeStart: inv.dateRangeStart, dateRangeEnd: inv.dateRangeEnd,
       interviewerIds: inv.interviewerIds || null,
+      replacingInterviewId: inv.replacingInterviewId || null,
     });
   }
   return res.status(200).json({ inviteId: null, ...result.draft });
@@ -641,9 +655,10 @@ async function selfBook(req, res) {
 
   const templateId = String(req.body?.templateId || "").trim();
   if (!templateId) return res.status(400).json({ error: "invalid_parameter" });
+  const replacingInterviewId = String(req.body?.replacingInterviewId || "").trim() || null;
 
   const db = getDb();
-  const result = await resolveSelfBookTarget(db, session, templateId);
+  const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId);
   if (result.error) return res.status(result.status).json({ error: result.error });
   if (result.existing) return res.status(200).json({ success: true, inviteId: result.existing.id, reused: true });
 
@@ -665,6 +680,7 @@ async function selfBook(req, res) {
     inviteToken: randomToken(16),
     selfBooked: true,
     ...(draft.interviewerIds ? { interviewerIds: draft.interviewerIds } : {}),
+    ...(draft.replacingInterviewId ? { replacingInterviewId: draft.replacingInterviewId } : {}),
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     expiresAt: draft.expiresAt,

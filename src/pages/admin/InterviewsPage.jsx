@@ -2250,9 +2250,17 @@ export default function InterviewsPage() {
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
                     {
+                      // Hidden "for now" (not deleted) — Request Reschedule
+                      // on the Student Dashboard no longer waits on this
+                      // gate at all; the candidate goes straight into
+                      // picking a new slot, and confirming THAT booking is
+                      // what now cancels the old interview (see
+                      // handleConfirmBooking in CandidateSchedulingTab.jsx).
+                      // Leaving this visible would just invite a premature/
+                      // redundant click. Flip `show` back on to restore it.
                       label: "Approve Reschedule",
                       onClick: () => handleApproveReschedule(iv),
-                      show: !!iv.rescheduleRequested,
+                      show: false,
                       highlight: true,
                     },
                     {
