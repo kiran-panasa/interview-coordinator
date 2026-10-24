@@ -7,7 +7,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, HelpCircle,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -185,6 +185,43 @@ const NAV = [
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
   { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
   { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
+  { id: "faq",      label: "FAQ",            icon: HelpCircle, accent: "rose" },
+];
+
+// Static — no backend, no submit-a-question flow (that's the Student
+// Queries feature, deliberately removed). Just answers to the questions
+// candidates actually ask, kept close to the terminology/flow this
+// dashboard uses (e.g. "Book an Interview" tab, "Request Reschedule" menu)
+// so the answers match what they'll actually see on screen.
+const FAQ_ITEMS = [
+  {
+    q: "How do I schedule an interview?",
+    a: "Go to \"Book an Interview\" in the left menu. Click the round/template you want to book, then pick an open date and time slot. Once you confirm, it shows up under \"My Interviews\" as Scheduled.",
+  },
+  {
+    q: "How do I reschedule an interview?",
+    a: "Open \"My Interviews\", find the scheduled interview, and click the ⋮ (three dots) on its card → \"Request Reschedule\". Enter a short reason, then pick a new slot the same way you booked the first time. Your old interview is automatically cancelled once the admin confirms your new slot.",
+  },
+  {
+    q: "Where do I find my interview link?",
+    a: "On \"My Interviews\", your upcoming interview card has a \"Join Meet\" button — it's active a few minutes before your scheduled time.",
+  },
+  {
+    q: "I missed my booking window — what now?",
+    a: "If a slot you were sent expires before you book it, it's marked \"Missed\" under \"Book an Interview\". Reach out to the admin team to get a new window opened for that round.",
+  },
+  {
+    q: "How do I know how many times I've attempted a round?",
+    a: "If you've taken the same round more than once (e.g. after a reschedule), each card is labeled \"1st Attempt\", \"2nd Attempt\", and so on, in the order they happened.",
+  },
+  {
+    q: "What's the Integrity Score on my completed interview?",
+    a: "It's an automated check run on your interview recording. Click the \"Integrity\" badge on a completed card to see the breakdown.",
+  },
+  {
+    q: "Can I update my resume link?",
+    a: "Yes — go to \"My Details\" and paste your resume link (e.g. a Google Drive share link) under Resume, then click Save.",
+  },
 ];
 
 export default function StudentDashboardPage() {
@@ -199,6 +236,7 @@ export default function StudentDashboardPage() {
   const [resources, setResources] = useState(null);
   const [newInviteIds, setNewInviteIds] = useState(new Set());
   const [newInterviewIds, setNewInterviewIds] = useState(new Set());
+  const [expandedFaqIndex, setExpandedFaqIndex] = useState(null);
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
   const [integrityInterview, setIntegrityInterview] = useState(null);
@@ -1212,6 +1250,33 @@ export default function StudentDashboardPage() {
               </motion.div>
             )}
 
+            {tab === "faq" && (
+              <motion.div key="faq" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">FAQ</h1>
+                  <p className="text-sm text-gray-500 mt-0.5">Common questions about booking and rescheduling interviews.</p>
+                </div>
+                <Card className="divide-y divide-gray-100 p-0 overflow-hidden">
+                  {FAQ_ITEMS.map((item, i) => {
+                    const open = expandedFaqIndex === i;
+                    return (
+                      <div key={i}>
+                        <button onClick={() => setExpandedFaqIndex(open ? null : i)}
+                          className="w-full flex items-center justify-between gap-3 text-left px-5 py-4 hover:bg-gray-50 transition-colors">
+                          <span className="text-sm font-semibold text-gray-800">{item.q}</span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+                        </button>
+                        {open && (
+                          <div className="px-5 pb-4 -mt-1">
+                            <p className="text-sm text-gray-500 leading-relaxed">{item.a}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </Card>
+              </motion.div>
+            )}
 
           </div>
         </div>
