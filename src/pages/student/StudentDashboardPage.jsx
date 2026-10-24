@@ -207,16 +207,8 @@ const FAQ_ITEMS = [
     a: "On \"My Interviews\", your upcoming interview card has a \"Join Meet\" button — it's active a few minutes before your scheduled time.",
   },
   {
-    q: "I missed my booking window — what now?",
-    a: "If a slot you were sent expires before you book it, it's marked \"Missed\" under \"Book an Interview\". Reach out to the admin team to get a new window opened for that round.",
-  },
-  {
     q: "How do I know how many times I've attempted a round?",
     a: "If you've taken the same round more than once (e.g. after a reschedule), each card is labeled \"1st Attempt\", \"2nd Attempt\", and so on, in the order they happened.",
-  },
-  {
-    q: "What's the Integrity Score on my completed interview?",
-    a: "It's an automated check run on your interview recording. Click the \"Integrity\" badge on a completed card to see the breakdown.",
   },
   {
     q: "Can I update my resume link?",
