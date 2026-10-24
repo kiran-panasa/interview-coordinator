@@ -102,8 +102,8 @@ function readCookie(name) {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-function Card({ children, className = "", innerRef }) {
-  return <div ref={innerRef} className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${className}`}>{children}</div>;
+function Card({ children, className = "", innerRef, id, onClick }) {
+  return <div ref={innerRef} id={id} onClick={onClick} className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 ${className}`}>{children}</div>;
 }
 
 // Same entrance pattern every admin page already uses (fadeUp + staggered
@@ -228,6 +228,10 @@ export default function StudentDashboardPage() {
   const [integrityInterview, setIntegrityInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
+  // Set when a card is clicked from Overview's Upcoming list — scrolls to
+  // and briefly highlights that exact card once My Interviews renders,
+  // then clears itself so the ring doesn't linger forever.
+  const [highlightInterviewId, setHighlightInterviewId] = useState(null);
   const [checkingInviteId, setCheckingInviteId] = useState(null);
   // The active self-book-in-progress draft — no ScheduleInvite exists for
   // it yet (see handleSelfBook / ensureSelfBookInvite), so abandoning it
@@ -252,6 +256,19 @@ export default function StudentDashboardPage() {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [expandedInviteId]);
+
+  // Jumping here from Overview's Upcoming list (see goToInterview) — the
+  // target card only exists once My Interviews has actually rendered, so
+  // this waits a tick for that, scrolls it into view, and clears the
+  // highlight after a moment instead of leaving the ring on permanently.
+  useEffect(() => {
+    if (tab !== "interviews" || !highlightInterviewId) return;
+    const t = setTimeout(() => {
+      document.getElementById(`iv-card-${highlightInterviewId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    const clear = setTimeout(() => setHighlightInterviewId(null), 2500);
+    return () => { clearTimeout(t); clearTimeout(clear); };
+  }, [tab, highlightInterviewId]);
 
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
@@ -561,7 +578,7 @@ export default function StudentDashboardPage() {
   const upcomingCombined = [
     ...upcomingScheduled.map(iv => ({
       id: iv.id, title: interviewTitle(iv), date: iv.scheduledDate, time: iv.scheduledTime,
-      duration: iv.duration, meetLink: iv.meetLink, pending: false,
+      duration: iv.duration, meetLink: iv.meetLink, pending: false, status: iv.status,
     })),
     ...awaiting.map(inv => ({
       id: inv.id, title: inv.round || inv.templateName || "Interview", date: inv.bookedDate, time: inv.bookedTime,
@@ -700,11 +717,20 @@ export default function StudentDashboardPage() {
                     </Card>
                   ) : (
                     <div className="space-y-3">
-                      {upcomingCombined.map((iv, i) => (
-                        <motion.div key={iv.id} initial="hidden" animate="visible" custom={i + 4} variants={fadeUp}>
-                          <Card className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${
+                      {upcomingCombined.map((iv, i) => {
+                        // Only a real "scheduled" interview actually has a
+                        // card to jump to in My Interviews — a still-pending
+                        // slot or one awaiting admin acceptance doesn't show
+                        // there (see INTERVIEW_SECTIONS), so those stay
+                        // non-clickable rather than jumping to nothing.
+                        const clickable = !iv.pending && iv.status === "scheduled";
+                        return (
+                      <motion.div key={iv.id} initial="hidden" animate="visible" custom={i + 4} variants={fadeUp}>
+                          <Card
+                            onClick={clickable ? () => { setHighlightInterviewId(iv.id); setActiveInterviewTab("all"); setTab("interviews"); } : undefined}
+                            className={`p-5 flex items-center justify-between gap-3 flex-wrap border-l-4 ${
                             iv.pending ? ACCENT_BORDER.emerald : ACCENT_BORDER.indigo
-                          }`}>
+                          } ${clickable ? "cursor-pointer" : ""}`}>
                             <div className="flex items-center gap-3">
                               <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
                                 iv.pending ? "bg-emerald-50 text-emerald-600" : "bg-indigo-50 text-indigo-600"
@@ -723,14 +749,15 @@ export default function StudentDashboardPage() {
                                 Slot Booked — Pending Confirmation
                               </span>
                             ) : iv.meetLink && (
-                              <a href={iv.meetLink} target="_blank" rel="noreferrer"
+                              <a href={iv.meetLink} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
                                 className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-6 rounded-xl text-sm hover:bg-brand-700 transition-colors flex-shrink-0">
                                 <Video className="w-3.5 h-3.5" /> Join Meet
                               </a>
                             )}
                           </Card>
-                        </motion.div>
-                      ))}
+                      </motion.div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1132,7 +1159,7 @@ export default function StudentDashboardPage() {
                             {section.label} <span className="text-gray-300">({items.length})</span>
                           </p>
                           {items.map(iv => isActive ? (
-                            <Card key={iv.id} className={`p-6 border-l-4 ${ACCENT_BORDER[accent]}`}>
+                            <Card key={iv.id} id={`iv-card-${iv.id}`} className={`p-6 border-l-4 ${ACCENT_BORDER[accent]} ${highlightInterviewId === iv.id ? "ring-2 ring-brand-400" : ""}`}>
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div>
                                   <div className="flex items-center gap-2 flex-wrap">
@@ -1180,7 +1207,7 @@ export default function StudentDashboardPage() {
                               </div>
                             </Card>
                           ) : (
-                            <Card key={iv.id} className={`p-5 border-l-4 ${ACCENT_BORDER[accent]}`}>
+                            <Card key={iv.id} id={`iv-card-${iv.id}`} className={`p-5 border-l-4 ${ACCENT_BORDER[accent]} ${highlightInterviewId === iv.id ? "ring-2 ring-brand-400" : ""}`}>
                               <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div className="opacity-80">
                                   <div className="flex items-center gap-2 flex-wrap">
