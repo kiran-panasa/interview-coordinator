@@ -567,6 +567,14 @@ export default function StudentDashboardPage() {
       aiReport: null, integrityScore: null, finalScore: null, cancelReason: inv.rejectionReason,
     })),
   ];
+  // Pending Confirmation / Scheduling In Progress / Reschedule Requested /
+  // Reschedule Approved are hidden "for now" — not deleted, INTERVIEW_
+  // SECTIONS itself is untouched, this just filters which sections render
+  // in My Interviews (tabs, empty-check, and the "All" list) and which
+  // interviews count toward "All". Remove this filter to bring them back.
+  const HIDDEN_SECTION_KEYS = new Set(["pending_confirmation", "pending_acceptance", "reschedule_requested", "reschedule_approved"]);
+  const visibleSections = INTERVIEW_SECTIONS.filter(s => !HIDDEN_SECTION_KEYS.has(s.key));
+  const visibleInterviews = interviewsWithPending.filter(iv => visibleSections.some(s => s.match(iv)));
   // Overview's "Upcoming" list — confirmed interviews plus slots already
   // picked but still waiting on admin confirmation, merged into one
   // soonest-first list. A slot the candidate already picked (via Nudge or
@@ -599,7 +607,7 @@ export default function StudentDashboardPage() {
     // missed, now combined into one list), and the interviews badge is
     // the same total the "All" quick-tab shows under My Interviews.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
-      : item.id === "interviews" ? interviewsWithPending.length
+      : item.id === "interviews" ? visibleInterviews.length
       : item.id === "help" ? queries.filter(q => q.status === "replied").length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
@@ -1076,7 +1084,7 @@ export default function StudentDashboardPage() {
                   </Card>
                 )}
 
-                {interviewsWithPending.length === 0 ? (
+                {visibleInterviews.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
                     <Inbox className="w-8 h-8 text-gray-200 mb-2" />
                     <p className="text-sm text-gray-400">No interviews yet.</p>
@@ -1092,16 +1100,8 @@ export default function StudentDashboardPage() {
                        thin-underline style where every inactive tab looked
                        identically gray. */}
                     <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 mb-3 overflow-x-auto">
-                      {[
-                        { key: "all", label: "All" },
-                        // These 4 statuses are usually empty and clutter the
-                        // tab bar — their sections (and any action needed,
-                        // e.g. a "Book an Interview" button after a
-                        // reschedule approval) still show normally under
-                        // "All" below, this just removes their own tab.
-                        ...INTERVIEW_SECTIONS.filter(s => !["pending_confirmation", "pending_acceptance", "reschedule_requested", "reschedule_approved"].includes(s.key)),
-                      ].map(tab => {
-                        const count = tab.key === "all" ? interviewsWithPending.length : interviewsWithPending.filter(tab.match).length;
+                      {[{ key: "all", label: "All" }, ...visibleSections].map(tab => {
+                        const count = tab.key === "all" ? visibleInterviews.length : visibleInterviews.filter(tab.match).length;
                         const isActiveTab = activeInterviewTab === tab.key;
                         const c = TAB_COLORS[tab.key] || TAB_COLORS.cancelled;
                         return (
@@ -1117,9 +1117,9 @@ export default function StudentDashboardPage() {
                     </div>
 
                     {(activeInterviewTab === "all"
-                      ? INTERVIEW_SECTIONS
-                      : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
-                    ).every(section => interviewsWithPending.filter(section.match).length === 0) && (
+                      ? visibleSections
+                      : visibleSections.filter(s => s.key === activeInterviewTab)
+                    ).every(section => visibleInterviews.filter(section.match).length === 0) && (
                       <Card className="flex flex-col items-center justify-center py-10">
                         <Inbox className="w-8 h-8 text-gray-200 mb-2" />
                         <p className="text-sm text-gray-400">Nothing here yet.</p>
@@ -1127,15 +1127,15 @@ export default function StudentDashboardPage() {
                     )}
 
                     {(activeInterviewTab === "all"
-                      ? INTERVIEW_SECTIONS
-                      : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
+                      ? visibleSections
+                      : visibleSections.filter(s => s.key === activeInterviewTab)
                     ).map(section => {
                       // Date-wise, soonest/earliest first — items had no
                       // defined order before (whatever order they came back
                       // from Firestore in), which could put a 24th before a
                       // 20th. Undated items (shouldn't normally happen for
                       // these statuses) sort last rather than disappearing.
-                      const items = interviewsWithPending.filter(section.match).slice().sort((a, b) => {
+                      const items = visibleInterviews.filter(section.match).slice().sort((a, b) => {
                         const da = a.scheduledDate ? `${a.scheduledDate}T${a.scheduledTime || ""}` : "";
                         const db = b.scheduledDate ? `${b.scheduledDate}T${b.scheduledTime || ""}` : "";
                         if (!da && !db) return 0;
