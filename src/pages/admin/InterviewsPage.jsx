@@ -6,6 +6,7 @@ import {
   Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles, CalendarPlus,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
+import { ordinalLabel } from "../../utils/strings";
 import { DURATIONS } from "../../constants/durations";
 import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 import { parseImportCSV, parseLinksCSV, downloadImportTemplate, callAppsScript, VERDICT_MAP } from "../../utils/interviewImport";
@@ -1679,6 +1680,32 @@ export default function InterviewsPage() {
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
+  // "1st Attempt"/"2nd Attempt"/... — when the SAME candidate has more
+  // than one interview for the SAME template (a reschedule, or a genuine
+  // retake), labels which attempt this one is instead of two same-named
+  // rows looking like an unexplained duplicate. Computed from `interviews`
+  // (the currently-loaded date range), not the full historical record —
+  // an attempt from well outside the selected date window won't factor in,
+  // so this is "accurate for what's currently in view," not a guaranteed
+  // global count. Only labeled when there's genuinely more than one.
+  const attemptLabelByInterviewId = useMemo(() => {
+    const byKey = new Map();
+    interviews.filter(iv => iv.candidateId && iv.templateId).forEach(iv => {
+      const key = `${iv.candidateId}|${iv.templateId}`;
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(iv);
+    });
+    const map = new Map();
+    byKey.forEach(list => {
+      if (list.length < 2) return;
+      list
+        .slice()
+        .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
+        .forEach((iv, i) => map.set(iv.id, ordinalLabel(i + 1)));
+    });
+    return map;
+  }, [interviews]);
+
   // Interviewers are keyed by account ID (falls back to email for older
   // records without one), and labelled by their current name — so an email
   // change never leaves an old address showing up as the option label.
@@ -2099,7 +2126,14 @@ export default function InterviewsPage() {
                 className="hover:bg-gray-50/70 transition-colors"
               >
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-gray-900">{resolvedName(iv)}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold text-gray-900">{resolvedName(iv)}</p>
+                    {attemptLabelByInterviewId.has(iv.id) && (
+                      <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        {attemptLabelByInterviewId.get(iv.id)}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-400">{iv.candidateEmail}</p>
                 </td>
                 <td className="px-4 py-3 text-gray-700 text-xs">

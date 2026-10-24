@@ -349,6 +349,7 @@ async function me(req, res) {
         integrityAnswers: iv.feedback?.domains?.integrity || null,
         cancelReason: iv.cancelReason || "",
         rescheduledTo: iv.rescheduledTo || "",
+        createdAt: iv.createdAt || "",
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));

@@ -10,6 +10,7 @@ import {
   CheckCircle2, XCircle, LifeBuoy, UserX, HelpCircle, Send,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
+import { ordinalLabel } from "../../utils/strings";
 import { getPreInterviewResources } from "../../api/firestore";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
 import AiReportModal from "../../features/interviews/AiReportModal";
@@ -504,6 +505,28 @@ export default function StudentDashboardPage() {
   }
 
   const { candidate, templates = [], interviews = [], pendingInvites = [], queries = [] } = data;
+  // "1st Attempt"/"2nd Attempt"/... — when there's more than one interview
+  // for the SAME template (a reschedule, or a genuine retake), both this
+  // dashboard and the admin's Interviews page should show which attempt
+  // this one is, instead of two same-named cards looking like an
+  // unexplained duplicate. Only labeled when there's genuinely more than
+  // one — a normal single interview stays unlabeled.
+  const attemptLabelByInterviewId = (() => {
+    const byTemplate = new Map();
+    interviews.filter(iv => iv.templateId).forEach(iv => {
+      if (!byTemplate.has(iv.templateId)) byTemplate.set(iv.templateId, []);
+      byTemplate.get(iv.templateId).push(iv);
+    });
+    const map = new Map();
+    byTemplate.forEach(list => {
+      if (list.length < 2) return;
+      list
+        .slice()
+        .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
+        .forEach((iv, i) => map.set(iv.id, ordinalLabel(i + 1)));
+    });
+    return map;
+  })();
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
   // All upcoming interviews with a confirmed date that hasn't already
   // passed, soonest first — previously this picked the first array match
@@ -1169,7 +1192,14 @@ export default function StudentDashboardPage() {
                             <Card key={iv.id} className={`p-6 border-l-4 ${ACCENT_BORDER[accent]}`}>
                               <div className="flex items-start justify-between gap-3 mb-3">
                                 <div>
-                                  <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                                    {attemptLabelByInterviewId.has(iv.id) && (
+                                      <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                                        {attemptLabelByInterviewId.get(iv.id)}
+                                      </span>
+                                    )}
+                                  </div>
                                   {iv.scheduledDate && (
                                     <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
                                       <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -1223,7 +1253,14 @@ export default function StudentDashboardPage() {
                             <Card key={iv.id} className={`p-5 border-l-4 ${ACCENT_BORDER[accent]}`}>
                               <div className="flex items-center justify-between gap-3 flex-wrap">
                                 <div className="opacity-80">
-                                  <p className="font-semibold text-gray-700 text-sm">{interviewTitle(iv)}</p>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="font-semibold text-gray-700 text-sm">{interviewTitle(iv)}</p>
+                                    {attemptLabelByInterviewId.has(iv.id) && (
+                                      <span className="text-[10px] font-bold uppercase tracking-wide text-violet-500 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                                        {attemptLabelByInterviewId.get(iv.id)}
+                                      </span>
+                                    )}
+                                  </div>
                                   {iv.scheduledDate && (
                                     <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
                                   )}

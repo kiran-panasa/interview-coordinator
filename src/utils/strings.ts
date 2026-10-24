@@ -52,3 +52,10 @@ export function avatarColor(id?: string): string {
   for (const ch of (id || "")) n += ch.charCodeAt(0);
   return AVATAR_COLORS[n % AVATAR_COLORS.length];
 }
+
+/** "1st Attempt", "2nd Attempt", "3rd Attempt", "4th Attempt", ... */
+export function ordinalLabel(n: number): string {
+  const v = n % 100;
+  const suffix = (v >= 11 && v <= 13) ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th");
+  return `${n}${suffix} Attempt`;
+}
