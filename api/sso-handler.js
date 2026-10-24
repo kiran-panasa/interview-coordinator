@@ -305,6 +305,8 @@ async function me(req, res) {
       bookedTime: inv.bookedTime || "",
       selfBooked: !!inv.selfBooked,
       rejectionReason: inv.rejectionReason || "",
+      createdAt: inv.createdAt || "",
+      updatedAt: inv.updatedAt || "",
     }));
 
   // Matched by candidateId (the normal, correct path) UNIONED with a
@@ -344,8 +346,10 @@ async function me(req, res) {
         finalScore: iv.feedback?.finalVerdict ?? null,
         integrityAnswers: iv.feedback?.domains?.integrity || null,
         cancelReason: iv.cancelReason || "",
+        cancelledBy: iv.cancelledBy || "",
         rescheduledTo: iv.rescheduledTo || "",
         createdAt: iv.createdAt || "",
+        updatedAt: iv.updatedAt || "",
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));

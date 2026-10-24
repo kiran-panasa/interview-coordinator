@@ -40,6 +40,20 @@ function writeSeenInterviewStatuses(sigs) {
   try { localStorage.setItem(SEEN_INTERVIEW_STATUSES_KEY, JSON.stringify([...sigs])); } catch { /* storage unavailable */ }
 }
 
+// A rejected booking has no linked "replacement" the way a cancelled
+// interview has `rescheduledTo` — it's just an invite that stays
+// status:"cancelled" forever once rejected. So instead of trying to infer
+// "already resolved", this tracks "the candidate already saw this one and
+// started rebooking" client-side, same idea as the two "seen" sets above.
+const DISMISSED_REJECTIONS_KEY = "ic_dismissed_rejections";
+function readDismissedRejectionIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_REJECTIONS_KEY) || "[]")); }
+  catch { return new Set(); }
+}
+function writeDismissedRejectionIds(ids) {
+  try { localStorage.setItem(DISMISSED_REJECTIONS_KEY, JSON.stringify([...ids])); } catch { /* storage unavailable */ }
+}
+
 const STATUS_LABEL = {
   pending_acceptance: "Scheduling In Progress",
   scheduled:           "Scheduled",
@@ -225,6 +239,7 @@ export default function StudentDashboardPage() {
   const [resources, setResources] = useState(null);
   const [newInviteIds, setNewInviteIds] = useState(new Set());
   const [newInterviewIds, setNewInterviewIds] = useState(new Set());
+  const [dismissedRejectionIds, setDismissedRejectionIds] = useState(() => readDismissedRejectionIds());
   const [expandedFaqIndex, setExpandedFaqIndex] = useState(null);
   const [expandedInviteId, setExpandedInviteId] = useState(null);
   const [aiReportInterview, setAiReportInterview] = useState(null);
@@ -601,6 +616,23 @@ export default function StudentDashboardPage() {
     .filter(iv => iv.status === "cancelled" && iv.cancelledBy === "admin" && !iv.rescheduledTo)
     .slice()
     .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  // An admin rejecting a picked slot (handleRejectBooking in
+  // CandidateSchedulingTab.jsx) is the other way a candidate ends up
+  // needing a new slot with no interview of their own ever having existed —
+  // there's no `rescheduledTo`-style link to tell "already resolved" apart,
+  // so this uses dismissedRejectionIds (see DISMISSED_REJECTIONS_KEY)
+  // instead, set the moment they click "Select a New Slot" below.
+  const rejectedNotifications = rejectedInvites.filter(inv => !dismissedRejectionIds.has(inv.id));
+  const notifications = [
+    ...cancelledByAdmin.map(iv => ({
+      id: iv.id, kind: "interview", templateId: iv.templateId, title: interviewTitle(iv),
+      date: iv.scheduledDate, time: iv.scheduledTime, reason: iv.cancelReason, when: iv.updatedAt || "",
+    })),
+    ...rejectedNotifications.map(inv => ({
+      id: inv.id, kind: "invite", templateId: inv.templateId, title: inv.round || inv.templateName || "Interview",
+      date: null, time: null, reason: inv.rejectionReason, when: inv.updatedAt || inv.createdAt || "",
+    })),
+  ].sort((a, b) => b.when.localeCompare(a.when));
   // Overview's summary cards.
   const overviewStats = [
     { label: "Scheduled", value: interviews.filter(i => i.status === "scheduled").length, icon: CalendarClock, chip: "bg-blue-50 text-blue-600" },
@@ -617,7 +649,7 @@ export default function StudentDashboardPage() {
     // how many have a status change the candidate hasn't seen yet.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
       : item.id === "interviews" ? newInterviewIds.size
-      : item.id === "notifications" ? cancelledByAdmin.length
+      : item.id === "notifications" ? notifications.length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
@@ -1282,41 +1314,47 @@ export default function StudentDashboardPage() {
               <motion.div key="notifications" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 tracking-tight">Notifications</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">Interviews the admin team had to cancel — pick a new slot whenever you're ready.</p>
+                  <p className="text-sm text-gray-500 mt-0.5">Bookings the admin team had to cancel or couldn't confirm — pick a new slot whenever you're ready.</p>
                 </div>
-                {cancelledByAdmin.length === 0 ? (
+                {notifications.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
                     <Bell className="w-8 h-8 text-gray-200 mb-2" />
                     <p className="text-sm text-gray-400">Nothing here right now.</p>
                   </Card>
                 ) : (
                   <div className="space-y-3">
-                    {cancelledByAdmin.map(iv => (
-                      <Card key={iv.id} className="p-5 border-l-4 border-l-sky-500">
+                    {notifications.map(n => (
+                      <Card key={n.id} className="p-5 border-l-4 border-l-sky-500">
                         <div className="flex items-start gap-3">
                           <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
                             <Bell className="w-4 h-4" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
-                            {iv.scheduledDate && (
+                            <p className="font-bold text-gray-900">{n.title}</p>
+                            {n.date && (
                               <p className="text-xs text-gray-400 mt-0.5">
-                                Was {formatDate(iv.scheduledDate)} · {iv.scheduledTime}
+                                Was {formatDate(n.date)} · {n.time}
                               </p>
                             )}
                             <p className="text-sm text-gray-600 mt-2">
-                              This interview was cancelled{iv.cancelReason ? `: ${iv.cancelReason}` : "."} Kindly select another slot according to your preferred date.
+                              {n.kind === "interview" ? "This interview was cancelled" : "This booking couldn't be confirmed"}
+                              {n.reason ? `: ${n.reason}` : "."} Kindly select another slot according to your preferred date.
                             </p>
                             <Button variant="primary" className="mt-3"
                               onClick={() => {
-                                if (!iv.templateId) {
-                                  alert("Couldn't start rebooking — this interview has no template on record. Please reach out to the admin team.");
+                                if (!n.templateId) {
+                                  alert("Couldn't start rebooking — this has no template on record. Please reach out to the admin team.");
                                   return;
                                 }
-                                handleSelfBook(iv.templateId, iv.id);
+                                if (n.kind === "invite") {
+                                  const next = new Set(dismissedRejectionIds).add(n.id);
+                                  setDismissedRejectionIds(next);
+                                  writeDismissedRejectionIds(next);
+                                }
+                                handleSelfBook(n.templateId, n.kind === "interview" ? n.id : undefined);
                               }}
                               disabled={bookingTemplateId != null}>
-                              {bookingTemplateId === iv.templateId ? "Starting…" : "Select a New Slot"}
+                              {bookingTemplateId === n.templateId ? "Starting…" : "Select a New Slot"}
                             </Button>
                           </div>
                         </div>
