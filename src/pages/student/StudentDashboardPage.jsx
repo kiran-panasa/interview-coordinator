@@ -1294,21 +1294,15 @@ export default function StudentDashboardPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                                  {iv.finalScore != null && (
-                                    <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                                      Final Score: {Number(iv.finalScore).toFixed(1)}/5
-                                    </span>
-                                  )}
+                                  {/* Clearly clickable, not just a colored
+                                     badge — trailing chevron + a title hint,
+                                     same hover affordance a real button has. */}
                                   {iv.integrityScore != null && (
                                     <button onClick={() => setIntegrityInterview(iv)}
-                                      className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100 transition-colors">
+                                      title="Click to see the integrity breakdown"
+                                      className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full hover:bg-amber-100 hover:border-amber-300 transition-colors">
                                       Integrity: {Number(iv.integrityScore).toFixed(1)}/5
-                                    </button>
-                                  )}
-                                  {iv.aiReport && (
-                                    <button onClick={() => setAiReportInterview(iv)}
-                                      className="flex items-center gap-1 text-xs font-semibold text-brand-600 border border-brand-200 bg-brand-50 px-2.5 py-1 rounded-full hover:bg-brand-100 transition-colors">
-                                      <Sparkles className="w-3 h-3" /> View Report
+                                      <ChevronRight className="w-3 h-3" />
                                     </button>
                                   )}
                                   <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
