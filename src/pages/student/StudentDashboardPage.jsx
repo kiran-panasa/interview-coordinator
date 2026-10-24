@@ -497,14 +497,20 @@ export default function StudentDashboardPage() {
     const map = new Map();
     byTemplate.forEach(list => {
       if (list.length < 2) return;
-      // The very first one in the sequence still counts as attempt #1 (so
-      // the second genuinely reads "2nd Attempt") — it just doesn't get
-      // its own badge, since a bare "1st Attempt" with nothing to
-      // distinguish it from yet isn't useful information.
+      // The attempt number only advances once an attempt actually
+      // completes — a cancelled/declined booking is just a retry of the
+      // SAME attempt, not a new one, so it shares that attempt's number
+      // instead of bumping it. The first one in the sequence still counts
+      // as attempt #1, it just doesn't get its own badge (see the n > 1
+      // check) until there's a genuine 2nd to compare it against.
+      let n = 1;
       list
         .slice()
         .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
-        .forEach((iv, i) => { if (i > 0) map.set(iv.id, ordinalLabel(i + 1)); });
+        .forEach(iv => {
+          if (n > 1) map.set(iv.id, ordinalLabel(n));
+          if (iv.status === "completed") n++;
+        });
     });
     return map;
   })();
