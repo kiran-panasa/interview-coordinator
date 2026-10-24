@@ -1102,24 +1102,52 @@ export default function InterviewsPage() {
   // ── Reschedule requests (student-flagged, see requestReschedule in
   //    api/sso-handler.js) ─────────────────────────────────────────────────
 
-  // Approves the request rather than just dismissing it — the interview
-  // itself is left exactly as-is (still "scheduled" at its OLD date/time;
-  // an admin still separately reschedules it via Edit or a fresh nudge from
-  // Nudge → Candidates), but the Student Dashboard now shows this as its
-  // own "Reschedule Approved" status with a prompt to go pick a new slot,
-  // and hides the Join Meet button since that old slot no longer applies.
+  // Approving used to only flip rescheduleApproved=true and leave the
+  // interview "scheduled" at its OLD date/time forever — the Calendar
+  // event stayed live, the slot stayed booked, and the interviewer was
+  // never told anything changed; the candidate then self-booked a
+  // completely separate new interview with no link back to this one.
+  // A reschedule request IS a real cancellation of this booking, so this
+  // now actually cancels it — same steps as handleCancel below (Calendar
+  // event, slot, interviewer notified) — which also frees the template up
+  // to self-book again on the Student Dashboard automatically (nothing
+  // keeps it "in progress" once this interview is cancelled).
   // rescheduleRequestReason/requestedAt are kept, not nulled out, so the
-  // fact that this interview was ever flagged stays visible on the row
-  // regardless of what status it moves to next.
+  // fact that this was a reschedule stays visible on the row permanently.
   const handleApproveReschedule = async (iv) => {
     try {
+      if (iv.eventId) {
+        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
+      }
+      const slotId = `${iv.scheduledDate}_${(iv.scheduledTime || "").replace(/[: ]/g, "")}`;
+      await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+
+      await markInterviewCancelled(iv.id, {
+        reason: `Reschedule approved — candidate requested a new slot${iv.rescheduleRequestReason ? ` ("${iv.rescheduleRequestReason}")` : ""}.`,
+        cancelledBy: "admin",
+      });
       await updateInterview(iv.id, {
         rescheduleRequested: false,
         rescheduleRequestResolvedAt: new Date().toISOString(),
         rescheduleApproved: true,
         rescheduleApprovedAt: new Date().toISOString(),
       });
-      setToast({ message: "Reschedule approved — the candidate can now pick a new slot." });
+
+      if (APPS_SCRIPT_URL && iv.interviewerEmail) {
+        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+          action:  "sendEmail",
+          subject: `Interview Cancelled: ${iv.round || iv.templateName || "Interview"}`,
+          body:
+            `Hi {{name}},\n\nThe following interview has been cancelled — the candidate requested a reschedule and it was approved:\n\n` +
+            `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
+            `They'll be picking a new slot — you may be assigned again depending on availability.\n\n— NxtWave Team`,
+          recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || "Panelist" }],
+        }).catch(() => {});
+      }
+
+      notifyAdmins("interview_cancelled", `Interview with ${iv.candidateName} on ${formatDate(iv.scheduledDate)} was cancelled (reschedule approved).`, iv);
+      setToast({ message: "Reschedule approved — old interview cancelled, interviewer notified, and the candidate can now pick a new slot." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
     }
