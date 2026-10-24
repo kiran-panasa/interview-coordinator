@@ -1094,12 +1094,19 @@ export default function InterviewsPage() {
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
 
   const handleCancel = async (iv) => {
-    if (!confirm(`Cancel interview with ${iv.candidateName}? This will also delete the calendar event and notify attendees.`)) return;
+    // Free text instead of a plain yes/no confirm — this reason is what the
+    // candidate actually sees (in their Notifications tab and this email),
+    // so "Cancel interview?" with no explanation isn't enough here.
+    const reason = window.prompt(
+      `Cancel interview with ${iv.candidateName}? This will also delete the calendar event and notify attendees.\n\nReason (shown to the candidate):`
+    );
+    if (reason === null) return;
+    if (!reason.trim()) { setToast({ message: "A reason is required to cancel.", type: "error" }); return; }
     try {
       if (iv.eventId) {
         await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
       }
-      await markInterviewCancelled(iv.id);
+      await markInterviewCancelled(iv.id, { reason: reason.trim(), cancelledBy: "admin" });
       const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
       await markSlotFree(iv.interviewerId, slotId).catch(() => {});
 
@@ -1116,8 +1123,9 @@ export default function InterviewsPage() {
           body:
             `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
             `Round: ${iv.round || iv.templateName || "Interview"}\n` +
-            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
-            `Our team will connect with you again shortly.\n\n— NxtWave Team`,
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+            `Reason: ${reason.trim()}\n\n` +
+            `Please log into your dashboard and pick a new slot at your convenience — you'll find it under the Notifications tab.\n\n— NxtWave Team`,
           recipients: [{ email: iv.candidateEmail, name: iv.candidateName || "Candidate" }],
         }).catch(() => {});
       }

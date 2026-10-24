@@ -7,7 +7,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle, HelpCircle,
+  CheckCircle2, XCircle, HelpCircle, Bell,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -125,6 +125,7 @@ const ACCENT_CHIP = {
   emerald: "bg-emerald-50 text-emerald-600",
   amber:   "bg-amber-50 text-amber-600",
   rose:    "bg-rose-50 text-rose-600",
+  sky:     "bg-sky-50 text-sky-600",
 };
 const ACCENT_CHIP_ACTIVE = {
   indigo:  "bg-indigo-600 text-white",
@@ -132,6 +133,7 @@ const ACCENT_CHIP_ACTIVE = {
   emerald: "bg-emerald-600 text-white",
   amber:   "bg-amber-600 text-white",
   rose:    "bg-rose-600 text-white",
+  sky:     "bg-sky-600 text-white",
 };
 const ACCENT_BORDER = {
   indigo:  "border-l-indigo-500",
@@ -179,6 +181,7 @@ const NAV = [
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
   { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
   { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
+  { id: "notifications", label: "Notifications", icon: Bell, accent: "sky" },
   { id: "faq",      label: "FAQ",            icon: HelpCircle, accent: "rose" },
 ];
 
@@ -587,6 +590,17 @@ export default function StudentDashboardPage() {
   ]
     .filter(x => x.date)
     .sort((a, b) => `${a.date}T${a.time || ""}`.localeCompare(`${b.date}T${b.time || ""}`));
+  // Admin cancelled this proactively (e.g. the interviewer had to drop out)
+  // and the candidate hasn't picked a replacement slot yet — rescheduledTo
+  // gets set the moment they do (see handleConfirmBooking in
+  // CandidateSchedulingTab.jsx), so this list clears itself once resolved.
+  // A candidate's OWN reschedule request also routes through
+  // markInterviewCancelled with cancelledBy: "admin", but rescheduledTo is
+  // set in that same step, so it never lingers here.
+  const cancelledByAdmin = interviews
+    .filter(iv => iv.status === "cancelled" && iv.cancelledBy === "admin" && !iv.rescheduledTo)
+    .slice()
+    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
   // Overview's summary cards.
   const overviewStats = [
     { label: "Scheduled", value: interviews.filter(i => i.status === "scheduled").length, icon: CalendarClock, chip: "bg-blue-50 text-blue-600" },
@@ -603,6 +617,7 @@ export default function StudentDashboardPage() {
     // how many have a status change the candidate hasn't seen yet.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
       : item.id === "interviews" ? newInterviewIds.size
+      : item.id === "notifications" ? cancelledByAdmin.length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
@@ -1259,6 +1274,55 @@ export default function StudentDashboardPage() {
                       );
                     })}
                   </>
+                )}
+              </motion.div>
+            )}
+
+            {tab === "notifications" && (
+              <motion.div key="notifications" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5 max-w-2xl">
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900 tracking-tight">Notifications</h1>
+                  <p className="text-sm text-gray-500 mt-0.5">Interviews the admin team had to cancel — pick a new slot whenever you're ready.</p>
+                </div>
+                {cancelledByAdmin.length === 0 ? (
+                  <Card className="flex flex-col items-center justify-center py-10">
+                    <Bell className="w-8 h-8 text-gray-200 mb-2" />
+                    <p className="text-sm text-gray-400">Nothing here right now.</p>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {cancelledByAdmin.map(iv => (
+                      <Card key={iv.id} className="p-5 border-l-4 border-l-sky-500">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
+                            <Bell className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-gray-900">{interviewTitle(iv)}</p>
+                            {iv.scheduledDate && (
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                Was {formatDate(iv.scheduledDate)} · {iv.scheduledTime}
+                              </p>
+                            )}
+                            <p className="text-sm text-gray-600 mt-2">
+                              This interview was cancelled{iv.cancelReason ? `: ${iv.cancelReason}` : "."} Kindly select another slot according to your preferred date.
+                            </p>
+                            <Button variant="primary" className="mt-3"
+                              onClick={() => {
+                                if (!iv.templateId) {
+                                  alert("Couldn't start rebooking — this interview has no template on record. Please reach out to the admin team.");
+                                  return;
+                                }
+                                handleSelfBook(iv.templateId, iv.id);
+                              }}
+                              disabled={bookingTemplateId != null}>
+                              {bookingTemplateId === iv.templateId ? "Starting…" : "Select a New Slot"}
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
                 )}
               </motion.div>
             )}
