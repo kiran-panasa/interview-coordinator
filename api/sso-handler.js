@@ -1,5 +1,4 @@
 import { getDb } from "./_lib/firebaseAdmin.js";
-import { FieldValue } from "firebase-admin/firestore";
 import { randomToken } from "./_lib/ssoSession.js";
 import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
@@ -47,11 +46,8 @@ export default async function handler(req, res) {
       case "otp/request":       return await otpRequest(req, res);
       case "otp/verify":        return await otpVerify(req, res);
       case "profile/resume":    return await updateResume(req, res);
-      case "interviews/request-reschedule": return await requestReschedule(req, res);
       case "interviews/self-book-start": return await selfBookStart(req, res);
       case "interviews/self-book": return await selfBook(req, res);
-      case "queries/create":       return await createQuery(req, res);
-      case "queries/reply":        return await replyToQuery(req, res);
       default:                  return res.status(404).json({ error: "not_found" });
     }
   } catch (err) {
@@ -354,17 +350,9 @@ async function me(req, res) {
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 
-  // Support queries the candidate raised ("AI report not generated",
-  // "panelist didn't join", etc.) — see queries/create and queries/reply
-  // below, and QueriesPage.jsx on the admin side.
-  const queriesSnap = await db.collection("studentQueries").where("candidateId", "==", session.candidateId).get();
-  const queries = queriesSnap.docs
-    .map(d => ({ id: d.id, ...d.data() }))
-    .sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
-
   return res.status(200).json({
     candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: programName, resumeLink: candidate.resumeLink || "" },
-    templates, interviews, pendingInvites, queries,
+    templates, interviews, pendingInvites,
   });
 }
 
@@ -466,37 +454,6 @@ async function updateResume(req, res) {
   return res.status(200).json({ success: true, resumeLink });
 }
 
-// ── POST /api/sso/interviews/request-reschedule ─────────────────────────────
-// Records a reschedule request against the student's OWN interview only —
-// verified by candidateId match, not just interview id, so a student can
-// never flag someone else's interview. No SLA engine or auto-approval yet
-// (see the Student Dashboard & SSO Technical Due Diligence doc — that's a
-// bigger, separate piece of work) — this just captures the request and
-// reason so an admin can see and act on it.
-async function requestReschedule(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
-  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
-  const session = await getValidSession(req);
-  if (!session) return res.status(401).json({ error: "no_session" });
-
-  const interviewId = String(req.body?.interviewId || "").trim();
-  const reason = String(req.body?.reason || "").trim();
-  if (!interviewId || !reason) return res.status(400).json({ error: "invalid_parameter" });
-
-  const db = getDb();
-  const ref = db.collection("interviews").doc(interviewId);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data().candidateId !== session.candidateId) {
-    return res.status(404).json({ error: "interview_not_found" });
-  }
-  await ref.update({
-    rescheduleRequested: true,
-    rescheduleRequestReason: reason,
-    rescheduleRequestedAt: new Date().toISOString(),
-  });
-  return res.status(200).json({ success: true });
-}
-
 // Resolves which active interviewers are eligible for a template's
 // "Required Skills" (Template.skills, set on the Templates page) — an
 // interviewer qualifies only if their own skills (InterviewersPage.jsx /
@@ -533,7 +490,7 @@ async function findSkillMatchedInterviewerIds(db, templateSkills) {
 // window — isPastGrace — since that's effectively abandoned and reusing it
 // would just hand back the same dead-end invite forever instead of a fresh
 // 7-day one).
-async function resolveSelfBookTarget(db, session, templateId, replacingInterviewId) {
+async function resolveSelfBookTarget(db, session, templateId, replacingInterviewId, rescheduleReason) {
   const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
   if (!candidateSnap.exists) return { error: "candidate_not_found", status: 404 };
   const candidate = candidateSnap.data();
@@ -568,10 +525,15 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     };
     // Reschedule flow, reusing a pre-existing invite for this template
     // (uncommon, but possible) — best-effort patch so handleConfirmBooking
-    // still knows to cancel+link the old interview once this gets confirmed.
+    // still knows to cancel+link the old interview once this gets confirmed,
+    // and so the reason the candidate gave is there for admin to see then.
     if (replacingInterviewId && !existing.replacingInterviewId) {
-      await db.collection("scheduleInvites").doc(existing.id).update({ replacingInterviewId }).catch(() => {});
+      await db.collection("scheduleInvites").doc(existing.id).update({
+        replacingInterviewId,
+        ...(rescheduleReason ? { rescheduleReason } : {}),
+      }).catch(() => {});
       effective.replacingInterviewId = replacingInterviewId;
+      if (rescheduleReason) effective.rescheduleReason = rescheduleReason;
     }
     return { candidate, existing: effective };
   }
@@ -595,6 +557,7 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
       dateRangeStart, dateRangeEnd, expiresAt,
       ...(matchedInterviewerIds ? { interviewerIds: matchedInterviewerIds } : {}),
       ...(replacingInterviewId ? { replacingInterviewId } : {}),
+      ...(rescheduleReason ? { rescheduleReason } : {}),
     },
   };
 }
@@ -622,10 +585,13 @@ async function selfBookStart(req, res) {
   // Reschedule" on the Student Dashboard) — carried through to selfBook
   // below and ultimately read by handleConfirmBooking (admin side) to
   // cancel+link the OLD interview once the new one is actually booked.
+  // rescheduleReason is shown to admin right there at that same confirm
+  // step — no separate notification sent when the candidate first asks.
   const replacingInterviewId = String(req.body?.replacingInterviewId || "").trim() || null;
+  const rescheduleReason = String(req.body?.rescheduleReason || "").trim() || null;
 
   const db = getDb();
-  const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId);
+  const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId, rescheduleReason);
   if (result.error) return res.status(result.status).json({ error: result.error });
   if (result.existing) {
     const inv = result.existing;
@@ -657,9 +623,10 @@ async function selfBook(req, res) {
   const templateId = String(req.body?.templateId || "").trim();
   if (!templateId) return res.status(400).json({ error: "invalid_parameter" });
   const replacingInterviewId = String(req.body?.replacingInterviewId || "").trim() || null;
+  const rescheduleReason = String(req.body?.rescheduleReason || "").trim() || null;
 
   const db = getDb();
-  const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId);
+  const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId, rescheduleReason);
   if (result.error) return res.status(result.status).json({ error: result.error });
   if (result.existing) return res.status(200).json({ success: true, inviteId: result.existing.id, reused: true });
 
@@ -682,6 +649,7 @@ async function selfBook(req, res) {
     selfBooked: true,
     ...(draft.interviewerIds ? { interviewerIds: draft.interviewerIds } : {}),
     ...(draft.replacingInterviewId ? { replacingInterviewId: draft.replacingInterviewId } : {}),
+    ...(draft.rescheduleReason ? { rescheduleReason: draft.rescheduleReason } : {}),
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     expiresAt: draft.expiresAt,
@@ -690,75 +658,3 @@ async function selfBook(req, res) {
   return res.status(200).json({ success: true, inviteId: ref.id });
 }
 
-// ── POST /api/sso/queries/create ─────────────────────────────────────────────
-// Lets a candidate raise a support query from the Student Dashboard — "AI
-// report not generated", "panelist didn't join the call", "slot doubt", or
-// anything else — without needing their own Firestore write access (every
-// student-facing mutation on this dashboard goes through this SSO session-
-// authenticated backend, same as self-book/request-reschedule above, not
-// direct client Firestore writes). Shows up on the admin's Student Queries
-// page (src/pages/admin/QueriesPage.jsx); an admin's reply flows back into
-// `queries` in the /api/sso/me response above.
-const QUERY_CATEGORIES = ["ai_report", "panelist_no_show", "slot_doubt", "other"];
-async function createQuery(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
-  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
-  const session = await getValidSession(req);
-  if (!session) return res.status(401).json({ error: "no_session" });
-
-  const category = QUERY_CATEGORIES.includes(req.body?.category) ? req.body.category : "other";
-  const message = String(req.body?.message || "").trim();
-  const interviewId = req.body?.interviewId ? String(req.body.interviewId).trim() : null;
-  if (!message) return res.status(400).json({ error: "invalid_parameter", message: "Please enter a message." });
-
-  const db = getDb();
-  const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
-  if (!candidateSnap.exists) return res.status(404).json({ error: "candidate_not_found" });
-  const candidate = candidateSnap.data();
-
-  const now = new Date().toISOString();
-  const ref = await db.collection("studentQueries").add({
-    candidateId: session.candidateId,
-    candidateName: candidate.name,
-    candidateEmail: candidate.email,
-    candidateUid: candidate.uid || "",
-    category,
-    interviewId,
-    status: "open",
-    createdAt: now,
-    updatedAt: now,
-    messages: [{ from: "student", text: message, at: now }],
-  });
-  return res.status(200).json({ success: true, queryId: ref.id });
-}
-
-// ── POST /api/sso/queries/reply ──────────────────────────────────────────────
-// A candidate continuing their own thread after an admin's reply — not the
-// admin's side of the reply, which is a plain client Firestore write from
-// QueriesPage.jsx (the admin already has full Firestore access via Auth).
-async function replyToQuery(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
-  if (!requireCsrf(req)) return res.status(403).json({ error: "csrf_mismatch" });
-  const session = await getValidSession(req);
-  if (!session) return res.status(401).json({ error: "no_session" });
-
-  const queryId = String(req.body?.queryId || "").trim();
-  const message = String(req.body?.message || "").trim();
-  if (!queryId || !message) return res.status(400).json({ error: "invalid_parameter" });
-
-  const db = getDb();
-  const ref = db.collection("studentQueries").doc(queryId);
-  const snap = await ref.get();
-  // Scoped to the caller's OWN query — a candidateId mismatch is treated
-  // identically to not-found, never leaking whether some other id exists.
-  if (!snap.exists || snap.data().candidateId !== session.candidateId) {
-    return res.status(404).json({ error: "not_found" });
-  }
-  const now = new Date().toISOString();
-  await ref.update({
-    messages: FieldValue.arrayUnion({ from: "student", text: message, at: now }),
-    status: "open",
-    updatedAt: now,
-  });
-  return res.status(200).json({ success: true });
-}

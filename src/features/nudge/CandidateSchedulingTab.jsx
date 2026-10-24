@@ -1303,6 +1303,17 @@ export default function CandidateSchedulingTab({
                     <span className="text-xs text-gray-600">{formatDate(inv.bookedDate)} · {inv.bookedTime}</span>
                     <span className="text-xs text-gray-400">{users.find(u => u.id === inv.bookedInterviewerId)?.displayName || "Interviewer"}</span>
                   </div>
+                  {/* This booking replaces an existing interview (see
+                     "Request Reschedule" on the Student Dashboard) — the
+                     candidate's reason shows right here, exactly when
+                     confirming is also what approves it; nothing was sent
+                     to admin separately back when they first asked. */}
+                  {inv.replacingInterviewId && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 mt-2">
+                      <span className="font-semibold">Reschedule</span> — confirming this cancels their earlier interview.
+                      {inv.rescheduleReason && <> Reason: "{inv.rescheduleReason}"</>}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <button

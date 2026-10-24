@@ -8,5 +8,3 @@ export { useScheduleInvites } from "./useScheduleInvites";
 export { usePendingScheduleInvites } from "./usePendingScheduleInvites";
 export { useInboundRequests } from "./useInboundRequests";
 export { usePendingInboundRequests } from "./usePendingInboundRequests";
-export { useRescheduleRequestedInterviews } from "./useRescheduleRequestedInterviews";
-export { useStudentQueries } from "./useStudentQueries";

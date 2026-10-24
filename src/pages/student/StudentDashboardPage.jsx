@@ -7,7 +7,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle, LifeBuoy, UserX, HelpCircle, Send,
+  CheckCircle2, XCircle,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -50,18 +50,20 @@ const STATUS_STYLE = {
 };
 // My Interviews is split into one section per status (instead of a single
 // "Past" catch-all) so every outcome is its own clearly labeled, trackable
-// group rather than lumped together. "Being Rescheduled" (an interviewer
-// declined and admin needs to reassign) is folded into Reschedule Approved
-// rather than kept as its own tab — from the candidate's side both mean the
-// same thing ("this round is being re-arranged, a new slot is coming"), just
-// triggered from different sides (candidate request vs interviewer decline).
+// group rather than lumped together. Pending Confirmation / Scheduling In
+// Progress / Reschedule Requested / Reschedule Approved are intentionally
+// not sections here — a booked-but-unconfirmed slot already shows in
+// Overview's Upcoming list, and a reschedule now resolves straight through
+// to a real Scheduled/Cancelled pair (see handleConfirmBooking in
+// CandidateSchedulingTab.jsx) without ever sitting in an in-between state
+// long enough to need its own tab.
 const INTERVIEW_SECTIONS = [
-  { key: "pending_confirmation", label: "Pending Confirmation", match: i => i.status === "pending_confirmation" },
-  { key: "pending_acceptance", label: "Scheduling In Progress", match: i => i.status === "pending_acceptance" },
-  { key: "scheduled",      label: "Scheduled",            match: i => i.status === "scheduled" && !i.rescheduleRequested && !i.rescheduleApproved },
+  { key: "scheduled",      label: "Scheduled",            match: i => i.status === "scheduled" },
   { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
-  { key: "reschedule_requested", label: "Reschedule Requested", match: i => i.status === "scheduled" && i.rescheduleRequested },
-  { key: "reschedule_approved", label: "Reschedule Approved", match: i => (i.status === "scheduled" && i.rescheduleApproved && !i.rescheduleRequested) || i.status === "declined" },
+  // An interviewer declined and admin needs to reassign — still the
+  // candidate's own active, unresolved state, so it stays its own section
+  // rather than disappearing.
+  { key: "declined",       label: "Being Rescheduled",   match: i => i.status === "declined" },
   { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
   { key: "no_show",        label: "Missed",               match: i => i.status === "no_show" },
   { key: "cancelled",      label: "Cancelled",           match: i => i.status === "cancelled" },
@@ -69,11 +71,7 @@ const INTERVIEW_SECTIONS = [
 // Sections whose interviews can still be acted on (Join Meet / Request
 // Reschedule) and get the larger, higher-contrast card — everything else
 // (completed/cancelled/etc.) gets the compact, muted "past" card.
-// "Pending Confirmation" has no action to take (just waiting on an admin),
-// but it's still an active, not-yet-resolved state, so it gets the larger
-// card too — none of that card's action buttons key off this status, so
-// none render, it just reads as more prominent than a done/dead entry.
-const ACTIVE_SECTION_KEYS = new Set(["pending_confirmation", "pending_acceptance", "reschedule_requested", "reschedule_approved", "scheduled"]);
+const ACTIVE_SECTION_KEYS = new Set(["scheduled", "declined"]);
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 
@@ -141,12 +139,9 @@ const ACCENT_BORDER = {
 // Left-border accent per My Interviews section, matched to that section's
 // status badge color so the two reinforce each other at a glance.
 const SECTION_ACCENT = {
-  pending_confirmation: "violet",
-  pending_acceptance:   "amber",
   scheduled:             "blue",
   completed:              "emerald",
-  reschedule_requested:   "amber",
-  reschedule_approved:    "sky",
+  declined:               "violet",
   partially_completed:    "sky",
   no_show:                 "rose",
   cancelled:               "gray",
@@ -155,12 +150,9 @@ const SECTION_ACCENT = {
 // at a glance instead of every tab/badge looking the same gray/blue.
 const TAB_COLORS = {
   all:                    { text: "text-indigo-600",  border: "border-indigo-600",  badgeBg: "bg-indigo-100",  badgeText: "text-indigo-700" },
-  pending_confirmation:   { text: "text-violet-600",  border: "border-violet-600",  badgeBg: "bg-violet-100",  badgeText: "text-violet-700" },
-  pending_acceptance:     { text: "text-amber-600",   border: "border-amber-600",   badgeBg: "bg-amber-100",   badgeText: "text-amber-700" },
   scheduled:              { text: "text-blue-600",    border: "border-blue-600",    badgeBg: "bg-blue-100",    badgeText: "text-blue-700" },
   completed:              { text: "text-emerald-600", border: "border-emerald-600", badgeBg: "bg-emerald-100", badgeText: "text-emerald-700" },
-  reschedule_requested:   { text: "text-orange-600",  border: "border-orange-600",  badgeBg: "bg-orange-100",  badgeText: "text-orange-700" },
-  reschedule_approved:    { text: "text-sky-600",     border: "border-sky-600",     badgeBg: "bg-sky-100",     badgeText: "text-sky-700" },
+  declined:               { text: "text-violet-600",  border: "border-violet-600",  badgeBg: "bg-violet-100",  badgeText: "text-violet-700" },
   partially_completed:    { text: "text-teal-600",    border: "border-teal-600",    badgeBg: "bg-teal-100",    badgeText: "text-teal-700" },
   no_show:                { text: "text-rose-600",    border: "border-rose-600",    badgeBg: "bg-rose-100",    badgeText: "text-rose-700" },
   cancelled:              { text: "text-gray-500",    border: "border-gray-400",    badgeBg: "bg-gray-200",    badgeText: "text-gray-600" },
@@ -181,25 +173,7 @@ const NAV = [
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
   { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
   { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
-  // Help removed from nav "for now" (not deleted) — the tab/handlers/state
-  // all still exist and work if navigated to directly; re-add this entry
-  // to bring it back.
-  // { id: "help",      label: "Help",           icon: LifeBuoy, accent: "rose" },
 ];
-
-// Mirrors QUERY_CATEGORIES in api/sso-handler.js's createQuery.
-const QUERY_CATEGORIES = [
-  { id: "ai_report",        label: "AI Report Not Generated", icon: Sparkles },
-  { id: "panelist_no_show", label: "Panelist Didn't Join",     icon: UserX },
-  { id: "slot_doubt",       label: "Slot Doubt",                icon: CalendarRange },
-  { id: "other",             label: "Other",                     icon: HelpCircle },
-];
-const QUERY_STATUS_STYLE = {
-  open:    "bg-amber-50 text-amber-700 border-amber-200",
-  replied: "bg-sky-50 text-sky-700 border-sky-200",
-  closed:  "bg-gray-100 text-gray-500 border-gray-200",
-};
-const QUERY_STATUS_LABEL = { open: "Open", replied: "Replied", closed: "Closed" };
 
 export default function StudentDashboardPage() {
   const navigate = useNavigate();
@@ -210,7 +184,6 @@ export default function StudentDashboardPage() {
   const [resumeLink,   setResumeLink]   = useState("");
   const [resumeSaving, setResumeSaving] = useState(false);
   const [resumeSaved,  setResumeSaved]  = useState(false);
-  const [reschedulingId, setReschedulingId] = useState(null);
   const [resources, setResources] = useState(null);
   const [newInviteIds, setNewInviteIds] = useState(new Set());
   const [expandedInviteId, setExpandedInviteId] = useState(null);
@@ -224,15 +197,6 @@ export default function StudentDashboardPage() {
   // without picking a slot leaves nothing behind.
   const [selfBookDraft, setSelfBookDraft] = useState(null);
   const expandedCardRef = useRef(null);
-
-  // Help tab — raising a new query, and replying within an existing thread.
-  const [queryCategory, setQueryCategory] = useState("ai_report");
-  const [queryInterviewId, setQueryInterviewId] = useState("");
-  const [queryMessage, setQueryMessage] = useState("");
-  const [submittingQuery, setSubmittingQuery] = useState(false);
-  const [expandedQueryId, setExpandedQueryId] = useState(null);
-  const [queryReplyDrafts, setQueryReplyDrafts] = useState({});
-  const [sendingQueryReply, setSendingQueryReply] = useState(null);
 
   // The expanded "Ready to Book" card behaves like a popover, not a
   // permanent section — it should collapse itself if the candidate leaves
@@ -251,19 +215,6 @@ export default function StudentDashboardPage() {
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [expandedInviteId]);
-
-  // Queries aren't live-subscribed (the Help tab reads them off the same
-  // one-shot /api/sso/me fetch as everything else — an anonymous student
-  // session has no direct Firestore access to studentQueries at all, see
-  // firestore.rules), so an admin's reply wouldn't show up here until the
-  // candidate happened to reload the page. Light polling while this tab is
-  // actually open is the cheapest way to make a reply feel like it arrives
-  // on its own, without needing a live listener this session can't have.
-  useEffect(() => {
-    if (tab !== "help") return;
-    const id = setInterval(() => { loadDashboard(); }, 15000);
-    return () => clearInterval(id);
-  }, [tab]);
 
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
@@ -338,41 +289,21 @@ export default function StudentDashboardPage() {
     setResumeSaving(false);
   };
 
-  // No admin-approval gate before picking a new time anymore — the reason
-  // is still recorded (so admin knows why, same endpoint as before), then
-  // this goes straight into the self-book flow for that interview's own
-  // template, with replacingInterviewId carried through so the OLD
-  // interview gets cancelled + linked automatically once an admin
-  // confirms the NEW booking (same confirm step every self-book already
-  // goes through — see handleConfirmBooking in CandidateSchedulingTab.jsx).
+  // No admin-approval gate before picking a new time, and no separate
+  // notification sent at this point either — the reason is carried
+  // straight into the self-book flow (stored on the new ScheduleInvite,
+  // alongside replacingInterviewId) so it only surfaces to admin exactly
+  // when it's relevant: at the moment they're confirming the new booking
+  // (see CandidateSchedulingTab.jsx), where "see the reason" and "approve"
+  // are the same action instead of two separate steps.
   const handleRequestReschedule = async (interviewId, templateId) => {
-    const reason = window.prompt("Why would you like to reschedule this interview? (This goes to the admin team.)");
+    const reason = window.prompt("Why would you like to reschedule this interview? (Shown to the admin when they confirm your new slot.)");
     if (!reason || !reason.trim()) return;
     if (!templateId) {
       alert("Couldn't start rebooking — this interview has no template on record. Please reach out to the admin team.");
       return;
     }
-    setReschedulingId(interviewId);
-    try {
-      const res = await fetch("/api/sso/interviews/request-reschedule", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
-        body: JSON.stringify({ interviewId, reason: reason.trim() }),
-      });
-      if (res.ok) {
-        setData(d => ({
-          ...d,
-          interviews: d.interviews.map(iv => iv.id === interviewId ? { ...iv, rescheduleRequested: true } : iv),
-        }));
-        await handleSelfBook(templateId, interviewId);
-      } else {
-        alert("Couldn't submit your reschedule request. Please try again.");
-      }
-    } catch {
-      alert("Couldn't submit your reschedule request. Please try again.");
-    }
-    setReschedulingId(null);
+    await handleSelfBook(templateId, interviewId, reason.trim());
   };
 
   // Read-only — fetches what the slot picker needs (duration/date-range/
@@ -381,14 +312,18 @@ export default function StudentDashboardPage() {
   // that did get confirmed, or got interrupted after ensureSelfBookInvite
   // ran), self-book-start hands back that real invite instead so it's
   // resumed rather than duplicated.
-  const handleSelfBook = async (templateId, replacingInterviewId) => {
+  const handleSelfBook = async (templateId, replacingInterviewId, rescheduleReason) => {
     setBookingTemplateId(templateId);
     try {
       const res = await fetch("/api/sso/interviews/self-book-start", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ templateId, ...(replacingInterviewId ? { replacingInterviewId } : {}) }),
+        body: JSON.stringify({
+          templateId,
+          ...(replacingInterviewId ? { replacingInterviewId } : {}),
+          ...(rescheduleReason ? { rescheduleReason } : {}),
+        }),
       });
       const json = await res.json();
       if (res.ok) {
@@ -440,52 +375,6 @@ export default function StudentDashboardPage() {
     }
   };
 
-  const handleSubmitQuery = async () => {
-    if (!queryMessage.trim()) return;
-    setSubmittingQuery(true);
-    try {
-      const res = await fetch("/api/sso/queries/create", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
-        body: JSON.stringify({
-          category: queryCategory,
-          message: queryMessage.trim(),
-          interviewId: queryInterviewId || null,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.message || "Please try again.");
-      setQueryMessage("");
-      setQueryInterviewId("");
-      await loadDashboard();
-    } catch (e) {
-      alert("Couldn't send your query: " + e.message);
-    }
-    setSubmittingQuery(false);
-  };
-
-  const handleReplyToQuery = async (queryId) => {
-    const text = (queryReplyDrafts[queryId] || "").trim();
-    if (!text) return;
-    setSendingQueryReply(queryId);
-    try {
-      const res = await fetch("/api/sso/queries/reply", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json", "x-csrf-token": readCookie("ic_student_csrf") },
-        body: JSON.stringify({ queryId, message: text }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.message || "Please try again.");
-      setQueryReplyDrafts(d => ({ ...d, [queryId]: "" }));
-      await loadDashboard();
-    } catch (e) {
-      alert("Couldn't send your reply: " + e.message);
-    }
-    setSendingQueryReply(null);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-brand-50/40 to-gray-50 flex items-center justify-center">
@@ -504,7 +393,7 @@ export default function StudentDashboardPage() {
     );
   }
 
-  const { candidate, templates = [], interviews = [], pendingInvites = [], queries = [] } = data;
+  const { candidate, templates = [], interviews = [], pendingInvites = [] } = data;
   // "1st Attempt"/"2nd Attempt"/... — when there's more than one interview
   // for the SAME template (a reschedule, or a genuine retake), both this
   // dashboard and the admin's Interviews page should show which attempt
@@ -594,24 +483,22 @@ export default function StudentDashboardPage() {
     ...awaiting.map(inv => ({
       id: inv.id, templateName: inv.templateName, round: inv.round || inv.templateName,
       scheduledDate: inv.bookedDate || "", scheduledTime: inv.bookedTime || "", duration: inv.duration,
-      status: "pending_confirmation", meetLink: "", rescheduleRequested: false, rescheduleApproved: false,
+      status: "pending_confirmation", meetLink: "",
       aiReport: null, integrityScore: null, finalScore: null, cancelReason: "",
     })),
     ...rejectedInvites.map(inv => ({
       id: inv.id, templateName: inv.templateName, round: inv.round || inv.templateName,
       scheduledDate: "", scheduledTime: "", duration: inv.duration,
-      status: "cancelled", meetLink: "", rescheduleRequested: false, rescheduleApproved: false,
+      status: "cancelled", meetLink: "",
       aiReport: null, integrityScore: null, finalScore: null, cancelReason: inv.rejectionReason,
     })),
   ];
-  // Pending Confirmation / Scheduling In Progress / Reschedule Requested /
-  // Reschedule Approved are hidden "for now" — not deleted, INTERVIEW_
-  // SECTIONS itself is untouched, this just filters which sections render
-  // in My Interviews (tabs, empty-check, and the "All" list) and which
-  // interviews count toward "All". Remove this filter to bring them back.
-  const HIDDEN_SECTION_KEYS = new Set(["pending_confirmation", "pending_acceptance", "reschedule_requested", "reschedule_approved"]);
-  const visibleSections = INTERVIEW_SECTIONS.filter(s => !HIDDEN_SECTION_KEYS.has(s.key));
-  const visibleInterviews = interviewsWithPending.filter(iv => visibleSections.some(s => s.match(iv)));
+  // `interviewsWithPending` also contains synthetic pending_confirmation
+  // entries (from `awaiting`) that don't match any INTERVIEW_SECTIONS
+  // entry on purpose — a booked-but-unconfirmed slot already shows in
+  // Overview's Upcoming list instead, so it's excluded from My Interviews'
+  // counts/tabs/list here rather than double-shown.
+  const visibleInterviews = interviewsWithPending.filter(iv => INTERVIEW_SECTIONS.some(s => s.match(iv)));
   // Overview's "Upcoming" list — confirmed interviews plus slots already
   // picked but still waiting on admin confirmation, merged into one
   // soonest-first list. A slot the candidate already picked (via Nudge or
@@ -645,7 +532,6 @@ export default function StudentDashboardPage() {
     // the same total the "All" quick-tab shows under My Interviews.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
       : item.id === "interviews" ? visibleInterviews.length
-      : item.id === "help" ? queries.filter(q => q.status === "replied").length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
@@ -1008,12 +894,15 @@ export default function StudentDashboardPage() {
                                     </p>
                                   )}
                                   {/* Where this invite came from — an admin-sent
-                                     nudge vs. you starting it yourself from this
-                                     dashboard (see handleSelfBook/selfBooked). */}
+                                     invite vs. you starting it yourself from this
+                                     dashboard (see handleSelfBook/selfBooked).
+                                     "Nudge" is internal admin terminology —
+                                     students never see that word, since they
+                                     were actually notified by email. */}
                                   <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
                                     inv.selfBooked ? "bg-gray-50 text-gray-500 border-gray-200" : "bg-indigo-50 text-indigo-600 border-indigo-200"
                                   }`}>
-                                    {inv.selfBooked ? "Self-booked" : "Sent via Nudge"}
+                                    {inv.selfBooked ? "Self-booked" : "Sent via Email"}
                                   </span>
                                   {deadline && (
                                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${
@@ -1137,7 +1026,7 @@ export default function StudentDashboardPage() {
                        thin-underline style where every inactive tab looked
                        identically gray. */}
                     <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 mb-3 overflow-x-auto">
-                      {[{ key: "all", label: "All" }, ...visibleSections].map(tab => {
+                      {[{ key: "all", label: "All" }, ...INTERVIEW_SECTIONS].map(tab => {
                         const count = tab.key === "all" ? visibleInterviews.length : visibleInterviews.filter(tab.match).length;
                         const isActiveTab = activeInterviewTab === tab.key;
                         const c = TAB_COLORS[tab.key] || TAB_COLORS.cancelled;
@@ -1154,8 +1043,8 @@ export default function StudentDashboardPage() {
                     </div>
 
                     {(activeInterviewTab === "all"
-                      ? visibleSections
-                      : visibleSections.filter(s => s.key === activeInterviewTab)
+                      ? INTERVIEW_SECTIONS
+                      : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
                     ).every(section => visibleInterviews.filter(section.match).length === 0) && (
                       <Card className="flex flex-col items-center justify-center py-10">
                         <Inbox className="w-8 h-8 text-gray-200 mb-2" />
@@ -1164,8 +1053,8 @@ export default function StudentDashboardPage() {
                     )}
 
                     {(activeInterviewTab === "all"
-                      ? visibleSections
-                      : visibleSections.filter(s => s.key === activeInterviewTab)
+                      ? INTERVIEW_SECTIONS
+                      : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
                     ).map(section => {
                       // Date-wise, soonest/earliest first — items had no
                       // defined order before (whatever order they came back
@@ -1208,20 +1097,13 @@ export default function StudentDashboardPage() {
                                   )}
                                 </div>
                                 <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${
-                                  iv.rescheduleRequested ? "bg-amber-50 text-amber-700 border-amber-200"
-                                    : iv.rescheduleApproved ? "bg-sky-50 text-sky-700 border-sky-200"
-                                    : (STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200")
+                                  STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"
                                 }`}>
-                                  {iv.rescheduleRequested ? "Reschedule Requested" : iv.rescheduleApproved ? "Reschedule Approved" : (STATUS_LABEL[iv.status] || iv.status)}
+                                  {STATUS_LABEL[iv.status] || iv.status}
                                 </span>
                               </div>
-                              {iv.rescheduleApproved && (
-                                <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 mb-3">
-                                  Your reschedule request was approved — kindly select a slot whenever you're available.
-                                </p>
-                              )}
                               <div className="flex flex-wrap items-center gap-2">
-                                {iv.meetLink && iv.status === "scheduled" && !iv.rescheduleApproved && (
+                                {iv.meetLink && iv.status === "scheduled" && (
                                   <a href={iv.meetLink} target="_blank" rel="noreferrer"
                                     className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
                                     <Video className="w-3.5 h-3.5" /> Join Meet
@@ -1234,18 +1116,12 @@ export default function StudentDashboardPage() {
                                    shouldn't read as equally casual/inviting
                                    as just joining the call. Still asks for a
                                    reason before submitting either way. */}
-                                {iv.status === "scheduled" && !iv.rescheduleRequested && !iv.rescheduleApproved && (
+                                {iv.status === "scheduled" && (
                                   <KebabMenu actions={[{
-                                    label: reschedulingId === iv.id ? "Submitting…" : "Request Reschedule",
+                                    label: bookingTemplateId === iv.templateId ? "Submitting…" : "Request Reschedule",
                                     onClick: () => handleRequestReschedule(iv.id, iv.templateId),
-                                    disabled: reschedulingId === iv.id,
+                                    disabled: bookingTemplateId != null,
                                   }]} />
-                                )}
-                                {iv.rescheduleApproved && (
-                                  <button onClick={() => setTab("slots")}
-                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
-                                    <CalendarPlus className="w-3.5 h-3.5" /> Book an Interview
-                                  </button>
                                 )}
                               </div>
                             </Card>
@@ -1278,20 +1154,6 @@ export default function StudentDashboardPage() {
                                       </p>
                                     );
                                   })()}
-                                  {/* Approved for reschedule but no new slot
-                                     picked yet — jump straight into that
-                                     template's self-book flow instead of
-                                     leaving the student to find "Book an
-                                     Interview" and the right template
-                                     themselves. */}
-                                  {iv.rescheduleApproved && !iv.rescheduledTo && iv.templateId && (
-                                    <button onClick={() => { setTab("slots"); handleSelfBook(iv.templateId); }}
-                                      disabled={bookingTemplateId != null}
-                                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 mt-2 disabled:opacity-50">
-                                      <CalendarPlus className="w-3.5 h-3.5" />
-                                      {bookingTemplateId === iv.templateId ? "Finding Slots…" : "Book a New Slot"}
-                                    </button>
-                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                                   {/* Clearly clickable, not just a colored
@@ -1320,121 +1182,6 @@ export default function StudentDashboardPage() {
               </motion.div>
             )}
 
-            {tab === "help" && (
-              <motion.div key="help" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
-                    <LifeBuoy className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Help</h1>
-                    <p className="text-sm text-gray-500 mt-0.5">Raise a query and the admin team will reply here.</p>
-                  </div>
-                </div>
-
-                <Card className="p-5">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2.5">What's this about?</p>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {QUERY_CATEGORIES.map(c => (
-                      <button key={c.id} onClick={() => setQueryCategory(c.id)}
-                        className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
-                          queryCategory === c.id ? "bg-rose-600 text-white border-rose-600" : "bg-white text-gray-600 border-gray-200 hover:border-rose-300"
-                        }`}>
-                        <c.icon className="w-3.5 h-3.5" /> {c.label}
-                      </button>
-                    ))}
-                  </div>
-                  {interviews.length > 0 && (
-                    <div className="mb-4">
-                      <label className="block text-xs font-semibold text-gray-500 mb-1.5">Related Interview (optional)</label>
-                      <select value={queryInterviewId} onChange={e => setQueryInterviewId(e.target.value)}
-                        className="w-full max-w-sm border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500">
-                        <option value="">None</option>
-                        {interviews.map(iv => (
-                          <option key={iv.id} value={iv.id}>{interviewTitle(iv)}{iv.scheduledDate ? ` — ${formatDate(iv.scheduledDate)}` : ""}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Your Message</label>
-                  <textarea
-                    value={queryMessage}
-                    onChange={e => setQueryMessage(e.target.value)}
-                    placeholder="Describe what's going on…"
-                    rows={3}
-                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors resize-none"
-                  />
-                  <Button variant="primary" className="mt-3" onClick={handleSubmitQuery} disabled={submittingQuery || !queryMessage.trim()}>
-                    {submittingQuery ? "Sending…" : "Send Query"}
-                  </Button>
-                </Card>
-
-                {queries.length > 0 && (
-                  <div className="space-y-2.5">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Your Queries</p>
-                    {queries.map(q => {
-                      const isExpanded = expandedQueryId === q.id;
-                      const meta = QUERY_CATEGORIES.find(c => c.id === q.category) || QUERY_CATEGORIES[3];
-                      const lastMessage = q.messages?.[q.messages.length - 1];
-                      return (
-                        <Card key={q.id} className="overflow-hidden">
-                          <button onClick={() => setExpandedQueryId(isExpanded ? null : q.id)}
-                            className="flex items-center justify-between gap-3 w-full px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
-                            <div className="flex items-center gap-3 min-w-0">
-                              {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />}
-                              <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
-                                <meta.icon className="w-4 h-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-semibold text-gray-900 truncate">{meta.label}</p>
-                                <p className="text-xs text-gray-400 truncate mt-0.5">{lastMessage?.text}</p>
-                              </div>
-                            </div>
-                            <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full flex-shrink-0 ${QUERY_STATUS_STYLE[q.status] || QUERY_STATUS_STYLE.open}`}>
-                              {QUERY_STATUS_LABEL[q.status] || q.status}
-                            </span>
-                          </button>
-                          {isExpanded && (
-                            <div className="px-5 pb-5 pt-1 border-t border-gray-50 space-y-3">
-                              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                                {(q.messages || []).map((m, i) => (
-                                  <div key={i} className={`flex ${m.from === "student" ? "justify-end" : "justify-start"}`}>
-                                    <div className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm ${
-                                      m.from === "student" ? "bg-rose-600 text-white" : "bg-gray-100 text-gray-800"
-                                    }`}>
-                                      <p className="whitespace-pre-wrap">{m.text}</p>
-                                      <p className={`text-[10px] mt-1 ${m.from === "student" ? "text-white/60" : "text-gray-400"}`}>
-                                        {m.from === "admin" ? (m.byName || "Admin team") : "You"} · {formatDateTime(m.at)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                              {q.status !== "closed" && (
-                                <div className="flex items-end gap-2 pt-1">
-                                  <textarea
-                                    value={queryReplyDrafts[q.id] || ""}
-                                    onChange={e => setQueryReplyDrafts(d => ({ ...d, [q.id]: e.target.value }))}
-                                    placeholder="Reply…"
-                                    rows={2}
-                                    className="flex-1 border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors resize-none"
-                                  />
-                                  <Button variant="primary" icon={Send} className="flex-shrink-0"
-                                    onClick={() => handleReplyToQuery(q.id)}
-                                    disabled={sendingQueryReply === q.id || !(queryReplyDrafts[q.id] || "").trim()}>
-                                    {sendingQueryReply === q.id ? "Sending…" : "Send"}
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </motion.div>
-            )}
 
           </div>
         </div>

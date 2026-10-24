@@ -29,7 +29,7 @@ import {
   getAllInterviews, getInterview,
   ensureRoundExists, seedDefaultRoundsOnce,
 } from "../../api/firestore";
-import { useInterviewsInDateRange, useRescheduleRequestedInterviews } from "../../hooks/subscriptions";
+import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useCandidates, useUsers, useRounds, useVendors, QK } from "../../hooks/queries";
 import Badge from "../../components/Badge";
 import Toast from "../../components/Toast";
@@ -115,15 +115,6 @@ export default function InterviewsPage() {
   const [filterDateFrom, setFilterDateFrom] = useState(yesterdayIso());
   const [filterDateTo,   setFilterDateTo]   = useState(todayIso());
   const interviews = useInterviewsInDateRange(filterDateFrom, filterDateTo);
-
-  // Unscoped by date — a student's reschedule request (see
-  // requestReschedule in api/sso-handler.js) can land on an interview well
-  // outside whatever date window is currently selected above, so finding it
-  // would otherwise mean guessing the right range first. Backs both the
-  // "Reschedule Requested" quick filter below and the sidebar nav badge
-  // (AdminLayout.jsx).
-  const [filterRescheduleOnly, setFilterRescheduleOnly] = useState(false);
-  const rescheduleRequestedAll = useRescheduleRequestedInterviews();
 
   // Auto-heals rows stuck with an eventId but no meetLink — Google creates
   // the Meet room a little after the Calendar event, and occasionally later
@@ -1100,60 +1091,6 @@ export default function InterviewsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, interviews]);
 
-  // ── Reschedule requests (student-flagged, see requestReschedule in
-  //    api/sso-handler.js) ─────────────────────────────────────────────────
-
-  // Approving used to only flip rescheduleApproved=true and leave the
-  // interview "scheduled" at its OLD date/time forever — the Calendar
-  // event stayed live, the slot stayed booked, and the interviewer was
-  // never told anything changed; the candidate then self-booked a
-  // completely separate new interview with no link back to this one.
-  // A reschedule request IS a real cancellation of this booking, so this
-  // now actually cancels it — same steps as handleCancel below (Calendar
-  // event, slot, interviewer notified) — which also frees the template up
-  // to self-book again on the Student Dashboard automatically (nothing
-  // keeps it "in progress" once this interview is cancelled).
-  // rescheduleRequestReason/requestedAt are kept, not nulled out, so the
-  // fact that this was a reschedule stays visible on the row permanently.
-  const handleApproveReschedule = async (iv) => {
-    try {
-      if (iv.eventId) {
-        await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
-      }
-      const slotId = `${iv.scheduledDate}_${(iv.scheduledTime || "").replace(/[: ]/g, "")}`;
-      await markSlotFree(iv.interviewerId, slotId).catch(() => {});
-
-      await markInterviewCancelled(iv.id, {
-        reason: `Reschedule approved — candidate requested a new slot${iv.rescheduleRequestReason ? ` ("${iv.rescheduleRequestReason}")` : ""}.`,
-        cancelledBy: "admin",
-      });
-      await updateInterview(iv.id, {
-        rescheduleRequested: false,
-        rescheduleRequestResolvedAt: new Date().toISOString(),
-        rescheduleApproved: true,
-        rescheduleApprovedAt: new Date().toISOString(),
-      });
-
-      if (APPS_SCRIPT_URL && iv.interviewerEmail) {
-        callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-          action:  "sendEmail",
-          subject: `Interview Cancelled: ${iv.round || iv.templateName || "Interview"}`,
-          body:
-            `Hi {{name}},\n\nThe following interview has been cancelled — the candidate requested a reschedule and it was approved:\n\n` +
-            `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
-            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
-            `They'll be picking a new slot — you may be assigned again depending on availability.\n\n— NxtWave Team`,
-          recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || "Panelist" }],
-        }).catch(() => {});
-      }
-
-      notifyAdmins("interview_cancelled", `Interview with ${iv.candidateName} on ${formatDate(iv.scheduledDate)} was cancelled (reschedule approved).`, iv);
-      setToast({ message: "Reschedule approved — old interview cancelled, interviewer notified, and the candidate can now pick a new slot." });
-    } catch (e) {
-      setToast({ message: e.message, type: "error" });
-    }
-  };
-
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
 
   const handleCancel = async (iv) => {
@@ -1652,20 +1589,11 @@ export default function InterviewsPage() {
   // worked, but you're on the wrong tab."
   const ivrKey = (i) => i.interviewerId || i.interviewerEmail || "";
   const filtered = useMemo(() => {
-    // Reschedule Requested bypasses the date window entirely (and the
-    // archived/program scoping workingSet/programWorkingSet apply) — the
-    // whole point is finding these regardless of which date range happens
-    // to be selected. Other filters (status/interviewer/vendor/template/
-    // search) still narrow it further on top.
-    const base = filterRescheduleOnly
-      ? rescheduleRequestedAll
-      : candSearch.trim() ? workingSet : programWorkingSet;
+    const base = candSearch.trim() ? workingSet : programWorkingSet;
     return base.filter(i => {
       if (filterStatus !== "All" && i.status !== filterStatus) return false;
-      if (!filterRescheduleOnly) {
-        if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
-        if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
-      }
+      if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
+      if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
       if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
       if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
       if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
@@ -1676,7 +1604,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail, filterRescheduleOnly, rescheduleRequestedAll]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -2019,25 +1947,11 @@ export default function InterviewsPage() {
             placeholder="Search candidate…"
             className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-48 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
-        {/* "Reschedule Requested" is a synthetic option, not a real `status`
-           value (a reschedule-requested interview is still "scheduled") —
-           selecting it flips filterRescheduleOnly instead of filterStatus,
-           which is also what bypasses the date range below (see the
-           filtered useMemo) since a request can land outside whatever
-           window is currently selected. */}
         <select
-          value={filterRescheduleOnly ? "reschedule_requested" : filterStatus}
-          onChange={e => {
-            const v = e.target.value;
-            setFilterRescheduleOnly(v === "reschedule_requested");
-            setFilterStatus(v === "reschedule_requested" ? "All" : v);
-            setIvrPage(1);
-          }}
+          value={filterStatus}
+          onChange={e => { setFilterStatus(e.target.value); setIvrPage(1); }}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           {STATUSES.map(s => <option key={s} value={s}>{s === "All" ? "All Statuses" : s.replace(/_/g," ")}</option>)}
-          <option value="reschedule_requested">
-            Reschedule Requested{rescheduleRequestedAll.length > 0 ? ` (${rescheduleRequestedAll.length})` : ""}
-          </option>
         </select>
         <div className="flex items-center gap-1.5">
           {/* Drives the actual Firestore query (see useInterviewsInDateRange) —
@@ -2075,10 +1989,10 @@ export default function InterviewsPage() {
           <option value="All">All Vendors</option>
           {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch || filterRescheduleOnly) && (
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
-            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setFilterRescheduleOnly(false); setIvrPage(1);
+            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setIvrPage(1);
           }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
@@ -2233,24 +2147,6 @@ export default function InterviewsPage() {
                       {iv.cancelledBy === "interviewer" ? "By interviewer: " : ""}{iv.cancelReason}
                     </p>
                   )}
-                  {iv.rescheduleRequested && (
-                    <p className="text-[11px] text-amber-600 mt-1 max-w-[160px] truncate"
-                      title={`Candidate asked to reschedule: ${iv.rescheduleRequestReason || "—"}`}>
-                      ⏰ Reschedule: {iv.rescheduleRequestReason || "—"}
-                    </p>
-                  )}
-                  {/* Kept visible after "Approve Reschedule" (and
-                     regardless of what status the interview is in now) —
-                     handleApproveReschedule only flips rescheduleRequested
-                     off, it never clears the reason, so this stays as a
-                     permanent record that the candidate once asked to
-                     reschedule, not just a transient pending flag. */}
-                  {!iv.rescheduleRequested && iv.rescheduleRequestReason && (
-                    <p className="text-[11px] text-gray-400 mt-1 max-w-[160px] truncate"
-                      title={`Reschedule requested and ${iv.rescheduleApproved ? "approved" : "handled"}: ${iv.rescheduleRequestReason}`}>
-                      Reschedule {iv.rescheduleApproved ? "approved" : "handled"}: {iv.rescheduleRequestReason}
-                    </p>
-                  )}
                   {/* Set by linkRescheduledInterview once the candidate
                      actually books their new slot — best-effort resolve,
                      same pattern as reassignedTo/resumedAsInterviewId
@@ -2299,20 +2195,6 @@ export default function InterviewsPage() {
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[
                     { label: "Edit", onClick: () => openEdit(iv) },
-                    {
-                      // Hidden "for now" (not deleted) — Request Reschedule
-                      // on the Student Dashboard no longer waits on this
-                      // gate at all; the candidate goes straight into
-                      // picking a new slot, and confirming THAT booking is
-                      // what now cancels the old interview (see
-                      // handleConfirmBooking in CandidateSchedulingTab.jsx).
-                      // Leaving this visible would just invite a premature/
-                      // redundant click. Flip `show` back on to restore it.
-                      label: "Approve Reschedule",
-                      onClick: () => handleApproveReschedule(iv),
-                      show: false,
-                      highlight: true,
-                    },
                     {
                       label: "Reassign Interviewer",
                       onClick: () => openReassign(iv),
