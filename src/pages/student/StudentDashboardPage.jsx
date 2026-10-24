@@ -212,8 +212,6 @@ export default function StudentDashboardPage() {
   const [aiReportInterview, setAiReportInterview] = useState(null);
   const [integrityInterview, setIntegrityInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
-  const [newBookingTemplateId, setNewBookingTemplateId] = useState("");
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
   const [checkingInviteId, setCheckingInviteId] = useState(null);
   // The active self-book-in-progress draft — no ScheduleInvite exists for
@@ -843,57 +841,44 @@ export default function StudentDashboardPage() {
                       <p className="text-sm text-gray-500 mt-0.5">Pick an open slot for any interview that's ready to book, or self-book one of your assigned templates.</p>
                     </div>
                   </div>
-                  {/* Always visible rather than silently disappearing once
-                     every assigned template already has an invite in
-                     progress — a single remaining template jumps straight
-                     to Find Slots, more than one reveals the template
-                     picker below instead of a modal, and none left just
-                     explains why instead of looking like the button never
-                     existed. */}
-                  {(() => {
-                    const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
-                    const disabled = bookingTemplateId != null || notStarted.length === 0;
-                    return (
-                      <Button variant="primary" className="flex-shrink-0" disabled={disabled}
-                        title={notStarted.length === 0
-                          ? (templates.length === 0
-                              ? "No templates assigned to you yet"
-                              : "All your assigned templates already have a booking in progress")
-                          : undefined}
-                        onClick={() => {
-                          if (notStarted.length === 0) return;
-                          if (notStarted.length === 1) { handleSelfBook(notStarted[0].id); return; }
-                          setShowTemplatePicker(v => !v);
-                        }}>
-                        <CalendarPlus className="w-4 h-4 mr-1.5 inline" />
-                        {bookingTemplateId ? "Finding Slots…" : "Self Book an Interview"}
-                      </Button>
-                    );
-                  })()}
                 </div>
 
-                {showTemplatePicker && (() => {
+                {/* Every assigned template not already in progress, shown as
+                   its own clickable box — a direct click goes straight to
+                   Find Slots for that template, instead of a "Self Book"
+                   button that then required a second dropdown selection. */}
+                {(() => {
                   const notStarted = templates.filter(t => !templatesInProgress.has(t.id));
-                  if (notStarted.length <= 1) return null;
-                  const selected = notStarted.find(t => t.id === newBookingTemplateId) || null;
+                  if (templates.length === 0 || notStarted.length === 0) return null;
                   return (
-                    <Card className="p-5">
-                      <p className="font-bold text-gray-900">Select a template</p>
-                      <p className="text-xs text-gray-400 mt-0.5 mb-3">You have {notStarted.length} templates ready to start — pick one to see its open slots.</p>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <select
-                          value={newBookingTemplateId}
-                          onChange={e => setNewBookingTemplateId(e.target.value)}
-                          className="flex-1 min-w-[200px] border border-gray-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-                          <option value="">Select a template…</option>
-                          {notStarted.map(t => <option key={t.id} value={t.id}>{t.name} · {t.durationMinutes}m</option>)}
-                        </select>
-                        <Button variant="primary" onClick={() => handleSelfBook(newBookingTemplateId)}
-                          disabled={!selected || bookingTemplateId === newBookingTemplateId} className="flex-shrink-0">
-                          {bookingTemplateId === newBookingTemplateId ? "Finding Slots…" : "Find Slots"}
-                        </Button>
+                    <div>
+                      <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-2">
+                        Self Book — {notStarted.length} template{notStarted.length !== 1 ? "s" : ""} ready to start
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {notStarted.map((t, i) => (
+                          <motion.button key={t.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}
+                            onClick={() => handleSelfBook(t.id)}
+                            disabled={bookingTemplateId != null}
+                            className={`text-left p-4 rounded-2xl border-2 bg-white transition-all disabled:cursor-wait disabled:opacity-60 ${
+                              bookingTemplateId === t.id ? "border-emerald-400 bg-emerald-50" : "border-gray-100 hover:border-emerald-300 hover:shadow-md"
+                            }`}>
+                            <div className="flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                                <CalendarPlus className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-900 truncate">{t.name}</p>
+                                <p className="text-xs text-gray-400">{t.durationMinutes}m</p>
+                              </div>
+                            </div>
+                            <p className="text-xs font-semibold text-emerald-600 mt-3">
+                              {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots →"}
+                            </p>
+                          </motion.button>
+                        ))}
                       </div>
-                    </Card>
+                    </div>
                   );
                 })()}
 
