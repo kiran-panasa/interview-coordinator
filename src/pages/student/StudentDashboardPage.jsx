@@ -28,18 +28,6 @@ function writeSeenInviteIds(ids) {
   try { localStorage.setItem(SEEN_INVITES_KEY, JSON.stringify([...ids])); } catch { /* storage unavailable */ }
 }
 
-// Same "seen" pattern as invites above, but keyed on `${id}:${status}` so a
-// status change (e.g. scheduled -> completed) counts as new again, not just
-// a brand-new interview id.
-const SEEN_INTERVIEW_STATUSES_KEY = "ic_seen_interview_statuses";
-function readSeenInterviewStatuses() {
-  try { return new Set(JSON.parse(localStorage.getItem(SEEN_INTERVIEW_STATUSES_KEY) || "[]")); }
-  catch { return new Set(); }
-}
-function writeSeenInterviewStatuses(sigs) {
-  try { localStorage.setItem(SEEN_INTERVIEW_STATUSES_KEY, JSON.stringify([...sigs])); } catch { /* storage unavailable */ }
-}
-
 // A rejected booking has no linked "replacement" the way a cancelled
 // interview has `rescheduledTo` — it's just an invite that stays
 // status:"cancelled" forever once rejected. So instead of trying to infer
@@ -250,7 +238,6 @@ export default function StudentDashboardPage() {
   const [resumeSaved,  setResumeSaved]  = useState(false);
   const [resources, setResources] = useState(null);
   const [newInviteIds, setNewInviteIds] = useState(new Set());
-  const [newInterviewIds, setNewInterviewIds] = useState(new Set());
   const [dismissedRejectionIds, setDismissedRejectionIds] = useState(() => readDismissedRejectionIds());
   const [readNotificationIds, setReadNotificationIds] = useState(() => readReadNotificationIds());
   const [expandedFaqIndex, setExpandedFaqIndex] = useState(null);
@@ -315,21 +302,6 @@ export default function StudentDashboardPage() {
       const seen = readSeenInviteIds();
       setNewInviteIds(new Set(bookableNow.filter(i => !seen.has(i.id)).map(i => i.id)));
       writeSeenInviteIds(new Set(bookableNow.map(i => i.id)));
-
-      // Same idea for My Interviews — the nav badge shouldn't show the
-      // total interview count forever, only how many have a status the
-      // candidate hasn't seen yet (a new interview, or an existing one
-      // moving to completed/cancelled/declined/etc).
-      const rejectedNow = (json.pendingInvites || []).filter(i => i.status === "cancelled" && i.rejectionReason);
-      const interviewSignatures = [
-        ...(json.interviews || []).map(iv => `${iv.id}:${iv.status}`),
-        ...rejectedNow.map(inv => `${inv.id}:cancelled`),
-      ];
-      const seenStatuses = readSeenInterviewStatuses();
-      setNewInterviewIds(new Set(
-        interviewSignatures.filter(sig => !seenStatuses.has(sig)).map(sig => sig.split(":")[0])
-      ));
-      writeSeenInterviewStatuses(new Set(interviewSignatures));
 
       if (expandInviteId) setExpandedInviteId(expandInviteId);
       else if (bookableNow.length) setExpandedInviteId(bookableNow[0].id);
@@ -666,12 +638,10 @@ export default function StudentDashboardPage() {
     const Icon = item.icon;
     const active = tab === item.id;
     // The slots badge is every card shown under Book an Interview (bookable
-    // + awaiting + missed, now combined into one list). The interviews
-    // badge is intentionally NOT the total interview count — that would
-    // never go away once a candidate has any interviews at all — it's only
-    // how many have a status change the candidate hasn't seen yet.
+    // + awaiting + missed, now combined into one list). My Interviews no
+    // longer gets a nav badge at all — per request, status-change counts
+    // there were more noise than signal.
     const badge = item.id === "slots" ? (bookable.length + awaiting.length + missed.length)
-      : item.id === "interviews" ? newInterviewIds.size
       : item.id === "notifications" ? notifications.filter(n => !readNotificationIds.has(n.id)).length
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
