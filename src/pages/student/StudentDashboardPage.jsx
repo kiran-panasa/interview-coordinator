@@ -72,10 +72,6 @@ const STATUS_STYLE = {
 const INTERVIEW_SECTIONS = [
   { key: "scheduled",      label: "Scheduled",            match: i => i.status === "scheduled" },
   { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
-  // An interviewer declined and admin needs to reassign — still the
-  // candidate's own active, unresolved state, so it stays its own section
-  // rather than disappearing.
-  { key: "declined",       label: "Being Rescheduled",   match: i => i.status === "declined" },
   { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
   { key: "no_show",        label: "Missed",               match: i => i.status === "no_show" },
   { key: "cancelled",      label: "Cancelled",           match: i => i.status === "cancelled" },
@@ -83,7 +79,7 @@ const INTERVIEW_SECTIONS = [
 // Sections whose interviews can still be acted on (Join Meet / Request
 // Reschedule) and get the larger, higher-contrast card — everything else
 // (completed/cancelled/etc.) gets the compact, muted "past" card.
-const ACTIVE_SECTION_KEYS = new Set(["scheduled", "declined"]);
+const ACTIVE_SECTION_KEYS = new Set(["scheduled"]);
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 
@@ -153,7 +149,6 @@ const ACCENT_BORDER = {
 const SECTION_ACCENT = {
   scheduled:             "blue",
   completed:              "emerald",
-  declined:               "violet",
   partially_completed:    "sky",
   no_show:                 "rose",
   cancelled:               "gray",
@@ -164,7 +159,6 @@ const TAB_COLORS = {
   all:                    { text: "text-indigo-600",  border: "border-indigo-600",  badgeBg: "bg-indigo-100",  badgeText: "text-indigo-700" },
   scheduled:              { text: "text-blue-600",    border: "border-blue-600",    badgeBg: "bg-blue-100",    badgeText: "text-blue-700" },
   completed:              { text: "text-emerald-600", border: "border-emerald-600", badgeBg: "bg-emerald-100", badgeText: "text-emerald-700" },
-  declined:               { text: "text-violet-600",  border: "border-violet-600",  badgeBg: "bg-violet-100",  badgeText: "text-violet-700" },
   partially_completed:    { text: "text-teal-600",    border: "border-teal-600",    badgeBg: "bg-teal-100",    badgeText: "text-teal-700" },
   no_show:                { text: "text-rose-600",    border: "border-rose-600",    badgeBg: "bg-rose-100",    badgeText: "text-rose-700" },
   cancelled:              { text: "text-gray-500",    border: "border-gray-400",    badgeBg: "bg-gray-200",    badgeText: "text-gray-600" },
@@ -665,14 +659,20 @@ export default function StudentDashboardPage() {
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 px-6 py-7 text-white shadow-lg">
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full pointer-events-none" />
                   <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-white/10 rounded-full pointer-events-none" />
-                  <div className="relative flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg font-bold flex-shrink-0">
-                      {(candidate.name || "?").charAt(0).toUpperCase()}
+                  <div className="relative flex items-center gap-4 flex-wrap justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg font-bold flex-shrink-0">
+                        {(candidate.name || "?").charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <h1 className="text-xl font-bold tracking-tight">Welcome, {candidate.name}</h1>
+                        <p className="text-sm text-white/80 mt-0.5">Here's where things stand with your interviews.</p>
+                      </div>
                     </div>
-                    <div>
-                      <h1 className="text-xl font-bold tracking-tight">Welcome, {candidate.name}</h1>
-                      <p className="text-sm text-white/80 mt-0.5">Here's where things stand with your interviews.</p>
-                    </div>
+                    <button onClick={() => setTab("slots")}
+                      className="flex items-center gap-2 bg-white text-brand-700 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-white/90 transition-colors shadow-sm flex-shrink-0">
+                      <CalendarPlus className="w-4 h-4" /> Schedule Interview
+                    </button>
                   </div>
                 </div>
 
