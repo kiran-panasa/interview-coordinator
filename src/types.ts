@@ -498,14 +498,20 @@ export interface Interview {
   rescheduleRequestReason?: string | null;
   rescheduleRequestedAt?: string | null;
   rescheduleRequestResolvedAt?: string | null;
-  // Set once an admin approves a reschedule request — the interview stays
-  // "scheduled" at its OLD date/time (nothing about the actual slot has
-  // changed yet), but the Student Dashboard shows this as its own
-  // "Reschedule Approved" status with a prompt to go pick a new slot from
-  // Book an Interview, and hides the Join Meet button/old meet link since
-  // that old slot is expected to go away. See StudentDashboardPage.jsx.
+  // Set once an admin approves a reschedule request — the interview is
+  // actually cancelled at that point (Calendar event removed, slot freed,
+  // interviewer notified; see handleApproveReschedule in InterviewsPage.jsx),
+  // with this flag + cancelReason left in place so it's clearly
+  // distinguishable from a plain admin/interviewer cancellation.
   rescheduleApproved?: boolean;
   rescheduleApprovedAt?: string | null;
+  // Set on the OLD cancelled interview once the candidate actually books
+  // their new slot (see linkRescheduledInterview in api/interviews.ts,
+  // called from handleConfirmBooking in CandidateSchedulingTab.jsx) —
+  // points at the NEW interview doc. No reciprocal field on the new one:
+  // it never happened, so there's nothing for the new record to reference
+  // back to.
+  rescheduledTo?: string;
   candidateJoined?: boolean;
   attendanceMarkedAt?: string;
   questionsAsked?: (string | { questionId: string })[];

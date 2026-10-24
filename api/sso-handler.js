@@ -348,6 +348,7 @@ async function me(req, res) {
         finalScore: iv.feedback?.finalVerdict ?? null,
         integrityAnswers: iv.feedback?.domains?.integrity || null,
         cancelReason: iv.cancelReason || "",
+        rescheduledTo: iv.rescheduledTo || "",
       };
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));

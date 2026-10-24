@@ -197,6 +197,42 @@ export async function markInterviewCancelled(
   });
 }
 
+// Points the OLD, now-cancelled interview at whichever NEW interview the
+// candidate just booked after a reschedule — only the forward link ("the
+// new link"), never a reciprocal one on the new record, since the old
+// interview never actually happened and the new one has nothing to
+// reference back to. Best-effort and silent on no-match/failure: this is
+// a traceability nicety for admin/candidate to follow "cancelled ->
+// rescheduled to", not something a real booking should ever fail over.
+export async function linkRescheduledInterview(
+  candidateId: string,
+  templateId: string,
+  newInterviewId: string
+): Promise<void> {
+  if (!candidateId || !templateId) return;
+  try {
+    const snap = await getDocs(query(
+      collection(db, "interviews"),
+      where("candidateId", "==", candidateId),
+      where("templateId", "==", templateId),
+      where("status", "==", "cancelled"),
+      where("rescheduleApproved", "==", true)
+    ));
+    // Most recently approved match that isn't already linked to something
+    // — covers a candidate with more than one past reschedule for the
+    // same template without re-pointing an earlier, already-resolved one.
+    const match = snap.docs
+      .map(d => ({ ...(d.data() as Interview), id: d.id }))
+      .filter(iv => !iv.rescheduledTo)
+      .sort((a, b) => (b.rescheduleApprovedAt || "").localeCompare(a.rescheduleApprovedAt || ""))[0];
+    if (match) {
+      await updateDoc(doc(db, "interviews", match.id), { rescheduledTo: newInterviewId });
+    }
+  } catch {
+    // Best-effort — never block or fail the actual booking over this.
+  }
+}
+
 export async function markCandidateAttendance(
   interviewId: string,
   joined: boolean

@@ -11,7 +11,7 @@ import {
   logInviteHistory, getPreInterviewResources, updateCandidate,
   ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory,
 } from "../../api/firestore";
-import { scheduleInterviewMeet } from "../../api/interviews";
+import { scheduleInterviewMeet, linkRescheduledInterview } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
@@ -444,6 +444,12 @@ export default function CandidateSchedulingTab({
         // same function picks it up above instead of creating a second one.
         await updateScheduleInvite(inv.id, { status: "confirmed", interviewId: id });
         logInviteHistory(inv.id, "confirmed", "Booking confirmed by admin").catch(() => {});
+        // If this candidate has a cancelled, reschedule-approved interview
+        // for the same template, point it at this new one — best-effort,
+        // never blocks confirming the booking itself.
+        if (inv.templateId) {
+          linkRescheduledInterview(inv.candidateId, inv.templateId, id).catch(() => {});
+        }
       }
 
       // Same transaction-locked, retry-safe path used everywhere else in

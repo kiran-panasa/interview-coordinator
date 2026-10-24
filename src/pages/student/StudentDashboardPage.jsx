@@ -1217,6 +1217,17 @@ export default function StudentDashboardPage() {
                                   {iv.cancelReason && (
                                     <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
                                   )}
+                                  {/* Set once the new slot is actually booked
+                                     (see linkRescheduledInterview) — best-
+                                     effort resolve, same as the admin side. */}
+                                  {iv.rescheduledTo && (() => {
+                                    const newIv = interviews.find(x => x.id === iv.rescheduledTo);
+                                    return (
+                                      <p className="text-xs text-emerald-600 mt-1">
+                                        → Rescheduled to {newIv ? formatDate(newIv.scheduledDate) : "a new interview"}
+                                      </p>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                                   {iv.finalScore != null && (

@@ -2201,6 +2201,19 @@ export default function InterviewsPage() {
                       Reschedule {iv.rescheduleApproved ? "approved" : "handled"}: {iv.rescheduleRequestReason}
                     </p>
                   )}
+                  {/* Set by linkRescheduledInterview once the candidate
+                     actually books their new slot — best-effort resolve,
+                     same pattern as reassignedTo/resumedAsInterviewId
+                     below. No reverse link on the new interview itself:
+                     it never happened, nothing to reference back to. */}
+                  {iv.rescheduledTo && (() => {
+                    const newIv = interviews.find(x => x.id === iv.rescheduledTo);
+                    return (
+                      <p className="text-[11px] text-gray-400 mt-1">
+                        → Rescheduled to {newIv ? `${formatDate(newIv.scheduledDate)}` : "a new interview"}
+                      </p>
+                    );
+                  })()}
                   {iv.status === "declined" && iv.reassignedTo && (() => {
                     // Best-effort — only resolves a name if the new interview
                     // also falls within the currently-loaded date range.
