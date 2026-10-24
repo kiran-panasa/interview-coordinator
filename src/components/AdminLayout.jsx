@@ -24,7 +24,10 @@ const ALL_NAV = [
   { to: "/admin/inbound",      label: "Inbound",             roles: ["admin"],                                        icon: Inbox },
   { to: "/admin/nudge",        label: "Nudge",               roles: ["admin"],                                        icon: Bell },
   { to: "/admin/interviews",   label: "Interviews",          roles: ["admin"],                                        icon: CalendarClock },
-  { to: "/admin/queries",      label: "Student Queries",     roles: ["admin"],                                        icon: LifeBuoy },
+  // Student Queries removed from nav "for now" (not deleted) — the page/
+  // route/badge logic below all still work if navigated to directly;
+  // re-add this entry to bring it back.
+  // { to: "/admin/queries",      label: "Student Queries",     roles: ["admin"],                                        icon: LifeBuoy },
   { to: "/admin/questions",    label: "Question Bank",       roles: ["admin", "content_team", "interviewer_content"], icon: HelpCircle },
   { to: "/admin/interviewer-stats", label: "Interviewer Statistics", roles: ["admin"],                                 icon: BarChart3 },
   { to: "/admin/settings",     label: "Settings",            roles: ["admin"],                                        icon: Settings },

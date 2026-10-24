@@ -179,7 +179,10 @@ const NAV = [
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
   { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
   { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
-  { id: "help",      label: "Help",           icon: LifeBuoy, accent: "rose" },
+  // Help removed from nav "for now" (not deleted) — the tab/handlers/state
+  // all still exist and work if navigated to directly; re-add this entry
+  // to bring it back.
+  // { id: "help",      label: "Help",           icon: LifeBuoy, accent: "rose" },
 ];
 
 // Mirrors QUERY_CATEGORIES in api/sso-handler.js's createQuery.
