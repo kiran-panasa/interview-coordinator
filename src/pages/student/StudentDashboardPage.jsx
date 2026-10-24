@@ -659,20 +659,14 @@ export default function StudentDashboardPage() {
                 <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 px-6 py-7 text-white shadow-lg">
                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full pointer-events-none" />
                   <div className="absolute -bottom-14 -left-10 w-36 h-36 bg-white/10 rounded-full pointer-events-none" />
-                  <div className="relative flex items-center gap-4 flex-wrap justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg font-bold flex-shrink-0">
-                        {(candidate.name || "?").charAt(0).toUpperCase()}
-                      </div>
-                      <div>
-                        <h1 className="text-xl font-bold tracking-tight">Welcome, {candidate.name}</h1>
-                        <p className="text-sm text-white/80 mt-0.5">Here's where things stand with your interviews.</p>
-                      </div>
+                  <div className="relative flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur flex items-center justify-center text-lg font-bold flex-shrink-0">
+                      {(candidate.name || "?").charAt(0).toUpperCase()}
                     </div>
-                    <button onClick={() => setTab("slots")}
-                      className="flex items-center gap-2 bg-white text-brand-700 font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-white/90 transition-colors shadow-sm flex-shrink-0">
-                      <CalendarPlus className="w-4 h-4" /> Schedule Interview
-                    </button>
+                    <div>
+                      <h1 className="text-xl font-bold tracking-tight">Welcome, {candidate.name}</h1>
+                      <p className="text-sm text-white/80 mt-0.5">Here's where things stand with your interviews.</p>
+                    </div>
                   </div>
                 </div>
 
@@ -1116,18 +1110,18 @@ export default function StudentDashboardPage() {
                       ? INTERVIEW_SECTIONS
                       : INTERVIEW_SECTIONS.filter(s => s.key === activeInterviewTab)
                     ).map(section => {
-                      // Date-wise, soonest/earliest first — items had no
-                      // defined order before (whatever order they came back
-                      // from Firestore in), which could put a 24th before a
-                      // 20th. Undated items (shouldn't normally happen for
-                      // these statuses) sort last rather than disappearing.
+                      // Date-wise, most recent first — items had no defined
+                      // order before (whatever order they came back from
+                      // Firestore in). Undated items (shouldn't normally
+                      // happen for these statuses) sort last rather than
+                      // disappearing.
                       const items = visibleInterviews.filter(section.match).slice().sort((a, b) => {
                         const da = a.scheduledDate ? `${a.scheduledDate}T${a.scheduledTime || ""}` : "";
                         const db = b.scheduledDate ? `${b.scheduledDate}T${b.scheduledTime || ""}` : "";
                         if (!da && !db) return 0;
                         if (!da) return 1;
                         if (!db) return -1;
-                        return da.localeCompare(db);
+                        return db.localeCompare(da);
                       });
                       if (items.length === 0) return null;
                       const isActive = ACTIVE_SECTION_KEYS.has(section.key);
