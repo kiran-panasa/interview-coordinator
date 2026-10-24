@@ -334,7 +334,7 @@ async function me(req, res) {
     .map(d => {
       const iv = d.data();
       return {
-        id: d.id, candidateName: candidate.name, templateName: iv.templateName || "", round: iv.round || "",
+        id: d.id, candidateName: candidate.name, templateId: iv.templateId || "", templateName: iv.templateName || "", round: iv.round || "",
         scheduledDate: iv.scheduledDate || "", scheduledTime: iv.scheduledTime || "",
         duration: iv.duration || 60, status: iv.status, meetLink: iv.meetLink || "",
         rescheduleRequested: !!iv.rescheduleRequested,

@@ -1228,6 +1228,20 @@ export default function StudentDashboardPage() {
                                       </p>
                                     );
                                   })()}
+                                  {/* Approved for reschedule but no new slot
+                                     picked yet — jump straight into that
+                                     template's self-book flow instead of
+                                     leaving the student to find "Book an
+                                     Interview" and the right template
+                                     themselves. */}
+                                  {iv.rescheduleApproved && !iv.rescheduledTo && iv.templateId && (
+                                    <button onClick={() => { setTab("slots"); handleSelfBook(iv.templateId); }}
+                                      disabled={bookingTemplateId != null}
+                                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 mt-2 disabled:opacity-50">
+                                      <CalendarPlus className="w-3.5 h-3.5" />
+                                      {bookingTemplateId === iv.templateId ? "Finding Slots…" : "Book a New Slot"}
+                                    </button>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
                                   {iv.finalScore != null && (
