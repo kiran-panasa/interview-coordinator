@@ -5,7 +5,7 @@ import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
 import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
-  User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText, RefreshCw,
+  User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
   CheckCircle2, XCircle, LifeBuoy, UserX, HelpCircle, Send,
 } from "lucide-react";
@@ -16,6 +16,7 @@ import AiReportModal from "../../features/interviews/AiReportModal";
 import IntegrityDetailModal from "../../features/interviews/IntegrityDetailModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import Button from "../../components/Button";
+import KebabMenu from "../../components/KebabMenu";
 
 const SEEN_INVITES_KEY = "ic_seen_invites";
 function readSeenInviteIds() {
@@ -1176,18 +1177,26 @@ export default function StudentDashboardPage() {
                                   Your reschedule request was approved — kindly select a slot whenever you're available.
                                 </p>
                               )}
-                              <div className="flex flex-wrap gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 {iv.meetLink && iv.status === "scheduled" && !iv.rescheduleApproved && (
                                   <a href={iv.meetLink} target="_blank" rel="noreferrer"
                                     className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
                                     <Video className="w-3.5 h-3.5" /> Join Meet
                                   </a>
                                 )}
+                                {/* Tucked behind a "⋮" instead of sitting as
+                                   its own big button next to Join Meet — a
+                                   reschedule request is a real cancel+rebook
+                                   that affects the interviewer too, so it
+                                   shouldn't read as equally casual/inviting
+                                   as just joining the call. Still asks for a
+                                   reason before submitting either way. */}
                                 {iv.status === "scheduled" && !iv.rescheduleRequested && !iv.rescheduleApproved && (
-                                  <button onClick={() => handleRequestReschedule(iv.id)} disabled={reschedulingId === iv.id}
-                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-white border border-gray-200 text-gray-600 font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-gray-50 transition-colors disabled:opacity-50">
-                                    <RefreshCw className="w-3.5 h-3.5" /> {reschedulingId === iv.id ? "Submitting…" : "Request Reschedule"}
-                                  </button>
+                                  <KebabMenu actions={[{
+                                    label: reschedulingId === iv.id ? "Submitting…" : "Request Reschedule",
+                                    onClick: () => handleRequestReschedule(iv.id),
+                                    disabled: reschedulingId === iv.id,
+                                  }]} />
                                 )}
                                 {iv.rescheduleApproved && (
                                   <button onClick={() => setTab("slots")}
