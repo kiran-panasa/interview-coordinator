@@ -769,12 +769,6 @@ export default function StudentDashboardPage() {
                       <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Email</p>
                       <p className="text-gray-800 font-medium mt-0.5">{candidate.email}</p>
                     </div>
-                    {candidate.uid && (
-                      <div>
-                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Student ID</p>
-                        <p className="text-gray-800 font-medium mt-0.5">{candidate.uid}</p>
-                      </div>
-                    )}
                     {candidate.program && (
                       <div>
                         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Program</p>
@@ -785,7 +779,7 @@ export default function StudentDashboardPage() {
                   {templates.length > 0 && (
                     <div>
                       <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                        <BookOpen className="w-3 h-3" /> Assigned Templates
+                        <BookOpen className="w-3 h-3" /> Eligible Rounds
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {templates.map(t => (
