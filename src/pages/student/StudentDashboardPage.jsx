@@ -1089,7 +1089,15 @@ export default function StudentDashboardPage() {
                        thin-underline style where every inactive tab looked
                        identically gray. */}
                     <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 mb-3 overflow-x-auto">
-                      {[{ key: "all", label: "All" }, ...INTERVIEW_SECTIONS].map(tab => {
+                      {[
+                        { key: "all", label: "All" },
+                        // These 4 statuses are usually empty and clutter the
+                        // tab bar — their sections (and any action needed,
+                        // e.g. a "Book an Interview" button after a
+                        // reschedule approval) still show normally under
+                        // "All" below, this just removes their own tab.
+                        ...INTERVIEW_SECTIONS.filter(s => !["pending_confirmation", "pending_acceptance", "reschedule_requested", "reschedule_approved"].includes(s.key)),
+                      ].map(tab => {
                         const count = tab.key === "all" ? interviewsWithPending.length : interviewsWithPending.filter(tab.match).length;
                         const isActiveTab = activeInterviewTab === tab.key;
                         const c = TAB_COLORS[tab.key] || TAB_COLORS.cancelled;
