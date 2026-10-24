@@ -1647,10 +1647,15 @@ export default function InterviewsPage() {
         const map = new Map();
         results.forEach(list => {
           if (list.length < 2) return;
+          // The very first one in the sequence still counts as attempt #1
+          // (so the second genuinely reads "2nd Attempt", not "1st") — it
+          // just doesn't get its own badge, since a bare "1st Attempt" on
+          // an interview with nothing to distinguish it from yet isn't
+          // useful information.
           list
             .slice()
             .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
-            .forEach((iv, i) => map.set(iv.id, ordinalLabel(i + 1)));
+            .forEach((iv, i) => { if (i > 0) map.set(iv.id, ordinalLabel(i + 1)); });
         });
         setAttemptLabelByInterviewId(map);
       })
