@@ -127,7 +127,7 @@ export default function UserManagementTab({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {["Name", "Email", "Role", "Vendor Contact", ""].map(h => (
+                    {["Name", "Email", "Role", "Vendor Dashboard Access", ""].map(h => (
                       <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                     ))}
                   </tr>

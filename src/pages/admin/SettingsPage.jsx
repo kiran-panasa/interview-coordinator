@@ -41,7 +41,7 @@ const ROLE_OPTIONS = [
   { value: "admin",               label: "Admin",                 desc: "Full access — manage interviews, candidates, users" },
   { value: "content_team",        label: "Content Team",          desc: "Access to Templates page only" },
   { value: "interviewer_content", label: "Interviewer + Content", desc: "Can conduct interviews AND access Templates" },
-  { value: "vendor",              label: "Vendor",                desc: "No other access — only the Vendor Dashboard for one vendor. For an existing admin/interviewer who also needs vendor access, use the Vendor Contact column below instead of this role." },
+  { value: "vendor",              label: "Vendor",                desc: "No other access — only the Vendor Dashboard for one vendor. For an existing admin/interviewer who also needs vendor access, use the Vendor Dashboard Access column below instead of this role." },
 ];
 
 const ALL_ROLES = [
