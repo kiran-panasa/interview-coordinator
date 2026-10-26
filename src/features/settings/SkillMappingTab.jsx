@@ -106,12 +106,12 @@ export default function SkillMappingTab() {
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-sm font-bold text-gray-900">Skill Mapping</h2>
+        <h2 className="text-sm font-bold text-gray-900">Interviewer Eligibility</h2>
         <p className="text-xs text-gray-400 mt-0.5">
-          Who's eligible to take a template's interviews when a candidate self-books. Required Skills and Specific
-          Interviewers can both be set at once — an interviewer then needs to match BOTH (the picked list narrows an
-          already skill-qualified pool, not adds exceptions to it). Leave both off to use every interviewer assigned
-          to the template.
+          Controls which interviewers' slots a candidate actually sees when self-booking a template. Required Skills
+          and Specific Interviewers can both be set at once — an interviewer then needs to match BOTH (the picked
+          list narrows an already skill-qualified pool, not adds exceptions to it). Leave both off to show every
+          interviewer assigned to the template.
         </p>
       </div>
 

@@ -59,7 +59,7 @@ const SECTIONS = [
   { value: "General",                  icon: SlidersHorizontal },
   { value: "Blocked Dates",            icon: CalendarOff },
   { value: "Pre-Interview Resources",  icon: FileText },
-  { value: "Skill Mapping",            icon: Target },
+  { value: "Interviewer Eligibility",  icon: Target },
 ];
 
 const BLANK_BLOCK = { startDate: "", endDate: "", reason: "" };
@@ -773,7 +773,7 @@ export default function SettingsPage() {
 
       {activeSection === "Pre-Interview Resources" && <PreInterviewResourcesTab />}
 
-      {activeSection === "Skill Mapping" && <SkillMappingTab />}
+      {activeSection === "Interviewer Eligibility" && <SkillMappingTab />}
 
       {/* ── Invite Modal ── */}
       <Modal open={showInviteModal} onClose={() => { setShowInviteModal(false); setSavedInvite(null); }} title="Invite">
