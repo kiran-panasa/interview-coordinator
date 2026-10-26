@@ -11,8 +11,9 @@ import {
   logInviteHistory, getPreInterviewResources, updateCandidate,
   ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory,
 } from "../../api/firestore";
-import { scheduleInterviewMeet, getInterview, markInterviewCancelled, updateInterview } from "../../api/interviews";
+import { scheduleInterviewMeet, getInterview, markInterviewCancelled, updateInterview, getInterviewsForCandidateTemplate } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
+import { ordinalLabel } from "../../utils/strings";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
@@ -727,6 +728,37 @@ export default function CandidateSchedulingTab({
   const pendingBookings = invites.filter(i => i.status === "pending_confirmation");
   const programName = (id) => programs.find(p => p.id === id)?.name || id || "—";
 
+  // Confirming a pending booking creates a brand-new interview — if the
+  // candidate already completed this exact template before, that new one
+  // is a real retake, and admin should know that at the moment they're
+  // about to confirm it, not discover it afterward on the Interviews page.
+  // Keyed on (candidateId, templateId) pairs present in pendingBookings
+  // only (bounded, cheap), same pattern as attemptLabelByInterviewId in
+  // InterviewsPage.jsx.
+  const [nextAttemptByPair, setNextAttemptByPair] = useState(() => new Map());
+  const pendingPairsKey = useMemo(() => {
+    const keys = new Set();
+    pendingBookings.forEach(inv => { if (inv.candidateId && inv.templateId) keys.add(`${inv.candidateId}|${inv.templateId}`); });
+    return [...keys].sort().join(",");
+  }, [pendingBookings]);
+  useEffect(() => {
+    if (!pendingPairsKey) { setNextAttemptByPair(new Map()); return; }
+    const pairs = pendingPairsKey.split(",").map(k => { const [candidateId, templateId] = k.split("|"); return { candidateId, templateId }; });
+    let cancelled = false;
+    Promise.all(pairs.map(p => getInterviewsForCandidateTemplate(p.candidateId, p.templateId).catch(() => [])))
+      .then(results => {
+        if (cancelled) return;
+        const map = new Map();
+        pairs.forEach((p, i) => {
+          const completedCount = (results[i] || []).filter(iv => iv.status === "completed").length;
+          map.set(`${p.candidateId}|${p.templateId}`, completedCount + 1);
+        });
+        setNextAttemptByPair(map);
+      })
+      .catch(() => { if (!cancelled) setNextAttemptByPair(new Map()); });
+    return () => { cancelled = true; };
+  }, [pendingPairsKey]);
+
   const inviteTemplateOptions = useMemo(() => {
     const set = new Set();
     invites.forEach(inv => { if (inv.templateName) set.add(inv.templateName); });
@@ -1278,6 +1310,7 @@ export default function CandidateSchedulingTab({
               const cand = candidates.find(c => c.id === inv.candidateId);
               const isFromInbound = !!cand?.source;
               const candProgramName = cand?.program ? programName(cand.program) : null;
+              const nextAttempt = nextAttemptByPair.get(`${inv.candidateId}|${inv.templateId}`) || 1;
               return (
               <div key={inv.id} className="bg-white border border-violet-200 rounded-xl px-5 py-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
@@ -1294,6 +1327,11 @@ export default function CandidateSchedulingTab({
                     {isFromInbound && (
                       <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
                         From Inbound
+                      </span>
+                    )}
+                    {nextAttempt > 1 && (
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                        {ordinalLabel(nextAttempt)} Attempt
                       </span>
                     )}
                   </div>

@@ -499,6 +499,13 @@ export default function StudentDashboardPage() {
     });
     return map;
   })();
+  // Booking again after already completing a template once is a real
+  // retake — this is the SAME rule as attemptLabelByInterviewId above
+  // (only labeled from the 2nd attempt onward), surfaced ahead of time
+  // here, before the new interview even exists yet, so the candidate
+  // knows what they're about to start before they confirm a slot.
+  const nextAttemptNumber = (templateId) =>
+    interviews.filter(iv => iv.templateId === templateId && iv.status === "completed").length + 1;
   const upcoming = interviews.filter(i => ["pending_acceptance", "scheduled", "declined"].includes(i.status));
   // All upcoming interviews with a confirmed date that hasn't already
   // passed, soonest first — previously this picked the first array match
@@ -917,7 +924,14 @@ export default function StudentDashboardPage() {
                                 <CalendarPlus className="w-4 h-4" />
                               </div>
                               <div className="min-w-0">
-                                <p className="font-bold text-gray-900 truncate">{t.name}</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="font-bold text-gray-900 truncate">{t.name}</p>
+                                  {nextAttemptNumber(t.id) > 1 && (
+                                    <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                      {ordinalLabel(nextAttemptNumber(t.id))} Attempt
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-xs text-gray-400">{t.durationMinutes} minutes</p>
                               </div>
                             </div>
@@ -938,7 +952,14 @@ export default function StudentDashboardPage() {
                   <Card className={`overflow-hidden border-l-4 ${ACCENT_BORDER.emerald}`}>
                     <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-50">
                       <div className="min-w-0">
-                        <p className="font-bold text-gray-900 truncate">{selfBookDraft.templateName}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-bold text-gray-900 truncate">{selfBookDraft.templateName}</p>
+                          {nextAttemptNumber(selfBookDraft.templateId) > 1 && (
+                            <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                              {ordinalLabel(nextAttemptNumber(selfBookDraft.templateId))} Attempt
+                            </span>
+                          )}
+                        </div>
                         <p className="text-xs text-gray-400 mt-0.5">Pick a slot below to confirm — nothing is booked until you do.</p>
                       </div>
                       <button onClick={() => setSelfBookDraft(null)}
