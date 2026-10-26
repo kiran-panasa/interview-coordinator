@@ -284,6 +284,11 @@ export interface Template {
   program?: string;
   domains: Domain[];
   skills?: string[];
+  // Hand-picked eligible-interviewer list (Settings → Skill Mapping) —
+  // mutually exclusive with `skills` above (picking one clears the other).
+  // When set, Self Book restricts to exactly these interviewers instead of
+  // skill-matching; see resolveSelfBookTarget in api/sso-handler.js.
+  interviewerIds?: string[];
   // Default interview length for this template, in minutes — pre-fills the
   // Duration field wherever an invite/interview is created on this template
   // (still overridable per-booking). Absent on templates created before

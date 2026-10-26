@@ -546,7 +546,14 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   if (!templateSnap.exists) return { error: "template_not_found", status: 404 };
   const template = templateSnap.data();
 
-  const matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
+  // A hand-picked interviewer list (Settings → Skill Mapping) wins outright
+  // over skill-matching — the two are mutually exclusive by design there
+  // (picking one clears the other), so whichever field is actually
+  // populated is the admin's real intent.
+  const explicitInterviewerIds = Array.isArray(template.interviewerIds) && template.interviewerIds.length
+    ? template.interviewerIds
+    : null;
+  const matchedInterviewerIds = explicitInterviewerIds || await findSkillMatchedInterviewerIds(db, template.skills);
   const now = new Date();
   const dateRangeStart = now.toISOString().slice(0, 10);
   const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);

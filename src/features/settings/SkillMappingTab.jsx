@@ -1,35 +1,58 @@
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Search, CheckCircle2 } from "lucide-react";
-import { useTemplates, useSkills, usePrograms, QK } from "../../hooks/queries";
+import { useTemplates, useSkills, usePrograms, useVendors, useUsers, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import SkillsSelect from "../../components/SkillsSelect";
 import { Skeleton } from "../../components/Skeleton";
 
-// A faster way to skim/update Required Skills across every template at once
-// — the Templates page still has its own Skills field for editing one
-// template in depth, this is purely a bulk overview next to it, writing to
-// the exact same template.skills field (see findSkillMatchedInterviewerIds
-// in api/sso-handler.js, which is what actually uses it to restrict which
-// interviewers a candidate's Self Book slots come from).
+// A faster way to skim/update a template's eligible-interviewer rules all
+// at once — the Templates page still has its own Skills field for editing
+// one template in depth, this is purely a bulk overview next to it.
+// Writes to template.skills / template.interviewerIds, the exact two
+// fields findSkillMatchedInterviewerIds / the explicit-pick check in
+// resolveSelfBookTarget (api/sso-handler.js) read to decide which
+// interviewers a candidate's Self Book slots come from. Mutually
+// exclusive by design — a template is either open to everyone assigned,
+// gated by required skills, or pinned to a hand-picked interviewer list;
+// mixing two at once on the same template would make it ambiguous which
+// one actually won.
 export default function SkillMappingTab() {
   const queryClient = useQueryClient();
   const { data: templates = [], isLoading } = useTemplates();
   const { data: skills    = [] } = useSkills();
   const { data: programs  = [] } = usePrograms();
+  const { data: vendors   = [] } = useVendors();
+  const { data: users     = [] } = useUsers();
 
   const [search, setSearch] = useState("");
   const [programFilter, setProgramFilter] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId,  setSavedId]  = useState(null);
-  // Picking "Specific Skills" with nothing chosen yet should still show the
-  // picker open, not immediately look like "All Interviewers" again just
-  // because skills.length is still 0 — this UI-only set tracks that explicit
-  // choice until either a skill gets picked (then t.skills itself carries
-  // it) or the row is switched back to All Interviewers.
-  const [expandedIds, setExpandedIds] = useState(() => new Set());
+  // Switching to "Specific Skills"/"Specific Interviewers" with nothing
+  // picked yet should still show that picker open, not snap back to "All
+  // Interviewers" just because the underlying array is still empty — this
+  // UI-only map tracks that explicit choice per template until either
+  // something gets picked (then the template's own field carries it) or
+  // the row is switched back to All Interviewers.
+  const [pendingMode, setPendingMode] = useState(() => new Map());
 
-  const isAllMode = (t) => !(t.skills && t.skills.length) && !expandedIds.has(t.id);
+  const vendorNameById = useMemo(() => Object.fromEntries(vendors.map(v => [v.id, v.name])), [vendors]);
+  const activeInterviewers = useMemo(
+    () => users.filter(u => ["interviewer", "interviewer_content"].includes(u.role) && u.status === "active"),
+    [users]
+  );
+  const interviewerOptions = useMemo(() => activeInterviewers
+    .map(u => ({ id: u.id, name: u.displayName || u.email, group: u.vendorId ? (vendorNameById[u.vendorId] || "Vendor") : "No Vendor" }))
+    .sort((a, b) => a.group.localeCompare(b.group) || a.name.localeCompare(b.name)),
+    [activeInterviewers, vendorNameById]
+  );
+
+  const modeOf = (t) => {
+    if (t.interviewerIds && t.interviewerIds.length) return "interviewers";
+    if (t.skills && t.skills.length) return "skills";
+    return pendingMode.get(t.id) || "all";
+  };
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
 
@@ -41,11 +64,11 @@ export default function SkillMappingTab() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [templates, search, programFilter]);
 
-  const handleChangeSkills = async (template, nextSkillIds) => {
+  const saveTemplate = async (template, data) => {
     setSavingId(template.id);
     setSavedId(null);
     try {
-      await updateTemplate(template.id, { skills: nextSkillIds });
+      await updateTemplate(template.id, data);
       queryClient.invalidateQueries({ queryKey: QK.templates });
       setSavedId(template.id);
       setTimeout(() => setSavedId(id => (id === template.id ? null : id)), 1500);
@@ -54,23 +77,30 @@ export default function SkillMappingTab() {
     }
   };
 
-  const handleUseAllInterviewers = (template) => {
-    setExpandedIds(ids => { const next = new Set(ids); next.delete(template.id); return next; });
-    if (template.skills && template.skills.length) handleChangeSkills(template, []);
+  const setMode = (template, mode) => {
+    setPendingMode(m => new Map(m).set(template.id, mode));
+    if (mode === "all") saveTemplate(template, { skills: [], interviewerIds: [] });
   };
 
-  const handlePickSpecificSkills = (template) => {
-    setExpandedIds(ids => new Set(ids).add(template.id));
-  };
+  const handleChangeSkills = (template, nextSkillIds) =>
+    saveTemplate(template, { skills: nextSkillIds, interviewerIds: [] });
+
+  const handleChangeInterviewers = (template, nextInterviewerIds) =>
+    saveTemplate(template, { interviewerIds: nextInterviewerIds, skills: [] });
+
+  const MODES = [
+    { value: "all",          label: "All Interviewers" },
+    { value: "skills",       label: "Specific Skills" },
+    { value: "interviewers", label: "Specific Interviewers" },
+  ];
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-sm font-bold text-gray-900">Skill Mapping</h2>
         <p className="text-xs text-gray-400 mt-0.5">
-          Which skills a template requires — only interviewers tagged with ALL of them are offered when a candidate
-          self-books it. Switch a row to "All Interviewers" to use every interviewer assigned to that template instead,
-          no skill restriction.
+          Who's eligible to take a template's interviews when a candidate self-books — every interviewer assigned to
+          it, only those tagged with ALL required skills, or a hand-picked list (grouped by vendor below).
         </p>
       </div>
 
@@ -105,13 +135,15 @@ export default function SkillMappingTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Required Skills", ""].map(h => (
+                {["Template", "Program", "Eligible Interviewers", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(t => (
+              {filtered.map(t => {
+                const mode = modeOf(t);
+                return (
                 <tr key={t.id} className="hover:bg-gray-50/70 transition-colors">
                   <td className="px-4 py-3 font-semibold text-gray-900 align-top whitespace-nowrap">{t.name}</td>
                   <td className="px-4 py-3 align-top whitespace-nowrap">
@@ -121,25 +153,31 @@ export default function SkillMappingTab() {
                   </td>
                   <td className="px-4 py-3 align-top min-w-[20rem] space-y-2">
                     <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-                      <button type="button" onClick={() => handleUseAllInterviewers(t)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                          isAllMode(t) ? "bg-white text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                        }`}>
-                        All Interviewers
-                      </button>
-                      <button type="button" onClick={() => handlePickSpecificSkills(t)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                          !isAllMode(t) ? "bg-white text-brand-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                        }`}>
-                        Specific Skills
-                      </button>
+                      {MODES.map(m => (
+                        <button key={m.value} type="button" onClick={() => setMode(t, m.value)}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
+                            mode === m.value ? "bg-white text-brand-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                          }`}>
+                          {m.label}
+                        </button>
+                      ))}
                     </div>
-                    {!isAllMode(t) && (
+                    {mode === "skills" && (
                       <SkillsSelect
                         skills={skills}
                         value={t.skills || []}
                         onChange={v => handleChangeSkills(t, v)}
                         placeholder="Pick required skills…"
+                      />
+                    )}
+                    {mode === "interviewers" && (
+                      <SkillsSelect
+                        skills={interviewerOptions}
+                        value={t.interviewerIds || []}
+                        onChange={v => handleChangeInterviewers(t, v)}
+                        placeholder="Pick interviewers…"
+                        searchPlaceholder="Search interviewers…"
+                        ungroupedLabel="No Vendor"
                       />
                     )}
                   </td>
@@ -148,7 +186,8 @@ export default function SkillMappingTab() {
                     {savedId === t.id && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
