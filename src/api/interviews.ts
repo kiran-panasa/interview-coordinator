@@ -276,6 +276,24 @@ export async function markCandidateAttendance(
   await updateDoc(doc(db, "interviews", interviewId), update);
 }
 
+// Admin's direct "Mark No-show" (InterviewsPage.jsx) — same end state as
+// markCandidateAttendance(id, false) above (no-show interview, no
+// evaluation data), for the case where an admin marks it rather than the
+// interviewer going through their own attendance gate. Previously a plain
+// status update with no clearing, which meant whatever the interviewer had
+// already entered/autosaved stayed attached to a no_show record.
+export async function markInterviewNoShow(interviewId: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", interviewId), {
+    status:             "no_show",
+    candidateJoined:    false,
+    attendanceMarkedAt: new Date().toISOString(),
+    nextNudgeAt:        null,
+    feedback:           deleteField(),
+    feedbackDraft:      deleteField(),
+    updatedAt:          new Date().toISOString(),
+  });
+}
+
 // Admin-only recovery for the "candidate was marked no-show but then
 // actually joined late" edge case. Resets status back to "scheduled" and
 // clears the attendance fields so the interviewer's own "Did the candidate
@@ -719,6 +737,42 @@ export async function clearCancelledInterviewScoringOnce(): Promise<void> {
         candidateJoined: deleteField(),
         attendanceMarkedAt: deleteField(),
         partialCompletionReason: deleteField(),
+        updatedAt: now,
+      });
+    });
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: now, count: targets.length });
+}
+
+// One-time, self-guarding cleanup for the same kind of stale-scoring issue
+// as clearCancelledInterviewScoringOnce above, but for no_show — before
+// handleMarkNoShow (admin's InterviewsPage) was fixed to clear feedback
+// itself, marking an interview no-show left whatever evaluation had
+// already been entered/autosaved sitting right next to a status that says
+// nobody showed up. Skips any record with auditCorrectionReason set — an
+// admin using "Correct Status (Audit)" to mark no_show deliberately keeps
+// feedback/recording as the evidence that correction was based on, and
+// this must never touch that.
+export async function clearNoShowInterviewScoringOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "noShowScoringCleanup");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const snap = await getDocs(query(collection(db, "interviews"), where("status", "==", "no_show")));
+  const now = new Date().toISOString();
+  const targets = snap.docs.filter(d => {
+    const data = d.data() as Interview;
+    return !data.auditCorrectionReason && !!(data.feedback || data.feedbackDraft);
+  });
+
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    targets.slice(i, i + 450).forEach(d => {
+      batch.update(d.ref, {
+        feedback: deleteField(),
+        feedbackDraft: deleteField(),
         updatedAt: now,
       });
     });

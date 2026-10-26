@@ -18,8 +18,8 @@ import { scheduleInterviewMeet, refreshMeetLink, resumePartiallyCompletedIntervi
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, reopenNoShowInterview,
-  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
+  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, reopenNoShowInterview,
+  backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, clearNoShowInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, markSlotFree,
   getTemplate, importCompletedInterview, importScheduledInterview, markInterviewPartiallyCompleted,
@@ -150,6 +150,10 @@ export default function InterviewsPage() {
   // One-time cleanup for cancelled interviews that carried stale feedback/
   // scoring from before markInterviewCancelled existed.
   useEffect(() => { clearCancelledInterviewScoringOnce().catch(err => console.error("Cancelled-interview scoring cleanup failed:", err)); }, []);
+  // Self-guarding — see clearNoShowInterviewScoringOnce in src/api/interviews.ts.
+  // One-time cleanup for no-show interviews that carried stale feedback/
+  // scoring from before handleMarkNoShow cleared it.
+  useEffect(() => { clearNoShowInterviewScoringOnce().catch(err => console.error("No-show scoring cleanup failed:", err)); }, []);
   // Self-guarding — see backfillFeedbackDescriptorsOnce in src/api/interviews.ts.
   // One-time backfill so historical feedback (saved before descriptor text
   // was baked into feedback.domains) gets it too — needed for consumers that
@@ -1185,10 +1189,20 @@ export default function InterviewsPage() {
       });
   };
 
+  // A no-show interview should never carry evaluation data — if the
+  // interviewer already entered (or autosaved) scores before this gets
+  // clicked, markInterviewNoShow discards them along with the status
+  // change, same as the interviewer's own "mark no-show" does. Warn
+  // explicitly first since that's a real, irreversible loss, not just a
+  // status flip.
   const handleMarkNoShow = async (iv) => {
-    if (!confirm(`Mark "${iv.candidateName}" as no-show?`)) return;
+    const hasScoring = !!(iv.feedback || iv.feedbackDraft);
+    const message = hasScoring
+      ? `"${iv.candidateName}" already has evaluation scores entered for this interview. Marking it as no-show will permanently discard them — a no-show can't carry a score.\n\nContinue?`
+      : `Mark "${iv.candidateName}" as no-show?`;
+    if (!confirm(message)) return;
     try {
-      await updateInterview(iv.id, { status: "no_show" });
+      await markInterviewNoShow(iv.id);
       notifyAdmins("no_show", `${iv.candidateName} was marked as a no-show for their interview on ${formatDate(iv.scheduledDate)}.`, iv);
       setToast({ message: "Marked as no-show." });
     } catch (e) {
