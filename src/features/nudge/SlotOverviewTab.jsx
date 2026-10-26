@@ -4,7 +4,7 @@ import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
 import { usePagination } from "../../hooks/usePagination";
 import { useVendors } from "../../hooks/queries";
-import { compareTimeLabels } from "../../utils/dates";
+import { compareTimeLabels, addMinutesToTimeLabel } from "../../utils/dates";
 import { getBusyWindowsForInterviewers } from "../../api/firestore";
 import { collapseSlotsByDuration } from "../../utils/slotAvailability";
 
@@ -260,7 +260,7 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
                                   ? "bg-orange-50 text-orange-700 border-orange-200"
                                   : "bg-emerald-50 text-emerald-700 border-emerald-200"
                               }`}>
-                              {s.time}{s.isBooked ? " · Booked" : ""}
+                              {s.time} – {addMinutesToTimeLabel(s.time, effectiveDuration)}{s.isBooked ? " · Booked" : ""}
                             </span>
                           ))}
                       </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2, CalendarCheck2, RefreshCw } from "lucide-react";
-import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes } from "../utils/dates";
+import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel } from "../utils/dates";
 import {
   updateScheduleInvite, getAvailableSlots, bookSlotForCandidate, getActiveAdmins,
 } from "../api/firestore";
@@ -247,6 +247,12 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
           const slotStart  = parseInterviewStart(s.date, s.time);
           const isPastSlot = slotStart ? slotStart < new Date() : false;
           const isDisabled = s.isBooked || isPastSlot;
+          // Shows the FULL span the interview actually holds (e.g. a
+          // 90-minute round at 9:00 AM shows "9:00 – 10:30 AM"), not just
+          // the start time — otherwise a merged multi-slot booking reads
+          // identically to a plain 30/60-minute one, with no visible way
+          // to tell they're not independently bookable every 30 minutes.
+          const slotEnd = addMinutesToTimeLabel(s.time, invite?.duration || 60);
           return (
             <button key={`${s.interviewerId}-${s.slotId}`}
               onClick={() => { if (!isDisabled) setSelected(s); }}
@@ -258,7 +264,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
                     ? "bg-brand-600 text-white border-brand-600"
                     : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
               }`}>
-              {s.time}
+              {s.time} – {slotEnd}
               {/* Visible label, not just a hover tooltip — easy to miss on
                  a greyed-out button, especially on mobile where hover
                  doesn't exist at all. */}
