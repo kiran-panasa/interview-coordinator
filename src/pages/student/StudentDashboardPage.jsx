@@ -834,12 +834,12 @@ export default function StudentDashboardPage() {
                   {templates.length > 0 && (
                     <div>
                       <p className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
-                        <BookOpen className="w-3 h-3" /> Eligible Rounds
+                        <BookOpen className="w-3 h-3" /> Eligible Interviews
                       </p>
                       <div className="flex flex-wrap gap-1.5">
                         {templates.map(t => (
                           <span key={t.id} className="text-xs font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-2.5 py-1 rounded-full">
-                            {t.name} · {t.durationMinutes}m
+                            {t.name}
                           </span>
                         ))}
                       </div>
