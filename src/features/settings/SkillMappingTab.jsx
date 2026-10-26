@@ -22,6 +22,14 @@ export default function SkillMappingTab() {
   const [programFilter, setProgramFilter] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId,  setSavedId]  = useState(null);
+  // Picking "Specific Skills" with nothing chosen yet should still show the
+  // picker open, not immediately look like "All Interviewers" again just
+  // because skills.length is still 0 — this UI-only set tracks that explicit
+  // choice until either a skill gets picked (then t.skills itself carries
+  // it) or the row is switched back to All Interviewers.
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
+
+  const isAllMode = (t) => !(t.skills && t.skills.length) && !expandedIds.has(t.id);
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
 
@@ -46,13 +54,23 @@ export default function SkillMappingTab() {
     }
   };
 
+  const handleUseAllInterviewers = (template) => {
+    setExpandedIds(ids => { const next = new Set(ids); next.delete(template.id); return next; });
+    if (template.skills && template.skills.length) handleChangeSkills(template, []);
+  };
+
+  const handlePickSpecificSkills = (template) => {
+    setExpandedIds(ids => new Set(ids).add(template.id));
+  };
+
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-sm font-bold text-gray-900">Skill Mapping</h2>
         <p className="text-xs text-gray-400 mt-0.5">
           Which skills a template requires — only interviewers tagged with ALL of them are offered when a candidate
-          self-books it. Leave a template blank to keep using every interviewer assigned to it, no restriction.
+          self-books it. Switch a row to "All Interviewers" to use every interviewer assigned to that template instead,
+          no skill restriction.
         </p>
       </div>
 
@@ -101,13 +119,29 @@ export default function SkillMappingTab() {
                       ? <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">{programName(t.program)}</span>
                       : <span className="text-xs text-gray-300">—</span>}
                   </td>
-                  <td className="px-4 py-3 align-top min-w-[20rem]">
-                    <SkillsSelect
-                      skills={skills}
-                      value={t.skills || []}
-                      onChange={v => handleChangeSkills(t, v)}
-                      placeholder="No restriction — uses every assigned interviewer"
-                    />
+                  <td className="px-4 py-3 align-top min-w-[20rem] space-y-2">
+                    <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+                      <button type="button" onClick={() => handleUseAllInterviewers(t)}
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                          isAllMode(t) ? "bg-white text-gray-800 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                        }`}>
+                        All Interviewers
+                      </button>
+                      <button type="button" onClick={() => handlePickSpecificSkills(t)}
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                          !isAllMode(t) ? "bg-white text-brand-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                        }`}>
+                        Specific Skills
+                      </button>
+                    </div>
+                    {!isAllMode(t) && (
+                      <SkillsSelect
+                        skills={skills}
+                        value={t.skills || []}
+                        onChange={v => handleChangeSkills(t, v)}
+                        placeholder="Pick required skills…"
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-3 align-top w-10">
                     {savingId === t.id && <span className="text-[11px] text-gray-400">Saving…</span>}
