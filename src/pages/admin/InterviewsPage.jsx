@@ -63,6 +63,7 @@ const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "parti
 // report actions, archiving) — it just carries a mandatory reason alongside.
 const isDoneStatus = (status) => status === "completed" || status === "partially_completed";
 const STATUS_LABEL = {
+  pending_acceptance: "Pending Acceptance", scheduled: "Scheduled",
   completed: "Completed", partially_completed: "Partially Completed",
   cancelled: "Cancelled", no_show: "No Show",
 };
@@ -2281,7 +2282,7 @@ export default function InterviewsPage() {
                     {
                       label: "Correct Status (Audit)",
                       onClick: () => openCorrectStatus(iv),
-                      show: isDoneStatus(iv.status),
+                      show: isDoneStatus(iv.status) || iv.status === "pending_acceptance",
                     },
                     {
                       label: "Mark No-show",

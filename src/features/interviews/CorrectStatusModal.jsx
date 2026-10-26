@@ -3,6 +3,7 @@ import Modal from "../../components/Modal";
 import Button from "../../components/Button";
 
 const CURRENT_LABEL = {
+  pending_acceptance:  "Pending Acceptance",
   completed:           "Completed",
   partially_completed: "Partially Completed",
   no_show:             "No Show",
@@ -10,6 +11,7 @@ const CURRENT_LABEL = {
 };
 
 const STATUS_OPTIONS = [
+  { value: "scheduled",           label: "Scheduled" },
   { value: "partially_completed", label: "Partially Completed" },
   { value: "cancelled",           label: "Cancelled" },
   { value: "no_show",             label: "No Show" },

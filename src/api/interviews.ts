@@ -620,9 +620,13 @@ export async function markInterviewPartiallyCompleted(
 // slot). This never touches any of that — feedback, recording, transcript
 // and the AI report are the evidence the correction was based on, and
 // deleting them here would destroy the audit trail.
+// "scheduled" is also a valid target — the escape hatch for an interview
+// stuck on pending_acceptance that already has a working Meet link (see
+// importScheduledInterview) or otherwise just needs a manual nudge past
+// the interviewer's Accept gate.
 export async function correctInterviewStatus(
   id: string,
-  newStatus: "partially_completed" | "cancelled" | "no_show",
+  newStatus: "scheduled" | "partially_completed" | "cancelled" | "no_show",
   reason: string
 ): Promise<void> {
   const fields: Record<string, unknown> = {
@@ -899,7 +903,12 @@ export async function importScheduledInterview(
 ): Promise<string> {
   const ref = await addDoc(collection(db, "interviews"), {
     ...(await withVendorId(await withProgramInfo(await withCandidateUid(data)))),
-    status: "pending_acceptance",
+    // A row that already carries a real meeting link was already locked in
+    // outside this app (e.g. set up directly in Calendar/the source sheet)
+    // — there's nothing left for an interviewer to "accept," so defaulting
+    // it to pending_acceptance anyway left it stuck showing a working Join
+    // Meet link next to a status that implied nobody had agreed to it yet.
+    status: data.meetLink ? "scheduled" : "pending_acceptance",
     candidateJoined: false,
     questionsAsked: [],
     questionRemarks: {},
