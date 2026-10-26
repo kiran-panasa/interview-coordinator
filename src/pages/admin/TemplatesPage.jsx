@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, RefreshCw, Copy, Upload, Download, CheckCircle2, AlertTriangle,
-  Info, FileWarning, ListChecks, ShieldCheck, LayoutGrid, ExternalLink,
+  Info, FileWarning, ShieldCheck, LayoutGrid, ExternalLink,
 } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
@@ -90,17 +90,6 @@ export default function TemplatesPage() {
       queryClient.invalidateQueries({ queryKey: QK.templates });
     })();
   }, [isLoading, templates, queryClient]);
-
-  // Stats per templateId: { [id]: { scheduled, completed, cancelled } }
-  const templateStats = useMemo(() => interviews.reduce((acc, iv) => {
-    const tid = iv.templateId;
-    if (!tid) return acc;
-    if (!acc[tid]) acc[tid] = { scheduled: 0, completed: 0, cancelled: 0 };
-    if (iv.status === "completed")                                      acc[tid].completed++;
-    else if (iv.status === "cancelled" || iv.status === "no_show")      acc[tid].cancelled++;
-    else if (iv.status !== "declined")                                  acc[tid].scheduled++;
-    return acc;
-  }, {}), [interviews]);
 
   const toTexts = (qb = {}) => ({
     theory:  (qb.theory  || []).join("\n"),
@@ -595,60 +584,6 @@ export default function TemplatesPage() {
         </motion.div>
       )}
 
-      {/* ── Interview Stats Table ── */}
-      {!isLoading && visibleTemplates.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
-          className="mt-8"
-        >
-          <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <ListChecks className="w-4 h-4 text-gray-400" /> Interview Stats
-          </h2>
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  {["Template", "Program", "Scheduled", "Completed", "Cancelled", "Total"].map(h => (
-                    <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {visibleTemplates.map(t => {
-                  const s = templateStats[t.id];
-                  const programName = programs.find(p => p.id === t.program)?.name;
-                  const scheduled  = s?.scheduled  ?? 0;
-                  const completed  = s?.completed  ?? 0;
-                  const cancelled  = s?.cancelled  ?? 0;
-                  const total      = scheduled + completed + cancelled;
-                  return (
-                    <tr key={t.id} className="hover:bg-gray-50/70 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-gray-900">{t.name}</td>
-                      <td className="px-4 py-3">
-                        {programName
-                          ? <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full whitespace-nowrap">{programName}</span>
-                          : <span className="text-xs text-gray-300">—</span>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold text-brand-700">{scheduled}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold text-emerald-700">{completed}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold text-red-500">{cancelled}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs font-semibold text-gray-700">{total}</span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </motion.div>
-      )}
       </>
       )}
 
