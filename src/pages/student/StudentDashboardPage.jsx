@@ -918,7 +918,7 @@ export default function StudentDashboardPage() {
                               </div>
                               <div className="min-w-0">
                                 <p className="font-bold text-gray-900 truncate">{t.name}</p>
-                                <p className="text-xs text-gray-400">{t.durationMinutes}m</p>
+                                <p className="text-xs text-gray-400">{t.durationMinutes} minutes</p>
                               </div>
                             </div>
                             <p className="text-xs font-semibold text-emerald-600 mt-3">
