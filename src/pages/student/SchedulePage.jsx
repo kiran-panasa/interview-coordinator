@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { formatDate, formatDateLong, parseInterviewStart, timeToMinutes, hhmmToMinutes } from "../../utils/dates";
+import { formatDate, formatDateLong, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -494,6 +494,14 @@ export default function SchedulePage() {
                         const slotStart  = parseInterviewStart(s.date, s.time);
                         const isPastSlot = slotStart ? slotStart < new Date() : false;
                         const isDisabled = s.isBooked || isPastSlot;
+                        // Shows the FULL span the interview actually holds
+                        // (e.g. a 90-minute round at 9:00 AM shows
+                        // "9:00 – 10:30 AM"), not just the start time —
+                        // otherwise a merged multi-slot booking reads
+                        // identically to a plain 30/60-minute one, with no
+                        // visible way to tell they're not independently
+                        // bookable every 30 minutes.
+                        const slotEnd = addMinutesToTimeLabel(s.time, invite?.duration || 60);
                         const handleClick = () => {
                           if (s.isBooked) {
                             alert("This slot is already booked. Please choose another available slot.");
@@ -512,7 +520,7 @@ export default function SchedulePage() {
                                   ? "bg-brand-600 text-white border-brand-600"
                                   : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
                             }`}>
-                            {s.time}
+                            {s.time} – {slotEnd}
                           </button>
                         );
                       })}
