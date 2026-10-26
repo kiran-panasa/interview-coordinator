@@ -412,8 +412,19 @@ export default function InterviewDetail() {
     setSaving(false);
   };
 
+  // The evaluation form is reachable before the attendance gate even
+  // appears (showEvaluation is true whenever the interview's scheduled
+  // time hasn't passed yet) — so an interviewer can genuinely have
+  // pre-filled/autosaved some scores here before ever confirming whether
+  // the candidate actually joined. If that happened, say so explicitly
+  // instead of the same generic confirm every time, so clicking No-show
+  // isn't a surprise data loss.
   const handleCandidateNoShow = async () => {
-    if (!confirm("Mark this candidate as a no-show?\n\nThis will set the interview status to no-show and no feedback is required.")) return;
+    const hasScoring = !!(interview.feedback || interview.feedbackDraft);
+    const message = hasScoring
+      ? "You've already entered some evaluation scores for this interview.\n\nMarking the candidate as a no-show will permanently discard everything entered so far — a no-show can't carry a score.\n\nContinue?"
+      : "Mark this candidate as a no-show?\n\nThis will set the interview status to no-show and no feedback is required.";
+    if (!confirm(message)) return;
     setSaving(true);
     await markCandidateAttendance(id, false);
     setInterview(iv => ({ ...iv, candidateJoined: false, status: "no_show", feedback: undefined, feedbackDraft: undefined }));
@@ -428,9 +439,11 @@ export default function InterviewDetail() {
   // entered is discarded — markCandidateAttendance clears both feedback and
   // feedbackDraft server-side; a no-show has nothing to evaluate.
   const handleUndoToNoShow = async () => {
+    const hasScoring = !!(interview.feedback || interview.feedbackDraft);
     if (!confirm(
-      "Mark this candidate as a no-show instead?\n\n" +
-      "Any evaluation you've started (or already submitted) for this interview will be discarded — a no-show has no feedback."
+      hasScoring
+        ? "Mark this candidate as a no-show instead?\n\nThe evaluation scores you've already entered (or submitted) for this interview will be permanently discarded — a no-show has no feedback.\n\nContinue?"
+        : "Mark this candidate as a no-show instead?"
     )) return;
     setSaving(true);
     try {
