@@ -9,14 +9,13 @@ import { Skeleton } from "../../components/Skeleton";
 // A faster way to skim/update a template's eligible-interviewer rules all
 // at once — the Templates page still has its own Skills field for editing
 // one template in depth, this is purely a bulk overview next to it.
-// Writes to template.skills / template.interviewerIds, the exact two
-// fields findSkillMatchedInterviewerIds / the explicit-pick check in
-// resolveSelfBookTarget (api/sso-handler.js) read to decide which
-// interviewers a candidate's Self Book slots come from. Mutually
-// exclusive by design — a template is either open to everyone assigned,
-// gated by required skills, or pinned to a hand-picked interviewer list;
-// mixing two at once on the same template would make it ambiguous which
-// one actually won.
+// Writes to template.skills / template.interviewerIds, both read by
+// resolveSelfBookTarget (api/sso-handler.js) to decide which interviewers
+// a candidate's Self Book slots come from. The two are independently
+// combinable, not exclusive — when both are set, an interviewer must have
+// the required skills AND be on the picked list (AND, not OR): the picked
+// list narrows an already skill-qualified pool down further, rather than
+// adding unqualified exceptions on top of it.
 export default function SkillMappingTab() {
   const queryClient = useQueryClient();
   const { data: templates = [], isLoading } = useTemplates();
@@ -29,13 +28,13 @@ export default function SkillMappingTab() {
   const [programFilter, setProgramFilter] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId,  setSavedId]  = useState(null);
-  // Switching to "Specific Skills"/"Specific Interviewers" with nothing
-  // picked yet should still show that picker open, not snap back to "All
-  // Interviewers" just because the underlying array is still empty — this
-  // UI-only map tracks that explicit choice per template until either
-  // something gets picked (then the template's own field carries it) or
-  // the row is switched back to All Interviewers.
-  const [pendingMode, setPendingMode] = useState(() => new Map());
+  // Toggling a picker open with nothing chosen in it yet shouldn't look
+  // like it snapped back off just because the underlying array is still
+  // empty — these UI-only sets track "this picker is explicitly open" per
+  // template until either something gets picked (the template's own field
+  // then carries it) or it's explicitly closed again.
+  const [skillsOpenIds,       setSkillsOpenIds]       = useState(() => new Set());
+  const [interviewersOpenIds, setInterviewersOpenIds] = useState(() => new Set());
 
   const vendorNameById = useMemo(() => Object.fromEntries(vendors.map(v => [v.id, v.name])), [vendors]);
   const activeInterviewers = useMemo(
@@ -48,11 +47,9 @@ export default function SkillMappingTab() {
     [activeInterviewers, vendorNameById]
   );
 
-  const modeOf = (t) => {
-    if (t.interviewerIds && t.interviewerIds.length) return "interviewers";
-    if (t.skills && t.skills.length) return "skills";
-    return pendingMode.get(t.id) || "all";
-  };
+  const skillsOn       = (t) => !!(t.skills && t.skills.length) || skillsOpenIds.has(t.id);
+  const interviewersOn = (t) => !!(t.interviewerIds && t.interviewerIds.length) || interviewersOpenIds.has(t.id);
+  const isAllInterviewers = (t) => !skillsOn(t) && !interviewersOn(t);
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
 
@@ -77,30 +74,44 @@ export default function SkillMappingTab() {
     }
   };
 
-  const setMode = (template, mode) => {
-    setPendingMode(m => new Map(m).set(template.id, mode));
-    if (mode === "all") saveTemplate(template, { skills: [], interviewerIds: [] });
+  const resetToAll = (template) => {
+    setSkillsOpenIds(s => { const n = new Set(s); n.delete(template.id); return n; });
+    setInterviewersOpenIds(s => { const n = new Set(s); n.delete(template.id); return n; });
+    if ((template.skills && template.skills.length) || (template.interviewerIds && template.interviewerIds.length)) {
+      saveTemplate(template, { skills: [], interviewerIds: [] });
+    }
   };
 
-  const handleChangeSkills = (template, nextSkillIds) =>
-    saveTemplate(template, { skills: nextSkillIds, interviewerIds: [] });
+  const toggleSkills = (template) => {
+    if (skillsOn(template)) {
+      setSkillsOpenIds(s => { const n = new Set(s); n.delete(template.id); return n; });
+      if (template.skills && template.skills.length) saveTemplate(template, { skills: [] });
+    } else {
+      setSkillsOpenIds(s => new Set(s).add(template.id));
+    }
+  };
 
-  const handleChangeInterviewers = (template, nextInterviewerIds) =>
-    saveTemplate(template, { interviewerIds: nextInterviewerIds, skills: [] });
+  const toggleInterviewers = (template) => {
+    if (interviewersOn(template)) {
+      setInterviewersOpenIds(s => { const n = new Set(s); n.delete(template.id); return n; });
+      if (template.interviewerIds && template.interviewerIds.length) saveTemplate(template, { interviewerIds: [] });
+    } else {
+      setInterviewersOpenIds(s => new Set(s).add(template.id));
+    }
+  };
 
-  const MODES = [
-    { value: "all",          label: "All Interviewers" },
-    { value: "skills",       label: "Specific Skills" },
-    { value: "interviewers", label: "Specific Interviewers" },
-  ];
+  const handleChangeSkills       = (template, next) => saveTemplate(template, { skills: next });
+  const handleChangeInterviewers = (template, next) => saveTemplate(template, { interviewerIds: next });
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-sm font-bold text-gray-900">Skill Mapping</h2>
         <p className="text-xs text-gray-400 mt-0.5">
-          Who's eligible to take a template's interviews when a candidate self-books — every interviewer assigned to
-          it, only those tagged with ALL required skills, or a hand-picked list (grouped by vendor below).
+          Who's eligible to take a template's interviews when a candidate self-books. Required Skills and Specific
+          Interviewers can both be set at once — an interviewer then needs to match BOTH (the picked list narrows an
+          already skill-qualified pool, not adds exceptions to it). Leave both off to use every interviewer assigned
+          to the template.
         </p>
       </div>
 
@@ -142,7 +153,7 @@ export default function SkillMappingTab() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {filtered.map(t => {
-                const mode = modeOf(t);
+                const bothOn = skillsOn(t) && interviewersOn(t);
                 return (
                 <tr key={t.id} className="hover:bg-gray-50/70 transition-colors">
                   <td className="px-4 py-3 font-semibold text-gray-900 align-top whitespace-nowrap">{t.name}</td>
@@ -152,17 +163,36 @@ export default function SkillMappingTab() {
                       : <span className="text-xs text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-3 align-top min-w-[20rem] space-y-2">
-                    <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-                      {MODES.map(m => (
-                        <button key={m.value} type="button" onClick={() => setMode(t, m.value)}
-                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
-                            mode === m.value ? "bg-white text-brand-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                          }`}>
-                          {m.label}
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button type="button" onClick={() => resetToAll(t)}
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                          isAllInterviewers(t)
+                            ? "bg-gray-800 text-white border-gray-800"
+                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}>
+                        All Interviewers
+                      </button>
+                      <button type="button" onClick={() => toggleSkills(t)}
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                          skillsOn(t)
+                            ? "bg-brand-50 text-brand-700 border-brand-300"
+                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}>
+                        Specific Skills
+                      </button>
+                      <button type="button" onClick={() => toggleInterviewers(t)}
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                          interviewersOn(t)
+                            ? "bg-violet-50 text-violet-700 border-violet-300"
+                            : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
+                        }`}>
+                        Specific Interviewers
+                      </button>
                     </div>
-                    {mode === "skills" && (
+                    {bothOn && (
+                      <p className="text-[11px] text-gray-400">Must match the skills below AND be on the interviewer list below.</p>
+                    )}
+                    {skillsOn(t) && (
                       <SkillsSelect
                         skills={skills}
                         value={t.skills || []}
@@ -170,7 +200,7 @@ export default function SkillMappingTab() {
                         placeholder="Pick required skills…"
                       />
                     )}
-                    {mode === "interviewers" && (
+                    {interviewersOn(t) && (
                       <SkillsSelect
                         skills={interviewerOptions}
                         value={t.interviewerIds || []}

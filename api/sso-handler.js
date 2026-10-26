@@ -546,14 +546,28 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   if (!templateSnap.exists) return { error: "template_not_found", status: 404 };
   const template = templateSnap.data();
 
-  // A hand-picked interviewer list (Settings → Skill Mapping) wins outright
-  // over skill-matching — the two are mutually exclusive by design there
-  // (picking one clears the other), so whichever field is actually
-  // populated is the admin's real intent.
+  // Required Skills and a hand-picked interviewer list (Settings → Skill
+  // Mapping) are independently combinable, not exclusive — when both are
+  // set, an interviewer must satisfy BOTH: the picked list narrows an
+  // already skill-qualified pool down further, rather than adding
+  // unqualified exceptions on top of it.
   const explicitInterviewerIds = Array.isArray(template.interviewerIds) && template.interviewerIds.length
     ? template.interviewerIds
     : null;
-  const matchedInterviewerIds = explicitInterviewerIds || await findSkillMatchedInterviewerIds(db, template.skills);
+  let matchedInterviewerIds;
+  if (explicitInterviewerIds && template.skills?.length) {
+    const skillMatched = await findSkillMatchedInterviewerIds(db, template.skills);
+    // findSkillMatchedInterviewerIds returns null when it fell back to the
+    // full pool (no active interviewer currently has the required skills)
+    // — that's a tagging gap, not a reason to also zero out the explicit
+    // pick, so the explicit list is used as-is in that case rather than
+    // intersecting against "everyone."
+    matchedInterviewerIds = skillMatched ? explicitInterviewerIds.filter(id => skillMatched.includes(id)) : explicitInterviewerIds;
+  } else if (explicitInterviewerIds) {
+    matchedInterviewerIds = explicitInterviewerIds;
+  } else {
+    matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
+  }
   const now = new Date();
   const dateRangeStart = now.toISOString().slice(0, 10);
   const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
