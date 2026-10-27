@@ -284,7 +284,7 @@ export default function VendorDashboardPage() {
                         <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input type="text" value={panelistSearch} onChange={e => setPanelistSearch(e.target.value)}
                           placeholder="Search panelist…"
-                          className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                          className="border border-gray-200 rounded-full pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
                       </div>
                       <DateFilterBar from={statsDateFrom} to={statsDateTo} setFrom={setStatsDateFrom} setTo={setStatsDateTo} />
                     </div>
@@ -357,7 +357,7 @@ export default function VendorDashboardPage() {
                       <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-[34px] pointer-events-none" />
                       <input type="text" value={statsSearch} onChange={e => setStatsSearch(e.target.value)}
                         placeholder="Search panelist…"
-                        className="border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                        className="border border-gray-200 rounded-full pl-8 pr-3 py-2 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Date Range</label>
@@ -453,7 +453,7 @@ export default function VendorDashboardPage() {
                         <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                         <input type="text" value={slotSearch} onChange={e => setSlotSearch(e.target.value)}
                           placeholder="Search panelist…"
-                          className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                          className="border border-gray-200 rounded-full pl-8 pr-3 py-1.5 text-sm text-gray-700 w-44 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
                       </div>
                       <DateFilterBar from={slotDateFrom} to={slotDateTo} setFrom={setSlotDateFrom} setTo={setSlotDateTo} />
                     </div>

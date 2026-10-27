@@ -123,7 +123,7 @@ export default function SkillMappingTab() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search templates…"
-            className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-56"
+            className="text-xs border border-gray-200 rounded-full pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-56"
           />
         </div>
         <select

@@ -104,7 +104,7 @@ export default function UserManagementTab({
                 value={userSearch}
                 onChange={e => setUserSearch(e.target.value)}
                 placeholder="Search name or email…"
-                className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-48"
+                className="text-xs border border-gray-200 rounded-full pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-48"
               />
             </div>
             <select
@@ -241,7 +241,7 @@ export default function UserManagementTab({
                   value={inviteSearch}
                   onChange={e => setInviteSearch(e.target.value)}
                   placeholder="Search name or email…"
-                  className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-48"
+                  className="text-xs border border-gray-200 rounded-full pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 w-48"
                 />
               </div>
               <select

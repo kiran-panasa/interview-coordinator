@@ -158,7 +158,7 @@ export default function InboundPage() {
           <input type="text" value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
             placeholder="Search name, email, UID…"
-            className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-56 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
+            className="border border-gray-200 rounded-full pl-8 pr-3 py-1.5 text-sm text-gray-700 w-56 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
           className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">

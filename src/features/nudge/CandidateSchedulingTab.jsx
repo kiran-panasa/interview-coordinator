@@ -1031,7 +1031,7 @@ export default function CandidateSchedulingTab({
                 value={candSearch}
                 onChange={e => setCandSearch(e.target.value)}
                 placeholder="Search name or UID…"
-                className="text-xs border border-gray-200 rounded-lg pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-gray-700 w-52"
+                className="text-xs border border-gray-200 rounded-full pl-8 pr-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white text-gray-700 w-52"
               />
             </div>
             {filteredCandidates.length > 0 && (

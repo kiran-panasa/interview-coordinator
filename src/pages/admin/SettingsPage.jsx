@@ -1033,7 +1033,7 @@ export default function SettingsPage() {
               onChange={e => setVendorMemberSearch(e.target.value)}
               placeholder="Search interviewers…"
               autoFocus
-              className="w-full border border-gray-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+              className="w-full border border-gray-200 rounded-full pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
             />
           </div>
           <div className="max-h-80 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50 scrollbar-thin">

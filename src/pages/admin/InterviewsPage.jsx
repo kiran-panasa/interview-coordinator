@@ -1979,7 +1979,7 @@ export default function InterviewsPage() {
           <input type="text" value={candSearch}
             onChange={e => { setCandSearch(e.target.value); setIvrPage(1); }}
             placeholder="Search candidate…"
-            className="border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 text-sm text-gray-700 w-48 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
+            className="border border-gray-200 rounded-full pl-8 pr-3 py-1.5 text-sm text-gray-700 w-48 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
         </div>
         <select
           value={filterStatus}
