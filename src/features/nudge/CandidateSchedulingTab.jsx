@@ -1331,7 +1331,7 @@ export default function CandidateSchedulingTab({
                     )}
                     {nextAttempt > 1 && (
                       <span className="text-[11px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                        {ordinalLabel(nextAttempt)} Attempt
+                        {ordinalLabel(nextAttempt)}
                       </span>
                     )}
                   </div>

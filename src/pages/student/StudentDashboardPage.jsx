@@ -933,7 +933,7 @@ export default function StudentDashboardPage() {
                                   <p className="font-bold text-gray-900 truncate">{t.name}</p>
                                   {!t.limitReached && nextAttemptNumber(t.id) > 1 && (
                                     <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                                      {ordinalLabel(nextAttemptNumber(t.id))} Attempt
+                                      {ordinalLabel(nextAttemptNumber(t.id))}
                                     </span>
                                   )}
                                 </div>
@@ -978,7 +978,7 @@ export default function StudentDashboardPage() {
                           <p className="font-bold text-gray-900 truncate">{selfBookDraft.templateName}</p>
                           {nextAttemptNumber(selfBookDraft.templateId) > 1 && (
                             <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
-                              {ordinalLabel(nextAttemptNumber(selfBookDraft.templateId))} Attempt
+                              {ordinalLabel(nextAttemptNumber(selfBookDraft.templateId))}
                             </span>
                           )}
                         </div>
@@ -1307,15 +1307,6 @@ export default function StudentDashboardPage() {
                                   {iv.cancelReason && (
                                     <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
                                   )}
-                                  {/* Per-template toggles (Templates →
-                                     Lifecycle) — AI Report and Final Score
-                                     can be hidden independently; this note
-                                     shows once whenever either is. Never
-                                     affects Integrity, which stays visible
-                                     either way. */}
-                                  {iv.status === "completed" && (!iv.showAiReport || !iv.showFinalScore) && (
-                                    <p className="text-xs text-gray-400 mt-1">Note: {iv.hiddenScoreNote}</p>
-                                  )}
                                   {/* Set once the new slot is actually booked
                                      (see linkRescheduledInterview) — best-
                                      effort resolve, same as the admin side. */}
@@ -1328,37 +1319,50 @@ export default function StudentDashboardPage() {
                                     );
                                   })()}
                                 </div>
-                                <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-                                  {/* Clearly clickable, not just a colored
-                                     badge — trailing chevron + a title hint,
-                                     same hover affordance a real button has. */}
-                                  {iv.integrityScore != null && (
-                                    <button onClick={() => setIntegrityInterview(iv)}
-                                      title="Click to see the integrity breakdown"
-                                      className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full hover:bg-amber-100 hover:border-amber-300 transition-colors">
-                                      Integrity: {Number(iv.integrityScore).toFixed(1)}/5
-                                      <ChevronRight className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                  {iv.status === "completed" && iv.showFinalScore && iv.finalScore != null && (
-                                    <span title="Final Score"
-                                      className="flex items-center gap-1 text-[11px] font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-1 rounded-full">
-                                      <Award className="w-3 h-3" />
-                                      {iv.finalScore}%
+                                <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                                    {/* Clearly clickable, not just a colored
+                                       badge — trailing chevron + a title hint,
+                                       same hover affordance a real button has. */}
+                                    {iv.integrityScore != null && (
+                                      <button onClick={() => setIntegrityInterview(iv)}
+                                        title="Click to see the integrity breakdown"
+                                        className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full hover:bg-amber-100 hover:border-amber-300 transition-colors">
+                                        IntegrityScore: {Number(iv.integrityScore).toFixed(1)}/5.0
+                                        <ChevronRight className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                    {iv.status === "completed" && iv.showFinalScore && iv.finalScore != null && (
+                                      <span title="Final Score"
+                                        className="flex items-center gap-1 text-[11px] font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-1 rounded-full">
+                                        <Award className="w-3 h-3" />
+                                        {Number(iv.finalScore).toFixed(1)}/5.0
+                                      </span>
+                                    )}
+                                    {iv.status === "completed" && iv.showAiReport && iv.aiReport && (
+                                      <button onClick={() => setAiReportInterview(iv)}
+                                        title="Click to see the AI-generated report"
+                                        className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full hover:bg-violet-100 hover:border-violet-300 transition-colors">
+                                        <Sparkles className="w-3 h-3" />
+                                        AI Report
+                                        <ChevronRight className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                    <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
+                                      {STATUS_LABEL[iv.status] || iv.status}
                                     </span>
+                                  </div>
+                                  {/* Per-template toggles (Templates →
+                                     Lifecycle) — AI Report and Final Score
+                                     can be hidden independently; this note
+                                     shows once whenever either is. Never
+                                     affects IntegrityScore, which stays
+                                     visible either way. Sits right under the
+                                     badge row above so it reads as "about
+                                     this Completed/IntegrityScore state". */}
+                                  {iv.status === "completed" && (!iv.showAiReport || !iv.showFinalScore) && (
+                                    <p className="text-xs text-amber-600 font-medium text-right max-w-xs">Note: {iv.hiddenScoreNote}</p>
                                   )}
-                                  {iv.status === "completed" && iv.showAiReport && iv.aiReport && (
-                                    <button onClick={() => setAiReportInterview(iv)}
-                                      title="Click to see the AI-generated report"
-                                      className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full hover:bg-violet-100 hover:border-violet-300 transition-colors">
-                                      <Sparkles className="w-3 h-3" />
-                                      AI Report
-                                      <ChevronRight className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                  <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_STYLE[iv.status] || "bg-gray-100 text-gray-500 border-gray-200"}`}>
-                                    {STATUS_LABEL[iv.status] || iv.status}
-                                  </span>
                                 </div>
                               </div>
                             </Card>
@@ -1375,7 +1379,6 @@ export default function StudentDashboardPage() {
               <motion.div key="notifications" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 tracking-tight">Notifications</h1>
-                  <p className="text-sm text-gray-500 mt-0.5">Bookings the admin team had to cancel or couldn't confirm — pick a new slot whenever you're ready.</p>
                 </div>
                 {notifications.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-10">
