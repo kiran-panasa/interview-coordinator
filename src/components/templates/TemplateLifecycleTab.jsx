@@ -49,6 +49,7 @@ export default function TemplateLifecycleTab() {
 
   const [search, setSearch] = useState("");
   const [programFilter, setProgramFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId,  setSavedId]  = useState(null);
   // Local drafts for the two free-typed fields — only committed on blur,
@@ -67,9 +68,10 @@ export default function TemplateLifecycleTab() {
     const q = search.trim().toLowerCase();
     return templates
       .filter(t => !programFilter || t.program === programFilter)
+      .filter(t => !statusFilter || statusOf(t) === statusFilter)
       .filter(t => !q || t.name.toLowerCase().includes(q))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [templates, search, programFilter]);
+  }, [templates, search, programFilter, statusFilter]);
 
   const saveTemplate = async (t, data) => {
     setSavingId(t.id);
@@ -146,6 +148,13 @@ export default function TemplateLifecycleTab() {
           className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-600 cursor-pointer">
           <option value="">All programs</option>
           {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={e => setStatusFilter(e.target.value)}
+          className="text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-600 cursor-pointer">
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
       </div>
 
