@@ -95,7 +95,7 @@ export default function QuestionBankTab({
       {/* Table */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden"
       >
         {loading ? (
           <div className="p-4"><SkeletonRows count={6} /></div>

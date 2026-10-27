@@ -59,7 +59,7 @@ export default function IntegrityDetailModal({ interview, onClose }) {
       ) : (
         <div className="space-y-4">
           {interview?.integrityScore != null && (
-            <div className={`bg-gradient-to-r ${bannerGradient(Number(interview.integrityScore))} rounded-2xl p-5 text-white shadow-popover`}>
+            <div className={`bg-gradient-to-r ${bannerGradient(Number(interview.integrityScore))} rounded-[1.75rem] p-5 text-white shadow-popover`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
@@ -99,7 +99,7 @@ export default function IntegrityDetailModal({ interview, onClose }) {
           )}
 
           {remarksField && answers[remarksField.id] && (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+            <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">{remarksField.label}</p>
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{answers[remarksField.id]}</p>
             </div>

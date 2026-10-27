@@ -23,7 +23,7 @@ export default function BlockedDatesTab({ blockedDates, onAdd, onEdit, onDelete 
         </Button>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+      <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
         {sorted.length === 0 ? (
           <p className="text-center text-gray-400 py-14 text-sm">No blocked dates yet.</p>
         ) : (

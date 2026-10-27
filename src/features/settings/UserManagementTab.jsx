@@ -117,7 +117,7 @@ export default function UserManagementTab({
             </select>
           </div>
         </div>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
           {loading ? (
             <div className="p-4"><SkeletonRows count={5} /></div>
           ) : filteredUsers.length === 0 ? (
@@ -254,9 +254,9 @@ export default function UserManagementTab({
             </div>
           </div>
           {loading ? (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4"><SkeletonRows count={3} /></div>
+            <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4"><SkeletonRows count={3} /></div>
           ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+            <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
               {filteredInvites.length === 0 ? (
                 <p className="text-center text-gray-400 py-14 text-sm">No invites match this filter.</p>
               ) : (

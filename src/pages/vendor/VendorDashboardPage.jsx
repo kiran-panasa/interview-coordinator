@@ -351,7 +351,7 @@ export default function VendorDashboardPage() {
                     </button>
                   </div>
 
-                  <div className="flex items-end gap-3 flex-wrap bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+                  <div className="flex items-end gap-3 flex-wrap bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4">
                     <div className="relative">
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Panelist</label>
                       <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-[34px] pointer-events-none" />

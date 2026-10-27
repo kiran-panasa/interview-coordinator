@@ -91,7 +91,7 @@ export default function MyInterviewsPage() {
 
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.3 }}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden"
       >
         {!loaded ? (
           <div className="p-4"><SkeletonRows count={6} /></div>

@@ -6,7 +6,7 @@ export default function AdhocReviewTab({ adhocQs, pendingAdhoc, interviewerNameB
   return (
     <div className="space-y-4">
       {adhocQs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-2 bg-white rounded-2xl border border-gray-100 shadow-soft">
+        <div className="flex flex-col items-center justify-center py-20 gap-2 bg-white rounded-[1.75rem] border border-gray-100 shadow-soft">
           <Inbox className="w-10 h-10 text-gray-200" strokeWidth={1.5} />
           <p className="text-sm text-gray-400">No questions in the review queue.</p>
         </div>
@@ -30,7 +30,7 @@ export default function AdhocReviewTab({ adhocQs, pendingAdhoc, interviewerNameB
                 key={q.id}
                 initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.25, delay: Math.min(idx * 0.03, 0.3) }}
-                className={`rounded-2xl border shadow-soft p-4 hover:bg-gray-50/70 transition-colors ${statusStyle}`}
+                className={`rounded-[1.75rem] border shadow-soft p-4 hover:bg-gray-50/70 transition-colors ${statusStyle}`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">

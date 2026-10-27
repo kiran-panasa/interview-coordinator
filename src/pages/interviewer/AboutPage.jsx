@@ -46,7 +46,7 @@ function Section({ title, sub, children }) {
 
 function PageCard({ title, path, children, note }) {
   return (
-    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-4">
+    <div className="print-avoid bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-4">
       <div className="flex items-baseline gap-2 mb-3">
         <h3 className="text-sm font-bold text-gray-900">{title}</h3>
         <code className="text-[10px] font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">{path}</code>
@@ -76,7 +76,7 @@ function SubHeading({ children }) {
 
 function ConceptCard({ title, children }) {
   return (
-    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+    <div className="print-avoid bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4">
       <h3 className="text-sm font-bold text-gray-800 mb-1">{title}</h3>
       <p className="text-xs text-gray-500 leading-relaxed">{children}</p>
     </div>
@@ -105,7 +105,7 @@ export default function AboutPage() {
       </div>
 
       {/* What is this */}
-      <div className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-8 text-sm text-gray-600 leading-relaxed">
+      <div className="bg-gray-50 border border-gray-100 rounded-[1.75rem] p-5 mb-8 text-sm text-gray-600 leading-relaxed">
         <p>
           <strong className="text-gray-900">Interview Coordinator</strong> is your workspace for managing interview assignments at NxtWave.
           You receive interview requests based on your availability, conduct structured interviews with a question checklist and domain-level
@@ -224,7 +224,7 @@ export default function AboutPage() {
 
       {/* Tips */}
       <Section title="Tips for a Smooth Interview">
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-3">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 space-y-3">
           {[
             { tip: "Update availability at least a week ahead", desc: "Admins run scheduling campaigns weekly. If your calendar is empty for an upcoming period, you won't be included in the invite pool." },
             { tip: "Save Questions Asked before submitting Evaluation", desc: "These are separate saves. Saving questions increments usage counters, giving the content team accurate data on question frequency." },

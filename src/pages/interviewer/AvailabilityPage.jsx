@@ -674,8 +674,8 @@ export default function AvailabilityPage() {
       <div className="p-8 space-y-6">
         <div className="space-y-2"><Skeleton className="h-7 w-48" /><Skeleton className="h-4 w-72" /></div>
         <div className="flex flex-col lg:flex-row gap-6 items-start">
-          <Skeleton className="w-full lg:w-80 h-96 rounded-2xl flex-shrink-0" />
-          <Skeleton className="flex-1 w-full h-96 rounded-2xl" />
+          <Skeleton className="w-full lg:w-80 h-96 rounded-[1.75rem] flex-shrink-0" />
+          <Skeleton className="flex-1 w-full h-96 rounded-[1.75rem]" />
         </div>
         <SkeletonRows count={4} />
       </div>
@@ -707,7 +707,7 @@ export default function AvailabilityPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* ── Calendar ── */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 w-full lg:w-80 flex-shrink-0">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 w-full lg:w-80 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
             <button onClick={prevMonth}
               className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
@@ -805,7 +805,7 @@ export default function AvailabilityPage() {
         </div>
 
         {/* ── Slot manager ── */}
-        <div className="flex-1 w-full bg-white rounded-2xl border border-gray-100 shadow-soft p-5 min-h-64">
+        <div className="flex-1 w-full bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 min-h-64">
           {selectedDates.size === 0 ? (
             <p className="text-sm text-gray-400 text-center mt-12">Select one or more dates on the calendar to add or manage time slots.</p>
           ) : (
@@ -1077,7 +1077,7 @@ export default function AvailabilityPage() {
           </div>
 
           {/* ── Filters ── */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 mb-3 flex flex-wrap items-end gap-3">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 mb-3 flex flex-wrap items-end gap-3">
             <div>
               <label className="block text-[10px] text-gray-400 mb-1">From</label>
               <DatePicker value={tableDateFrom} onChange={e => setTableDateFrom(e.target.value)} accent="emerald"
@@ -1121,7 +1121,7 @@ export default function AvailabilityPage() {
             )}
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-x-auto">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-x-auto">
             <table className="w-full text-sm min-w-[620px]">
               <thead>
                 <tr className="border-b border-gray-100">

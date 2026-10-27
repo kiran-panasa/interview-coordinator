@@ -177,7 +177,7 @@ export default function InterviewQuestions() {
       <div className="p-8 max-w-3xl space-y-5">
         <Skeleton className="h-4 w-32" />
         <div className="space-y-2"><Skeleton className="h-6 w-56" /><Skeleton className="h-3 w-40" /></div>
-        <Skeleton className="h-72 w-full rounded-2xl" />
+        <Skeleton className="h-72 w-full rounded-[1.75rem]" />
       </div>
     );
   }
@@ -201,12 +201,12 @@ export default function InterviewQuestions() {
       </motion.div>
 
       {templateQs.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-8 text-center text-sm text-gray-400">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-8 text-center text-sm text-gray-400">
           No questions are attached to this interview's template.
         </div>
       ) : (
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
             <span className="inline-flex items-center gap-1.5 text-xs text-gray-500">
               <ListChecks className="w-3.5 h-3.5 text-gray-400" /> {askedQIds.size} / {templateQs.length} marked

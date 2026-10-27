@@ -568,7 +568,7 @@ export default function InterviewDetail() {
         </div>
         <Skeleton className="h-6 w-24 rounded-full" />
       </div>
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-4">
+      <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 space-y-4">
         <Skeleton className="h-3 w-32" />
         <div className="grid grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -583,7 +583,7 @@ export default function InterviewDetail() {
   );
   if (!interview) return (
     <div className="p-8 max-w-3xl">
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-10 text-center">
+      <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-10 text-center">
         <AlertTriangle className="w-8 h-8 text-gray-300 mx-auto mb-3" />
         <p className="text-sm text-gray-400">Interview not found.</p>
       </div>
@@ -646,7 +646,7 @@ export default function InterviewDetail() {
 
       {/* Details card */}
       <motion.div initial="hidden" animate="visible" custom={1} variants={fadeUp}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5">
         <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-4">
           <Calendar className="w-4 h-4 text-gray-400" /> Interview Details
         </h2>
@@ -713,7 +713,7 @@ export default function InterviewDetail() {
          whichever domains it already answered (shown read-only below). */}
       {priorSessions.length > 0 && (
         <motion.div initial="hidden" animate="visible" custom={1.5} variants={fadeUp}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-wide mb-3">
             Previous Session{priorSessions.length > 1 ? "s" : ""}
           </p>
@@ -760,7 +760,7 @@ export default function InterviewDetail() {
       {/* Accept / Decline */}
       {isPending && (
         <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
-          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5">
+          className="bg-amber-50 border border-amber-200 rounded-[1.75rem] p-5 mb-5">
           <p className="text-sm font-semibold text-amber-800 mb-1">Awaiting your response</p>
           <p className="text-xs text-amber-600 mb-4">
             {formatDate(interview.scheduledDate)} at {interview.scheduledTime} · {interview.round}
@@ -781,7 +781,7 @@ export default function InterviewDetail() {
       {/* ── Cancel Interview — for an already-scheduled interview, before it starts ── */}
       {canCancelInterview && (
         <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
-          className="bg-white border border-gray-100 rounded-2xl p-5 mb-5 flex items-center justify-between gap-3">
+          className="bg-white border border-gray-100 rounded-[1.75rem] p-5 mb-5 flex items-center justify-between gap-3">
           <p className="text-xs text-gray-400">Need to cancel this interview?</p>
           <button onClick={openCancelModal} disabled={saving}
             className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-4 py-1.5 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors flex-shrink-0">
@@ -793,7 +793,7 @@ export default function InterviewDetail() {
       {/* ── Attendance gate — appears once interview time has passed ── */}
       {showAttendanceGate && (
         <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
-          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5">
+          className="bg-amber-50 border border-amber-200 rounded-[1.75rem] p-5 mb-5">
           <p className="text-sm font-bold text-amber-800 mb-1">Did the candidate join?</p>
           <p className="text-xs text-amber-600 mb-4">
             Scheduled for {interview.scheduledTime} · {formatDate(interview.scheduledDate)}
@@ -814,7 +814,7 @@ export default function InterviewDetail() {
       {/* ── No-show confirmation ── */}
       {isNoShow && (
         <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
-          className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-5 flex items-center gap-3">
+          className="bg-red-50 border border-red-200 rounded-[1.75rem] p-5 mb-5 flex items-center gap-3">
           <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
           <div>
             <p className="text-sm font-semibold text-red-700">Candidate did not join</p>
@@ -826,7 +826,7 @@ export default function InterviewDetail() {
       {/* ── Partially Completed notice ── */}
       {interview.status === "partially_completed" && (
         <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
-          className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-5 flex items-start gap-3">
+          className="bg-amber-50 border border-amber-200 rounded-[1.75rem] p-5 mb-5 flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-amber-700">Marked as Partially Completed</p>
@@ -840,7 +840,7 @@ export default function InterviewDetail() {
       {/* ── Cancelled notice ── */}
       {interview.status === "cancelled" && (
         <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
-          className="bg-red-50 border border-red-200 rounded-2xl p-5 mb-5 flex items-start gap-3">
+          className="bg-red-50 border border-red-200 rounded-[1.75rem] p-5 mb-5 flex items-start gap-3">
           <XCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-semibold text-red-700">Interview Cancelled</p>
@@ -856,7 +856,7 @@ export default function InterviewDetail() {
           template applies immediately here too. ── */}
       {template?.guidelinesDocUrl && (
         <motion.div initial="hidden" animate="visible" custom={2.5} variants={fadeUp}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
               <FileText className="w-4 h-4 text-gray-400" /> Interview Guidelines / Format
@@ -878,7 +878,7 @@ export default function InterviewDetail() {
       {/* ── Questions Asked — opens in a separate tab so the evaluation form isn't lost ── */}
       {showEvaluation && totalQuestions > 0 && (
         <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
               <HelpCircle className="w-4 h-4 text-gray-400" /> Questions Asked
@@ -900,7 +900,7 @@ export default function InterviewDetail() {
       {/* ── Evaluation section (scheduled or completed) ── */}
       {showEvaluation && (
         <motion.div initial="hidden" animate="visible" custom={4} variants={fadeUp}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-5">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
               <ClipboardList className="w-4 h-4 text-gray-400" /> Evaluation

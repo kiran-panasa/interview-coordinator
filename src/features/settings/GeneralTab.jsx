@@ -78,7 +78,7 @@ export default function GeneralTab({
         className="mb-8"
       >
         <SectionTitle icon={BellRing} label="Candidate Nudge Reminders" />
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
           <p className="text-xs text-gray-400 mb-4">
             Controls the automatic Day 1 / Day 2 follow-up reminders sent to candidates who haven't booked a slot yet.
             After the final reminder, candidates who still haven't booked are flagged "No Response After 2 Reminders" and admins are notified.
@@ -122,7 +122,7 @@ export default function GeneralTab({
         className="mb-8"
       >
         <SectionTitle icon={Tag} label="Skills" />
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
           <p className="text-xs text-gray-400 mb-4">These skills are shared across templates and interviewer profiles for matching.</p>
           <div className="flex flex-wrap gap-2 mb-4">
             {skills.map(s => (
@@ -181,7 +181,7 @@ export default function GeneralTab({
         className="mb-8"
       >
         <SectionTitle icon={ListChecks} label="Rounds" />
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
           <p className="text-xs text-gray-400 mb-4">
             These round names show up in Schedule Interview, Nudge → Candidates, and each Program's default round
             below. Picking "Other…" there and typing a new name also saves it here automatically.
@@ -243,7 +243,7 @@ export default function GeneralTab({
         className="mb-8"
       >
         <SectionTitle icon={Building2} label="Vendors" count={vendors.length} />
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
           <p className="text-xs text-gray-400 mb-4">
             Groups interviewers by the outsourcing vendor they belong to — a label for filtering and reporting on
             Interviews and Interviewer Stats. It doesn't grant any login or access of its own.
@@ -317,7 +317,7 @@ export default function GeneralTab({
           still changeable per campaign.
         </p>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
           {programs.length === 0 && !addingProgram ? (
             <div className="flex flex-col items-center justify-center py-14 gap-3">
               <FolderKanban className="w-10 h-10 text-gray-200" strokeWidth={1.5} />

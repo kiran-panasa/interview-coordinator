@@ -333,7 +333,7 @@ export default function InterviewerStatsPage() {
             </div>
 
             {leaderboardRanked.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-14">
+              <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft flex flex-col items-center justify-center py-14">
                 <Trophy className="w-8 h-8 text-gray-200 mb-2" />
                 <p className="text-sm text-gray-400">No active interviewers yet.</p>
               </div>
@@ -343,7 +343,7 @@ export default function InterviewerStatsPage() {
                   const style = RANK_STYLE[i];
                   const RankIcon = style?.icon;
                   return (
-                    <div key={row.interviewer.id} className={`bg-white rounded-2xl border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
+                    <div key={row.interviewer.id} className={`bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${
                         style ? style.badge : "bg-gray-100 text-gray-500"
                       }`}>
@@ -368,7 +368,7 @@ export default function InterviewerStatsPage() {
       <>
       {/* Filters */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4 mb-5">
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 mb-5">
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label>
@@ -413,7 +413,7 @@ export default function InterviewerStatsPage() {
 
       {/* Stats table */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
         {interviewerStats.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-2">
             <BarChart3 className="w-10 h-10 text-gray-200" strokeWidth={1.5} />

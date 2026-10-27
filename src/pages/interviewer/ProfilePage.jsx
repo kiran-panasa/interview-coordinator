@@ -78,10 +78,10 @@ export default function ProfilePage() {
     return (
       <div className="p-8 max-w-2xl space-y-8">
         <div className="flex items-center gap-5">
-          <Skeleton className="w-16 h-16 rounded-2xl" />
+          <Skeleton className="w-16 h-16 rounded-[1.75rem]" />
           <div className="space-y-2"><Skeleton className="h-6 w-40" /><Skeleton className="h-3 w-56" /></div>
         </div>
-        <Skeleton className="h-64 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-[1.75rem]" />
       </div>
     );
   }
@@ -94,7 +94,7 @@ export default function ProfilePage() {
       {/* Header */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
         className="flex items-center gap-5 mb-8">
-        <div className="w-16 h-16 rounded-2xl bg-emerald-100 flex items-center justify-center flex-shrink-0 shadow-soft">
+        <div className="w-16 h-16 rounded-[1.75rem] bg-emerald-100 flex items-center justify-center flex-shrink-0 shadow-soft">
           <span className="text-2xl font-bold text-emerald-700">{initials}</span>
         </div>
         <div>
@@ -104,7 +104,7 @@ export default function ProfilePage() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft divide-y divide-gray-100">
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft divide-y divide-gray-100">
 
         {/* ── Basic Info ── */}
         <div className="px-6 py-5">

@@ -279,7 +279,7 @@ function Section({ title, sub, children }) {
 
 function PageCard({ title, path, children, note }) {
   return (
-    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-5 mb-4">
+    <div className="print-avoid bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-4">
       <div className="flex items-baseline gap-2 mb-3">
         <h3 className="text-sm font-bold text-gray-900">{title}</h3>
         <code className="text-[10px] font-mono text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded">{path}</code>
@@ -305,7 +305,7 @@ function Bullet({ children }) {
 
 function ConceptCard({ title, children }) {
   return (
-    <div className="print-avoid bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+    <div className="print-avoid bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4">
       <h3 className="text-sm font-bold text-gray-800 mb-1">{title}</h3>
       <p className="text-xs text-gray-500 leading-relaxed">{children}</p>
     </div>
@@ -372,7 +372,7 @@ export default function AboutPage() {
 
       {/* ── What is this? ── */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-        className="bg-gray-50 border border-gray-100 rounded-2xl p-5 mb-8 text-sm text-gray-600 leading-relaxed">
+        className="bg-gray-50 border border-gray-100 rounded-[1.75rem] p-5 mb-8 text-sm text-gray-600 leading-relaxed">
         <p>
           <strong className="text-gray-900">Interview Coordinator</strong> is NxtWave's internal operations tool for managing the full interview lifecycle —
           from configuring structured evaluation templates and building a central question bank, to sending scheduling invites to candidates,
@@ -512,7 +512,7 @@ export default function AboutPage() {
       {/* ── Role overview ── */}
       {!isContent && (
         <Section title="Roles & Access" sub="What each role can see and do.">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden print-avoid">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden print-avoid">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">

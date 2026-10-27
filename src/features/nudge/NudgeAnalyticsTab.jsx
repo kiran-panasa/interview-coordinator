@@ -184,7 +184,7 @@ export default function NudgeAnalyticsTab({
   return (
     <div className="space-y-6">
       {/* Filters */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft px-5 py-4">
+      <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft px-5 py-4">
         <div className="flex gap-3 flex-wrap items-end">
           <div className="flex items-center gap-1.5">
             <div>
@@ -283,7 +283,7 @@ export default function NudgeAnalyticsTab({
       )}
 
       {/* Table */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+      <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center gap-2">
           <BarChart3 className="w-3.5 h-3.5 text-gray-400" />
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">

@@ -77,7 +77,7 @@ export default function PreInterviewResourcesTab() {
           links or video URLs), not uploaded files.
         </p>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 space-y-5">
           {/* Video setup guide */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1.5">

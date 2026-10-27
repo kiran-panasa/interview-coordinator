@@ -82,7 +82,7 @@ export default function LeaderboardPage() {
         </div>
 
         {ranked.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-14">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft flex flex-col items-center justify-center py-14">
             <Trophy className="w-8 h-8 text-gray-200 mb-2" />
             <p className="text-sm text-gray-400">No active interviewers yet.</p>
           </div>
@@ -92,7 +92,7 @@ export default function LeaderboardPage() {
               const style = RANK_STYLE[i];
               const RankIcon = style?.icon;
               return (
-                <div key={row.interviewer.id} className={`bg-white rounded-2xl border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
+                <div key={row.interviewer.id} className={`bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${
                     style ? style.badge : "bg-gray-100 text-gray-500"
                   }`}>

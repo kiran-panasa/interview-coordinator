@@ -644,7 +644,7 @@ export default function CandidatesPage() {
         </motion.div>
       )}
 
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3} className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3} className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
         {(needsFullList ? isLoading : pageLoading) ? (
           <div className="p-4"><SkeletonRows count={6} /></div>
         ) : (

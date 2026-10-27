@@ -159,8 +159,8 @@ export default function NotificationsPage() {
       </motion.div>
 
       {nudges.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-12 h-12 rounded-[1.75rem] bg-gray-50 flex items-center justify-center">
             <Inbox className="w-6 h-6 text-gray-300" />
           </div>
           <p className="text-sm text-gray-400">No notifications yet.</p>
@@ -174,7 +174,7 @@ export default function NotificationsPage() {
             return (
               <motion.div key={n.id}
                 custom={idx} initial="hidden" animate="visible" variants={fadeUp}
-                className={`bg-white rounded-2xl border p-5 transition-colors ${
+                className={`bg-white rounded-[1.75rem] border p-5 transition-colors ${
                   isNew ? "border-emerald-200 shadow-card" : "border-gray-100 shadow-soft"
                 }`}
               >

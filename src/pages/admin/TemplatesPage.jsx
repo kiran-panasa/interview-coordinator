@@ -507,7 +507,7 @@ export default function TemplatesPage() {
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-3">
+            <div key={i} className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 space-y-3">
               <div className="flex items-start justify-between gap-2">
                 <Skeleton className="h-4 w-2/3" />
                 <Skeleton className="h-6 w-6 rounded-lg flex-shrink-0" />
@@ -522,7 +522,7 @@ export default function TemplatesPage() {
           ))}
         </div>
       ) : visibleTemplates.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-12 text-center">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-12 text-center">
           {templates.length === 0 ? (
             <>
               <p className="text-gray-400 text-sm mb-4">No templates yet.</p>
@@ -548,7 +548,7 @@ export default function TemplatesPage() {
             const programName = programs.find(p => p.id === t.program)?.name;
             return (
               <motion.div key={t.id} variants={fadeUp}
-                className="bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-card transition-shadow p-5 flex flex-col gap-3"
+                className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft hover:shadow-card transition-shadow p-5 flex flex-col gap-3"
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">

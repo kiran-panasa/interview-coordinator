@@ -60,7 +60,7 @@ export default function AiReportModal({ interview, loading, status, onClose, onR
       title={interview ? `AI Candidate Report — ${interview.candidateName}` : ""} wide>
       {loading && (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-brand-50 flex items-center justify-center">
+          <div className="w-14 h-14 rounded-[1.75rem] bg-brand-50 flex items-center justify-center">
             <Loader2 className="w-7 h-7 text-brand-500 animate-spin" />
           </div>
           <p className="text-sm font-semibold text-gray-700">Analyzing the interview transcript…</p>
@@ -72,7 +72,7 @@ export default function AiReportModal({ interview, loading, status, onClose, onR
         const StatusIcon = STATUS_COPY[status.status]?.icon || Clock3;
         return (
           <div className="flex flex-col items-center text-center py-14 gap-3 px-6">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center">
+            <div className="w-14 h-14 rounded-[1.75rem] bg-amber-50 flex items-center justify-center">
               <StatusIcon className="w-7 h-7 text-amber-500" />
             </div>
             <p className="text-sm font-bold text-gray-900">{STATUS_COPY[status.status]?.title || "Not ready yet"}</p>

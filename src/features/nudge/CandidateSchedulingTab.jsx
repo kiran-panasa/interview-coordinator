@@ -792,7 +792,7 @@ export default function CandidateSchedulingTab({
       {/* Campaign config */}
       <motion.div
         initial="hidden" animate="visible" custom={1} variants={fadeUp}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft px-6 py-5"
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft px-6 py-5"
       >
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
           <CalendarRange className="w-3.5 h-3.5 text-gray-400" /> Scheduling Campaign
@@ -1014,7 +1014,7 @@ export default function CandidateSchedulingTab({
       {/* Candidate list */}
       <motion.div
         initial="hidden" animate="visible" custom={2} variants={fadeUp}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden"
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden"
       >
         <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between gap-3 flex-wrap">
           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5 whitespace-nowrap">
@@ -1167,7 +1167,7 @@ export default function CandidateSchedulingTab({
           )}
         </div>
         {invites.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft px-4 py-3 mb-3">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft px-4 py-3 mb-3">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-1">Status</label>
@@ -1202,11 +1202,11 @@ export default function CandidateSchedulingTab({
           </div>
         )}
         {filteredInvites.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
             <p className="text-sm text-gray-400">{inviteFiltersActive ? "No invites match these filters." : "No invites sent yet."}</p>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
             {/* The action column (Copy + kebab) was getting squeezed off the
                right edge on narrower screens with no way to reach it — the
                table had no horizontal scroll of its own, so overflow just

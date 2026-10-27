@@ -293,7 +293,7 @@ export default function InterviewerNudgeTab({
       {/* Config */}
       <motion.div
         initial="hidden" animate="visible" custom={0} variants={fadeUp}
-        className="bg-white rounded-2xl border border-gray-100 shadow-soft px-6 py-5"
+        className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft px-6 py-5"
       >
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
           <Megaphone className="w-3.5 h-3.5 text-gray-400" /> Slot Request Campaign
@@ -375,7 +375,7 @@ export default function InterviewerNudgeTab({
 
       {/* Interviewers table */}
       <motion.div initial="hidden" animate="visible" custom={1} variants={fadeUp}>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
           <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-gray-400" />
@@ -575,13 +575,13 @@ export default function InterviewerNudgeTab({
           {unreadResponses > 0 && <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">{unreadResponses} new</span>}
         </div>
         {incomingResponses.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
+          <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft flex flex-col items-center justify-center py-10">
             <p className="text-sm text-gray-400">No responses yet.</p>
           </div>
         ) : (
           <div className="space-y-2">
             {incomingResponses.map(n => (
-              <div key={n.id} className={`bg-white rounded-2xl border px-5 py-4 flex items-start gap-4 shadow-soft ${n.status === "unread" ? "border-red-200 bg-red-50/60" : "border-gray-100"}`}>
+              <div key={n.id} className={`bg-white rounded-[1.75rem] border px-5 py-4 flex items-start gap-4 shadow-soft ${n.status === "unread" ? "border-red-200 bg-red-50/60" : "border-gray-100"}`}>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-900">{n.senderName}</p>
                   <p className="text-sm text-gray-600 mt-0.5">{n.message}</p>

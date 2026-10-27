@@ -86,7 +86,7 @@ export default function InterviewerDashboard() {
         {/* Today */}
         <motion.div
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15, duration: 0.3 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft"
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft"
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -131,7 +131,7 @@ export default function InterviewerDashboard() {
         {/* Needs action */}
         <motion.div
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.3 }}
-          className="bg-white rounded-2xl border border-gray-100 shadow-soft"
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft"
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
