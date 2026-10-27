@@ -473,11 +473,31 @@ async function otpRequest(req, res) {
 
   const phone = String(req.body?.phone || "").trim();
   if (!phone) return res.status(400).json({ error: "invalid_parameter", message: "phone is required." });
+  const digits = phone.replace(/\D/g, "").slice(-10);
 
   const db = getDb();
-  const snap = await db.collection("candidates").where("phone", "==", phone).get();
-  if (snap.size !== 1) return res.status(404).json({ error: "student_not_found", message: "No access — you're not registered. Please connect with your team." });
-  const candidate = snap.docs[0];
+  const exactSnap = await db.collection("candidates").where("phone", "==", phone).get();
+  let candidate = exactSnap.size === 1 ? exactSnap.docs[0] : null;
+
+  // Exact match either found nothing (the stored phone differs only in
+  // formatting — country code, spaces, dashes — from what the student
+  // typed) or found more than one candidate sharing that exact string (a
+  // duplicate record — admin-side creation now checks for these before
+  // inserting, see findCandidateByUidOrEmail, but that doesn't retroactively
+  // clean up records that already existed). Either way, fall back to a
+  // normalized last-10-digit match across every candidate — the same
+  // approach the user_id SSO flow already relies on for its own phone
+  // fallback (see tokenExchange above) — and when THAT still finds more
+  // than one, prefer whichever actually has templates assigned, since
+  // logging into a record with none would just show an empty dashboard.
+  if (!candidate && digits.length === 10) {
+    const allSnap = await db.collection("candidates").get();
+    const matches = allSnap.docs.filter(d => (d.data().phone || "").replace(/\D/g, "").slice(-10) === digits);
+    if (matches.length === 1) candidate = matches[0];
+    else if (matches.length > 1) candidate = matches.find(d => (d.data().templateIds || []).length > 0) || matches[0];
+  }
+
+  if (!candidate) return res.status(404).json({ error: "student_not_found", message: "No access — you're not registered. Please connect with your team." });
 
   const otp = generateOtp();
   const createdAt = new Date();
