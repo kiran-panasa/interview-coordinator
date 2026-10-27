@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Medal, Award } from "lucide-react";
+import { Trophy, Medal, Award, Locate } from "lucide-react";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useUsers } from "../../hooks/queries";
+import { useAuth } from "../../AuthContext";
 
 // Same ISO week (Monday–Sunday) / calendar month helpers as the admin and
 // vendor leaderboards, so all three agree on what "this week"/"this month"
@@ -38,10 +39,12 @@ const RANK_STYLE = [
 ];
 
 export default function LeaderboardPage() {
+  const { userProfile } = useAuth();
   const [period, setPeriod] = useState("week");
   const range = period === "week" ? thisWeekRange() : thisMonthRange();
   const interviews = useInterviewsInDateRange(range.from, range.to);
   const { data: usersAll = [] } = useUsers();
+  const rowRefs = useRef(new Map());
 
   // Ranked by COMPLETED interviews (actual work done) in the period — same
   // ranking rule as the admin and vendor dashboard leaderboards, across
@@ -56,6 +59,12 @@ export default function LeaderboardPage() {
       })
       .sort((a, b) => b.completed - a.completed || b.total - a.total);
   }, [usersAll, interviews]);
+
+  const myIndex = ranked.findIndex(r => r.interviewer.id === userProfile?.id);
+  const scrollToMe = () => {
+    const el = rowRefs.current.get(userProfile?.id);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
 
   return (
     <div className="p-8">
@@ -79,6 +88,12 @@ export default function LeaderboardPage() {
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-3">{range.from} – {range.to}</p>
+          {myIndex >= 0 && (
+            <button onClick={scrollToMe}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3.5 py-1.5 rounded-full hover:bg-emerald-100 transition-colors mt-3">
+              <Locate className="w-3.5 h-3.5" /> Find Me — Rank #{myIndex + 1}
+            </button>
+          )}
         </div>
 
         {ranked.length === 0 ? (
@@ -91,15 +106,25 @@ export default function LeaderboardPage() {
             {ranked.map((row, i) => {
               const style = RANK_STYLE[i];
               const RankIcon = style?.icon;
+              const isMe = row.interviewer.id === userProfile?.id;
               return (
-                <div key={row.interviewer.id} className={`bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
+                <div key={row.interviewer.id}
+                  ref={el => { if (el) rowRefs.current.set(row.interviewer.id, el); else rowRefs.current.delete(row.interviewer.id); }}
+                  className={`bg-white rounded-[1.75rem] border p-4 flex items-center gap-4 transition-shadow ${
+                    isMe ? "border-emerald-400 ring-2 ring-emerald-200 shadow-card" : `border-gray-100 shadow-soft ${style?.card || ""}`
+                  }`}>
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${
                     style ? style.badge : "bg-gray-100 text-gray-500"
                   }`}>
                     {RankIcon ? <RankIcon className="w-5 h-5" /> : i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 truncate">{maskName(row.interviewer.displayName) || row.interviewer.email}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-semibold text-gray-900 truncate">{maskName(row.interviewer.displayName) || row.interviewer.email}</p>
+                      {isMe && (
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full flex-shrink-0">You</span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} this {period}</p>
                   </div>
                   <div className="text-center flex-shrink-0 w-16">
