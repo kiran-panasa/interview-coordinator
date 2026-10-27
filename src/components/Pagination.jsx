@@ -24,7 +24,7 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page === 1}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" /> Prev
         </button>
@@ -35,7 +35,7 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
             <button
               key={p}
               onClick={() => onPageChange(p)}
-              className={`w-7 h-7 text-xs font-semibold rounded-lg transition-colors ${
+              className={`w-7 h-7 text-xs font-semibold rounded-full transition-colors ${
                 p === page
                   ? "bg-brand-600 text-white shadow-soft"
                   : "text-gray-500 hover:bg-gray-100 hover:text-gray-800"
@@ -48,7 +48,7 @@ function Pagination({ page, totalPages, total, pageSize, onPageChange }) {
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page === totalPages}
-          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
+          className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full disabled:opacity-30 disabled:hover:bg-transparent transition-colors"
         >
           Next <ChevronRight className="w-3.5 h-3.5" />
         </button>

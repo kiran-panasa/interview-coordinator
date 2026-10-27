@@ -163,7 +163,7 @@ export default function TimePicker({
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
             style={{ position: "fixed", top: coords.top, left: coords.left, zIndex: 9999 }}
-            className="bg-white rounded-xl border border-gray-200 shadow-popover p-2 w-44"
+            className="bg-white rounded-2xl border border-gray-200 shadow-popover p-2 w-44"
           >
             <input
               ref={textInputRef}
@@ -202,7 +202,7 @@ export default function TimePicker({
             <div className="flex gap-1 mt-2 pt-2 border-t border-gray-100">
               {["AM", "PM"].map(p => (
                 <button key={p} type="button" onClick={() => pickPeriod(p)}
-                  className={`flex-1 text-xs font-semibold py-1.5 rounded-lg transition-colors ${
+                  className={`flex-1 text-xs font-semibold py-1.5 rounded-full transition-colors ${
                     p === selPeriod ? "bg-brand-600 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"
                   }`}>
                   {p}

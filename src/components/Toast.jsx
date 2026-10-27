@@ -16,7 +16,7 @@ export default function Toast({ message, type = "success", onDone }) {
       initial={{ opacity: 0, y: 16, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 28 }}
-      className={`fixed bottom-6 right-6 z-50 ${bg} text-white pl-4 pr-5 py-3 rounded-xl shadow-popover text-sm font-medium flex items-center gap-2.5 max-w-sm`}
+      className={`fixed bottom-6 right-6 z-50 ${bg} text-white pl-4 pr-5 py-3 rounded-full shadow-popover text-sm font-medium flex items-center gap-2.5 max-w-sm`}
     >
       <Icon className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
       {message}

@@ -130,16 +130,16 @@ export default function DatePicker({
             initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
             style={{ position: "fixed", top: coords.top, left: coords.left, zIndex: 9999 }}
-            className="bg-white rounded-xl border border-gray-200 shadow-popover p-3 w-64"
+            className="bg-white rounded-2xl border border-gray-200 shadow-popover p-3 w-64"
           >
             <div className="flex items-center justify-between mb-2">
               <button type="button" onClick={() => setViewDate(new Date(year, month - 1, 1))}
-                className="p-1 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <p className="text-sm font-bold text-gray-900">{MONTH_NAMES[month]} {year}</p>
               <button type="button" onClick={() => setViewDate(new Date(year, month + 1, 1))}
-                className="p-1 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors">
+                className="p-1 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -162,7 +162,7 @@ export default function DatePicker({
                   <button key={d} type="button" disabled={isDisabled}
                     title={blocked ? `Blocked${blocked.reason ? `: ${blocked.reason}` : ""}` : undefined}
                     onClick={() => { if (!isDisabled) emit(iso); }}
-                    className={`aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-colors ${
+                    className={`aspect-square flex items-center justify-center rounded-full text-xs font-medium transition-colors ${
                       blocked
                         ? `bg-red-50 text-red-400 line-through ${isDisabled ? "cursor-not-allowed" : "hover:bg-red-100"}`
                         : isSelected ? colors.selected
