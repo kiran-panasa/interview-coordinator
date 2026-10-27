@@ -100,7 +100,7 @@ const DAY_START_SCROLL_HOUR = 7; // auto-scrolled here on open, same as Google C
 export default function CalendarPage() {
   const { userProfile } = useAuth();
   const interviews = useInterviewerInterviews(userProfile?.email, userProfile?.id);
-  const [view, setView] = useState("month"); // "month" | "day"
+  const [view, setView] = useState("day"); // "month" | "day"
   const [viewDate, setViewDate] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
