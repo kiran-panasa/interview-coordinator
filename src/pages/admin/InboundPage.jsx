@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { formatDate } from "../../utils/dates";
 import { resolveInboundProgramId } from "../../utils/inboundProgramMapping";
 import {
-  createCandidate, updateCandidate, moveInboundRequestToNudge, dismissInboundRequest,
+  createCandidate, findCandidateByUidOrEmail, updateCandidate, moveInboundRequestToNudge, dismissInboundRequest,
 } from "../../api/firestore";
 import { useInboundRequests } from "../../hooks/subscriptions";
 import { useCandidates, usePrograms, QK } from "../../hooks/queries";
@@ -95,7 +95,18 @@ export default function InboundPage() {
       let created = 0, matched = 0;
       for (const r of chosen) {
         const resolvedProgramId = resolveInboundProgramId(r, programs) || "";
-        const existing = candidates.find(c => (c.email || "").toLowerCase() === (r.candidateEmail || "").toLowerCase());
+        // Checked against the loaded candidates list first (cheap, usually
+        // already fresh here since this page always loads the full list —
+        // see useCandidates() above) and, in case that's momentarily stale,
+        // against Firestore directly too — matching by uid as well as
+        // email now, since an inbound request can carry a uid that
+        // disagrees with email-only matching (e.g. the candidate's email on
+        // file changed since they were first added).
+        const existing =
+          candidates.find(c =>
+            (r.candidateEmail && (c.email || "").toLowerCase() === r.candidateEmail.toLowerCase()) ||
+            (r.uid && c.uid === r.uid)
+          ) || await findCandidateByUidOrEmail(r.uid, r.candidateEmail);
         let candidateId = existing?.id;
         if (candidateId) {
           matched++;

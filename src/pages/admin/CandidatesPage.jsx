@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { createCandidate, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate, getCandidatesPage, getCandidates } from "../../api/firestore";
+import { createCandidate, findCandidateByUidOrEmail, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate, getCandidatesPage, getCandidates } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
@@ -282,16 +282,32 @@ export default function CandidatesPage() {
           .filter(c => c.id !== editTarget.id || activeProgram === "all" || c.program === activeProgram));
         setToast({ message: "Candidate updated." });
       } else {
-        const createdAt = new Date().toISOString();
-        const id = await createCandidate({ ...cleanForm, createdBy: currentUser.uid });
-        const newCandidate = { id, ...cleanForm, createdAt, createdBy: currentUser.uid };
-        patchFullList(prev => [newCandidate, ...prev]);
-        // Only show it in the scoped page view if it actually belongs on
-        // the tab currently being viewed.
-        if (!needsFullList && (activeProgram === "all" || activeProgram === form.program)) {
-          setPageItems(prev => [newCandidate, ...prev]);
+        // Checked against Firestore directly, not whatever's in local
+        // state — the default (no search, no archived) view never loads
+        // the full candidate list, so a stale/empty local check would miss
+        // an existing record here more often than not. See
+        // findCandidateByUidOrEmail.
+        const existing = await findCandidateByUidOrEmail(cleanForm.uid, cleanForm.email);
+        if (existing) {
+          const mergedTemplateIds = [...new Set([...(existing.templateIds || []), ...(cleanForm.templateIds || [])])];
+          const fieldUpdates = { ...cleanForm, templateIds: mergedTemplateIds };
+          await updateCandidate(existing.id, fieldUpdates);
+          patchFullList(prev => prev.map(c => c.id === existing.id ? { ...c, ...fieldUpdates } : c));
+          setPageItems(prev => prev.map(c => c.id === existing.id ? { ...c, ...fieldUpdates } : c));
+          queryClient.invalidateQueries({ queryKey: QK.candidates });
+          setToast({ message: "A candidate with this email or UID already exists — updated their existing record instead of creating a duplicate." });
+        } else {
+          const createdAt = new Date().toISOString();
+          const id = await createCandidate({ ...cleanForm, createdBy: currentUser.uid });
+          const newCandidate = { id, ...cleanForm, createdAt, createdBy: currentUser.uid };
+          patchFullList(prev => [newCandidate, ...prev]);
+          // Only show it in the scoped page view if it actually belongs on
+          // the tab currently being viewed.
+          if (!needsFullList && (activeProgram === "all" || activeProgram === form.program)) {
+            setPageItems(prev => [newCandidate, ...prev]);
+          }
+          setToast({ message: "Candidate added." });
         }
-        setToast({ message: "Candidate added." });
       }
       invalidateCounts();
       setShowModal(false);

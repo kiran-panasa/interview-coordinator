@@ -84,6 +84,35 @@ export async function getCandidate(id: string): Promise<Candidate | null> {
   return snap.exists() ? { id: snap.id, ...snap.data() } as Candidate : null;
 }
 
+// The authoritative "does this person already exist" check — matched by
+// exact uid (what SSO login actually keys off) or by email, case-
+// insensitively since nothing has ever enforced consistent casing on the
+// email field. Deliberately NOT based on whatever candidate list a caller
+// happens to have loaded in memory: CandidatesPage's default (no search, no
+// archived) view never loads the full collection at all (see needsFullList
+// there), so a local-array check from the Add Candidate modal would silently
+// miss an existing record more often than not — this runs its own scoped
+// queries instead, so it's correct regardless of what's currently on screen.
+export async function findCandidateByUidOrEmail(uid?: string, email?: string): Promise<Candidate | null> {
+  const col = collection(db, "candidates");
+  const trimmedUid   = (uid || "").trim();
+  const trimmedEmail = (email || "").trim();
+  const lowerEmail   = trimmedEmail.toLowerCase();
+
+  const snaps = await Promise.all([
+    trimmedUid ? getDocs(query(col, where("uid", "==", trimmedUid))) : null,
+    trimmedEmail ? getDocs(query(col, where("email", "==", trimmedEmail))) : null,
+    trimmedEmail && lowerEmail !== trimmedEmail ? getDocs(query(col, where("email", "==", lowerEmail))) : null,
+  ]);
+  for (const snap of snaps) {
+    if (snap && !snap.empty) {
+      const d = snap.docs[0];
+      return { id: d.id, ...d.data() } as Candidate;
+    }
+  }
+  return null;
+}
+
 export async function createCandidate(data: Omit<Candidate, "id" | "createdAt">): Promise<string> {
   const ref = await addDoc(collection(db, "candidates"), {
     ...data, createdAt: new Date().toISOString(),
