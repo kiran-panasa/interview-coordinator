@@ -16,6 +16,7 @@ const STATUS_OPTIONS = [
     value: "active",
     label: "Active",
     text: "text-emerald-700",
+    bg: "bg-emerald-50 border-emerald-200",
     dot: "bg-emerald-500",
     desc: "Normal, bookable state. Shows in a candidate's Eligible Interviews and Self Book list.",
     when: "The default — use this for anything currently running.",
@@ -24,6 +25,7 @@ const STATUS_OPTIONS = [
     value: "draft",
     label: "Draft",
     text: "text-amber-700",
+    bg: "bg-amber-50 border-amber-200",
     dot: "bg-amber-500",
     desc: "Hidden from students, same as Archived. Purely organizational — a marker for your own tracking.",
     when: "Use while still building/configuring a template that isn't ready to assign to anyone yet.",
@@ -32,6 +34,7 @@ const STATUS_OPTIONS = [
     value: "archived",
     label: "Archived",
     text: "text-gray-600",
+    bg: "bg-gray-100 border-gray-200",
     dot: "bg-gray-400",
     desc: "Hidden from students, same as Draft. Purely organizational — a marker for your own tracking.",
     when: "Use to retire/pause a template that WAS running — e.g. a round you're temporarily stopping or retiring for good.",
@@ -180,7 +183,7 @@ export default function TemplateLifecycleTab() {
                           value={status}
                           onChange={e => handleChangeStatus(t, e.target.value)}
                           title={STATUS_BY_VALUE[status].desc}
-                          className={`text-xs font-semibold border border-gray-200 rounded-lg pl-6 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-400 ${STATUS_BY_VALUE[status].text}`}>
+                          className={`text-xs font-semibold border rounded-full pl-6 pr-7 py-1.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-400 ${STATUS_BY_VALUE[status].bg} ${STATUS_BY_VALUE[status].text}`}>
                           {STATUS_OPTIONS.map(o => (
                             <option key={o.value} value={o.value}>{o.label}</option>
                           ))}
@@ -188,6 +191,11 @@ export default function TemplateLifecycleTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top min-w-[18rem] space-y-1.5">
+                      {/* Rose when an actual limit is set (this template now
+                         restricts booking), plain gray when blank/unlimited —
+                         a distinct accent from Status's emerald/amber/gray so
+                         the two controls read as clearly different things,
+                         not two gray inputs side by side. */}
                       <div className="flex items-center gap-1.5">
                         <input
                           type="number" min={1}
@@ -195,7 +203,11 @@ export default function TemplateLifecycleTab() {
                           onChange={e => setMaxAttemptsDraft(d => ({ ...d, [t.id]: e.target.value }))}
                           onBlur={() => commitMaxAttempts(t)}
                           placeholder="Unlimited"
-                          className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                          className={`w-24 text-xs font-semibold rounded-lg px-2 py-1.5 border focus:outline-none focus:ring-1 ${
+                            maxAttemptsOf(t).trim() !== ""
+                              ? "bg-rose-50 border-rose-200 text-rose-700 focus:ring-rose-400"
+                              : "bg-white border-gray-200 text-gray-700 focus:ring-brand-400"
+                          }`}
                         />
                         <span className="text-[11px] text-gray-400">completed attempt{maxAttemptsOf(t) === "1" ? "" : "s"} max</span>
                       </div>
@@ -206,7 +218,7 @@ export default function TemplateLifecycleTab() {
                           onChange={e => setMessageDraft(d => ({ ...d, [t.id]: e.target.value }))}
                           onBlur={() => commitMessage(t)}
                           placeholder={DEFAULT_ATTEMPT_LIMIT_MESSAGE}
-                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-400 text-gray-700 placeholder:text-gray-300"
+                          className="w-full text-xs border border-rose-100 bg-rose-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-rose-400 text-gray-700 placeholder:text-rose-300"
                         />
                       )}
                     </td>
