@@ -116,9 +116,11 @@ export default function CandidatePortal() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setPhoneError(data.error === "student_not_found"
-          ? "No access — you're not registered. Please connect with your team."
-          : "Failed to send code. Please try again.");
+        setPhoneError(
+          data.error === "student_not_found"
+            ? "No access — you're not registered. Please connect with your team."
+            : data.message || "Failed to send code. Please try again."
+        );
         setBusy(false);
         return;
       }

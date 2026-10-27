@@ -457,22 +457,43 @@ async function logout(req, res) {
 }
 
 // ── POST /api/sso/otp/request ────────────────────────────────────────────────
+// Two independent limiters: a generous per-IP ceiling (this is a login
+// screen many students on the same campus/office network will hit within
+// the same minute — a cohort of ~150 behind one shared NAT IP is the normal
+// case, not an attack, so this only needs to catch an actual flood) and a
+// much tighter per-phone-number one, which is the limiter that actually
+// matters for abuse — repeatedly OTP-bombing one person's phone. Both are
+// in-memory (reset on cold start, not shared across concurrent serverless
+// instances) — a soft, best-effort limit, not a hard security boundary.
 const otpRateLimitState = new Map();
 function underOtpRateLimit(ip) {
   const now = Date.now();
   const entry = otpRateLimitState.get(ip);
   if (!entry || now - entry.windowStart > 60_000) { otpRateLimitState.set(ip, { count: 1, windowStart: now }); return true; }
   entry.count++;
-  return entry.count <= 10;
+  return entry.count <= 120;
+}
+const otpPhoneRateLimitState = new Map();
+function underOtpPhoneRateLimit(phone) {
+  const now = Date.now();
+  const entry = otpPhoneRateLimitState.get(phone);
+  if (!entry || now - entry.windowStart > 10 * 60_000) { otpPhoneRateLimitState.set(phone, { count: 1, windowStart: now }); return true; }
+  entry.count++;
+  return entry.count <= 5;
 }
 function generateOtp() { return String(Math.floor(100000 + Math.random() * 900000)); }
 async function otpRequest(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
   const ip = (req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown").split(",")[0].trim();
-  if (!underOtpRateLimit(ip)) return res.status(429).json({ error: "rate_limited" });
+  if (!underOtpRateLimit(ip)) {
+    return res.status(429).json({ error: "rate_limited", message: "Too many sign-in attempts from your network right now — please wait a minute and try again." });
+  }
 
   const phone = String(req.body?.phone || "").trim();
   if (!phone) return res.status(400).json({ error: "invalid_parameter", message: "phone is required." });
+  if (!underOtpPhoneRateLimit(phone)) {
+    return res.status(429).json({ error: "rate_limited", message: "Too many codes requested for this number — please wait a few minutes and try again." });
+  }
   const digits = phone.replace(/\D/g, "").slice(-10);
 
   const db = getDb();
