@@ -257,12 +257,12 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
             <button key={`${s.interviewerId}-${s.slotId}`}
               onClick={() => { if (!isDisabled) setSelected(s); }}
               title={s.isBooked ? "Already booked" : isPastSlot ? "Already passed" : undefined}
-              className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-colors flex flex-col items-center leading-tight ${
+              className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all flex flex-col items-center leading-tight ${
                 isDisabled
                   ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed"
                   : isSelected
-                    ? "bg-brand-600 text-white border-brand-600"
-                    : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
+                    ? "bg-brand-600 text-white border-brand-600 shadow-card"
+                    : "bg-white text-gray-700 border-gray-200 shadow-soft hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5"
               }`}>
               {s.time} – {slotEnd}
               {/* Visible label, not just a hover tooltip — easy to miss on
@@ -275,13 +275,13 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
       </div>
 
       {selected ? (
-        <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-2.5 text-sm text-brand-800 font-medium">
+        <div className="bg-brand-50 border border-brand-200 rounded-full px-4 py-2.5 text-sm text-brand-800 font-medium text-center">
           Selected: {formatDateLong(selected.date)} · {selected.time}
         </div>
       ) : (
         <p className="text-xs text-gray-400 text-center">Select a slot above to continue.</p>
       )}
-      <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy}>
+      <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy} className="w-full !rounded-full">
         {busy ? "Booking…" : "Confirm This Slot"}
       </Button>
     </div>
