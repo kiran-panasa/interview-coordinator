@@ -1269,7 +1269,7 @@ export default function StudentDashboardPage() {
                               <div className="flex flex-wrap items-center gap-2">
                                 {iv.meetLink && iv.status === "scheduled" && (
                                   <a href={iv.meetLink} target="_blank" rel="noreferrer"
-                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                                    className="inline-flex items-center justify-center gap-1.5 text-center bg-brand-600 text-white font-semibold py-2.5 px-5 rounded-full text-sm hover:bg-brand-700 transition-colors">
                                     <Video className="w-3.5 h-3.5" /> Join Meet
                                   </a>
                                 )}

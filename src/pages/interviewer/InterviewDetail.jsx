@@ -767,11 +767,11 @@ export default function InterviewDetail() {
           </p>
           <div className="flex gap-3">
             <button onClick={handleAccept} disabled={saving}
-              className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+              className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-full text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
               <CheckCircle2 className="w-4 h-4" /> Accept
             </button>
             <button onClick={openDeclineModal} disabled={saving}
-              className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
+              className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-full text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
               <XCircle className="w-4 h-4" /> Decline
             </button>
           </div>
@@ -784,7 +784,7 @@ export default function InterviewDetail() {
           className="bg-white border border-gray-100 rounded-[1.75rem] p-5 mb-5 flex items-center justify-between gap-3">
           <p className="text-xs text-gray-400">Need to cancel this interview?</p>
           <button onClick={openCancelModal} disabled={saving}
-            className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-4 py-1.5 rounded-xl text-xs font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors flex-shrink-0">
+            className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-4 py-1.5 rounded-full text-xs font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors flex-shrink-0">
             <XCircle className="w-3.5 h-3.5" /> Cancel Interview
           </button>
         </motion.div>
@@ -800,11 +800,11 @@ export default function InterviewDetail() {
           </p>
           <div className="flex gap-3">
             <button onClick={handleCandidateJoined} disabled={saving}
-              className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+              className="inline-flex items-center gap-1.5 bg-emerald-600 text-white px-5 py-2 rounded-full text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
               <CheckCircle2 className="w-4 h-4" /> Candidate Joined
             </button>
             <button onClick={handleCandidateNoShow} disabled={saving}
-              className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-xl text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
+              className="inline-flex items-center gap-1.5 bg-white border border-red-300 text-red-600 px-5 py-2 rounded-full text-sm font-semibold hover:bg-red-50 disabled:opacity-60 transition-colors">
               <XCircle className="w-4 h-4" /> Candidate Didn't Join
             </button>
           </div>
@@ -867,7 +867,7 @@ export default function InterviewDetail() {
             href={template.guidelinesDocUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-full shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
           >
             View Document
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -889,7 +889,7 @@ export default function InterviewDetail() {
             to={`/interviewer/interviews/${id}/questions`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-full shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
           >
             View/Select Questions to be Asked
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -967,7 +967,7 @@ export default function InterviewDetail() {
                 </div>
               )}
               <button onClick={handleLegacySubmit} disabled={saving}
-                className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+                className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-full py-2.5 text-sm font-semibold shadow-soft hover:bg-emerald-700 disabled:opacity-60 transition-colors">
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 {saving ? "Saving…" : hasFeedback ? "Update Evaluation" : "Save Evaluation"}
               </button>
@@ -1030,7 +1030,7 @@ export default function InterviewDetail() {
                   <button
                     onClick={handleMarkCompleted}
                     disabled={!canComplete || saving}
-                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-colors whitespace-nowrap ${
                       canComplete
                         ? "bg-emerald-600 text-white shadow-soft hover:bg-emerald-700"
                         : "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -1093,13 +1093,13 @@ export default function InterviewDetail() {
           )}
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={() => { setPartialModalOpen(false); setPendingPartialFeedback(null); }}
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              className="px-4 py-2 rounded-full text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
               Cancel
             </button>
             <button
               onClick={handleMarkPartiallyCompleted}
               disabled={!partialCompletionReason || saving}
-              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
                 partialCompletionReason
                   ? "bg-amber-600 text-white shadow-soft hover:bg-amber-700"
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -1144,13 +1144,13 @@ export default function InterviewDetail() {
           )}
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={() => setDeclineModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              className="px-4 py-2 rounded-full text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
               Cancel
             </button>
             <button
               onClick={handleDecline}
               disabled={!declineReason || saving}
-              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
                 declineReason
                   ? "bg-red-600 text-white shadow-soft hover:bg-red-700"
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"
@@ -1195,13 +1195,13 @@ export default function InterviewDetail() {
           )}
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={() => setCancelModalOpen(false)}
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              className="px-4 py-2 rounded-full text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
               Back
             </button>
             <button
               onClick={handleCancelInterview}
               disabled={!cancelReasonValue || saving}
-              className={`inline-flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
                 cancelReasonValue
                   ? "bg-red-600 text-white shadow-soft hover:bg-red-700"
                   : "bg-gray-100 text-gray-400 cursor-not-allowed"

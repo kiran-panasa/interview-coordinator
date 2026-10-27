@@ -1279,11 +1279,11 @@ export default function AvailabilityPage() {
           <p className="text-sm text-gray-500">Do you want to save these changes?</p>
           <div className="flex gap-3 pt-1">
             <button onClick={handleConfirmSave} disabled={busy}
-              className="flex-1 bg-emerald-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60">
+              className="flex-1 bg-emerald-600 text-white rounded-full py-2.5 text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60">
               {busy ? "Saving…" : "Save"}
             </button>
             <button onClick={() => setShowSaveConfirm(false)}
-              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+              className="px-5 bg-gray-100 text-gray-700 rounded-full py-2.5 text-sm font-semibold hover:bg-gray-200">
               Cancel
             </button>
           </div>
@@ -1303,11 +1303,11 @@ export default function AvailabilityPage() {
           )}
           <div className="flex gap-3 pt-1">
             <button onClick={handleConfirmBulkDelete} disabled={busy}
-              className="flex-1 bg-red-500 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-60">
+              className="flex-1 bg-red-500 text-white rounded-full py-2.5 text-sm font-semibold hover:bg-red-600 disabled:opacity-60">
               {busy ? "Saving…" : "Mark as Unavailable"}
             </button>
             <button onClick={() => setShowBulkDeleteConfirm(false)}
-              className="px-5 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-sm font-semibold hover:bg-gray-200">
+              className="px-5 bg-gray-100 text-gray-700 rounded-full py-2.5 text-sm font-semibold hover:bg-gray-200">
               Cancel
             </button>
           </div>

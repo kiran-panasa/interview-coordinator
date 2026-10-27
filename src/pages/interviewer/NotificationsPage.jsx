@@ -227,7 +227,7 @@ export default function NotificationsPage() {
                   <Link
                     to={`/interviewer/interviews/${n.interviewId}`}
                     onClick={() => updateNotification(n.id, { status: "read" })}
-                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-emerald-700 transition-colors"
+                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-full hover:bg-emerald-700 transition-colors"
                   >
                     {n.type === "interview_approval" ? "Review & Respond →" : "Go to Interview →"}
                   </Link>

@@ -51,7 +51,7 @@ export default function SsoCallbackPage() {
             </p>
             {FORMS_SSO_LINK_ID && (
               <a href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
-                className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors mt-4">
+                className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
                 Try Signing In Again
               </a>
             )}

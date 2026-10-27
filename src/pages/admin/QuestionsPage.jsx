@@ -684,12 +684,12 @@ export default function QuestionsPage() {
             {selected.size > 0 && (
               <>
                 <button onClick={() => setShowBulkEdit(true)}
-                  className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-amber-100 transition-colors">
+                  className="flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 text-sm font-semibold px-4 py-2.5 rounded-full hover:bg-amber-100 transition-colors">
                   <Pencil className="w-4 h-4" />
                   Edit selected ({selected.size})
                 </button>
                 <button onClick={handleDeleteSelected} disabled={deletingSelected}
-                  className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-red-100 disabled:opacity-50 transition-colors">
+                  className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 text-sm font-semibold px-4 py-2.5 rounded-full hover:bg-red-100 disabled:opacity-50 transition-colors">
                   <Trash2 className="w-4 h-4" />
                   {deletingSelected ? "Deleting…" : `Delete selected (${selected.size})`}
                 </button>
@@ -841,7 +841,7 @@ export default function QuestionsPage() {
           {/* Parse button */}
           {!bulkPreview && (
             <button onClick={handleBulkParse} disabled={!bulkText.trim()}
-              className="w-full py-2.5 bg-gray-800 text-white text-sm font-semibold rounded-xl hover:bg-gray-700 disabled:opacity-40 transition-colors">
+              className="w-full py-2.5 bg-gray-800 text-white text-sm font-semibold rounded-full hover:bg-gray-700 disabled:opacity-40 transition-colors">
               Parse & Preview
             </button>
           )}
@@ -894,12 +894,12 @@ export default function QuestionsPage() {
               <div className="flex gap-3">
                 {bulkPreview.rows.length > 0 && (
                   <button onClick={handleBulkImport} disabled={bulkImporting}
-                    className="flex-1 py-2.5 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700 disabled:opacity-60 transition-colors">
+                    className="flex-1 py-2.5 bg-brand-600 text-white text-sm font-semibold rounded-full hover:bg-brand-700 disabled:opacity-60 transition-colors">
                     {bulkImporting ? "Importing…" : `Import ${bulkPreview.rows.length} Question${bulkPreview.rows.length !== 1 ? "s" : ""}`}
                   </button>
                 )}
                 <button onClick={() => setBulkPreview(null)}
-                  className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-200 transition-colors">
+                  className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-200 transition-colors">
                   Edit CSV
                 </button>
               </div>
@@ -1047,11 +1047,11 @@ export default function QuestionsPage() {
           {/* Actions */}
           <div className="flex gap-3 pt-1">
             <button onClick={handleBulkEdit} disabled={bulkSaving || !bulkHasChanges}
-              className="flex-1 py-2.5 bg-brand-600 text-white text-sm font-semibold rounded-xl hover:bg-brand-700 disabled:opacity-50 transition-colors">
+              className="flex-1 py-2.5 bg-brand-600 text-white text-sm font-semibold rounded-full hover:bg-brand-700 disabled:opacity-50 transition-colors">
               {bulkSaving ? "Saving…" : `Apply to ${selected.size} Question${selected.size !== 1 ? "s" : ""}`}
             </button>
             <button onClick={() => { setShowBulkEdit(false); setBulkForm(BLANK_BULK); }}
-              className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-200 transition-colors">
+              className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-semibold rounded-full hover:bg-gray-200 transition-colors">
               Cancel
             </button>
           </div>

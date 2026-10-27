@@ -240,7 +240,7 @@ export default function CandidatePortal() {
                   <>
                     <a
                       href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
-                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-xl text-sm hover:bg-gray-800 transition-colors">
+                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
                       <LogIn className="w-4 h-4" /> Sign In via Academy Account
                     </a>
                     <div className="flex items-center gap-3 text-xs text-gray-400">
@@ -441,7 +441,7 @@ export default function CandidatePortal() {
                         ) : (
                           <Link
                             to={`/student/schedule?invite=${inv.inviteToken}`}
-                            className="flex items-center justify-center gap-1.5 w-full text-center bg-brand-600 text-white font-semibold py-2.5 rounded-xl text-sm hover:bg-brand-700 transition-colors">
+                            className="flex items-center justify-center gap-1.5 w-full text-center bg-brand-600 text-white font-semibold py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors">
                             Schedule Now <ArrowRight className="w-3.5 h-3.5" />
                           </Link>
                         )}
