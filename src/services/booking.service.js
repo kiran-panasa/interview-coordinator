@@ -105,6 +105,10 @@ export async function confirmSelfBooking(inviteId) {
     // skip the interviewer's separate manual accept/decline step, same as
     // the admin-confirmed path.
     status:           "scheduled",
+    // Lets the Interviews page's "Booked via" filter and badge isolate
+    // these from admin-scheduled/Nudge-confirmed interviews — see
+    // InterviewsPage.jsx.
+    bookingSource:    "self_book",
   });
   await updateScheduleInvite(invite.id, { status: "confirmed", interviewId });
   logInviteHistory(invite.id, "confirmed", "Booking auto-confirmed by candidate — no admin review needed for self-book.").catch(() => {});

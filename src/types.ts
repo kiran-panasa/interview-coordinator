@@ -473,6 +473,12 @@ export interface Interview {
   vendorId?: string | null;
   templateId?: string;
   templateName?: string;
+  // Set to "self_book" when this interview was created by confirmSelfBooking
+  // (src/services/booking.service.js) — i.e. the candidate booked and
+  // auto-confirmed it themselves from the Student Dashboard, with no admin
+  // review step. Absent for admin-scheduled and admin-confirmed Nudge
+  // bookings. Used by the Interviews page's "Booked via" filter/badge.
+  bookingSource?: "self_book";
   // Snapshotted from the template's own Program assignment (Template.program
   // -> Program.id/name, see src/api/programs.ts) at creation time — lets a
   // direct-Firestore reader (e.g. Academy Nexus) filter on an exact program

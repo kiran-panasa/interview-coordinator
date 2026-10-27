@@ -186,6 +186,7 @@ export default function InterviewsPage() {
   const [filterIvr,      setFilterIvr]      = useState("All");
   const [filterVendor,   setFilterVendor]   = useState("All");
   const [filterTemplates, setFilterTemplates] = useState([]); // template names, empty = All
+  const [filterSource,   setFilterSource]   = useState("All"); // "All" | "self_book"
   const [candSearch,     setCandSearch]     = useState("");
   const [showModal,     setShowModal]     = useState(false);
   const [editTarget,    setEditTarget]    = useState(null);
@@ -1620,6 +1621,7 @@ export default function InterviewsPage() {
       if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
       if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
       if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
+      if (filterSource   !== "All" && i.bookingSource !== filterSource) return false;
       if (candSearch) {
         const q = candSearch.trim().toLowerCase();
         const hay = [i.candidateName, i.candidateEmail, i.candidateUid].filter(Boolean).join(" ").toLowerCase();
@@ -1627,7 +1629,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, candSearch, vendorByEmail]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, filterSource, candSearch, vendorByEmail]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -2023,10 +2025,16 @@ export default function InterviewsPage() {
           <option value="All">All Vendors</option>
           {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
         </select>
-        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || candSearch) && (
+        <select value={filterSource} onChange={e => { setFilterSource(e.target.value); setIvrPage(1); }}
+          title="How the booking was made"
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <option value="All">Booked via: Any</option>
+          <option value="self_book">Booked via: Self-Book</option>
+        </select>
+        {(filterStatus !== "All" || filterDateFrom !== yesterdayIso() || filterDateTo !== todayIso() || filterIvr !== "All" || filterVendor !== "All" || filterTemplates.length > 0 || filterSource !== "All" || candSearch) && (
           <button onClick={() => {
             setFilterStatus("All"); setFilterDateFrom(yesterdayIso()); setFilterDateTo(todayIso());
-            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setCandSearch(""); setIvrPage(1);
+            setFilterIvr("All"); setFilterVendor("All"); setFilterTemplates([]); setFilterSource("All"); setCandSearch(""); setIvrPage(1);
           }}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             <X className="w-3.5 h-3.5" /> Clear
@@ -2095,6 +2103,12 @@ export default function InterviewsPage() {
                     {attemptLabelByInterviewId.has(iv.id) && (
                       <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
                         {attemptLabelByInterviewId.get(iv.id)}
+                      </span>
+                    )}
+                    {iv.bookingSource === "self_book" && (
+                      <span title="Candidate booked and confirmed this slot themselves — no admin review step"
+                        className="text-[10px] font-bold uppercase tracking-wide text-sky-600 bg-sky-50 border border-sky-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        Self-Booked
                       </span>
                     )}
                   </div>
