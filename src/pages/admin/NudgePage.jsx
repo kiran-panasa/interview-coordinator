@@ -90,7 +90,7 @@ export default function NudgePage() {
 
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-        className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-8"
+        className="flex gap-1 bg-gray-100 p-1.5 rounded-full w-fit mb-8"
       >
         {TABS.map(({ id, label, icon: Icon }) => {
           const isActive = activeTab === id;
@@ -99,7 +99,7 @@ export default function NudgePage() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`relative px-5 py-2.5 text-sm font-semibold rounded-lg transition-colors flex items-center gap-2 ${
+              className={`relative px-5 py-2.5 text-sm font-semibold rounded-full transition-colors flex items-center gap-2 ${
                 isActive
                   ? "text-brand-700"
                   : badge > 0
@@ -110,7 +110,7 @@ export default function NudgePage() {
               {isActive && (
                 <motion.span
                   layoutId="nudgeTabIndicator"
-                  className="absolute inset-0 bg-white rounded-lg shadow-sm border border-gray-200"
+                  className="absolute inset-0 bg-white rounded-full shadow-sm border border-gray-200"
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}

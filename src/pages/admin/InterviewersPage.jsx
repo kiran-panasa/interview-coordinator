@@ -452,7 +452,7 @@ export default function InterviewersPage() {
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input type="text" placeholder="Search by name, email, company…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-56 border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            className="w-56 border border-gray-200 rounded-full pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
         </div>
         <select value={filterSkill} onChange={e => setFilterSkill(e.target.value)} className={SEL}>
           <option value="">All Skills</option>

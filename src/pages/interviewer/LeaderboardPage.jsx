@@ -68,10 +68,10 @@ export default function LeaderboardPage() {
           <p className="text-sm text-gray-500 mt-1">
             Ranked by completed interviews across every vendor — names shown first-name-only for privacy
           </p>
-          <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-xl p-1 mt-4 w-fit mx-auto">
+          <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-full p-1.5 mt-4 w-fit mx-auto">
             {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
               <button key={id} onClick={() => setPeriod(id)}
-                className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
                   period === id ? "bg-white text-orange-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
                 }`}>
                 {label}

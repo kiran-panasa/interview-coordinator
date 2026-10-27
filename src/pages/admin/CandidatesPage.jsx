@@ -609,11 +609,11 @@ export default function CandidatesPage() {
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input type="text" placeholder="Search by name, UID, or email…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors" />
+            className="w-full border border-gray-200 rounded-full pl-9 pr-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors" />
         </div>
         <button
           onClick={() => { setShowArchived(s => !s); setCandPage(1); setSearch(""); }}
-          className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border transition-colors whitespace-nowrap ${
+          className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border transition-colors whitespace-nowrap ${
             showArchived
               ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
               : "text-gray-500 border-gray-200 hover:bg-gray-50"

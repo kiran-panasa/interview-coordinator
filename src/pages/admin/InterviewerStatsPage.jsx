@@ -291,10 +291,10 @@ export default function InterviewerStatsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1.5">
             {[["stats", "Stats", BarChart3], ["leaderboard", "Leaderboard", Trophy]].map(([id, label, Icon]) => (
               <button key={id} onClick={() => setView(id)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-sm font-semibold transition-colors ${
                   view === id ? "bg-white text-brand-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
                 }`}>
                 <Icon className="w-3.5 h-3.5" /> {label}
@@ -319,10 +319,10 @@ export default function InterviewerStatsPage() {
         return (
           <div className="max-w-2xl mx-auto space-y-5">
             <div className="text-center">
-              <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-xl p-1 w-fit mx-auto">
+              <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-full p-1.5 w-fit mx-auto">
                 {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
                   <button key={id} onClick={() => setLeaderboardPeriod(id)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
                       leaderboardPeriod === id ? "bg-white text-orange-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
                     }`}>
                     {label}
