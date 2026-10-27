@@ -4,7 +4,7 @@ import { Search, CheckCircle2 } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
-import { DEFAULT_HIDDEN_SCORE_MESSAGE } from "../../constants/templateAttempts";
+import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT } from "../../constants/templateAttempts";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -56,6 +56,8 @@ export default function TemplateLifecycleTab() {
   const [maxAttemptsDraft, setMaxAttemptsDraft] = useState({});
   const [messageDraft,     setMessageDraft]     = useState({});
   const [scoreMessageDraft, setScoreMessageDraft] = useState({});
+  const [maxNoShowsDraft,   setMaxNoShowsDraft]   = useState({});
+  const [noShowMessageDraft, setNoShowMessageDraft] = useState({});
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
   const statusOf = (t) => t.status || "active";
@@ -64,6 +66,8 @@ export default function TemplateLifecycleTab() {
   const showAiReportOf   = (t) => t.showAiReportToStudent !== false;
   const showFinalScoreOf = (t) => t.showFinalScoreToStudent !== false;
   const scoreMessageOf   = (t) => scoreMessageDraft[t.id] ?? (t.hiddenScoreMessage || "");
+  const maxNoShowsOf     = (t) => maxNoShowsDraft[t.id] ?? (t.maxNoShows != null ? String(t.maxNoShows) : "");
+  const noShowMessageOf  = (t) => noShowMessageDraft[t.id] ?? (t.noShowBlockedMessage || "");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -124,6 +128,24 @@ export default function TemplateLifecycleTab() {
     saveTemplate(t, { hiddenScoreMessage: next });
   };
 
+  // Blank -> null ("use the platform default of DEFAULT_NO_SHOW_LIMIT" —
+  // unlike Attempt Limit, blank here is NOT unlimited). Typing 0 is how an
+  // admin explicitly opts a template out of the no-show block entirely.
+  const commitMaxNoShows = (t) => {
+    const raw = maxNoShowsOf(t).trim();
+    const next = raw === "" ? null : Math.max(0, Math.round(Number(raw)) || 0);
+    setMaxNoShowsDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.maxNoShows ?? null)) return;
+    saveTemplate(t, { maxNoShows: next });
+  };
+
+  const commitNoShowMessage = (t) => {
+    const next = noShowMessageOf(t).trim();
+    setNoShowMessageDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.noShowBlockedMessage || "")) return;
+    saveTemplate(t, { noShowBlockedMessage: next });
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -168,7 +190,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", "Attempt Limit", "AI Report & Score", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "AI Report & Score", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -228,6 +250,39 @@ export default function TemplateLifecycleTab() {
                           onBlur={() => commitMessage(t)}
                           placeholder="Leave blank to use the default message shown to candidates."
                           className="w-full text-xs border border-sky-100 bg-sky-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-sky-400 text-gray-700 placeholder:text-gray-400"
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[14rem] space-y-1.5">
+                      {/* Amber, not sky — distinct from Attempt Limit (this
+                         one is on by default and actually blocks booking,
+                         so it reads as more consequential), still not red
+                         since typing a number here is still routine admin
+                         config, not itself a danger action. */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number" min={0}
+                          value={maxNoShowsOf(t)}
+                          onChange={e => setMaxNoShowsDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitMaxNoShows(t)}
+                          placeholder={`Default (${DEFAULT_NO_SHOW_LIMIT})`}
+                          className={`w-24 text-xs font-semibold rounded-lg px-2 py-1.5 border focus:outline-none focus:ring-1 ${
+                            t.maxNoShows === 0
+                              ? "bg-white border-gray-200 text-gray-700 focus:ring-brand-400"
+                              : "bg-amber-50 border-amber-200 text-amber-700 focus:ring-amber-400"
+                          }`}
+                        />
+                        <span className="text-[11px] text-gray-400">no-show{maxNoShowsOf(t) === "1" ? "" : "s"} max</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400">0 = no limit for this template. Blank uses the default.</p>
+                      {t.maxNoShows !== 0 && (
+                        <textarea
+                          rows={2}
+                          value={noShowMessageOf(t)}
+                          onChange={e => setNoShowMessageDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitNoShowMessage(t)}
+                          placeholder="Leave blank to use the default message shown to candidates."
+                          className="w-full text-xs border border-amber-100 bg-amber-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-700 placeholder:text-gray-400"
                         />
                       )}
                     </td>

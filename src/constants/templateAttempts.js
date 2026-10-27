@@ -10,3 +10,13 @@ export const DEFAULT_ATTEMPT_LIMIT_MESSAGE =
 // hiddenScoreMessage of its own.
 export const DEFAULT_HIDDEN_SCORE_MESSAGE =
   "Check with program support for completing scoring details.";
+
+// Unlike DEFAULT_ATTEMPT_LIMIT_MESSAGE above (opt-in — a template with no
+// maxAttempts set has no cap at all), the no-show limit is on by default —
+// a template that's never had maxNoShows touched still enforces this count,
+// so every template is protected out of the box rather than needing an
+// admin to remember to turn it on. See effectiveMaxNoShows in
+// api/sso-handler.js.
+export const DEFAULT_NO_SHOW_LIMIT = 2;
+export const DEFAULT_NO_SHOW_BLOCKED_MESSAGE =
+  "You've been blocked from booking this interview after repeatedly not showing up for it. Kindly contact your program support team for any concerns.";

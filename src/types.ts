@@ -121,6 +121,14 @@ export interface Candidate {
   // this candidate; a positive integer replaces the template's cap with
   // this candidate's own. See effectiveMaxAttempts in api/sso-handler.js.
   attemptOverrides?: Record<string, number>;
+  // Same shape/semantics as attemptOverrides above, but for the no-show
+  // block (Candidates → kebab → "Manage Attempts & No-Shows") — map of
+  // templateId -> override. No entry means "use the template's own
+  // maxNoShows (or the platform default of 2 if the template's never set
+  // one)"; 0 means unlimited no-shows for just this candidate — the
+  // admin's "unblock him" action. See effectiveMaxNoShows in
+  // api/sso-handler.js.
+  noShowOverrides?: Record<string, number>;
   createdAt: string;
   createdBy?: string;
 }
@@ -320,6 +328,21 @@ export interface Template {
   // blank.
   maxAttempts?: number | null;
   attemptLimitMessage?: string;
+  // No-show block (Templates → Lifecycle) — unlike maxAttempts, this is ON
+  // by default: null/undefined (never configured, or cleared back to
+  // "use the default") means the platform default (DEFAULT_NO_SHOW_LIMIT,
+  // src/constants/templateAttempts.js) applies, not unlimited. An admin
+  // sets this to exactly 0 to opt a template OUT of the no-show block
+  // entirely. Counts interviews whose
+  // CURRENT status is "no_show" for this candidate+template — so an admin
+  // correcting a mis-marked no-show (correctInterviewStatus) automatically
+  // lowers the count too, no separate cleanup needed. Once reached, Self
+  // Book refuses new bookings (resolveSelfBookTarget in api/sso-handler.js)
+  // with noShowBlockedMessage (falls back to DEFAULT_NO_SHOW_BLOCKED_MESSAGE
+  // when blank). An admin can grant a specific candidate more chances via
+  // Candidate.noShowOverrides without touching this template-wide setting.
+  maxNoShows?: number | null;
+  noShowBlockedMessage?: string;
   // Whether a completed interview on this template shows its AI Report and
   // its Final Score to the candidate (Templates → Lifecycle) — independent
   // toggles, so a template can hide one without the other (e.g. show the

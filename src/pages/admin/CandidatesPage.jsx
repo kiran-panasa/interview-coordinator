@@ -723,7 +723,7 @@ export default function CandidatesPage() {
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
                       { label: "Edit",   onClick: () => openEdit(c), show: !showArchived },
-                      { label: "Manage Attempts", onClick: () => setAttemptsTarget(c), show: (c.templateIds || []).length > 0 },
+                      { label: "Manage Attempts & No-Shows", onClick: () => setAttemptsTarget(c), show: (c.templateIds || []).length > 0 },
                       ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
                       { label: "Archive",   onClick: () => handleArchive(c),   show: c.archived !== true },
                       { label: "Unarchive", onClick: () => handleUnarchive(c), show: c.archived === true },

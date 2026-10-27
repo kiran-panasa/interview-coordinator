@@ -444,6 +444,9 @@ export default function StudentDashboardPage() {
       } else if (json?.error === "attempt_limit_reached") {
         alert(json.message || "You've reached the maximum number of attempts for this interview.");
         loadDashboard();
+      } else if (json?.error === "no_show_limit_reached") {
+        alert(json.message || "You've been blocked from booking this interview due to repeated no-shows.");
+        loadDashboard();
       } else {
         // Surfaces the actual failure (e.g. template_not_assigned) instead
         // of a generic message that looks identical whether the request
@@ -949,13 +952,21 @@ export default function StudentDashboardPage() {
                         Self Book — {notStarted.length} template{notStarted.length !== 1 ? "s" : ""} ready to start
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {notStarted.map((t, i) => (
+                        {notStarted.map((t, i) => {
+                          // Two independent reasons a template can be
+                          // blocked — too many completed attempts, or too
+                          // many no-shows — shown with their own message,
+                          // but otherwise rendered identically (disabled
+                          // card, no Find Slots button).
+                          const blocked = t.limitReached || t.noShowBlocked;
+                          const blockedMessage = t.limitReached ? t.attemptLimitMessage : t.noShowBlockedMessage;
+                          return (
                           <motion.button key={t.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}
-                            onClick={() => { if (!t.limitReached) handleSelfBook(t.id); }}
-                            disabled={bookingTemplateId != null || t.limitReached}
-                            title={t.limitReached ? t.attemptLimitMessage : undefined}
+                            onClick={() => { if (!blocked) handleSelfBook(t.id); }}
+                            disabled={bookingTemplateId != null || blocked}
+                            title={blocked ? blockedMessage : undefined}
                             className={`text-left p-4 rounded-[1.5rem] border bg-white transition-all disabled:cursor-not-allowed ${
-                              t.limitReached
+                              blocked
                                 ? "border-gray-100 opacity-60"
                                 : bookingTemplateId === t.id
                                   ? "border-emerald-300 bg-emerald-50 shadow-card disabled:cursor-wait disabled:opacity-60"
@@ -963,14 +974,14 @@ export default function StudentDashboardPage() {
                             }`}>
                             <div className="flex items-center gap-3">
                               <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
-                                t.limitReached ? "bg-gray-100 text-gray-400" : "bg-emerald-50 text-emerald-600"
+                                blocked ? "bg-gray-100 text-gray-400" : "bg-emerald-50 text-emerald-600"
                               }`}>
                                 <CalendarPlus className="w-5 h-5" />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className="font-bold text-gray-900 truncate">{t.name}</p>
-                                  {!t.limitReached && nextAttemptNumber(t.id) > 1 && (
+                                  {!blocked && nextAttemptNumber(t.id) > 1 && (
                                     <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                       {ordinalLabel(nextAttemptNumber(t.id))}
                                     </span>
@@ -981,7 +992,7 @@ export default function StudentDashboardPage() {
                                    not just once it's blocked — so reaching
                                    it doesn't come as a surprise after
                                    someone's already on their last try. */}
-                                {!t.limitReached && t.maxAttempts != null && (
+                                {!blocked && t.maxAttempts != null && (
                                   <p className={`text-[11px] font-semibold mt-0.5 ${
                                     t.attemptsUsed >= t.maxAttempts - 1 ? "text-amber-600" : "text-gray-400"
                                   }`}>
@@ -990,8 +1001,8 @@ export default function StudentDashboardPage() {
                                 )}
                               </div>
                             </div>
-                            {t.limitReached ? (
-                              <p className="text-xs font-medium text-gray-500 mt-3 leading-snug">{t.attemptLimitMessage}</p>
+                            {blocked ? (
+                              <p className="text-xs font-medium text-gray-500 mt-3 leading-snug">{blockedMessage}</p>
                             ) : (
                               <span className={`inline-flex items-center justify-center w-full mt-3 py-2 rounded-full text-xs font-bold transition-colors ${
                                 bookingTemplateId === t.id ? "bg-emerald-100 text-emerald-700" : "bg-emerald-50 text-emerald-700"
@@ -1000,7 +1011,8 @@ export default function StudentDashboardPage() {
                               </span>
                             )}
                           </motion.button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   );

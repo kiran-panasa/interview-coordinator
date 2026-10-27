@@ -4,7 +4,10 @@ import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
 import { sendWhatsAppOtp } from "./_lib/whatsapp.js";
 import { sendSmsOtp } from "./_lib/sms.js";
-import { DEFAULT_ATTEMPT_LIMIT_MESSAGE, DEFAULT_HIDDEN_SCORE_MESSAGE } from "../src/constants/templateAttempts.js";
+import {
+  DEFAULT_ATTEMPT_LIMIT_MESSAGE, DEFAULT_HIDDEN_SCORE_MESSAGE,
+  DEFAULT_NO_SHOW_LIMIT, DEFAULT_NO_SHOW_BLOCKED_MESSAGE,
+} from "../src/constants/templateAttempts.js";
 import { computeSelfBookWindow, DEFAULT_SELF_BOOK_CUTOFF_TIME } from "../src/utils/selfBookWindow.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
@@ -52,6 +55,22 @@ function effectiveMaxAttempts(templateMaxAttempts, override) {
   if (override === 0) return null;
   if (typeof override === "number" && override > 0) return override;
   return templateMaxAttempts ?? null;
+}
+
+// Same shape as effectiveMaxAttempts above, but the no-show block is ON by
+// default — a template whose maxNoShows is null/undefined (never touched,
+// or explicitly cleared back to "use the default") still enforces
+// DEFAULT_NO_SHOW_LIMIT, rather than being unlimited the way a blank
+// maxAttempts is. An admin opts a template OUT entirely by setting
+// maxNoShows to exactly 0; candidate.noShowOverrides works exactly like
+// attemptOverrides (0 = unlimited for just this candidate — the
+// "unblock them" action; a positive integer = their personal cap).
+function effectiveMaxNoShows(templateMaxNoShows, override) {
+  if (override === 0) return null;
+  if (typeof override === "number" && override > 0) return override;
+  if (templateMaxNoShows === 0) return null;
+  if (typeof templateMaxNoShows === "number" && templateMaxNoShows > 0) return templateMaxNoShows;
+  return DEFAULT_NO_SHOW_LIMIT;
 }
 
 export default async function handler(req, res) {
@@ -273,6 +292,10 @@ async function me(req, res) {
       id: s.id, name: s.data().name, durationMinutes: s.data().durationMinutes || 60,
       maxAttempts: s.data().maxAttempts ?? null,
       attemptLimitMessage: s.data().attemptLimitMessage || "",
+      // null/undefined both mean "use the platform default" here (unlike
+      // maxAttempts, where blank means unlimited) — see effectiveMaxNoShows.
+      maxNoShows: s.data().maxNoShows ?? null,
+      noShowBlockedMessage: s.data().noShowBlockedMessage || "",
     }));
 
   // Only invites for templates CURRENTLY assigned to this candidate —
@@ -392,15 +415,22 @@ async function me(req, res) {
   // still show the template with its limit-reached message instead of it
   // just disappearing with no explanation.
   const completedCountByTemplateId = {};
+  const noShowCountByTemplateId = {};
   interviews.forEach(iv => {
-    if (iv.status === "completed" && iv.templateId) {
+    if (!iv.templateId) return;
+    if (iv.status === "completed") {
       completedCountByTemplateId[iv.templateId] = (completedCountByTemplateId[iv.templateId] || 0) + 1;
+    } else if (iv.status === "no_show") {
+      noShowCountByTemplateId[iv.templateId] = (noShowCountByTemplateId[iv.templateId] || 0) + 1;
     }
   });
   const templatesWithAttempts = templates.map(t => {
     const effectiveMax = effectiveMaxAttempts(t.maxAttempts, candidate.attemptOverrides?.[t.id]);
     const attemptsUsed = completedCountByTemplateId[t.id] || 0;
     const limitReached = effectiveMax != null && attemptsUsed >= effectiveMax;
+    const noShowEffectiveMax = effectiveMaxNoShows(t.maxNoShows, candidate.noShowOverrides?.[t.id]);
+    const noShowCount = noShowCountByTemplateId[t.id] || 0;
+    const noShowBlocked = noShowEffectiveMax != null && noShowCount >= noShowEffectiveMax;
     return {
       ...t, attemptsUsed,
       // Overwritten with the candidate-specific EFFECTIVE cap (override
@@ -410,6 +440,10 @@ async function me(req, res) {
       maxAttempts: effectiveMax,
       limitReached,
       attemptLimitMessage: limitReached ? (t.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE) : "",
+      maxNoShows: noShowEffectiveMax,
+      noShowCount,
+      noShowBlocked,
+      noShowBlockedMessage: noShowBlocked ? (t.noShowBlockedMessage || DEFAULT_NO_SHOW_BLOCKED_MESSAGE) : "",
     };
   });
 
@@ -662,6 +696,26 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
         error: "attempt_limit_reached",
         status: 403,
         message: capTemplate?.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE,
+      };
+    }
+  }
+
+  // No-show block — same defense-in-depth reasoning as the attempt cap
+  // above (/me already annotates this onto the template list too). Counts
+  // CURRENT status only, so an admin correcting a mis-marked no-show
+  // (correctInterviewStatus) un-blocks the candidate automatically.
+  const noShowEffectiveMax = effectiveMaxNoShows(capTemplate?.maxNoShows, candidate.noShowOverrides?.[templateId]);
+  if (noShowEffectiveMax != null) {
+    const noShowSnap = await db.collection("interviews")
+      .where("candidateId", "==", session.candidateId)
+      .where("templateId", "==", templateId)
+      .where("status", "==", "no_show")
+      .get();
+    if (noShowSnap.size >= noShowEffectiveMax) {
+      return {
+        error: "no_show_limit_reached",
+        status: 403,
+        message: capTemplate?.noShowBlockedMessage || DEFAULT_NO_SHOW_BLOCKED_MESSAGE,
       };
     }
   }
