@@ -205,6 +205,10 @@ const FAQ_ITEMS = [
     a: "Go to \"Book an Interview\" in the left menu. Click the round/template you want to book, then pick an open date and time slot. Once you confirm, it shows up under \"My Interviews\" as Scheduled.",
   },
   {
+    q: "Why can't I book a slot for today?",
+    a: "Same-day booking isn't allowed — the earliest you can ever book is tomorrow. There's also a daily cutoff (shown live on the Book an Interview page, 5:30 PM by default): book before the cutoff and tomorrow's slots are open, but if you wait until after it, tomorrow closes too and the earliest becomes the day after. So if you want tomorrow's slot, book it before 5:30 PM today — don't wait!",
+  },
+  {
     q: "How do I reschedule an interview?",
     a: "Open \"My Interviews\", find the scheduled interview, and click the ⋮ (three dots) on its card → \"Request Reschedule\". Enter a short reason, then pick a new slot the same way you booked the first time. Your old interview is cancelled automatically the moment you confirm the new slot — no waiting on anyone.",
   },
