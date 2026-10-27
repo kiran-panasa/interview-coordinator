@@ -870,7 +870,7 @@ export default function StudentDashboardPage() {
                       placeholder="https://drive.google.com/your-resume"
                       className="flex-1 border border-gray-200 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors"
                     />
-                    <Button variant="primary" onClick={handleSaveResume} disabled={resumeSaving} className="px-5 flex-shrink-0 !rounded-full">
+                    <Button variant="primary" onClick={handleSaveResume} disabled={resumeSaving} className="px-5 flex-shrink-0">
                       {resumeSaving ? "Saving…" : resumeSaved ? "Saved ✓" : "Save"}
                     </Button>
                   </div>
@@ -1382,7 +1382,7 @@ export default function StudentDashboardPage() {
                               {n.reason ? `: ${n.reason}` : "."} Kindly select another slot according to your preferred date.
                             </p>
                             <div className="flex items-center gap-2 flex-wrap mt-3">
-                              <Button variant="primary" className="!rounded-full"
+                              <Button variant="primary"
                                 onClick={() => {
                                   if (!n.templateId) {
                                     alert("Couldn't start rebooking — this has no template on record. Please reach out to the admin team.");

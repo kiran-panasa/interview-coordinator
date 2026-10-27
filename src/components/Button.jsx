@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
 
 const VARIANTS = {
-  primary:   "bg-brand-600 text-white shadow-soft hover:bg-brand-700 disabled:bg-brand-300",
+  primary:   "bg-brand-600 text-white shadow-soft hover:bg-brand-700 hover:shadow-card disabled:bg-brand-300 disabled:shadow-none",
   secondary: "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 disabled:text-gray-300",
   ghost:     "bg-transparent text-gray-600 hover:bg-gray-100 disabled:text-gray-300",
-  danger:    "bg-red-600 text-white shadow-soft hover:bg-red-700 disabled:bg-red-300",
+  danger:    "bg-red-600 text-white shadow-soft hover:bg-red-700 hover:shadow-card disabled:bg-red-300 disabled:shadow-none",
 };
 
 const SIZES = {
@@ -28,7 +28,7 @@ export default function Button({
       whileTap={disabled ? undefined : { scale: 0.98 }}
       transition={{ duration: 0.12 }}
       disabled={disabled}
-      className={`inline-flex items-center justify-center font-semibold rounded-xl transition-colors duration-150 disabled:cursor-not-allowed ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center justify-center font-semibold rounded-full transition-all duration-150 disabled:cursor-not-allowed ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
       {...props}
     >
       {Icon && <Icon className={size === "sm" ? "w-3.5 h-3.5" : "w-4 h-4"} />}

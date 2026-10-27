@@ -22,7 +22,7 @@ const NAV = [
 ];
 
 function Card({ children, className = "" }) {
-  return <div className={`bg-white rounded-2xl border border-gray-100 shadow-soft ${className}`}>{children}</div>;
+  return <div className={`bg-white rounded-[1.75rem] border border-gray-100 shadow-soft ${className}`}>{children}</div>;
 }
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
@@ -235,8 +235,8 @@ export default function VendorDashboardPage() {
             const isActive = tab === item.id;
             return (
               <button key={item.id} onClick={() => setTab(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150 ${
-                  isActive ? "bg-orange-50 text-orange-700 font-semibold" : "text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-900"
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-full text-sm transition-all duration-150 ${
+                  isActive ? "bg-orange-500 text-white font-semibold shadow-card" : "text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-900"
                 }`}>
                 <Icon className="w-4 h-4 flex-shrink-0" strokeWidth={2} />
                 <span className="flex-1 text-left">{item.label}</span>
@@ -557,11 +557,11 @@ export default function VendorDashboardPage() {
                     <p className="text-sm text-gray-500 mt-0.5">
                       Ranked by completed interviews, {formatDate(range.from)} to {formatDate(range.to)}.
                     </p>
-                    <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-xl p-1 mt-4 w-fit mx-auto">
+                    <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-full p-1.5 mt-4 w-fit mx-auto">
                       {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
                         <button key={id} onClick={() => setLeaderboardPeriod(id)}
-                          className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                            leaderboardPeriod === id ? "bg-white text-orange-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
+                          className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
+                            leaderboardPeriod === id ? "bg-white text-orange-700 shadow-card" : "text-gray-500 hover:text-gray-700"
                           }`}>
                           {label}
                         </button>

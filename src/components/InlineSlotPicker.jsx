@@ -281,7 +281,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
       ) : (
         <p className="text-xs text-gray-400 text-center">Select a slot above to continue.</p>
       )}
-      <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy} className="w-full !rounded-full">
+      <Button variant="primary" size="lg" onClick={handleBook} disabled={!selected || busy} className="w-full">
         {busy ? "Booking…" : "Confirm This Slot"}
       </Button>
     </div>

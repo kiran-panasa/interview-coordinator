@@ -107,9 +107,9 @@ export default function AdminLayout() {
             return (
               <NavLink key={item.to} to={item.to}
                 className={({ isActive }) =>
-                  `group flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150 ${
+                  `group flex items-center gap-2.5 px-3 py-2 rounded-full text-sm transition-all duration-150 ${
                     isActive
-                      ? "bg-brand-50 text-brand-700 font-semibold"
+                      ? "bg-brand-600 text-white font-semibold shadow-card"
                       : needsAttention
                         ? "bg-red-50 text-red-700 font-semibold hover:bg-red-100"
                         : "text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-900"

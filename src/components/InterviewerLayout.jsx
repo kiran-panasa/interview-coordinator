@@ -70,9 +70,9 @@ export default function InterviewerLayout() {
             return (
               <NavLink key={item.to} to={item.to}
                 className={({ isActive }) =>
-                  `flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                  `flex items-center gap-2.5 px-3 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
                     isActive
-                      ? "bg-emerald-50 text-emerald-700 font-semibold"
+                      ? "bg-emerald-600 text-white font-semibold shadow-card"
                       : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
                   }`
                 }>

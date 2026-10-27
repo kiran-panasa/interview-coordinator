@@ -24,12 +24,12 @@ export default function Modal({ open, onClose, title, children, wide = false }) 
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 4 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className={`relative bg-white rounded-2xl shadow-popover w-full ${wide ? "max-w-2xl" : "max-w-lg"} max-h-[90vh] flex flex-col`}
+            className={`relative bg-white rounded-[1.75rem] shadow-popover w-full ${wide ? "max-w-2xl" : "max-w-lg"} max-h-[90vh] flex flex-col`}
           >
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
               <h2 className="text-base font-bold text-gray-900 tracking-tight">{title}</h2>
               <button onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 rounded-lg p-1.5 hover:bg-gray-100 transition-colors">
+                className="text-gray-400 hover:text-gray-600 rounded-full p-1.5 hover:bg-gray-100 transition-colors">
                 <X className="w-4 h-4" strokeWidth={2} />
               </button>
             </div>

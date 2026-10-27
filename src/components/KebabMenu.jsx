@@ -50,7 +50,7 @@ function KebabMenu({ actions }) {
       <button
         ref={btnRef}
         onClick={handleOpen}
-        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+        className="w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
         title="More actions"
       >
         <MoreVertical className="w-4 h-4" />
@@ -66,7 +66,7 @@ function KebabMenu({ actions }) {
               exit={{ opacity: 0, scale: 0.97 }}
               transition={{ duration: 0.12 }}
               style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
-              className="bg-white border border-gray-100 rounded-xl shadow-popover py-1.5 min-w-[170px]"
+              className="bg-white border border-gray-100 rounded-2xl shadow-popover py-1.5 min-w-[170px]"
             >
               {visible.map((a, i) => (
                 <div key={i} className="flex items-center w-full">
