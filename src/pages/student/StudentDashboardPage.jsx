@@ -1160,13 +1160,13 @@ export default function StudentDashboardPage() {
                     <div className="flex flex-wrap gap-2">
                       {resources.videoGuideUrl && (
                         <a href={resources.videoGuideUrl} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-full hover:bg-amber-100 transition-colors">
                           <PlayCircle className="w-3.5 h-3.5" /> {resources.videoGuideLabel || "Setup Video Guide"}
                         </a>
                       )}
                       {(resources.documents || []).map(doc => (
                         <a key={doc.id} href={doc.url} target="_blank" rel="noreferrer"
-                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg hover:bg-amber-100 transition-colors">
+                          className="flex items-center gap-1.5 text-xs font-semibold bg-white border border-amber-200 text-amber-800 px-3 py-1.5 rounded-full hover:bg-amber-100 transition-colors">
                           <FileDown className="w-3.5 h-3.5" /> {doc.label}
                         </a>
                       ))}

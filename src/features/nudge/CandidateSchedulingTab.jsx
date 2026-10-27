@@ -1357,13 +1357,13 @@ export default function CandidateSchedulingTab({
                   <button
                     onClick={() => handleConfirmBooking(inv)}
                     disabled={confirmingId === inv.id}
-                    className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 disabled:opacity-60 transition-colors">
+                    className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-600 text-white px-3 py-2 rounded-full hover:bg-emerald-700 disabled:opacity-60 transition-colors">
                     {confirmingId === inv.id ? "Confirming…" : "✓ Confirm"}
                   </button>
                   <button
                     onClick={() => openRejectModal(inv)}
                     disabled={confirmingId === inv.id}
-                    className="flex items-center gap-1.5 text-xs font-semibold border border-red-200 text-red-500 px-3 py-2 rounded-lg hover:bg-red-50 disabled:opacity-60 transition-colors">
+                    className="flex items-center gap-1.5 text-xs font-semibold border border-red-200 text-red-500 px-3 py-2 rounded-full hover:bg-red-50 disabled:opacity-60 transition-colors">
                     ✕ Reject
                   </button>
                 </div>
@@ -1515,7 +1515,7 @@ export default function CandidateSchedulingTab({
                 type="button"
                 onClick={handleRejectBooking}
                 disabled={rejecting || !rejectReason.trim()}
-                className="flex items-center gap-1.5 text-sm font-semibold bg-red-600 text-white px-4 py-2.5 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors">
+                className="flex items-center gap-1.5 text-sm font-semibold bg-red-600 text-white px-4 py-2.5 rounded-full hover:bg-red-700 disabled:opacity-50 transition-colors">
                 {rejecting ? "Rejecting…" : "Reject & Notify Candidate"}
               </button>
             </div>

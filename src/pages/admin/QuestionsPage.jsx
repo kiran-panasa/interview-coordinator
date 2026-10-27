@@ -812,7 +812,7 @@ export default function QuestionsPage() {
               </p>
             </div>
             <button onClick={downloadSampleCSV}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-lg hover:bg-gray-50 flex-shrink-0 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-semibold rounded-full hover:bg-gray-50 flex-shrink-0 transition-colors">
               <Download className="w-3.5 h-3.5" />
               Download Template
             </button>
@@ -958,7 +958,7 @@ export default function QuestionsPage() {
               <div className="flex gap-1 text-xs">
                 {["add", "replace"].map(mode => (
                   <button key={mode} type="button" onClick={() => setBulkForm(f => ({ ...f, skillsMode: mode }))}
-                    className={`px-2.5 py-1 rounded-lg border capitalize transition-colors ${bulkForm.skillsMode === mode ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                    className={`px-2.5 py-1 rounded-full border capitalize transition-colors ${bulkForm.skillsMode === mode ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                     {mode === "add" ? "Add to existing" : "Replace all"}
                   </button>
                 ))}
@@ -984,7 +984,7 @@ export default function QuestionsPage() {
               <div className="flex gap-1 text-xs">
                 {["add", "replace"].map(mode => (
                   <button key={mode} type="button" onClick={() => setBulkForm(f => ({ ...f, domainsMode: mode }))}
-                    className={`px-2.5 py-1 rounded-lg border capitalize transition-colors ${bulkForm.domainsMode === mode ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                    className={`px-2.5 py-1 rounded-full border capitalize transition-colors ${bulkForm.domainsMode === mode ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                     {mode === "add" ? "Add to existing" : "Replace all"}
                   </button>
                 ))}
@@ -1009,7 +1009,7 @@ export default function QuestionsPage() {
               <div className="flex gap-1 text-xs">
                 {[{ key: "add", label: "Add to" }, { key: "remove", label: "Remove from" }].map(({ key, label }) => (
                   <button key={key} type="button" onClick={() => setBulkForm(f => ({ ...f, templatesMode: key }))}
-                    className={`px-2.5 py-1 rounded-lg border transition-colors ${bulkForm.templatesMode === key ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                    className={`px-2.5 py-1 rounded-full border transition-colors ${bulkForm.templatesMode === key ? "bg-brand-600 text-white border-brand-600" : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                     {label}
                   </button>
                 ))}

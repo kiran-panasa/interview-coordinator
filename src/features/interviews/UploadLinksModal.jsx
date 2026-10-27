@@ -95,7 +95,7 @@ export default function UploadLinksModal({
         <button
           onClick={handleParseCSV}
           disabled={!csvText.trim()}
-          className="w-full border border-brand-200 text-brand-700 bg-brand-50 rounded-xl py-2 text-sm font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors">
+          className="w-full border border-brand-200 text-brand-700 bg-brand-50 rounded-full py-2 text-sm font-semibold hover:bg-brand-100 disabled:opacity-40 transition-colors">
           Parse &amp; Preview
         </button>
 

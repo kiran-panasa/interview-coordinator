@@ -879,12 +879,12 @@ export default function SettingsPage() {
             <p className="text-xs text-gray-400 mb-3">Valid roles: <span className="font-mono">interviewer</span>, <span className="font-mono">admin</span>, <span className="font-mono">content_team</span> (defaults to interviewer if blank/invalid)</p>
             <div className="flex gap-2">
               <button onClick={downloadInviteSampleExcel}
-                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-3 py-1.5 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors">
+                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:text-emerald-900 px-3 py-1.5 border border-emerald-200 rounded-full hover:bg-emerald-50 transition-colors">
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 Download Excel (.xlsx)
               </button>
               <button onClick={downloadInviteSampleCSV}
-                className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 px-3 py-1.5 border border-brand-200 rounded-lg hover:bg-brand-50 transition-colors">
+                className="flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 px-3 py-1.5 border border-brand-200 rounded-full hover:bg-brand-50 transition-colors">
                 <FileText className="w-3.5 h-3.5" />
                 Download CSV
               </button>
