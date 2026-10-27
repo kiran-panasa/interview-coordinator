@@ -32,6 +32,7 @@ const InterviewerStatsPage = lazy(() => import("./pages/admin/InterviewerStatsPa
 
 const InterviewerLayout    = lazy(() => import("./components/InterviewerLayout"));
 const InterviewerDashboard = lazy(() => import("./pages/interviewer/Dashboard"));
+const InterviewerCalendarPage = lazy(() => import("./pages/interviewer/CalendarPage"));
 const MyInterviewsPage     = lazy(() => import("./pages/interviewer/MyInterviewsPage"));
 const InterviewDetail      = lazy(() => import("./pages/interviewer/InterviewDetail"));
 const InterviewQuestions   = lazy(() => import("./pages/interviewer/InterviewQuestions"));
@@ -158,6 +159,7 @@ function AppRoutes() {
         <Route path="/interviewer" element={<InterviewerGuard><InterviewerLayout /></InterviewerGuard>}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard"    element={<InterviewerDashboard />} />
+          <Route path="calendar"     element={<InterviewerCalendarPage />} />
           <Route path="interviews"   element={<MyInterviewsPage />} />
           <Route path="interviews/:id" element={<InterviewDetail />} />
           <Route path="interviews/:id/questions" element={<InterviewQuestions />} />

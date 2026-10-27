@@ -8,11 +8,12 @@ import { checkAndSendFeedbackNudges } from "../services/nudge.service";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
-  LayoutDashboard, CalendarClock, Clock3, Bell, UserCircle, Info, FileText, LogOut, UserCog2, Building2, Trophy,
+  LayoutDashboard, CalendarClock, CalendarDays, Clock3, Bell, UserCircle, Info, FileText, LogOut, UserCog2, Building2, Trophy,
 } from "lucide-react";
 
 const NAV = [
   { to: "/interviewer/dashboard",       label: "Dashboard",       icon: LayoutDashboard },
+  { to: "/interviewer/calendar",        label: "Calendar",        icon: CalendarDays },
   { to: "/interviewer/interviews",      label: "My Interviews",   icon: CalendarClock },
   { to: "/interviewer/availability",    label: "My Availability", icon: Clock3 },
   { to: "/interviewer/notifications",   label: "Notifications",   icon: Bell, badge: true },
