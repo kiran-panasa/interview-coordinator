@@ -36,6 +36,17 @@ const makeEmptyForm = () => ({
   questionBank: { theory: [], coding: [], project: [], resume: [] },
 });
 
+// Read-only here — same colors as the Status dropdown on the Lifecycle tab
+// (the actual place to change it), so browsing this grid already shows
+// what's paused/active at a glance without switching tabs.
+const templateStatus = (t) => t.status || "active";
+const TEMPLATE_STATUS_LABEL = { active: "Active", draft: "Draft", archived: "Archived" };
+const TEMPLATE_STATUS_BADGE = {
+  active:   "bg-emerald-50 text-emerald-700 border-emerald-200",
+  draft:    "bg-amber-50 text-amber-700 border-amber-200",
+  archived: "bg-gray-100 text-gray-600 border-gray-200",
+};
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function TemplatesPage() {
@@ -552,12 +563,21 @@ export default function TemplatesPage() {
                   ]} />
                 </div>
 
-                {/* Program badge (only visible on "All" tab) */}
-                {activeProgram === "all" && programName && (
-                  <span className="self-start text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                    {programName}
+                {/* Program badge (only visible on "All" tab) + status badge
+                   — read-only here, same colors as the Status dropdown on
+                   the Lifecycle tab (the actual place to change it) so a
+                   glance at this grid already shows what's paused without
+                   switching tabs. */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {activeProgram === "all" && programName && (
+                    <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                      {programName}
+                    </span>
+                  )}
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${TEMPLATE_STATUS_BADGE[templateStatus(t)]}`}>
+                    {TEMPLATE_STATUS_LABEL[templateStatus(t)]}
                   </span>
-                )}
+                </div>
 
                 {/* Domain chips */}
                 {isV2 ? (
