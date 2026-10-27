@@ -428,14 +428,15 @@ async function me(req, res) {
   }
   const interviewsWithScoreVisibility = interviews.map(iv => {
     const tmpl = templateByIdForScore.get(iv.templateId);
-    // Unset/true (every template before this existed) stays visible — the
-    // Integrity Score is a separate, always-visible feature, untouched by
-    // this flag either way.
-    const showScore = !tmpl || tmpl.showScoreToStudent !== false;
+    // Independent toggles — unset/true (every template before this existed)
+    // stays visible on both. The Integrity Score is a separate, always-
+    // visible feature, untouched by either of these.
+    const showAiReport   = !tmpl || tmpl.showAiReportToStudent !== false;
+    const showFinalScore = !tmpl || tmpl.showFinalScoreToStudent !== false;
     return {
       ...iv,
-      showScore,
-      hiddenScoreNote: showScore ? "" : (tmpl?.hiddenScoreMessage || DEFAULT_HIDDEN_SCORE_MESSAGE),
+      showAiReport, showFinalScore,
+      hiddenScoreNote: (showAiReport && showFinalScore) ? "" : (tmpl?.hiddenScoreMessage || DEFAULT_HIDDEN_SCORE_MESSAGE),
     };
   });
 

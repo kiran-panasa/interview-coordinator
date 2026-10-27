@@ -61,7 +61,8 @@ export default function TemplateLifecycleTab() {
   const statusOf = (t) => t.status || "active";
   const maxAttemptsOf = (t) => maxAttemptsDraft[t.id] ?? (t.maxAttempts != null ? String(t.maxAttempts) : "");
   const messageOf     = (t) => messageDraft[t.id] ?? (t.attemptLimitMessage || "");
-  const showScoreOf      = (t) => t.showScoreToStudent !== false;
+  const showAiReportOf   = (t) => t.showAiReportToStudent !== false;
+  const showFinalScoreOf = (t) => t.showFinalScoreToStudent !== false;
   const scoreMessageOf   = (t) => scoreMessageDraft[t.id] ?? (t.hiddenScoreMessage || "");
 
   const filtered = useMemo(() => {
@@ -106,9 +107,14 @@ export default function TemplateLifecycleTab() {
     saveTemplate(t, { attemptLimitMessage: next });
   };
 
-  const handleChangeShowScore = (t, showScore) => {
-    if (showScoreOf(t) === showScore) return;
-    saveTemplate(t, { showScoreToStudent: showScore });
+  const handleChangeShowAiReport = (t, showAiReport) => {
+    if (showAiReportOf(t) === showAiReport) return;
+    saveTemplate(t, { showAiReportToStudent: showAiReport });
+  };
+
+  const handleChangeShowFinalScore = (t, showFinalScore) => {
+    if (showFinalScoreOf(t) === showFinalScore) return;
+    saveTemplate(t, { showFinalScoreToStudent: showFinalScore });
   };
 
   const commitScoreMessage = (t) => {
@@ -228,23 +234,33 @@ export default function TemplateLifecycleTab() {
                     <td className="px-4 py-3 align-top min-w-[16rem] space-y-1.5">
                       {/* Violet — distinct from Status's emerald/amber/gray
                          and Attempt Limit's sky, so all three read as
-                         separate controls at a glance. Never affects
-                         Integrity Score, which always stays visible. */}
-                      <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-                        <button type="button" onClick={() => handleChangeShowScore(t, true)}
-                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                            showScoreOf(t) ? "bg-white text-violet-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                          }`}>
-                          Visible
-                        </button>
-                        <button type="button" onClick={() => handleChangeShowScore(t, false)}
-                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
-                            !showScoreOf(t) ? "bg-white text-violet-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
-                          }`}>
-                          Hidden
-                        </button>
-                      </div>
-                      {!showScoreOf(t) && (
+                         separate controls at a glance. Independent toggles
+                         — a template can show the score but keep the AI
+                         report back, or vice versa. Never affects Integrity
+                         Score, which always stays visible. */}
+                      {[
+                        { label: "AI Report",   on: showAiReportOf(t),   onChange: v => handleChangeShowAiReport(t, v) },
+                        { label: "Final Score", on: showFinalScoreOf(t), onChange: v => handleChangeShowFinalScore(t, v) },
+                      ].map(row => (
+                        <div key={row.label} className="flex items-center gap-2">
+                          <span className="text-[11px] text-gray-500 w-16 flex-shrink-0">{row.label}</span>
+                          <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+                            <button type="button" onClick={() => row.onChange(true)}
+                              className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                                row.on ? "bg-white text-violet-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                              }`}>
+                              Visible
+                            </button>
+                            <button type="button" onClick={() => row.onChange(false)}
+                              className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                                !row.on ? "bg-white text-violet-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                              }`}>
+                              Hidden
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {(!showAiReportOf(t) || !showFinalScoreOf(t)) && (
                         <textarea
                           rows={2}
                           value={scoreMessageOf(t)}

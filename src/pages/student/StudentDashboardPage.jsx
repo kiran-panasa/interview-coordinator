@@ -1307,13 +1307,13 @@ export default function StudentDashboardPage() {
                                   {iv.cancelReason && (
                                     <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
                                   )}
-                                  {/* Per-template toggle (Templates →
-                                     Lifecycle) — some templates don't show
-                                     AI Report/Score to students at all,
-                                     with this note in their place. Never
+                                  {/* Per-template toggles (Templates →
+                                     Lifecycle) — AI Report and Final Score
+                                     can be hidden independently; this note
+                                     shows once whenever either is. Never
                                      affects Integrity, which stays visible
                                      either way. */}
-                                  {iv.status === "completed" && !iv.showScore && (
+                                  {iv.status === "completed" && (!iv.showAiReport || !iv.showFinalScore) && (
                                     <p className="text-xs text-gray-400 mt-1">Note: {iv.hiddenScoreNote}</p>
                                   )}
                                   {/* Set once the new slot is actually booked
@@ -1340,14 +1340,14 @@ export default function StudentDashboardPage() {
                                       <ChevronRight className="w-3 h-3" />
                                     </button>
                                   )}
-                                  {iv.status === "completed" && iv.showScore && iv.finalScore != null && (
+                                  {iv.status === "completed" && iv.showFinalScore && iv.finalScore != null && (
                                     <span title="Final Score"
                                       className="flex items-center gap-1 text-[11px] font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-1 rounded-full">
                                       <Award className="w-3 h-3" />
                                       {iv.finalScore}%
                                     </span>
                                   )}
-                                  {iv.status === "completed" && iv.showScore && iv.aiReport && (
+                                  {iv.status === "completed" && iv.showAiReport && iv.aiReport && (
                                     <button onClick={() => setAiReportInterview(iv)}
                                       title="Click to see the AI-generated report"
                                       className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full hover:bg-violet-100 hover:border-violet-300 transition-colors">
