@@ -56,7 +56,7 @@ export default function QuestionForm({ form, setForm, skills, allDomainTypes, te
         <div className="flex gap-2">
           {["easy", "medium", "hard"].map(d => (
             <button key={d} type="button" onClick={() => setForm(f => ({ ...f, difficulty: d }))}
-              className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+              className={`flex-1 py-2 rounded-full text-xs font-semibold border transition-colors ${
                 form.difficulty === d
                   ? { easy: "bg-emerald-50 text-emerald-700 border-emerald-300", medium: "bg-amber-50 text-amber-700 border-amber-300", hard: "bg-red-50 text-red-700 border-red-300" }[d]
                   : "border-gray-200 text-gray-500 hover:bg-gray-50"
