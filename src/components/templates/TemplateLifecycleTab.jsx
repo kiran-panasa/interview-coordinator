@@ -4,6 +4,7 @@ import { Search, CheckCircle2, Info } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
+import { DEFAULT_ATTEMPT_LIMIT_MESSAGE } from "../../constants/templateAttempts";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -46,9 +47,17 @@ export default function TemplateLifecycleTab() {
   const [programFilter, setProgramFilter] = useState("");
   const [savingId, setSavingId] = useState(null);
   const [savedId,  setSavedId]  = useState(null);
+  // Local drafts for the two free-typed fields — only committed on blur,
+  // so an in-progress keystroke (especially in the number input, where an
+  // empty/partial value mid-edit is normal) never gets written to
+  // Firestore as a half-finished value.
+  const [maxAttemptsDraft, setMaxAttemptsDraft] = useState({});
+  const [messageDraft,     setMessageDraft]     = useState({});
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
   const statusOf = (t) => t.status || "active";
+  const maxAttemptsOf = (t) => maxAttemptsDraft[t.id] ?? (t.maxAttempts != null ? String(t.maxAttempts) : "");
+  const messageOf     = (t) => messageDraft[t.id] ?? (t.attemptLimitMessage || "");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -58,18 +67,37 @@ export default function TemplateLifecycleTab() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [templates, search, programFilter]);
 
-  const handleChangeStatus = async (t, status) => {
-    if (statusOf(t) === status) return;
+  const saveTemplate = async (t, data) => {
     setSavingId(t.id);
     setSavedId(null);
     try {
-      await updateTemplate(t.id, { status });
+      await updateTemplate(t.id, data);
       queryClient.invalidateQueries({ queryKey: QK.templates });
       setSavedId(t.id);
       setTimeout(() => setSavedId(id => (id === t.id ? null : id)), 1500);
     } finally {
       setSavingId(null);
     }
+  };
+
+  const handleChangeStatus = (t, status) => {
+    if (statusOf(t) === status) return;
+    saveTemplate(t, { status });
+  };
+
+  const commitMaxAttempts = (t) => {
+    const raw = maxAttemptsOf(t).trim();
+    const next = raw === "" ? null : Math.max(1, Math.round(Number(raw)) || 1);
+    setMaxAttemptsDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.maxAttempts ?? null)) return;
+    saveTemplate(t, { maxAttempts: next });
+  };
+
+  const commitMessage = (t) => {
+    const next = messageOf(t).trim();
+    setMessageDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.attemptLimitMessage || "")) return;
+    saveTemplate(t, { attemptLimitMessage: next });
   };
 
   return (
@@ -79,7 +107,9 @@ export default function TemplateLifecycleTab() {
         <p className="text-xs text-gray-400 mt-0.5">
           Pause or retire a template without deleting it — switching it off Active hides it from students (Eligible
           Interviews / Self Book) immediately, but never touches an interview already scheduled or completed on it,
-          or anything on the admin side. Switch it back to Active and it's bookable again, exactly as before.
+          or anything on the admin side. Switch it back to Active and it's bookable again, exactly as before. The
+          Attempt Limit column separately caps how many times a candidate can book this round at all — leave it
+          blank for unlimited.
         </p>
       </div>
 
@@ -126,7 +156,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -155,6 +185,29 @@ export default function TemplateLifecycleTab() {
                           </button>
                         ))}
                       </div>
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[18rem] space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number" min={1}
+                          value={maxAttemptsOf(t)}
+                          onChange={e => setMaxAttemptsDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitMaxAttempts(t)}
+                          placeholder="Unlimited"
+                          className="w-24 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-brand-400"
+                        />
+                        <span className="text-[11px] text-gray-400">completed attempt{maxAttemptsOf(t) === "1" ? "" : "s"} max</span>
+                      </div>
+                      {maxAttemptsOf(t).trim() !== "" && (
+                        <textarea
+                          rows={2}
+                          value={messageOf(t)}
+                          onChange={e => setMessageDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitMessage(t)}
+                          placeholder={DEFAULT_ATTEMPT_LIMIT_MESSAGE}
+                          className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-400 text-gray-700 placeholder:text-gray-300"
+                        />
+                      )}
                     </td>
                     <td className="px-4 py-3 w-10">
                       {savingId === t.id && <span className="text-[11px] text-gray-400">Saving…</span>}

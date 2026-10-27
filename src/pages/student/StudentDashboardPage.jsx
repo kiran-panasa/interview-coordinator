@@ -412,6 +412,9 @@ export default function StudentDashboardPage() {
       } else if (json?.error === "template_not_active") {
         alert("This round isn't currently open for booking. Please refresh the page — it may have been paused since you loaded this dashboard.");
         loadDashboard();
+      } else if (json?.error === "attempt_limit_reached") {
+        alert(json.message || "You've reached the maximum number of attempts for this interview.");
+        loadDashboard();
       } else {
         // Surfaces the actual failure (e.g. template_not_assigned) instead
         // of a generic message that looks identical whether the request
@@ -917,19 +920,26 @@ export default function StudentDashboardPage() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {notStarted.map((t, i) => (
                           <motion.button key={t.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}
-                            onClick={() => handleSelfBook(t.id)}
-                            disabled={bookingTemplateId != null}
-                            className={`text-left p-4 rounded-2xl border-2 bg-white transition-all disabled:cursor-wait disabled:opacity-60 ${
-                              bookingTemplateId === t.id ? "border-emerald-400 bg-emerald-50" : "border-gray-100 hover:border-emerald-300 hover:shadow-md"
+                            onClick={() => { if (!t.limitReached) handleSelfBook(t.id); }}
+                            disabled={bookingTemplateId != null || t.limitReached}
+                            title={t.limitReached ? t.attemptLimitMessage : undefined}
+                            className={`text-left p-4 rounded-2xl border-2 bg-white transition-all disabled:cursor-not-allowed ${
+                              t.limitReached
+                                ? "border-gray-100 opacity-60"
+                                : bookingTemplateId === t.id
+                                  ? "border-emerald-400 bg-emerald-50 disabled:cursor-wait disabled:opacity-60"
+                                  : "border-gray-100 hover:border-emerald-300 hover:shadow-md"
                             }`}>
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                                t.limitReached ? "bg-gray-100 text-gray-400" : "bg-emerald-50 text-emerald-600"
+                              }`}>
                                 <CalendarPlus className="w-4 h-4" />
                               </div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className="font-bold text-gray-900 truncate">{t.name}</p>
-                                  {nextAttemptNumber(t.id) > 1 && (
+                                  {!t.limitReached && nextAttemptNumber(t.id) > 1 && (
                                     <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                       {ordinalLabel(nextAttemptNumber(t.id))} Attempt
                                     </span>
@@ -938,9 +948,13 @@ export default function StudentDashboardPage() {
                                 <p className="text-xs text-gray-400">{t.durationMinutes} minutes</p>
                               </div>
                             </div>
-                            <p className="text-xs font-semibold text-emerald-600 mt-3">
-                              {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots →"}
-                            </p>
+                            {t.limitReached ? (
+                              <p className="text-xs font-medium text-gray-500 mt-3 leading-snug">{t.attemptLimitMessage}</p>
+                            ) : (
+                              <p className="text-xs font-semibold text-emerald-600 mt-3">
+                                {bookingTemplateId === t.id ? "Finding Slots…" : "Find Slots →"}
+                              </p>
+                            )}
                           </motion.button>
                         ))}
                       </div>

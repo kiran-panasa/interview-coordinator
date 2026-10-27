@@ -4,6 +4,7 @@ import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
 import { sendWhatsAppOtp } from "./_lib/whatsapp.js";
 import { sendSmsOtp } from "./_lib/sms.js";
+import { DEFAULT_ATTEMPT_LIMIT_MESSAGE } from "../src/constants/templateAttempts.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
 // plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
@@ -248,7 +249,11 @@ async function me(req, res) {
   // did, since the student already has something in motion for it.
   const templates = templateSnaps
     .filter(s => s.exists && (s.data().status || "active") === "active")
-    .map(s => ({ id: s.id, name: s.data().name, durationMinutes: s.data().durationMinutes || 60 }));
+    .map(s => ({
+      id: s.id, name: s.data().name, durationMinutes: s.data().durationMinutes || 60,
+      maxAttempts: s.data().maxAttempts ?? null,
+      attemptLimitMessage: s.data().attemptLimitMessage || "",
+    }));
 
   // Only invites for templates CURRENTLY assigned to this candidate —
   // candidate.templateIds can change after an invite was created (admin
@@ -360,9 +365,31 @@ async function me(req, res) {
     })
     .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""));
 
+  // Per-template attempt cap (Templates → Lifecycle) — only a COMPLETED
+  // interview counts as a used attempt, same rule as the attempt-number
+  // labels elsewhere (a cancelled/declined retry doesn't burn an attempt).
+  // Annotated onto `templates` (not filtered out) so the dashboard can
+  // still show the template with its limit-reached message instead of it
+  // just disappearing with no explanation.
+  const completedCountByTemplateId = {};
+  interviews.forEach(iv => {
+    if (iv.status === "completed" && iv.templateId) {
+      completedCountByTemplateId[iv.templateId] = (completedCountByTemplateId[iv.templateId] || 0) + 1;
+    }
+  });
+  const templatesWithAttempts = templates.map(t => {
+    const attemptsUsed = completedCountByTemplateId[t.id] || 0;
+    const limitReached = t.maxAttempts != null && attemptsUsed >= t.maxAttempts;
+    return {
+      ...t, attemptsUsed,
+      limitReached,
+      attemptLimitMessage: limitReached ? (t.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE) : "",
+    };
+  });
+
   return res.status(200).json({
     candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: programName, resumeLink: candidate.resumeLink || "" },
-    templates, interviews, pendingInvites,
+    templates: templatesWithAttempts, interviews, pendingInvites,
   });
 }
 
@@ -508,6 +535,31 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     return { error: "template_not_assigned", status: 403 };
   }
 
+  // Defense in depth for the attempt-cap check /me already annotates onto
+  // the templates list (limitReached) — covers "they had the dashboard
+  // open before the limit was reached/lowered" and the public
+  // SchedulePage.jsx / Nudge-reuse path, which doesn't go through /me at
+  // all. Blocks BOTH a brand-new draft and reusing an existing in-flight
+  // invite for this template — reaching the cap mid-booking is a rare
+  // edge (e.g. the limit was set after they'd already started one), but
+  // should still be refused rather than let through.
+  const capSnap = await db.collection("interviewTemplates").doc(templateId).get();
+  const capTemplate = capSnap.exists ? capSnap.data() : null;
+  if (capTemplate?.maxAttempts != null) {
+    const completedSnap = await db.collection("interviews")
+      .where("candidateId", "==", session.candidateId)
+      .where("templateId", "==", templateId)
+      .where("status", "==", "completed")
+      .get();
+    if (completedSnap.size >= capTemplate.maxAttempts) {
+      return {
+        error: "attempt_limit_reached",
+        status: 403,
+        message: capTemplate.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE,
+      };
+    }
+  }
+
   const existingSnap = await db.collection("scheduleInvites")
     .where("candidateId", "==", session.candidateId)
     .where("templateId", "==", templateId)
@@ -629,7 +681,7 @@ async function selfBookStart(req, res) {
 
   const db = getDb();
   const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId, rescheduleReason);
-  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error, ...(result.message ? { message: result.message } : {}) });
   if (result.existing) {
     const inv = result.existing;
     return res.status(200).json({
@@ -664,7 +716,7 @@ async function selfBook(req, res) {
 
   const db = getDb();
   const result = await resolveSelfBookTarget(db, session, templateId, replacingInterviewId, rescheduleReason);
-  if (result.error) return res.status(result.status).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error, ...(result.message ? { message: result.message } : {}) });
   if (result.existing) return res.status(200).json({ success: true, inviteId: result.existing.id, reused: true });
 
   const { candidate, draft } = result;

@@ -291,6 +291,17 @@ export interface Template {
   // "draft" vs "archived" is purely organizational for admins (still being
   // built vs retired); both behave identically to students.
   status?: "active" | "draft" | "archived";
+  // Attempt cap (Templates → Lifecycle) — null/unset means unlimited. Only
+  // a COMPLETED interview counts toward it (same rule as the attempt-number
+  // badges elsewhere; a cancelled/declined retry doesn't burn an attempt).
+  // Once reached, the template stops accepting new Self Book bookings
+  // (resolveSelfBookTarget in api/sso-handler.js) but existing interviews
+  // are untouched. attemptLimitMessage is shown to the candidate in place
+  // of the normal "Find Slots" card; falls back to
+  // DEFAULT_ATTEMPT_LIMIT_MESSAGE (src/constants/templateAttempts.js) when
+  // blank.
+  maxAttempts?: number | null;
+  attemptLimitMessage?: string;
   program?: string;
   domains: Domain[];
   skills?: string[];
