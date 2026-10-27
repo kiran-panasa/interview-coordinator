@@ -4,6 +4,7 @@ import { Search, CheckCircle2 } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
+import { DEFAULT_HIDDEN_SCORE_MESSAGE } from "../../constants/templateAttempts";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -54,11 +55,14 @@ export default function TemplateLifecycleTab() {
   // Firestore as a half-finished value.
   const [maxAttemptsDraft, setMaxAttemptsDraft] = useState({});
   const [messageDraft,     setMessageDraft]     = useState({});
+  const [scoreMessageDraft, setScoreMessageDraft] = useState({});
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
   const statusOf = (t) => t.status || "active";
   const maxAttemptsOf = (t) => maxAttemptsDraft[t.id] ?? (t.maxAttempts != null ? String(t.maxAttempts) : "");
   const messageOf     = (t) => messageDraft[t.id] ?? (t.attemptLimitMessage || "");
+  const showScoreOf      = (t) => t.showScoreToStudent !== false;
+  const scoreMessageOf   = (t) => scoreMessageDraft[t.id] ?? (t.hiddenScoreMessage || "");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -100,6 +104,18 @@ export default function TemplateLifecycleTab() {
     setMessageDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
     if (next === (t.attemptLimitMessage || "")) return;
     saveTemplate(t, { attemptLimitMessage: next });
+  };
+
+  const handleChangeShowScore = (t, showScore) => {
+    if (showScoreOf(t) === showScore) return;
+    saveTemplate(t, { showScoreToStudent: showScore });
+  };
+
+  const commitScoreMessage = (t) => {
+    const next = scoreMessageOf(t).trim();
+    setScoreMessageDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.hiddenScoreMessage || "")) return;
+    saveTemplate(t, { hiddenScoreMessage: next });
   };
 
   return (
@@ -146,7 +162,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", "Attempt Limit", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", "AI Report & Score", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -206,6 +222,36 @@ export default function TemplateLifecycleTab() {
                           onBlur={() => commitMessage(t)}
                           placeholder="Leave blank to use the default message shown to candidates."
                           className="w-full text-xs border border-sky-100 bg-sky-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-sky-400 text-gray-700 placeholder:text-gray-400"
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[16rem] space-y-1.5">
+                      {/* Violet — distinct from Status's emerald/amber/gray
+                         and Attempt Limit's sky, so all three read as
+                         separate controls at a glance. Never affects
+                         Integrity Score, which always stays visible. */}
+                      <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
+                        <button type="button" onClick={() => handleChangeShowScore(t, true)}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                            showScoreOf(t) ? "bg-white text-violet-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                          }`}>
+                          Visible
+                        </button>
+                        <button type="button" onClick={() => handleChangeShowScore(t, false)}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors ${
+                            !showScoreOf(t) ? "bg-white text-violet-700 shadow-sm" : "text-gray-400 hover:text-gray-600"
+                          }`}>
+                          Hidden
+                        </button>
+                      </div>
+                      {!showScoreOf(t) && (
+                        <textarea
+                          rows={2}
+                          value={scoreMessageOf(t)}
+                          onChange={e => setScoreMessageDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitScoreMessage(t)}
+                          placeholder={`Leave blank for: "${DEFAULT_HIDDEN_SCORE_MESSAGE}"`}
+                          className="w-full text-xs border border-violet-100 bg-violet-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-violet-400 text-gray-700 placeholder:text-gray-400"
                         />
                       )}
                     </td>

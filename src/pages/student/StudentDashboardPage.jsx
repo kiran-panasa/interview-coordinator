@@ -7,7 +7,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle, HelpCircle, Bell,
+  CheckCircle2, XCircle, HelpCircle, Bell, Award,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -1307,6 +1307,15 @@ export default function StudentDashboardPage() {
                                   {iv.cancelReason && (
                                     <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
                                   )}
+                                  {/* Per-template toggle (Templates →
+                                     Lifecycle) — some templates don't show
+                                     AI Report/Score to students at all,
+                                     with this note in their place. Never
+                                     affects Integrity, which stays visible
+                                     either way. */}
+                                  {iv.status === "completed" && !iv.showScore && (
+                                    <p className="text-xs text-gray-400 mt-1">Note: {iv.hiddenScoreNote}</p>
+                                  )}
                                   {/* Set once the new slot is actually booked
                                      (see linkRescheduledInterview) — best-
                                      effort resolve, same as the admin side. */}
@@ -1328,6 +1337,22 @@ export default function StudentDashboardPage() {
                                       title="Click to see the integrity breakdown"
                                       className="flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full hover:bg-amber-100 hover:border-amber-300 transition-colors">
                                       Integrity: {Number(iv.integrityScore).toFixed(1)}/5
+                                      <ChevronRight className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {iv.status === "completed" && iv.showScore && iv.finalScore != null && (
+                                    <span title="Final Score"
+                                      className="flex items-center gap-1 text-[11px] font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-1 rounded-full">
+                                      <Award className="w-3 h-3" />
+                                      {iv.finalScore}%
+                                    </span>
+                                  )}
+                                  {iv.status === "completed" && iv.showScore && iv.aiReport && (
+                                    <button onClick={() => setAiReportInterview(iv)}
+                                      title="Click to see the AI-generated report"
+                                      className="flex items-center gap-1 text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-1 rounded-full hover:bg-violet-100 hover:border-violet-300 transition-colors">
+                                      <Sparkles className="w-3 h-3" />
+                                      AI Report
                                       <ChevronRight className="w-3 h-3" />
                                     </button>
                                   )}

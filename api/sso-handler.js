@@ -4,7 +4,7 @@ import { createSession, exchangeTokenForSession } from "./_lib/ssoExchange.js";
 import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } from "./_lib/ssoSession.js";
 import { sendWhatsAppOtp } from "./_lib/whatsapp.js";
 import { sendSmsOtp } from "./_lib/sms.js";
-import { DEFAULT_ATTEMPT_LIMIT_MESSAGE } from "../src/constants/templateAttempts.js";
+import { DEFAULT_ATTEMPT_LIMIT_MESSAGE, DEFAULT_HIDDEN_SCORE_MESSAGE } from "../src/constants/templateAttempts.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
 // plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
@@ -412,9 +412,36 @@ async function me(req, res) {
     };
   });
 
+  // Per-template "show the AI Report / Final Score to the student" toggle
+  // (Templates → Lifecycle) — a completed interview can reference a
+  // template no longer in candidate.templateIds (reassigned away since),
+  // so this looks the template up directly rather than reusing `templates`
+  // above, which is scoped to currently-assigned ones only.
+  const templateByIdForScore = new Map();
+  templateSnaps.forEach(s => { if (s.exists) templateByIdForScore.set(s.id, s.data()); });
+  const missingTemplateIds = [...new Set(
+    interviews.filter(iv => iv.templateId && !templateByIdForScore.has(iv.templateId)).map(iv => iv.templateId)
+  )];
+  if (missingTemplateIds.length) {
+    const extraSnaps = await Promise.all(missingTemplateIds.map(tid => db.collection("interviewTemplates").doc(tid).get()));
+    extraSnaps.forEach(s => { if (s.exists) templateByIdForScore.set(s.id, s.data()); });
+  }
+  const interviewsWithScoreVisibility = interviews.map(iv => {
+    const tmpl = templateByIdForScore.get(iv.templateId);
+    // Unset/true (every template before this existed) stays visible — the
+    // Integrity Score is a separate, always-visible feature, untouched by
+    // this flag either way.
+    const showScore = !tmpl || tmpl.showScoreToStudent !== false;
+    return {
+      ...iv,
+      showScore,
+      hiddenScoreNote: showScore ? "" : (tmpl?.hiddenScoreMessage || DEFAULT_HIDDEN_SCORE_MESSAGE),
+    };
+  });
+
   return res.status(200).json({
     candidate: { name: candidate.name, email: candidate.email, uid: candidate.uid || "", program: programName, resumeLink: candidate.resumeLink || "" },
-    templates: templatesWithAttempts, interviews, pendingInvites,
+    templates: templatesWithAttempts, interviews: interviewsWithScoreVisibility, pendingInvites,
   });
 }
 

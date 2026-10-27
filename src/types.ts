@@ -308,6 +308,15 @@ export interface Template {
   // blank.
   maxAttempts?: number | null;
   attemptLimitMessage?: string;
+  // Whether a completed interview on this template shows its AI Report and
+  // Final Score to the candidate (Templates → Lifecycle). Unset/true means
+  // visible — the default, and what every template behaved like before
+  // this existed. false hides both and shows hiddenScoreMessage instead
+  // (falls back to DEFAULT_HIDDEN_SCORE_MESSAGE, src/constants/templateAttempts.js,
+  // when blank). Never affects the Integrity Score, which is a separate,
+  // always-visible feature. See me() in api/sso-handler.js.
+  showScoreToStudent?: boolean;
+  hiddenScoreMessage?: string;
   program?: string;
   domains: Domain[];
   skills?: string[];
