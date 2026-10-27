@@ -240,8 +240,14 @@ async function me(req, res) {
     Promise.all((candidate.templateIds || []).map(tid => db.collection("interviewTemplates").doc(tid).get())),
   ]);
   const programName = programSnap?.exists ? programSnap.data().name : (candidate.program || "");
+  // Paused/retired templates (Templates page → Mark as Draft/Archive) drop
+  // out of Eligible Interviews and Self Book entirely — unset or "active"
+  // (every template that existed before this field did) stays visible, as
+  // before. Doesn't touch pendingInvites below: an invite already sent for
+  // a template that's since been archived still shows/works exactly as it
+  // did, since the student already has something in motion for it.
   const templates = templateSnaps
-    .filter(s => s.exists)
+    .filter(s => s.exists && (s.data().status || "active") === "active")
     .map(s => ({ id: s.id, name: s.data().name, durationMinutes: s.data().durationMinutes || 60 }));
 
   // Only invites for templates CURRENTLY assigned to this candidate —
@@ -545,6 +551,12 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   const templateSnap = await db.collection("interviewTemplates").doc(templateId).get();
   if (!templateSnap.exists) return { error: "template_not_found", status: 404 };
   const template = templateSnap.data();
+  // Defense in depth for the "template got paused while this page was
+  // already open" race — /api/sso/me already excludes a non-active
+  // template from what the student is shown in the first place.
+  if ((template.status || "active") !== "active") {
+    return { error: "template_not_active", status: 403 };
+  }
 
   // Required Skills and a hand-picked interviewer list (Settings → Skill
   // Mapping) are independently combinable, not exclusive — when both are

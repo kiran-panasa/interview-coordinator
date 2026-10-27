@@ -116,7 +116,7 @@ export default function TemplatesPage() {
   const openBlank = () => {
     setEditTarget(null);
     const defaultProgram = (activeProgram !== "all" && activeProgram !== "unassigned") ? activeProgram : "";
-    setForm({ name: "", program: defaultProgram, skills: [], domains: [], questionBank: {}, guidelinesDocUrl: "", guidelinesDocLabel: "", durationMinutes: 60 });
+    setForm({ name: "", program: defaultProgram, status: "active", skills: [], domains: [], questionBank: {}, guidelinesDocUrl: "", guidelinesDocLabel: "", durationMinutes: 60 });
     setQbTexts({ theory: "", coding: "", project: "", resume: "" });
     setAssignedQIds([]);
     setShowNewPicker(false);
@@ -335,6 +335,22 @@ export default function TemplatesPage() {
     setToast({ message: "Template deleted." });
   };
 
+  // Student-facing visibility only — see the `status` field's comment in
+  // types.ts. Deliberately a standalone quick-action, not part of the
+  // Edit form's `data` object above: that object never includes `status`
+  // at all, so a routine content edit can never silently flip a paused
+  // template back to active (or vice versa) as a side effect of saving.
+  const statusOf = (t) => t.status || "active";
+  const handleChangeStatus = async (t, status) => {
+    await updateTemplate(t.id, { status });
+    queryClient.invalidateQueries({ queryKey: QK.templates });
+    setToast({
+      message: status === "active"
+        ? `"${t.name}" is active again — visible to students for booking.`
+        : `"${t.name}" is now ${status} — hidden from students. Existing interviews on it are unaffected.`,
+    });
+  };
+
   // ── Derived state ────────────────────────────────────────────────────────────
 
   const sortedDomains  = useMemo(() => [...form.domains].sort((a, b) => a.order - b.order), [form.domains]);
@@ -531,9 +547,12 @@ export default function TemplatesPage() {
               .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
             const isV2 = t.schemaVersion === 2;
             const programName = programs.find(p => p.id === t.program)?.name;
+            const status = statusOf(t);
             return (
               <motion.div key={t.id} variants={fadeUp}
-                className="bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-card transition-shadow p-5 flex flex-col gap-3"
+                className={`bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-card transition-shadow p-5 flex flex-col gap-3 ${
+                  status !== "active" ? "opacity-60" : ""
+                }`}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2">
@@ -544,16 +563,35 @@ export default function TemplatesPage() {
                     { label: "Preview",  onClick: () => setPreviewTarget(t) },
                     { label: "Export",   onClick: () => exportTemplateToExcel(t), highlight: true },
                     { label: "Edit",     onClick: () => openEdit(t) },
+                    { label: "Mark Active",  onClick: () => handleChangeStatus(t, "active"),   show: status !== "active" },
+                    { label: "Save as Draft", onClick: () => handleChangeStatus(t, "draft"),    show: status !== "draft" },
+                    { label: "Archive",      onClick: () => handleChangeStatus(t, "archived"), show: status !== "archived" },
                     { label: "Delete",   onClick: () => handleDelete(t), danger: true },
                   ]} />
                 </div>
 
-                {/* Program badge (only visible on "All" tab) */}
-                {activeProgram === "all" && programName && (
-                  <span className="self-start text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
-                    {programName}
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Program badge (only visible on "All" tab) */}
+                  {activeProgram === "all" && programName && (
+                    <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                      {programName}
+                    </span>
+                  )}
+                  {/* Active has no badge — the normal, unremarkable state;
+                     a status chip on every single card would be noise.
+                     Draft/Archived are the states worth flagging since
+                     they mean "hidden from students right now." */}
+                  {status === "draft" && (
+                    <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      Draft — hidden from students
+                    </span>
+                  )}
+                  {status === "archived" && (
+                    <span className="text-[11px] font-semibold text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">
+                      Archived — hidden from students
+                    </span>
+                  )}
+                </div>
 
                 {/* Domain chips */}
                 {isV2 ? (

@@ -281,6 +281,16 @@ export interface QuestionBank {
 export interface Template {
   id: string;
   name: string;
+  // Lifecycle — controls student-facing visibility only. "active" (or
+  // unset, for every template that existed before this field did) is
+  // bookable and shows in a candidate's Eligible Interviews / Self Book
+  // list; "draft" and "archived" both hide it from students (see me() and
+  // resolveSelfBookTarget in api/sso-handler.js) without touching any
+  // interview already scheduled/completed on it, or admin-side visibility
+  // (Templates page, Nudge, Interviews) — none of that reads this field.
+  // "draft" vs "archived" is purely organizational for admins (still being
+  // built vs retired); both behave identically to students.
+  status?: "active" | "draft" | "archived";
   program?: string;
   domains: Domain[];
   skills?: string[];

@@ -409,6 +409,9 @@ export default function StudentDashboardPage() {
         // shows exactly what was sent. This refresh is just routine data
         // sync, not reconciling a changed range.
         loadDashboard();
+      } else if (json?.error === "template_not_active") {
+        alert("This round isn't currently open for booking. Please refresh the page — it may have been paused since you loaded this dashboard.");
+        loadDashboard();
       } else {
         // Surfaces the actual failure (e.g. template_not_assigned) instead
         // of a generic message that looks identical whether the request
