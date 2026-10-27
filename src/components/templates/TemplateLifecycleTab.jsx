@@ -37,6 +37,7 @@ const STATUS_OPTIONS = [
     when: "Use to retire/pause a template that WAS running — e.g. a round you're temporarily stopping or retiring for good.",
   },
 ];
+const STATUS_BY_VALUE = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, o]));
 
 export default function TemplateLifecycleTab() {
   const queryClient = useQueryClient();
@@ -173,17 +174,17 @@ export default function TemplateLifecycleTab() {
                         : <span className="text-xs text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-50">
-                        {STATUS_OPTIONS.map(o => (
-                          <button key={o.value} type="button" onClick={() => handleChangeStatus(t, o.value)}
-                            title={o.desc}
-                            className={`flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-md transition-colors whitespace-nowrap ${
-                              status === o.value ? `bg-white shadow-sm ${o.text}` : "text-gray-400 hover:text-gray-600"
-                            }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${status === o.value ? o.dot : "bg-gray-300"}`} />
-                            {o.label}
-                          </button>
-                        ))}
+                      <div className="relative inline-flex items-center">
+                        <span className={`w-1.5 h-1.5 rounded-full absolute left-2.5 pointer-events-none ${STATUS_BY_VALUE[status].dot}`} />
+                        <select
+                          value={status}
+                          onChange={e => handleChangeStatus(t, e.target.value)}
+                          title={STATUS_BY_VALUE[status].desc}
+                          className={`text-xs font-semibold border border-gray-200 rounded-lg pl-6 pr-7 py-1.5 bg-white cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand-400 ${STATUS_BY_VALUE[status].text}`}>
+                          {STATUS_OPTIONS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top min-w-[18rem] space-y-1.5">
