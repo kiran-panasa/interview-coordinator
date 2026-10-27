@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
-  query, where, onSnapshot,
+  query, where, onSnapshot, getCountFromServer,
 } from "firebase/firestore";
 import type { AvailabilitySlot, AvailableSlot, BusyWindow } from "../types";
 import { compareTimeLabels, timeToMinutes } from "../utils/dates";
@@ -239,6 +239,22 @@ export async function getBusyWindowsForInterviewers(
   return result;
 }
 
+// Total interviews ever assigned to each interviewer (any status — including
+// cancelled/declined, since the point is "has this person been given a fair
+// share of assignments over time", not "how busy are they right now") — used
+// to break ties when more than one interviewer is free for the same slot, so
+// one panelist doesn't silently absorb every booking just by sorting first.
+// A cheap server-side count, not a doc fetch, since the pool only needs the
+// number.
+async function getInterviewerLoadCounts(interviewerIds: string[]): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  await Promise.all(interviewerIds.map(async id => {
+    const snap = await getCountFromServer(query(collection(db, "interviews"), where("interviewerId", "==", id)));
+    result[id] = snap.data().count;
+  }));
+  return result;
+}
+
 // `interviewerIds`, when given (non-empty), restricts the eligible pool to
 // exactly those interviewers — the explicit "Panelists" selection an admin
 // can make when launching a Nudge campaign (see ScheduleInvite.interviewerIds
@@ -253,6 +269,9 @@ export interface AvailableSlotsResult {
   // Keyed by interviewerId — plain object rather than a Map so this is
   // JSON-serializable for the sessionStorage cache below.
   busyWindowsByInterviewer: Record<string, BusyWindow[]>;
+  // Keyed by interviewerId — total interviews ever assigned, used to break
+  // ties fairly when more than one interviewer is free for the same slot.
+  loadByInterviewer: Record<string, number>;
 }
 
 export async function getAvailableSlots(
@@ -299,7 +318,7 @@ export async function getAvailableSlots(
   ]);
   const interviewerIdList = interviewers.map(ivr => ivr.id);
 
-  const [slotsByInterviewer, busyWindowsByInterviewerMap] = await Promise.all([
+  const [slotsByInterviewer, busyWindowsByInterviewerMap, loadByInterviewer] = await Promise.all([
     Promise.all(interviewers.map(async ivr => {
       const slotsSnap = await getDocs(query(
         collection(db, "availability", ivr.id, "slots"),
@@ -323,6 +342,7 @@ export async function getAvailableSlots(
       return slots;
     })),
     getBusyWindowsForInterviewers(interviewerIdList, dateStart, dateEnd),
+    getInterviewerLoadCounts(interviewerIdList),
   ]);
 
   const result: AvailableSlot[] = slotsByInterviewer.flat();
@@ -331,7 +351,7 @@ export async function getAvailableSlots(
   const busyWindowsByInterviewer: Record<string, BusyWindow[]> = {};
   busyWindowsByInterviewerMap.forEach((windows, id) => { busyWindowsByInterviewer[id] = windows; });
 
-  const data: AvailableSlotsResult = { slots: result, busyWindowsByInterviewer };
+  const data: AvailableSlotsResult = { slots: result, busyWindowsByInterviewer, loadByInterviewer };
   try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); }
   catch { /* sessionStorage full or unavailable */ }
 

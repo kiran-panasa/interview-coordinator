@@ -12,7 +12,7 @@ import Button from "./Button";
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 
-function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
+function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer, loadByInterviewer) {
   const windowStartMin = hhmmToMinutes(invite?.timeRangeStart);
   const windowEndMin   = hhmmToMinutes(invite?.timeRangeEnd);
   const withinTimeWindow = (slot) => {
@@ -21,7 +21,7 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
     return startMin >= windowStartMin && startMin <= windowEndMin;
   };
   const perInterviewer = collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60, busyWindowsByInterviewer);
-  return mergeSlotsAcrossInterviewers(perInterviewer);
+  return mergeSlotsAcrossInterviewers(perInterviewer, loadByInterviewer);
 }
 
 // The same slot-browse-and-book experience as SchedulePage.jsx's "Pick a
@@ -41,6 +41,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   const [refreshing, setRefreshing] = useState(false);
   const [slots, setSlots] = useState([]);
   const [busyWindowsByInterviewer, setBusyWindowsByInterviewer] = useState({});
+  const [loadByInterviewer, setLoadByInterviewer] = useState({});
   const [selectedDate, setSelectedDate] = useState(null);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -97,15 +98,16 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
 
   const fetchSlots = async (forceRefresh = false) => {
     try {
-      const { slots: s, busyWindowsByInterviewer: bw } = await getAvailableSlots(
+      const { slots: s, busyWindowsByInterviewer: bw, loadByInterviewer: load } = await getAvailableSlots(
         invite.dateRangeStart, invite.dateRangeEnd, invite.interviewerIds || null, forceRefresh
       );
       setSlots(s);
       setBusyWindowsByInterviewer(bw);
+      setLoadByInterviewer(load);
       // Only worth emailing admins about once a real invite exists to
       // reference — a virtual (not-yet-created) draft has no id to attach
       // the notification/flag to.
-      if (!forceRefresh && invite.id && computeBookableSlots(invite, s, bw).length === 0) notifyAdminsNoSlotsAvailable(invite);
+      if (!forceRefresh && invite.id && computeBookableSlots(invite, s, bw, load).length === 0) notifyAdminsNoSlotsAvailable(invite);
       return { s, bw };
     } catch {
       setSlots([]);
@@ -186,7 +188,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
     );
   }
 
-  const bookableSlots = computeBookableSlots(invite, slots, busyWindowsByInterviewer);
+  const bookableSlots = computeBookableSlots(invite, slots, busyWindowsByInterviewer, loadByInterviewer);
   const dates = [...new Set(bookableSlots.map(s => s.date))].sort();
   const activeDate = selectedDate && dates.includes(selectedDate) ? selectedDate : dates[0];
 

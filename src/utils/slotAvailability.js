@@ -94,7 +94,15 @@ export function collapseSlotsByDurationGrouped(slots, durationMinutes, busyWindo
 // not the moment the first one is. When still open, the merged slot points
 // at whichever underlying interviewer slot is free, so booking it behaves
 // exactly as if that one interviewer's slot had been picked directly.
-export function mergeSlotsAcrossInterviewers(slots) {
+//
+// Which free interviewer that is, when more than one offers the same time,
+// is decided by loadByInterviewer (interviewerId -> total interviews ever
+// assigned, from getAvailableSlots) — lowest load wins the tie, so whoever
+// has been assigned the fewest interviews gets first claim on a shared slot
+// instead of whichever interviewer happened to sort first. This never
+// overrides real availability — it only breaks ties among interviewers who
+// are already free at that exact time.
+export function mergeSlotsAcrossInterviewers(slots, loadByInterviewer = {}) {
   const byKey = new Map();
   for (const s of slots) {
     const key = `${s.date}|${s.time}`;
@@ -103,8 +111,12 @@ export function mergeSlotsAcrossInterviewers(slots) {
   }
   return [...byKey.values()]
     .map(group => {
-      const open = group.find(s => !s.isBooked);
-      return open ? { ...open } : { ...group[0], isBooked: true };
+      const free = group.filter(s => !s.isBooked);
+      if (!free.length) return { ...group[0], isBooked: true };
+      const least = free.reduce((best, s) =>
+        (loadByInterviewer[s.interviewerId] ?? 0) < (loadByInterviewer[best.interviewerId] ?? 0) ? s : best
+      );
+      return { ...least };
     })
     .sort((a, b) => compareTimeLabels(a.time, b.time));
 }

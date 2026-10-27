@@ -34,7 +34,7 @@ function generateOtp() {
 // scheduled, a confirmed nudge booking, import — any source), used so a
 // start time is only offered when nothing overlaps it for the full
 // duration, not just when its own raw slot doc isn't marked booked.
-function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
+function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer, loadByInterviewer) {
   const windowStartMin = hhmmToMinutes(invite?.timeRangeStart);
   const windowEndMin   = hhmmToMinutes(invite?.timeRangeEnd);
   const withinTimeWindow = (slot) => {
@@ -43,7 +43,7 @@ function computeBookableSlots(invite, rawSlots, busyWindowsByInterviewer) {
     return startMin >= windowStartMin && startMin <= windowEndMin;
   };
   const perInterviewer = collapseSlotsByDurationGrouped(rawSlots.filter(withinTimeWindow), invite?.duration || 60, busyWindowsByInterviewer);
-  return mergeSlotsAcrossInterviewers(perInterviewer);
+  return mergeSlotsAcrossInterviewers(perInterviewer, loadByInterviewer);
 }
 
 
@@ -93,6 +93,7 @@ export default function SchedulePage() {
   const [otpId,      setOtpId]      = useState(null);
   const [slots,      setSlots]      = useState([]);
   const [busyWindowsByInterviewer, setBusyWindowsByInterviewer] = useState({});
+  const [loadByInterviewer, setLoadByInterviewer] = useState({});
   const [selected,   setSelected]   = useState(null);
   const [busy,       setBusy]       = useState(false);
   const [bookedInfo, setBookedInfo] = useState(null);
@@ -166,13 +167,14 @@ export default function SchedulePage() {
   const loadSlots = async (inv) => {
     setStep("loading_slots");
     try {
-      const { slots: s, busyWindowsByInterviewer: bw } = await getAvailableSlots(
+      const { slots: s, busyWindowsByInterviewer: bw, loadByInterviewer: load } = await getAvailableSlots(
         inv.dateRangeStart, inv.dateRangeEnd, inv.interviewerIds || null
       );
       setSlots(s);
       setBusyWindowsByInterviewer(bw);
+      setLoadByInterviewer(load);
       setStep("slots");
-      if (computeBookableSlots(inv, s, bw).length === 0) notifyAdminsNoSlotsAvailable(inv);
+      if (computeBookableSlots(inv, s, bw, load).length === 0) notifyAdminsNoSlotsAvailable(inv);
     } catch (e) {
       console.error(e);
       setStep("slots");
@@ -279,10 +281,11 @@ export default function SchedulePage() {
       if (e.message.includes("already booked") || e.message.includes("already passed")) {
         // Refresh slots (bypassing the cache) so the now-stale one shows as
         // booked/disabled instead of silently failing again on retry.
-        const { slots: fresh, busyWindowsByInterviewer: freshBw } =
+        const { slots: fresh, busyWindowsByInterviewer: freshBw, loadByInterviewer: freshLoad } =
           await getAvailableSlots(invite.dateRangeStart, invite.dateRangeEnd, invite.interviewerIds || null, true);
         setSlots(fresh);
         setBusyWindowsByInterviewer(freshBw);
+        setLoadByInterviewer(freshLoad);
         setSelected(null);
         alert(e.message);
       } else {
@@ -295,7 +298,7 @@ export default function SchedulePage() {
   // Raw 30-min-granularity slots collapsed down to the ones actually
   // bookable for this invite (duration + optional time-window) — see
   // computeBookableSlots above.
-  const bookableSlots = computeBookableSlots(invite, slots, busyWindowsByInterviewer);
+  const bookableSlots = computeBookableSlots(invite, slots, busyWindowsByInterviewer, loadByInterviewer);
 
   // Group slots by date
   const slotsByDate = bookableSlots.reduce((acc, s) => {
