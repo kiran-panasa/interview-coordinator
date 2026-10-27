@@ -500,7 +500,7 @@ function ScoreBanner({ icon: Icon, label, subtitle, value, gradient }) {
     <div className={`bg-gradient-to-r ${gradient} rounded-[1.75rem] p-5 text-white shadow-popover`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
             <Icon className="w-5 h-5" />
           </div>
           <div>
@@ -529,7 +529,7 @@ function IncompleteVerdictBanner({ missingSections }) {
     <div className="bg-gray-100 border border-gray-200 rounded-[1.75rem] p-5 text-gray-700">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center flex-shrink-0">
             <Award className="w-5 h-5 text-gray-400" />
           </div>
           <div>

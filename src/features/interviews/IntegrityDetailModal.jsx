@@ -62,7 +62,7 @@ export default function IntegrityDetailModal({ interview, onClose }) {
             <div className={`bg-gradient-to-r ${bannerGradient(Number(interview.integrityScore))} rounded-[1.75rem] p-5 text-white shadow-popover`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>

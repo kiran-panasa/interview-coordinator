@@ -964,7 +964,7 @@ export default function CandidateSchedulingTab({
             <input
               autoFocus type="text" value={panelistSearch} onChange={e => setPanelistSearch(e.target.value)}
               placeholder="Search interviewers…"
-              className="w-full text-sm border border-gray-200 rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="w-full text-sm border border-gray-200 rounded-full pl-9 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
           <div className="border border-gray-100 rounded-xl max-h-80 overflow-y-auto">

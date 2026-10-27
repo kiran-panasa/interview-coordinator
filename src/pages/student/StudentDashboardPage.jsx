@@ -887,7 +887,7 @@ export default function StudentDashboardPage() {
               <motion.div key="slots" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div className="flex items-start justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
                       <CalendarPlus className="w-5 h-5" />
                     </div>
                     <div>
@@ -1148,7 +1148,7 @@ export default function StudentDashboardPage() {
             {tab === "interviews" && (
               <motion.div key="interviews" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0">
                     <ListChecks className="w-5 h-5" />
                   </div>
                   <h1 className="text-xl font-bold text-gray-900 tracking-tight">My Interviews</h1>
@@ -1389,7 +1389,7 @@ export default function StudentDashboardPage() {
                       return (
                       <Card key={n.id} className={`p-5 border-l-4 border-l-sky-500 ${isRead ? "opacity-60" : ""}`}>
                         <div className="flex items-start gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
+                          <div className="w-9 h-9 rounded-full bg-sky-50 text-sky-600 flex items-center justify-center flex-shrink-0">
                             <Bell className="w-4 h-4" />
                           </div>
                           <div className="min-w-0 flex-1">

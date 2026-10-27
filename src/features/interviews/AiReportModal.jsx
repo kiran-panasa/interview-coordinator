@@ -99,7 +99,7 @@ export default function AiReportModal({ interview, loading, status, onClose, onR
           {/* Header strip */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-50 rounded-xl px-5 py-4 border border-gray-100">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
                 <Sparkles className="w-4 h-4 text-brand-600" />
               </div>
               <div>

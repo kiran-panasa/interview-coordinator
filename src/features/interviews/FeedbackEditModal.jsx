@@ -23,7 +23,7 @@ export default function FeedbackEditModal({
       {feedbackEditModal && (
         <div className="space-y-4">
           <div className="flex items-center gap-2.5 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
-            <div className="w-8 h-8 rounded-lg bg-brand-50 flex items-center justify-center flex-shrink-0">
+            <div className="w-8 h-8 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
               <ClipboardEdit className="w-4 h-4 text-brand-600" />
             </div>
             <div className="text-xs text-gray-500 space-y-0.5">
