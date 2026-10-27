@@ -1336,7 +1336,7 @@ export default function StudentDashboardPage() {
                                       <span title="Final Score"
                                         className="flex items-center gap-1 text-[11px] font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-2.5 py-1 rounded-full">
                                         <Award className="w-3 h-3" />
-                                        {Number(iv.finalScore).toFixed(1)}/5.0
+                                        Final Score: {Number(iv.finalScore).toFixed(1)}/5.0
                                       </span>
                                     )}
                                     {iv.status === "completed" && iv.showAiReport && iv.aiReport && (
