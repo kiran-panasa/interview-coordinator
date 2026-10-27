@@ -247,7 +247,7 @@ export default function NudgeAnalyticsTab({
             </button>
           )}
           <button onClick={handleExport}
-            className="ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
+            className="ml-auto flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors">
             <FileSpreadsheet className="w-3.5 h-3.5" />
             Export{filtered.length !== rows.length ? ` (${filtered.length})` : ""}
           </button>

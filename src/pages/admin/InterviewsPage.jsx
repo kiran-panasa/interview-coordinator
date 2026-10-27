@@ -2035,7 +2035,7 @@ export default function InterviewsPage() {
         <div className="ml-auto flex items-center gap-2">
           <button onClick={handleBulkGenerateAiReports} disabled={bulkAiGenerating}
             title="Generates reports with Claude for completed interviews from the last 14 days that are missing one — useful when Gemini's own daily quota runs out"
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-violet-200 text-violet-700 bg-violet-50 hover:bg-violet-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
             {bulkAiGenerating
               ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
               : <Sparkles className="w-3.5 h-3.5" />}
@@ -2044,13 +2044,13 @@ export default function InterviewsPage() {
               : "Generate Missing AI Reports"}
           </button>
           <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
-            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
             {downloadingFeedback ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
             {downloadingFeedback ? "Fetching recording/transcript/AI report links…" : `Download Feedback${filtered.length !== workingSet.length ? ` (${filtered.length})` : ""}`}
           </button>
           <button
             onClick={() => { setShowArchived(s => !s); setIvrPage(1); }}
-            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border transition-colors ${
               showArchived
                 ? "bg-amber-50 text-amber-700 border-amber-200 font-semibold"
                 : "text-gray-500 border-gray-200 hover:bg-gray-50"

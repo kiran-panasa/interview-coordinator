@@ -303,7 +303,7 @@ export default function InterviewerStatsPage() {
           </div>
           {view === "stats" && (
             <button onClick={() => exportInterviewerStats(interviewerStats, totals)} disabled={interviewerStats.length === 0}
-              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
               <Download className="w-3.5 h-3.5" /> Download
             </button>
           )}
