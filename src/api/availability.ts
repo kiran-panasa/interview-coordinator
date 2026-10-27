@@ -163,7 +163,7 @@ export async function getSlotsForInterviewers(
 // Statuses that mean the interviewer is NOT genuinely committed to this
 // time anymore — everything else (including pending_acceptance: they've
 // been assigned it and haven't yet said no) still counts as busy.
-const BUSY_EXCLUDED_STATUSES = new Set(["cancelled", "declined"]);
+export const BUSY_EXCLUDED_STATUSES = new Set(["cancelled", "declined"]);
 
 // The authoritative "is this interviewer actually busy then" signal — built
 // fresh from their real interviews every time it's read, rather than a flag

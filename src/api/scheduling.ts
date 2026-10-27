@@ -3,10 +3,10 @@ import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
-import type { ScheduleInvite, OtpVerification, InviteHistoryEntry } from "../types";
-import { parseInterviewStart, timeToMinutes } from "../utils/dates";
+import type { ScheduleInvite, OtpVerification, InviteHistoryEntry, Interview } from "../types";
+import { parseInterviewStart, timeToMinutes, addMinutesToTimeLabel } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
-import { freeSlotsHeldByInvite } from "./availability";
+import { freeSlotsHeldByInvite, BUSY_EXCLUDED_STATUSES } from "./availability";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
 // ── Schedule Invites ──────────────────────────────────────────────────────────
@@ -192,6 +192,65 @@ export async function bookSlotForCandidate(
   const slotRef    = doc(db, "availability", interviewerId, "slots", slotId);
   const inviteRef  = doc(db, "scheduleInvites", inviteId);
   const historyRef = doc(collection(db, "scheduleInvites", inviteId, "history"));
+
+  // A candidate can have several templates in flight at once, each booked
+  // independently — nothing earlier in the flow stops them from picking a
+  // second template's slot that overlaps a first one they already hold
+  // (e.g. a 90-min 9:00-10:30 booking, then picking 10:00 for another
+  // template). This works exactly like double-booking protection in a real
+  // calendar app: look across every OTHER active booking this same
+  // candidate holds for this same date — both their own still-pending
+  // self-book invites and their already-confirmed interviews — and refuse
+  // the new one if its time span overlaps any of them, regardless of
+  // template. Looked up outside the transaction (Firestore transactions
+  // can only get() known refs, not run queries), same caveat as the
+  // slot-span lookup below — a true simultaneous double-click race isn't
+  // closed by this, but that's not the scenario being guarded against here.
+  const inviteSnap = await getDoc(inviteRef);
+  if (!inviteSnap.exists()) throw new Error("This booking link is no longer valid.");
+  const inviteData = inviteSnap.data() as ScheduleInvite;
+  const newStartMin = timeToMinutes(bookedTime);
+  const newEndMin   = newStartMin + durationMinutes;
+
+  if (inviteData.candidateEmail) {
+    // Single-equality queries (candidateEmail only), filtered client-side —
+    // same defensive shape as getInterviewerBusyWindows' fallback, since
+    // (candidateEmail + status + bookedDate) / (candidateEmail +
+    // scheduledDate) aren't in firestore.indexes.json and this must never
+    // hard-fail a booking because a composite index wasn't deployed. A
+    // candidate's own invite/interview count is small, so fetching their
+    // full history and filtering here is cheap.
+    const [otherInvitesSnap, otherInterviewsSnap] = await Promise.all([
+      getDocs(query(collection(db, "scheduleInvites"), where("candidateEmail", "==", inviteData.candidateEmail))),
+      getDocs(query(collection(db, "interviews"), where("candidateEmail", "==", inviteData.candidateEmail))),
+    ]);
+
+    const conflicts: { round: string; time: string; duration: number }[] = [];
+    otherInvitesSnap.docs.forEach(d => {
+      if (d.id === inviteId) return;
+      const other = d.data() as ScheduleInvite;
+      if (other.status !== "pending_confirmation" || other.bookedDate !== bookedDate || !other.bookedTime) return;
+      conflicts.push({ round: other.round || other.templateName || "another interview", time: other.bookedTime, duration: other.duration || 60 });
+    });
+    otherInterviewsSnap.docs.forEach(d => {
+      const other = d.data() as Interview;
+      if (other.scheduledDate !== bookedDate || !other.scheduledTime) return;
+      if (BUSY_EXCLUDED_STATUSES.has(other.status)) return;
+      conflicts.push({ round: other.templateName || other.round || "another interview", time: other.scheduledTime, duration: other.duration || 60 });
+    });
+
+    const overlap = conflicts.find(c => {
+      const otherStart = timeToMinutes(c.time);
+      const otherEnd = otherStart + c.duration;
+      return newStartMin < otherEnd && newEndMin > otherStart;
+    });
+    if (overlap) {
+      const overlapEnd = addMinutesToTimeLabel(overlap.time, overlap.duration);
+      throw new Error(
+        `Nice try, but you can't be in two interviews at once — you're already booked for ${overlap.round} on ${bookedDate} from ${overlap.time} to ${overlapEnd}. Please pick a time that doesn't overlap.`
+      );
+    }
+  }
 
   // Longer interviews span more than one raw slot doc — e.g. a 90-minute
   // booking at 3:00 PM also occupies whatever's submitted at 3:30/4:00. The
