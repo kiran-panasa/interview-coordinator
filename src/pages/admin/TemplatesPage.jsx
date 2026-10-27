@@ -445,12 +445,12 @@ export default function TemplatesPage() {
         {pageView === "templates" && (
           <div className="flex items-center gap-2">
             <button onClick={handleSyncTemplateNames} disabled={syncingNames || templates.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-300 text-brand-700 text-xs font-semibold rounded-xl hover:bg-brand-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-300 text-brand-700 text-xs font-semibold rounded-full hover:bg-brand-50 disabled:opacity-40 transition-colors">
               <RefreshCw className={`w-3.5 h-3.5 ${syncingNames ? "animate-spin" : ""}`} />
               {syncingNames ? "Syncing…" : "Sync Template Names"}
             </button>
             <button onClick={handleMigrateDomainIds} disabled={migrating || templates.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold rounded-xl hover:bg-amber-50 disabled:opacity-40 transition-colors">
+              className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 text-amber-700 text-xs font-semibold rounded-full hover:bg-amber-50 disabled:opacity-40 transition-colors">
               <RefreshCw className={`w-3.5 h-3.5 ${migrating ? "animate-spin" : ""}`} />
               {migrating ? "Migrating…" : "Sync Domain IDs"}
             </button>
