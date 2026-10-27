@@ -1248,7 +1248,7 @@ export default function CandidateSchedulingTab({
                           onClick={() => handleCopyLink(inv)}
                           disabled={!inv.inviteToken}
                           title="Copy scheduling link"
-                          className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border transition-colors disabled:opacity-40 ${
+                          className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors disabled:opacity-40 ${
                             copiedId === inv.id
                               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                               : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"

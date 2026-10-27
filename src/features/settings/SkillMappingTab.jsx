@@ -165,7 +165,7 @@ export default function SkillMappingTab() {
                   <td className="px-4 py-3 align-top min-w-[20rem] space-y-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <button type="button" onClick={() => resetToAll(t)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap ${
                           isAllInterviewers(t)
                             ? "bg-gray-800 text-white border-gray-800"
                             : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
@@ -173,7 +173,7 @@ export default function SkillMappingTab() {
                         All Interviewers
                       </button>
                       <button type="button" onClick={() => toggleSkills(t)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap ${
                           skillsOn(t)
                             ? "bg-brand-50 text-brand-700 border-brand-300"
                             : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"
@@ -181,7 +181,7 @@ export default function SkillMappingTab() {
                         Specific Skills
                       </button>
                       <button type="button" onClick={() => toggleInterviewers(t)}
-                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition-colors whitespace-nowrap ${
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border transition-colors whitespace-nowrap ${
                           interviewersOn(t)
                             ? "bg-violet-50 text-violet-700 border-violet-300"
                             : "bg-white text-gray-500 border-gray-200 hover:border-gray-300"

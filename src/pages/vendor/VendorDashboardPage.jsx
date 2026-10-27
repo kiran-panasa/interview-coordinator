@@ -496,12 +496,12 @@ export default function VendorDashboardPage() {
                               <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
                                 {byDate.map(g => (
                                   <div key={g.date}>
-                                    <p className="inline-block text-xs font-bold text-orange-800 bg-orange-50 border border-orange-200 rounded-lg px-2.5 py-1 uppercase tracking-wide mb-2">{formatDateLong(g.date)}</p>
+                                    <p className="inline-block text-xs font-bold text-orange-800 bg-orange-50 border border-orange-200 rounded-full px-2.5 py-1 uppercase tracking-wide mb-2">{formatDateLong(g.date)}</p>
                                     <div className="flex flex-wrap gap-1.5">
                                       {g.slots.map(s => (
                                         <span key={s.id}
                                           title={s.isBooked ? "Already booked" : "Open"}
-                                          className={`text-[11px] font-semibold px-2 py-1 rounded-lg border ${
+                                          className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${
                                             s.isBooked ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200"
                                           }`}>
                                           {s.time}
