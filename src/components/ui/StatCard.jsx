@@ -5,7 +5,7 @@ export default function StatCard({ label, value, color, icon: Icon, iconBg = "bg
     <motion.div
       whileHover={{ y: -2 }}
       transition={{ duration: 0.15 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-soft hover:shadow-card p-5 transition-shadow"
+      className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft hover:shadow-card p-5 transition-shadow"
     >
       <div className="flex items-start justify-between">
         <div>
@@ -13,7 +13,7 @@ export default function StatCard({ label, value, color, icon: Icon, iconBg = "bg
           <p className={`text-3xl font-bold mt-1.5 tracking-tight ${color}`}>{value}</p>
         </div>
         {Icon && (
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+          <div className={`w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 ${iconBg}`}>
             <Icon className={`w-5 h-5 ${color}`} strokeWidth={2} />
           </div>
         )}

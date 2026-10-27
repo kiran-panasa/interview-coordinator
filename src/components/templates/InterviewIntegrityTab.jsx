@@ -59,7 +59,7 @@ export default function InterviewIntegrityTab() {
           — the same scale as the Final Interview Verdict.
         </p>
 
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
           <FieldListEditor
             fields={fields}
             onChange={setFields}

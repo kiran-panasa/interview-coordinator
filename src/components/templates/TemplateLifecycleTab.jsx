@@ -157,7 +157,7 @@ export default function TemplateLifecycleTab() {
         </select>
       </div>
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+      <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
         {isLoading ? (
           <div className="p-4 space-y-3">
             {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}

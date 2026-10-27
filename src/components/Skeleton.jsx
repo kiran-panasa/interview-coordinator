@@ -6,7 +6,7 @@ export function SkeletonStatCards({ count = 4 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5 space-y-3">
+        <div key={i} className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 space-y-3">
           <Skeleton className="w-9 h-9 rounded-xl" />
           <Skeleton className="h-6 w-16" />
           <Skeleton className="h-3 w-24" />

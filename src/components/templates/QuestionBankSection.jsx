@@ -20,7 +20,7 @@ export default function QuestionBankSection({ bankKey, label, placeholder, note,
   };
 
   return (
-    <div className="rounded-2xl border border-gray-100 shadow-soft overflow-hidden bg-white">
+    <div className="rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden bg-white">
       <div className="flex items-center justify-between bg-gray-50 px-4 py-2.5 border-b border-gray-100">
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">{label}</span>

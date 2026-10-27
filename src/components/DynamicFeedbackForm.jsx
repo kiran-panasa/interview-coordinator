@@ -300,7 +300,7 @@ function CardBlock({ domain, index, cardData, onChange, onDelete, disabled, ques
   const cardRating = computeCardRating(domain.cardFields, cardData);
 
   return (
-    <div className="border border-gray-200 rounded-2xl overflow-hidden">
+    <div className="border border-gray-200 rounded-[1.75rem] overflow-hidden">
       <div
         className={cls(
           "flex items-center justify-between px-4 py-3 cursor-pointer select-none transition-colors",
@@ -404,7 +404,7 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
   const cards = domainData?.cards || [];
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+    <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
       <div
         className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-brand-50 to-white border-b border-gray-100 cursor-pointer select-none"
         onClick={() => setOpen(o => !o)}
@@ -497,7 +497,7 @@ const DomainSection = memo(function DomainSection({ domain, domainData, onChange
 function ScoreBanner({ icon: Icon, label, subtitle, value, gradient }) {
   if (value == null) return null;
   return (
-    <div className={`bg-gradient-to-r ${gradient} rounded-2xl p-5 text-white shadow-popover`}>
+    <div className={`bg-gradient-to-r ${gradient} rounded-[1.75rem] p-5 text-white shadow-popover`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
@@ -526,7 +526,7 @@ function VerdictBanner({ value }) {
 function IncompleteVerdictBanner({ missingSections }) {
   const missing = (missingSections || []).join(", ");
   return (
-    <div className="bg-gray-100 border border-gray-200 rounded-2xl p-5 text-gray-700">
+    <div className="bg-gray-100 border border-gray-200 rounded-[1.75rem] p-5 text-gray-700">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center flex-shrink-0">
@@ -740,13 +740,13 @@ export function DynamicFeedbackDisplay({ template, feedbackData }) {
         />
       ))}
       {feedbackData.comments && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-soft p-5">
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Overall Notes</p>
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedbackData.comments}</p>
         </div>
       )}
       {feedbackData.overallRecommendation && (
-        <div className="bg-brand-50 rounded-2xl border border-brand-100 px-5 py-4 flex items-center gap-3">
+        <div className="bg-brand-50 rounded-[1.75rem] border border-brand-100 px-5 py-4 flex items-center gap-3">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Overall Recommendation</p>
           <span className="text-sm font-bold text-brand-700">{feedbackData.overallRecommendation}</span>
         </div>

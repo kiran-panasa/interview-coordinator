@@ -230,7 +230,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
           const isActive = d === activeDate;
           return (
             <button key={d} onClick={() => { setSelectedDate(d); setSelected(null); }}
-              className={`flex-shrink-0 flex flex-col items-center justify-center w-16 py-2.5 rounded-2xl border-2 transition-all ${
+              className={`flex-shrink-0 flex flex-col items-center justify-center w-16 py-2.5 rounded-[1.75rem] border-2 transition-all ${
                 isActive ? "bg-violet-600 border-violet-600 text-white shadow-md" : "bg-white border-gray-100 text-gray-600 hover:border-violet-300"
               }`}>
               <span className={`text-[10px] font-semibold uppercase tracking-wide ${isActive ? "text-white/80" : "text-gray-400"}`}>{dayLabel}</span>

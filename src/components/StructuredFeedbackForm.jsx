@@ -14,7 +14,7 @@ import Button from "./Button";
 function Section({ title, badge, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-soft overflow-hidden">
+    <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
       <button type="button" onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors">
         <div className="flex items-center gap-2">
