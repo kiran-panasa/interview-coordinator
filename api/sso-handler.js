@@ -34,6 +34,25 @@ function isPastGrace(invite) {
   return !!invite.expiresAt && new Date(invite.expiresAt).getTime() + BOOKING_GRACE_MS < Date.now();
 }
 
+// A per-candidate exception to a template's own attempt cap (set on
+// Candidates → kebab → "Manage Attempts"), for the rare case where one
+// specific candidate genuinely needs a different limit than everyone else
+// on that template — an escalated extra attempt, or none at all — without
+// touching the template's own setting. candidate.attemptOverrides is a
+// map of templateId -> override:
+//   - no entry at all        -> use the template's own maxAttempts
+//   - 0                      -> unlimited for THIS candidate regardless
+//                                of what the template says
+//   - a positive integer     -> THIS candidate's personal cap for that
+//                                template, replacing the template's own
+// Returns null for "no cap" either way, otherwise the number to compare
+// attemptsUsed against.
+function effectiveMaxAttempts(templateMaxAttempts, override) {
+  if (override === 0) return null;
+  if (typeof override === "number" && override > 0) return override;
+  return templateMaxAttempts ?? null;
+}
+
 export default async function handler(req, res) {
   const route = String(req.query.route || "");
 
@@ -378,10 +397,16 @@ async function me(req, res) {
     }
   });
   const templatesWithAttempts = templates.map(t => {
+    const effectiveMax = effectiveMaxAttempts(t.maxAttempts, candidate.attemptOverrides?.[t.id]);
     const attemptsUsed = completedCountByTemplateId[t.id] || 0;
-    const limitReached = t.maxAttempts != null && attemptsUsed >= t.maxAttempts;
+    const limitReached = effectiveMax != null && attemptsUsed >= effectiveMax;
     return {
       ...t, attemptsUsed,
+      // Overwritten with the candidate-specific EFFECTIVE cap (override
+      // already applied) — the dashboard only ever needs "how many am I
+      // allowed," not the template's raw default vs. this candidate's
+      // override as two separate numbers.
+      maxAttempts: effectiveMax,
       limitReached,
       attemptLimitMessage: limitReached ? (t.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE) : "",
     };
@@ -545,17 +570,18 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   // should still be refused rather than let through.
   const capSnap = await db.collection("interviewTemplates").doc(templateId).get();
   const capTemplate = capSnap.exists ? capSnap.data() : null;
-  if (capTemplate?.maxAttempts != null) {
+  const capEffectiveMax = effectiveMaxAttempts(capTemplate?.maxAttempts, candidate.attemptOverrides?.[templateId]);
+  if (capEffectiveMax != null) {
     const completedSnap = await db.collection("interviews")
       .where("candidateId", "==", session.candidateId)
       .where("templateId", "==", templateId)
       .where("status", "==", "completed")
       .get();
-    if (completedSnap.size >= capTemplate.maxAttempts) {
+    if (completedSnap.size >= capEffectiveMax) {
       return {
         error: "attempt_limit_reached",
         status: 403,
-        message: capTemplate.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE,
+        message: capTemplate?.attemptLimitMessage || DEFAULT_ATTEMPT_LIMIT_MESSAGE,
       };
     }
   }

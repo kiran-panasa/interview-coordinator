@@ -115,6 +115,12 @@ export interface Candidate {
   nudgeStatus?: "pending_nudge" | "nudged";
   archived?: boolean;
   archivedAt?: string | null;
+  // Per-candidate exceptions to a template's own attempt cap (Candidates →
+  // kebab → "Manage Attempts") — map of templateId -> override. No entry
+  // means "use the template's own maxAttempts"; 0 means unlimited for just
+  // this candidate; a positive integer replaces the template's cap with
+  // this candidate's own. See effectiveMaxAttempts in api/sso-handler.js.
+  attemptOverrides?: Record<string, number>;
   createdAt: string;
   createdBy?: string;
 }

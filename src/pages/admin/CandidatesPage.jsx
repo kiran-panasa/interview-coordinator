@@ -16,6 +16,7 @@ import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { SkeletonRows } from "../../components/Skeleton";
 import { usePagination } from "../../hooks/usePagination";
+import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -140,6 +141,7 @@ export default function CandidatesPage() {
   const [saving,     setSaving]     = useState(false);
   const [toast,      setToast]      = useState(null);
   const [showCSV,    setShowCSV]    = useState(false);
+  const [attemptsTarget, setAttemptsTarget] = useState(null);
 
   // The default view only ever reads a handful of "fresh" candidates per
   // Program (see the pageItems state below) instead of the whole
@@ -705,6 +707,7 @@ export default function CandidatesPage() {
                   <td className="px-4 py-3 w-12">
                     <KebabMenu actions={[
                       { label: "Edit",   onClick: () => openEdit(c), show: !showArchived },
+                      { label: "Manage Attempts", onClick: () => setAttemptsTarget(c), show: (c.templateIds || []).length > 0 },
                       ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
                       { label: "Archive",   onClick: () => handleArchive(c),   show: c.archived !== true },
                       { label: "Unarchive", onClick: () => handleUnarchive(c), show: c.archived === true },
@@ -978,6 +981,12 @@ export default function CandidatesPage() {
           </div>
         </div>
       </Modal>
+
+      <AttemptOverridesModal
+        candidate={attemptsTarget}
+        templates={templates}
+        onClose={() => setAttemptsTarget(null)}
+      />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
     </div>

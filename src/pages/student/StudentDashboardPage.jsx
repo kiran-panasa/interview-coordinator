@@ -946,6 +946,17 @@ export default function StudentDashboardPage() {
                                   )}
                                 </div>
                                 <p className="text-xs text-gray-400">{t.durationMinutes} minutes</p>
+                                {/* Visible before the limit is actually hit,
+                                   not just once it's blocked — so reaching
+                                   it doesn't come as a surprise after
+                                   someone's already on their last try. */}
+                                {!t.limitReached && t.maxAttempts != null && (
+                                  <p className={`text-[11px] font-semibold mt-0.5 ${
+                                    t.attemptsUsed >= t.maxAttempts - 1 ? "text-amber-600" : "text-gray-400"
+                                  }`}>
+                                    {t.attemptsUsed} of {t.maxAttempts} attempt{t.maxAttempts === 1 ? "" : "s"} used
+                                  </p>
+                                )}
                               </div>
                             </div>
                             {t.limitReached ? (
