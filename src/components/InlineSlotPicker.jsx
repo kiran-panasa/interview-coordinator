@@ -9,6 +9,7 @@ import { callAppsScript } from "../lib/appsScript";
 import { collapseSlotsByDurationGrouped, mergeSlotsAcrossInterviewers } from "../utils/slotAvailability";
 import { resolveActionAdminRecipients } from "../utils/adminNotify";
 import { confirmSelfBooking } from "../services/booking.service";
+import SelfBookCutoffBanner from "./SelfBookCutoffBanner";
 import Button from "./Button";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -250,6 +251,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   if (dates.length === 0) {
     return (
       <div className="space-y-3">
+        <SelfBookCutoffBanner compact />
         <p className="text-sm text-gray-400 py-4 text-center">No slots available right now — please check back later.</p>
         <button onClick={handleRefresh} disabled={refreshing}
           className="flex items-center justify-center gap-1.5 w-full text-xs font-semibold text-brand-600 hover:text-brand-700 py-2 transition-colors">
@@ -263,6 +265,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
 
   return (
     <div className="space-y-4">
+      <SelfBookCutoffBanner compact />
       <div className="flex items-center justify-between">
         <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Pick a date</p>
         <button onClick={handleRefresh} disabled={refreshing}

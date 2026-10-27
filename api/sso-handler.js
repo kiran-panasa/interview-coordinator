@@ -5,6 +5,7 @@ import { setSessionCookies, clearSessionCookies, getValidSession, requireCsrf } 
 import { sendWhatsAppOtp } from "./_lib/whatsapp.js";
 import { sendSmsOtp } from "./_lib/sms.js";
 import { DEFAULT_ATTEMPT_LIMIT_MESSAGE, DEFAULT_HIDDEN_SCORE_MESSAGE } from "../src/constants/templateAttempts.js";
+import { computeSelfBookWindow, DEFAULT_SELF_BOOK_CUTOFF_TIME } from "../src/utils/selfBookWindow.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
 // plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
@@ -629,6 +630,16 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     return { error: "template_not_assigned", status: 403 };
   }
 
+  // Same-day booking is never allowed; the cutoff time (Settings -> General
+  // -> Self-Book Window, default 5:30 PM IST) decides whether tomorrow is
+  // still open (before it) or closed too (at/after it) — see
+  // computeSelfBookWindow. Enforced here, not just in the client's
+  // countdown banner, since that's only ever a courtesy — a stale page
+  // open past the cutoff must not still be able to book tomorrow.
+  const cutoffSnap = await db.collection("settings").doc("selfBookCutoff").get();
+  const cutoffTime = cutoffSnap.exists ? (cutoffSnap.data().cutoffTime || DEFAULT_SELF_BOOK_CUTOFF_TIME) : DEFAULT_SELF_BOOK_CUTOFF_TIME;
+  const { earliestDate } = computeSelfBookWindow(new Date(), cutoffTime);
+
   // Defense in depth for the attempt-cap check /me already annotates onto
   // the templates list (limitReached) — covers "they had the dashboard
   // open before the limit was reached/lowered" and the public
@@ -673,11 +684,10 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     // silently show a different (wrong) window than what was actually
     // sent. Instead, return a copy with an EFFECTIVE range computed
     // on the fly (never persisted) for the picker to use.
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const minEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const minEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const effective = {
       ...existing,
-      dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < todayStr) ? todayStr : existing.dateRangeStart,
+      dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < earliestDate) ? earliestDate : existing.dateRangeStart,
       dateRangeEnd: (!existing.dateRangeEnd || existing.dateRangeEnd < minEnd) ? minEnd : existing.dateRangeEnd,
     };
     // Reschedule flow, reusing a pre-existing invite for this template
@@ -727,9 +737,8 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   } else {
     matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
   }
-  const now = new Date();
-  const dateRangeStart = now.toISOString().slice(0, 10);
-  const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const dateRangeStart = earliestDate;
+  const endDate = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + 7 * 24 * 60 * 60 * 1000);
   const dateRangeEnd = endDate.toISOString().slice(0, 10);
   const expiresAt = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
 

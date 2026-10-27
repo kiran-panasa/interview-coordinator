@@ -197,6 +197,18 @@ export interface NudgeReminderSettings {
   updatedBy?: string;
 }
 
+// Self-book/reschedule booking window — same-day booking is never allowed
+// (enforced unconditionally, not configurable); cutoffTime decides whether
+// tomorrow is still bookable (before it) or closed (at/after it), pushing
+// the earliest bookable day to the day after instead. See
+// src/utils/selfBookWindow.js (computeSelfBookWindow) for the actual
+// date math, shared between client and api/sso-handler.js.
+export interface SelfBookCutoffSettings {
+  cutoffTime: string; // "HH:mm", 24-hour, Asia/Kolkata
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 export interface InviteHistoryEntry {
   id: string;
   status: string;

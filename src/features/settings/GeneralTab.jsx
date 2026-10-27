@@ -1,7 +1,11 @@
 import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing, Building2, Users } from "lucide-react";
-import { subscribeToNudgeReminderSettings, updateNudgeReminderSettings, updateProgram } from "../../api/firestore";
+import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing, Building2, Users, CalendarClock } from "lucide-react";
+import {
+  subscribeToNudgeReminderSettings, updateNudgeReminderSettings,
+  subscribeToSelfBookCutoffSettings, updateSelfBookCutoffSettings,
+  updateProgram,
+} from "../../api/firestore";
 import { useTemplates } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import Button from "../../components/Button";
@@ -70,6 +74,29 @@ export default function GeneralTab({
     }
   };
 
+  const [cutoffSettings, setCutoffSettings] = useState(null);
+  const [cutoffForm,     setCutoffForm]     = useState(null);
+  const [cutoffSaving,   setCutoffSaving]   = useState(false);
+  const [cutoffSaved,    setCutoffSaved]    = useState(false);
+
+  useEffect(() => subscribeToSelfBookCutoffSettings(s => {
+    setCutoffSettings(s);
+    setCutoffForm(f => f || s);
+  }), []);
+
+  const cutoffDirty = cutoffForm && cutoffSettings && cutoffForm.cutoffTime !== cutoffSettings.cutoffTime;
+
+  const handleSaveCutoffSettings = async () => {
+    setCutoffSaving(true);
+    try {
+      await updateSelfBookCutoffSettings(cutoffForm, currentUser.uid);
+      setCutoffSaved(true);
+      setTimeout(() => setCutoffSaved(false), 2000);
+    } finally {
+      setCutoffSaving(false);
+    }
+  };
+
   return (
     <div>
       {/* Nudge Reminders */}
@@ -112,6 +139,41 @@ export default function GeneralTab({
               {reminderSaving ? "Saving…" : "Save"}
             </Button>
             {reminderSaved && <span className="text-xs font-semibold text-emerald-600">Saved.</span>}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Self-Book Window */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="mb-8"
+      >
+        <SectionTitle icon={CalendarClock} label="Self-Book Window" />
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
+          <p className="text-xs text-gray-400 mb-4">
+            Candidates can never book an interview for today — earliest is always tomorrow. This cutoff time decides
+            how long that stays true: booked before the cutoff, tomorrow is open; booked at/after it, tomorrow closes
+            too and the earliest becomes the day after — giving your team the rest of the day to prepare (e.g.
+            granting co-host access) before anyone's working hours end. Applies to both new self-book and
+            Request Reschedule.
+          </p>
+          {!cutoffForm ? (
+            <p className="text-xs text-gray-400">Loading…</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Cutoff time (IST)</label>
+                <input type="time" value={cutoffForm.cutoffTime}
+                  onChange={e => setCutoffForm(f => ({ ...f, cutoffTime: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-3 mt-4">
+            <Button variant="primary" size="sm" onClick={handleSaveCutoffSettings} disabled={!cutoffDirty || cutoffSaving}>
+              {cutoffSaving ? "Saving…" : "Save"}
+            </Button>
+            {cutoffSaved && <span className="text-xs font-semibold text-emerald-600">Saved.</span>}
           </div>
         </div>
       </motion.div>

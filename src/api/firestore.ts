@@ -14,6 +14,7 @@ export * from "./notifications";
 export * from "./scheduling";
 export * from "./blockedDates";
 export * from "./nudgeSettings";
+export * from "./selfBookSettings";
 export * from "./preInterviewResources";
 export * from "./interviewIntegrity";
 export * from "./inboundRequests";

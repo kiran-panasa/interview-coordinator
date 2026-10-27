@@ -14,6 +14,7 @@ import { ordinalLabel } from "../../utils/strings";
 import { getPreInterviewResources } from "../../api/firestore";
 import { cancelInterviewByCandidate } from "../../services/booking.service";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
+import SelfBookCutoffBanner from "../../components/SelfBookCutoffBanner";
 import AiReportModal from "../../features/interviews/AiReportModal";
 import IntegrityDetailModal from "../../features/interviews/IntegrityDetailModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
@@ -928,6 +929,8 @@ export default function StudentDashboardPage() {
                     </div>
                   </div>
                 </div>
+
+                <SelfBookCutoffBanner />
 
                 {/* Every assigned template not already in progress, shown as
                    its own clickable box — a direct click goes straight to
