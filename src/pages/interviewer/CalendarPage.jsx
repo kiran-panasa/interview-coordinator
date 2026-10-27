@@ -47,6 +47,17 @@ const STATUS_BLOCK = {
   declined:            "bg-red-400",
   no_show:             "bg-orange-400",
 };
+// What STATUS_DOT/STATUS_BLOCK's colors actually mean — shown as a legend
+// so the color coding isn't something you have to guess or memorize.
+const LEGEND = [
+  { status: "scheduled",           label: "Scheduled" },
+  { status: "completed",           label: "Completed" },
+  { status: "pending_acceptance",  label: "Pending Acceptance" },
+  { status: "partially_completed", label: "Partially Completed" },
+  { status: "cancelled",           label: "Cancelled" },
+  { status: "declined",            label: "Declined" },
+  { status: "no_show",             label: "No Show" },
+];
 
 function toIso(y, m, d) {
   return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -160,6 +171,15 @@ export default function CalendarPage() {
             </button>
           </div>
         </div>
+      </motion.div>
+
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="flex items-center gap-x-4 gap-y-1.5 flex-wrap mb-5">
+        {LEGEND.map(l => (
+          <span key={l.status} className="flex items-center gap-1.5 text-xs text-gray-500">
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[l.status]}`} />
+            {l.label}
+          </span>
+        ))}
       </motion.div>
 
       {view === "month" ? (
