@@ -542,12 +542,21 @@ export async function scheduleInterviewMeet(interviewId: string): Promise<Schedu
     meetLink = await fetchMeetLinkForEvent(interviewId, result.eventId);
   }
 
+  // Persisted here, not just returned — every caller (self-book's
+  // auto-confirm, admin's manual confirm/resend, interviewer Accept) used
+  // to only console.error this, so an admin had no way to ever discover a
+  // co-host grant failed unless they happened to be watching the browser
+  // console at that exact moment. Now it's trackable from the Interviews
+  // page itself (see the "Meet" column's warning badge) for someone to go
+  // grant co-host access by hand in the Calendar event — cleared on the
+  // next successful schedule/resend in case a retry fixes it.
   await updateDoc(ref, {
     meetLink,
     eventId: result.eventId || "",
     recallBotId: result.recallBotId || "",
     inviteSentAt: new Date().toISOString(),
     scheduleStartedAt: deleteField(),
+    hostManagementWarning: result.hostManagementWarning || deleteField(),
     updatedAt: new Date().toISOString(),
   });
   if (meetLink) await sendInviteConfirmationEmails(iv, meetLink);

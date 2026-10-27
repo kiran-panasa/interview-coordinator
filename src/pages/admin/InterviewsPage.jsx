@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import {
-  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles, CalendarPlus,
+  Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles, CalendarPlus, AlertTriangle,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -2120,6 +2120,12 @@ export default function InterviewsPage() {
                         Join Meet
                       </a>
                       <CopyButton value={iv.meetLink} />
+                      {iv.hostManagementWarning && (
+                        <AlertTriangle
+                          className="w-3.5 h-3.5 text-amber-500 flex-shrink-0"
+                          title={`Couldn't grant the interviewer co-host access automatically — grant it by hand in the Calendar event. (${iv.hostManagementWarning})`}
+                        />
+                      )}
                     </div>
                   ) : iv.eventId ? (
                     <button

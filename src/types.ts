@@ -565,6 +565,11 @@ export interface Interview {
   feedbackDraft?: (Record<string, unknown> & { savedAt: string }) | null;
   meetLink?: string;
   eventId?: string;
+  // Set whenever scheduleInterviewMeet's Apps Script call reports it
+  // couldn't grant the interviewer co-host/host-management access on the
+  // Calendar event — surfaced on the Interviews page's Meet column so an
+  // admin can go grant it by hand, since nothing retries this automatically.
+  hostManagementWarning?: string;
   transcriptUrl?: string;
   meetingRecordingUrl?: string;
   recallBotId?: string;

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Loader2, CalendarCheck2, RefreshCw } from "lucide-react";
+import { motion } from "framer-motion";
+import { Loader2, RefreshCw, PartyPopper, Copy, Check } from "lucide-react";
 import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel } from "../utils/dates";
 import {
   updateScheduleInvite, getAvailableSlots, bookSlotForCandidate, getActiveAdmins,
@@ -47,6 +48,15 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [booked, setBooked] = useState(null);
+  const [meetCopied, setMeetCopied] = useState(false);
+
+  const PEP_LINES = [
+    "Prepare well — you've got this!",
+    "Go get it. All the best!",
+    "Show them what you're made of — good luck!",
+    "You're one interview away — give it your best shot!",
+  ];
+  const pepLine = PEP_LINES[Math.abs((booked?.date || "").split("").reduce((h, c) => h + c.charCodeAt(0), 0)) % PEP_LINES.length];
 
   const notifyAdminsNoSlotsAvailable = async (inv) => {
     if (inv.noSlotsNotifiedAt) return;
@@ -142,7 +152,11 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
       } catch (confirmErr) {
         console.error("Self-book auto-confirm failed — booking stays pending for admin follow-up:", confirmErr);
       }
-      setBooked({ date: selected.date, time: selected.time, meetLink });
+      setBooked({
+        date: selected.date, time: selected.time, meetLink,
+        round: realInvite.round || realInvite.templateName || invite.templateName || invite.round || "Interview",
+        duration: realInvite.duration || invite.duration || 60,
+      });
       // Delayed, not immediate — onBooked typically refreshes/re-renders
       // the parent dashboard (see StudentDashboardPage), which can unmount
       // this panel once the booking moves out of "pending"/"draft" state.
@@ -163,22 +177,61 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   };
 
   if (booked) {
+    const rows = [
+      { label: "Interview", value: booked.round },
+      { label: "Date", value: formatDateLong(booked.date) },
+      { label: "Time", value: `${booked.time} · ${booked.duration} min` },
+    ];
     return (
-      <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3.5">
-        <CalendarCheck2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-        <div>
-          <p className="text-sm font-bold text-emerald-800">Interview confirmed — {formatDateLong(booked.date)} · {booked.time}</p>
-          {booked.meetLink ? (
-            <p className="text-xs text-emerald-600 mt-0.5">
-              Meet link: <a href={booked.meetLink} target="_blank" rel="noreferrer" className="underline font-semibold">{booked.meetLink}</a> — also emailed to you.
-            </p>
-          ) : (
-            <p className="text-xs text-emerald-600 mt-0.5">
-              You'll get your Meet link by email shortly.
-            </p>
-          )}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="bg-white border border-emerald-100 rounded-[1.75rem] shadow-card overflow-hidden"
+      >
+        <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 px-6 pt-7 pb-8 text-center text-white">
+          <motion.div
+            initial={{ scale: 0.6, rotate: -10 }} animate={{ scale: 1, rotate: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 14, delay: 0.1 }}
+            className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3"
+          >
+            <PartyPopper className="w-7 h-7" />
+          </motion.div>
+          <p className="text-lg font-bold">Interview Confirmed!</p>
+          <p className="text-xs text-emerald-50/90 mt-1">{pepLine}</p>
         </div>
-      </div>
+
+        <div className="px-6 py-5 space-y-3">
+          {rows.map(r => (
+            <div key={r.label} className="flex items-center justify-between text-sm">
+              <span className="text-gray-400">{r.label}</span>
+              <span className="font-semibold text-gray-800 text-right">{r.value}</span>
+            </div>
+          ))}
+
+          <div className="pt-3 border-t border-gray-100">
+            {booked.meetLink ? (
+              <>
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Meet link</p>
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full pl-4 pr-1.5 py-1.5">
+                  <a href={booked.meetLink} target="_blank" rel="noreferrer"
+                    className="flex-1 min-w-0 truncate text-xs font-semibold text-emerald-700 hover:underline">
+                    {booked.meetLink}
+                  </a>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(booked.meetLink).then(() => { setMeetCopied(true); setTimeout(() => setMeetCopied(false), 1500); }); }}
+                    className="flex-shrink-0 w-7 h-7 rounded-full bg-white border border-emerald-200 flex items-center justify-center text-emerald-600 hover:bg-emerald-100 transition-colors"
+                    title="Copy Meet link"
+                  >
+                    {meetCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1.5">Also emailed to you — and to your interviewer.</p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-500">You'll get your Meet link by email shortly.</p>
+            )}
+          </div>
+        </div>
+      </motion.div>
     );
   }
 
