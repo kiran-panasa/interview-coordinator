@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, CheckCircle2, Info } from "lucide-react";
+import { Search, CheckCircle2 } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
@@ -17,8 +17,7 @@ const STATUS_OPTIONS = [
     text: "text-emerald-700",
     bg: "bg-emerald-50 border-emerald-200",
     dot: "bg-emerald-500",
-    desc: "Normal, bookable state. Shows in a candidate's Eligible Interviews and Self Book list.",
-    when: "The default — use this for anything currently running.",
+    desc: "Normal, bookable state — shows in a candidate's Eligible Interviews and Self Book list. The default.",
   },
   {
     value: "draft",
@@ -26,8 +25,7 @@ const STATUS_OPTIONS = [
     text: "text-amber-700",
     bg: "bg-amber-50 border-amber-200",
     dot: "bg-amber-500",
-    desc: "Hidden from students, same as Archived. Purely organizational — a marker for your own tracking.",
-    when: "Use while still building/configuring a template that isn't ready to assign to anyone yet.",
+    desc: "Hidden from students. Use while still building/configuring a template that isn't ready to assign yet.",
   },
   {
     value: "archived",
@@ -35,8 +33,7 @@ const STATUS_OPTIONS = [
     text: "text-gray-600",
     bg: "bg-gray-100 border-gray-200",
     dot: "bg-gray-400",
-    desc: "Hidden from students, same as Draft. Purely organizational — a marker for your own tracking.",
-    when: "Use to retire/pause a template that WAS running — e.g. a round you're temporarily stopping or retiring for good.",
+    desc: "Hidden from students. Use to retire/pause a template that WAS running.",
   },
 ];
 const STATUS_BY_VALUE = Object.fromEntries(STATUS_OPTIONS.map(o => [o.value, o]));
@@ -109,25 +106,6 @@ export default function TemplateLifecycleTab() {
     <div className="space-y-5">
       <div>
         <h2 className="text-sm font-bold text-gray-900">Lifecycle</h2>
-        <p className="text-xs text-gray-400 mt-0.5">
-          Pause or retire a template without deleting it — switching it off Active hides it from students (Eligible
-          Interviews / Self Book) immediately, but never touches an interview already scheduled or completed on it,
-          or anything on the admin side. Switch it back to Active and it's bookable again, exactly as before. The
-          Attempt Limit column separately caps how many times a candidate can book this round at all — leave it
-          blank for unlimited.
-        </p>
-      </div>
-
-      <div className="flex items-start gap-2.5 bg-indigo-50 border border-indigo-200 rounded-xl px-3.5 py-3">
-        <Info className="w-4 h-4 text-indigo-500 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-indigo-800 space-y-1">
-          {STATUS_OPTIONS.map(o => (
-            <p key={o.value}>
-              <span className="font-bold">{o.label}</span> — {o.desc} <span className="text-indigo-600">{o.when}</span>
-            </p>
-          ))}
-          <p className="text-indigo-600">Draft and Archived behave identically to students — the difference between them is only which label makes sense to you when you look back at it later.</p>
-        </div>
       </div>
 
       <div className="flex items-center gap-3 flex-wrap">
