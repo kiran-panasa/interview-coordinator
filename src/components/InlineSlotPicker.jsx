@@ -7,6 +7,7 @@ import {
 import { callAppsScript } from "../lib/appsScript";
 import { collapseSlotsByDurationGrouped, mergeSlotsAcrossInterviewers } from "../utils/slotAvailability";
 import { resolveActionAdminRecipients } from "../utils/adminNotify";
+import { confirmSelfBooking } from "../services/booking.service";
 import Button from "./Button";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -70,32 +71,6 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
     } catch { /* best-effort */ }
   };
 
-  // Beyond this email, a booking is also already visible live in-app —
-  // bookSlotForCandidate flips the invite to "pending_confirmation", which
-  // subscribeToPendingScheduleInvites (badge on the admin's Nudge nav item,
-  // and the Candidates tab list) picks up immediately.
-  const notifyAdminsBookingPending = async (inv, sel) => {
-    try {
-      const activeAdmins = await getActiveAdmins();
-      const admins = resolveActionAdminRecipients(activeAdmins, inv.sentBy);
-      if (!admins.length || !APPS_SCRIPT_URL) return;
-      const round = inv.round || inv.templateName || "Interview";
-      await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
-        action: "sendEmail",
-        subject: `Action needed: ${inv.candidateName} selected a slot for ${round}`,
-        body:
-          "Hi {{name}},\n\n" +
-          `${inv.candidateName} has selected an interview slot and it's waiting for your approval:\n\n` +
-          `• Round:       ${round}\n` +
-          `• Interviewer: ${sel.interviewerName || "-"}\n` +
-          `• Date:        ${formatDate(sel.date)}\n` +
-          `• Time:        ${sel.time}\n\n` +
-          `Please review and confirm it from the Nudge → Candidates tab:\n${window.location.origin}/admin/nudge\n\n— NxtWave Interview Coordinator`,
-        recipients: admins.map(a => ({ email: a.email, name: a.displayName || "" })),
-      });
-    } catch { /* best-effort */ }
-  };
-
   const fetchSlots = async (forceRefresh = false) => {
     try {
       const { slots: s, busyWindowsByInterviewer: bw, loadByInterviewer: load } = await getAvailableSlots(
@@ -150,9 +125,30 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
         selected.interviewerId, selected.slotId, realInvite.id,
         selected.date, selected.time, realInvite.duration || 60
       );
-      setBooked({ date: selected.date, time: selected.time });
-      notifyAdminsBookingPending(realInvite, selected);
-      onBooked?.();
+      // Self-book skips admin review entirely — confirmSelfBooking creates
+      // the Interview record straight at "scheduled" and generates the Meet
+      // link right here, same as CandidateSchedulingTab's admin-confirm
+      // flow does for the Nudge email-link path (which keeps its manual
+      // review step; only this authenticated self-book path doesn't need
+      // one). If this fails after the slot itself was successfully
+      // reserved, the invite is simply left at "pending_confirmation" —
+      // the existing admin Pending Confirmations queue (and its retry,
+      // which reuses the same interview record once one exists) is the
+      // fallback, so a transient failure here never strands the booking.
+      let meetLink = "";
+      try {
+        const result = await confirmSelfBooking(realInvite.id);
+        meetLink = result?.meetLink || "";
+      } catch (confirmErr) {
+        console.error("Self-book auto-confirm failed — booking stays pending for admin follow-up:", confirmErr);
+      }
+      setBooked({ date: selected.date, time: selected.time, meetLink });
+      // Delayed, not immediate — onBooked typically refreshes/re-renders
+      // the parent dashboard (see StudentDashboardPage), which can unmount
+      // this panel once the booking moves out of "pending"/"draft" state.
+      // Giving the candidate a few seconds to actually read/click the Meet
+      // link above before that happens.
+      setTimeout(() => onBooked?.(), 4000);
     } catch (e) {
       if (e.message.includes("already booked") || e.message.includes("already passed")) {
         const { bw: freshBw } = { bw: (await fetchSlots(true)).bw };
@@ -171,10 +167,16 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
       <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3.5">
         <CalendarCheck2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
         <div>
-          <p className="text-sm font-bold text-emerald-800">Slot reserved — {formatDateLong(booked.date)} · {booked.time}</p>
-          <p className="text-xs text-emerald-600 mt-0.5">
-            Pending admin confirmation. You'll get a Meet invite by email once confirmed.
-          </p>
+          <p className="text-sm font-bold text-emerald-800">Interview confirmed — {formatDateLong(booked.date)} · {booked.time}</p>
+          {booked.meetLink ? (
+            <p className="text-xs text-emerald-600 mt-0.5">
+              Meet link: <a href={booked.meetLink} target="_blank" rel="noreferrer" className="underline font-semibold">{booked.meetLink}</a> — also emailed to you.
+            </p>
+          ) : (
+            <p className="text-xs text-emerald-600 mt-0.5">
+              You'll get your Meet link by email shortly.
+            </p>
+          )}
         </div>
       </div>
     );

@@ -993,7 +993,7 @@ export default function StudentDashboardPage() {
                       <InlineSlotPicker
                         invite={{ ...selfBookDraft, id: selfBookDraft.inviteId }}
                         ensureInvite={ensureSelfBookInvite}
-                        onBooked={() => window.location.reload()}
+                        onBooked={() => loadDashboard()}
                       />
                     </div>
                   </Card>
@@ -1095,7 +1095,7 @@ export default function StudentDashboardPage() {
                           </button>
                           {isExpanded && (
                             <div className="px-6 pb-6 pt-1 border-t border-gray-50">
-                              <InlineSlotPicker invite={inv} onBooked={() => window.location.reload()} />
+                              <InlineSlotPicker invite={inv} onBooked={() => loadDashboard()} />
                             </div>
                           )}
                         </Card>

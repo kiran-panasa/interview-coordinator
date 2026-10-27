@@ -527,7 +527,7 @@ export interface Interview {
   // status badge once status is "cancelled", same as partialCompletionReason/
   // declineReason are for their own statuses.
   cancelReason?: string;
-  cancelledBy?: "interviewer" | "admin";
+  cancelledBy?: "interviewer" | "admin" | "candidate";
   // Set by the student themselves via "Request Reschedule" on the Student
   // Dashboard (POST /api/sso/interviews/request-reschedule in
   // api/sso-handler.js) — surfaced on the Interviews page next to the
@@ -764,6 +764,12 @@ export interface ScheduleInvite {
   bookedTime?: string;
   bookedAt?: string;
   interviewId?: string;
+  // Set when this invite is a candidate-initiated reschedule (see
+  // handleRequestReschedule in StudentDashboardPage.jsx / resolveSelfBookTarget
+  // in api/sso-handler.js) — points at the OLD interview being replaced, so
+  // confirming this booking knows to cancel that one and link the two
+  // together (see confirmSelfBooking in src/services/booking.service.js).
+  replacingInterviewId?: string | null;
   // Set when an admin rejects a candidate's booked slot (see Pending
   // Confirmations on the Nudge > Candidates tab) — the reason they typed,
   // also emailed to the candidate verbatim inside a fixed template.

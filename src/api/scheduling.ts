@@ -87,6 +87,11 @@ export async function deleteScheduleInvite(id: string): Promise<void> {
   await deleteDoc(ref);
 }
 
+export async function getScheduleInvite(id: string): Promise<ScheduleInvite | null> {
+  const snap = await getDoc(doc(db, "scheduleInvites", id));
+  return snap.exists() ? { id: snap.id, ...snap.data() } as ScheduleInvite : null;
+}
+
 export async function getScheduleInviteByToken(token: string): Promise<ScheduleInvite | null> {
   const snap = await getDocs(query(
     collection(db, "scheduleInvites"),

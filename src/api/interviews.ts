@@ -193,7 +193,7 @@ export async function deleteInterview(id: string): Promise<void> {
 // reconciliation — regardless of what it held before being cancelled.
 export async function markInterviewCancelled(
   id: string,
-  opts?: { reason?: string; cancelledBy?: "interviewer" | "admin" }
+  opts?: { reason?: string; cancelledBy?: "interviewer" | "admin" | "candidate" }
 ): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     status: "cancelled",

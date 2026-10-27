@@ -2177,8 +2177,8 @@ export default function InterviewsPage() {
                   )}
                   {iv.status === "cancelled" && iv.cancelReason && (
                     <p className="text-[11px] text-red-500 mt-1 max-w-[160px] truncate"
-                      title={`Cancelled by ${iv.cancelledBy === "interviewer" ? "interviewer" : "admin"}: ${iv.cancelReason}`}>
-                      {iv.cancelledBy === "interviewer" ? "By interviewer: " : ""}{iv.cancelReason}
+                      title={`Cancelled by ${iv.cancelledBy === "interviewer" ? "interviewer" : iv.cancelledBy === "candidate" ? "candidate" : "admin"}: ${iv.cancelReason}`}>
+                      {iv.cancelledBy === "interviewer" ? "By interviewer: " : iv.cancelledBy === "candidate" ? "By candidate: " : ""}{iv.cancelReason}
                     </p>
                   )}
                   {/* Set by linkRescheduledInterview once the candidate
