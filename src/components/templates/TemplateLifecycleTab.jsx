@@ -4,7 +4,6 @@ import { Search, CheckCircle2, Info } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
-import { DEFAULT_ATTEMPT_LIMIT_MESSAGE } from "../../constants/templateAttempts";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -200,11 +199,12 @@ export default function TemplateLifecycleTab() {
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top min-w-[18rem] space-y-1.5">
-                      {/* Rose when an actual limit is set (this template now
+                      {/* Sky when an actual limit is set (this template now
                          restricts booking), plain gray when blank/unlimited —
                          a distinct accent from Status's emerald/amber/gray so
                          the two controls read as clearly different things,
-                         not two gray inputs side by side. */}
+                         not two gray inputs side by side. Not red/rose —
+                         this is routine configuration, not a warning. */}
                       <div className="flex items-center gap-1.5">
                         <input
                           type="number" min={1}
@@ -214,7 +214,7 @@ export default function TemplateLifecycleTab() {
                           placeholder="Unlimited"
                           className={`w-24 text-xs font-semibold rounded-lg px-2 py-1.5 border focus:outline-none focus:ring-1 ${
                             maxAttemptsOf(t).trim() !== ""
-                              ? "bg-rose-50 border-rose-200 text-rose-700 focus:ring-rose-400"
+                              ? "bg-sky-50 border-sky-200 text-sky-700 focus:ring-sky-400"
                               : "bg-white border-gray-200 text-gray-700 focus:ring-brand-400"
                           }`}
                         />
@@ -226,8 +226,8 @@ export default function TemplateLifecycleTab() {
                           value={messageOf(t)}
                           onChange={e => setMessageDraft(d => ({ ...d, [t.id]: e.target.value }))}
                           onBlur={() => commitMessage(t)}
-                          placeholder={DEFAULT_ATTEMPT_LIMIT_MESSAGE}
-                          className="w-full text-xs border border-rose-100 bg-rose-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-rose-400 text-gray-700 placeholder:text-rose-300"
+                          placeholder="Leave blank to use the default message shown to candidates."
+                          className="w-full text-xs border border-sky-100 bg-sky-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-sky-400 text-gray-700 placeholder:text-gray-400"
                         />
                       )}
                     </td>
