@@ -7,17 +7,19 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle, HelpCircle, Bell, Award,
+  CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
 import { getPreInterviewResources } from "../../api/firestore";
+import { cancelInterviewByCandidate } from "../../services/booking.service";
 import InlineSlotPicker from "../../components/InlineSlotPicker";
 import AiReportModal from "../../features/interviews/AiReportModal";
 import IntegrityDetailModal from "../../features/interviews/IntegrityDetailModal";
 import ErrorBoundary from "../../components/ErrorBoundary";
 import Button from "../../components/Button";
 import KebabMenu from "../../components/KebabMenu";
+import Modal from "../../components/Modal";
 
 const SEEN_INVITES_KEY = "ic_seen_invites";
 function readSeenInviteIds() {
@@ -203,7 +205,11 @@ const FAQ_ITEMS = [
   },
   {
     q: "How do I reschedule an interview?",
-    a: "Open \"My Interviews\", find the scheduled interview, and click the ⋮ (three dots) on its card → \"Request Reschedule\". Enter a short reason, then pick a new slot the same way you booked the first time. Your old interview is automatically cancelled once the admin confirms your new slot.",
+    a: "Open \"My Interviews\", find the scheduled interview, and click the ⋮ (three dots) on its card → \"Request Reschedule\". Enter a short reason, then pick a new slot the same way you booked the first time. Your old interview is cancelled automatically the moment you confirm the new slot — no waiting on anyone.",
+  },
+  {
+    q: "What's the difference between Cancel and Reschedule?",
+    a: "Use \"Request Reschedule\" when you want a different slot right away. Use \"Cancel Interview\" when none of this week's open slots work for you at all — available slots only show about a week ahead, so cancelling just means you're not ready to book yet. Come back to \"Book an Interview\" next week once new slots open up, and book a fresh one then. Both ask for a reason, and both are tracked — please only use them when you genuinely need to.",
   },
   {
     q: "Where do I find my interview link?",
@@ -238,6 +244,14 @@ export default function StudentDashboardPage() {
   const [integrityInterview, setIntegrityInterview] = useState(null);
   const [bookingTemplateId, setBookingTemplateId] = useState(null);
   const [activeInterviewTab, setActiveInterviewTab] = useState("all");
+  // Shared by both "Request Reschedule" and the new plain "Cancel Interview"
+  // kebab actions — { mode: "reschedule" | "cancel", interviewId, templateId }
+  // or null. One modal, one reason textarea, one red warning note, so the
+  // two actions read as two flavors of the same serious decision rather
+  // than a casual window.prompt() for one and nothing for the other.
+  const [cancelRescheduleTarget, setCancelRescheduleTarget] = useState(null);
+  const [cancelRescheduleReason, setCancelRescheduleReason] = useState("");
+  const [cancelRescheduleSubmitting, setCancelRescheduleSubmitting] = useState(false);
   // Set when a card is clicked from Overview's Upcoming list — scrolls to
   // and briefly highlights that exact card once My Interviews renders,
   // then clears itself so the ring doesn't linger forever.
@@ -354,21 +368,39 @@ export default function StudentDashboardPage() {
     setResumeSaving(false);
   };
 
-  // No admin-approval gate before picking a new time, and no separate
-  // notification sent at this point either — the reason is carried
-  // straight into the self-book flow (stored on the new ScheduleInvite,
-  // alongside replacingInterviewId) so it only surfaces to admin exactly
-  // when it's relevant: at the moment they're confirming the new booking
-  // (see CandidateSchedulingTab.jsx), where "see the reason" and "approve"
-  // are the same action instead of two separate steps.
-  const handleRequestReschedule = async (interviewId, templateId) => {
-    const reason = window.prompt("Why would you like to reschedule this interview? (Shown to the admin when they confirm your new slot.)");
-    if (!reason || !reason.trim()) return;
-    if (!templateId) {
-      alert("Couldn't start rebooking — this interview has no template on record. Please reach out to the admin team.");
-      return;
+  const openCancelRescheduleModal = (mode, interviewId, templateId) => {
+    setCancelRescheduleReason("");
+    setCancelRescheduleTarget({ mode, interviewId, templateId });
+  };
+
+  // One submit handler for both modes, routed by cancelRescheduleTarget.mode
+  // — reschedule carries the reason into the self-book flow (stored on the
+  // new ScheduleInvite, cancelling the old interview the moment the new one
+  // is confirmed — see handleSelfBook/confirmSelfBooking), while cancel acts
+  // immediately via cancelInterviewByCandidate with no rebooking attached.
+  const handleCancelRescheduleSubmit = async () => {
+    if (!cancelRescheduleTarget) return;
+    const reason = cancelRescheduleReason.trim();
+    if (!reason) { alert("Please enter a reason."); return; }
+    const { mode, interviewId, templateId } = cancelRescheduleTarget;
+    setCancelRescheduleSubmitting(true);
+    try {
+      if (mode === "reschedule") {
+        if (!templateId) {
+          alert("Couldn't start rebooking — this interview has no template on record. Please reach out to the admin team.");
+        } else {
+          setCancelRescheduleTarget(null);
+          await handleSelfBook(templateId, interviewId, reason);
+        }
+      } else {
+        await cancelInterviewByCandidate(interviewId, reason);
+        setCancelRescheduleTarget(null);
+        await loadDashboard();
+      }
+    } catch (e) {
+      alert(`Couldn't ${mode === "reschedule" ? "start rebooking" : "cancel the interview"} — ${e?.message || "please try again."}`);
     }
-    await handleSelfBook(templateId, interviewId, reason.trim());
+    setCancelRescheduleSubmitting(false);
   };
 
   // Read-only — fetches what the slot picker needs (duration/date-range/
@@ -1274,18 +1306,27 @@ export default function StudentDashboardPage() {
                                   </a>
                                 )}
                                 {/* Tucked behind a "⋮" instead of sitting as
-                                   its own big button next to Join Meet — a
-                                   reschedule request is a real cancel+rebook
-                                   that affects the interviewer too, so it
-                                   shouldn't read as equally casual/inviting
-                                   as just joining the call. Still asks for a
-                                   reason before submitting either way. */}
+                                   their own big buttons next to Join Meet —
+                                   both are a real cancel (one with a rebook
+                                   attached, one without) that affects the
+                                   interviewer too, so neither should read as
+                                   equally casual/inviting as just joining
+                                   the call. Both open the same reason +
+                                   warning modal before doing anything. */}
                                 {iv.status === "scheduled" && (
-                                  <KebabMenu actions={[{
-                                    label: bookingTemplateId === iv.templateId ? "Submitting…" : "Request Reschedule",
-                                    onClick: () => handleRequestReschedule(iv.id, iv.templateId),
-                                    disabled: bookingTemplateId != null,
-                                  }]} />
+                                  <KebabMenu actions={[
+                                    {
+                                      label: bookingTemplateId === iv.templateId ? "Submitting…" : "Request Reschedule",
+                                      onClick: () => openCancelRescheduleModal("reschedule", iv.id, iv.templateId),
+                                      disabled: bookingTemplateId != null,
+                                    },
+                                    {
+                                      label: "Cancel Interview",
+                                      onClick: () => openCancelRescheduleModal("cancel", iv.id, iv.templateId),
+                                      disabled: bookingTemplateId != null,
+                                      danger: true,
+                                    },
+                                  ]} />
                                 )}
                               </div>
                             </Card>
@@ -1490,6 +1531,59 @@ export default function StudentDashboardPage() {
         interview={integrityInterview}
         onClose={() => setIntegrityInterview(null)}
       />
+
+      <Modal
+        open={!!cancelRescheduleTarget}
+        onClose={() => { if (!cancelRescheduleSubmitting) setCancelRescheduleTarget(null); }}
+        title={cancelRescheduleTarget?.mode === "cancel" ? "Cancel Interview" : "Request Reschedule"}
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-2xl px-3.5 py-3">
+            <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-red-700 leading-relaxed">
+              <span className="font-bold">Important:</span> cancellations and reschedules are tracked on your account.
+              Repeatedly cancelling or rescheduling interviews may result in your account being blocked from further
+              bookings. Please only do this if you genuinely can't make it.
+            </p>
+          </div>
+
+          {cancelRescheduleTarget?.mode === "cancel" && (
+            <p className="text-sm text-gray-500">
+              Not free for any of this week's open slots? Slots only show about a week ahead, so cancelling just means
+              you're not booking right now — come back to "Book an Interview" next week once new slots are open.
+            </p>
+          )}
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+              Reason {cancelRescheduleTarget?.mode === "cancel" ? "for cancelling" : "for rescheduling"}
+            </label>
+            <textarea
+              rows={3} autoFocus
+              value={cancelRescheduleReason}
+              onChange={e => setCancelRescheduleReason(e.target.value)}
+              placeholder="Let us know what's going on…"
+              className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors resize-none"
+            />
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <Button variant="secondary" className="flex-1" disabled={cancelRescheduleSubmitting}
+              onClick={() => setCancelRescheduleTarget(null)}>
+              Back
+            </Button>
+            <Button
+              variant={cancelRescheduleTarget?.mode === "cancel" ? "danger" : "primary"}
+              className="flex-1" disabled={cancelRescheduleSubmitting}
+              onClick={handleCancelRescheduleSubmit}
+            >
+              {cancelRescheduleSubmitting
+                ? "Submitting…"
+                : cancelRescheduleTarget?.mode === "cancel" ? "Confirm Cancellation" : "Continue to Pick a New Slot"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </ErrorBoundary>
   );
 }

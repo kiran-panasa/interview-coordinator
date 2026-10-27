@@ -64,6 +64,40 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
   }
 }
 
+// A plain cancel — the candidate isn't rebooking anything right now (the
+// "I'm not free for any slot this week, I'll come back next week" case —
+// see the Book an Interview FAQ), just giving up the one they already hold.
+// Unlike cancelReplacedInterview above, this is the direct result of a user
+// action (the Cancel Interview modal), so it throws on failure instead of
+// swallowing it — the caller shows a real error rather than silently doing
+// nothing.
+export async function cancelInterviewByCandidate(interviewId, reason) {
+  const iv = await getInterview(interviewId);
+  if (!iv) throw new Error("This interview could not be found.");
+  if (iv.status === "cancelled") return; // already cancelled — nothing to do
+
+  if (iv.eventId) {
+    await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
+  }
+  if (iv.interviewerId && iv.scheduledDate && iv.scheduledTime) {
+    const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
+    await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+  }
+  await markInterviewCancelled(interviewId, { reason, cancelledBy: "candidate" });
+  if (APPS_SCRIPT_URL && iv.interviewerEmail) {
+    callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+      action:  "sendEmail",
+      subject: `Interview Cancelled: ${iv.round || iv.templateName || "Interview"}`,
+      body:
+        "Hi {{name}},\n\nThe following interview has been cancelled by the candidate:\n\n" +
+        `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
+        `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+        `Reason: ${reason}\n\n— NxtWave Team`,
+      recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || "Panelist" }],
+    }).catch(() => {});
+  }
+}
+
 // Takes the invite's id, not the invite object itself, and re-fetches it
 // fresh — called right after bookSlotForCandidate's transaction commits, so
 // this is the only way to see the bookedInterviewerId/bookedSlotId/
