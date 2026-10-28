@@ -13,39 +13,40 @@ const MONTH_NAMES = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-// Compact per-status dot/chip colors — a trimmed version of Badge.jsx's
-// palette (same statuses, just sized for a small calendar chip rather than
-// a full pill).
+// Seven distinct hues, spread around the color wheel rather than clustered
+// in the same warm family — pending_acceptance/partially_completed/no_show
+// used to all be amber-or-adjacent and were hard to tell apart at a
+// glance; each status now gets its own clearly different color.
 const STATUS_DOT = {
-  pending_acceptance:  "bg-amber-400",
+  pending_acceptance:  "bg-violet-400",
   scheduled:           "bg-blue-500",
   completed:           "bg-emerald-500",
   partially_completed: "bg-amber-400",
   cancelled:           "bg-gray-300",
   declined:            "bg-red-400",
-  no_show:             "bg-orange-400",
+  no_show:             "bg-pink-400",
 };
 const STATUS_CHIP = {
-  pending_acceptance:  "bg-amber-50 text-amber-700 hover:bg-amber-100",
+  pending_acceptance:  "bg-violet-50 text-violet-700 hover:bg-violet-100",
   scheduled:           "bg-blue-50 text-blue-700 hover:bg-blue-100",
   completed:           "bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
   partially_completed: "bg-amber-50 text-amber-700 hover:bg-amber-100",
   cancelled:           "bg-gray-100 text-gray-400 hover:bg-gray-200 line-through",
   declined:            "bg-red-50 text-red-600 hover:bg-red-100",
-  no_show:             "bg-orange-50 text-orange-700 hover:bg-orange-100",
+  no_show:             "bg-pink-50 text-pink-700 hover:bg-pink-100",
 };
 // A bolder, solid-fill version of the same palette for the day view's time
 // blocks — the month view's soft chips get lost at that smaller size, but a
 // proper calendar event block (Google Calendar-style) needs enough contrast
 // to read as "this time is taken" at a glance.
 const STATUS_BLOCK = {
-  pending_acceptance:  "bg-amber-500",
+  pending_acceptance:  "bg-violet-500",
   scheduled:           "bg-blue-500",
   completed:           "bg-emerald-500",
   partially_completed: "bg-amber-500",
   cancelled:           "bg-gray-300",
   declined:            "bg-red-400",
-  no_show:             "bg-orange-400",
+  no_show:             "bg-pink-500",
 };
 // What STATUS_DOT/STATUS_BLOCK's colors actually mean — shown as a legend
 // so the color coding isn't something you have to guess or memorize.
