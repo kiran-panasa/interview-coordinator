@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
+  collection, collectionGroup, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
   query, where, onSnapshot, getCountFromServer,
 } from "firebase/firestore";
 import type { AvailabilitySlot, AvailableSlot, BusyWindow } from "../types";
@@ -122,6 +122,36 @@ export async function markSlotBooked(
   });
 }
 
+// Symmetric counterpart to freeSlotsForInterview below — locks every raw
+// slot doc an interview's full duration actually spans (not just the one
+// matching its exact start time), same span lookup bookSlotForCandidate
+// (api/scheduling.ts) uses. Used by admin's manual schedule/reassign/edit
+// paths (InterviewsPage.jsx), which — unlike self-book/Nudge — don't go
+// through that transaction-locked function at all, so without this a
+// 60/90-minute admin-created interview only ever had its first 30 minutes
+// actually marked booked, leaving the rest of its own span still shown (and
+// bookable by someone else) as free.
+export async function bookSlotsForInterview(
+  interviewerId: string,
+  date: string,
+  time: string,
+  durationMinutes: number,
+  interviewId: string
+): Promise<void> {
+  if (!interviewerId || !date || !time) return;
+  const startMin = timeToMinutes(time);
+  const endMin = startMin + (durationMinutes || 30);
+  const daySnap = await getDocs(query(
+    collection(db, "availability", interviewerId, "slots"),
+    where("date", "==", date)
+  ));
+  const toBook = daySnap.docs.filter(d => {
+    const t = timeToMinutes((d.data() as { time?: string }).time || "");
+    return t >= startMin && t < endMin;
+  });
+  await Promise.all(toBook.map(d => updateDoc(d.ref, { isBooked: true, interviewId })));
+}
+
 export async function markSlotFree(interviewerId: string, slotId: string): Promise<void> {
   await updateDoc(doc(db, "availability", interviewerId, "slots", slotId), {
     isBooked: false, interviewId: null, heldByInviteId: null,
@@ -139,6 +169,49 @@ export async function markSlotFree(interviewerId: string, slotId: string): Promi
 // freeSlotsHeldByInvite (used while a booking is still only an invite),
 // this looks slots up by date+time span since a cancelled/deleted
 // interview's own heldByInviteId tag may already be gone.
+// One-time, self-guarding cleanup for raw availability slots left stuck
+// isBooked:true from before freeSlotsForInterview existed — a cancelled/
+// declined/deleted interview longer than one raw slot (any duration over
+// 30 minutes) only ever had its FIRST slot freed by the old single-slot
+// free, leaving the rest of its span orphaned (isBooked:true, with
+// interviewId/heldByInviteId pointing at nothing live) forever — which is
+// also what silently made a genuinely free slot unbookable by anyone else.
+// Same settings-marker-doc guard as backfillAiReportPendingOnce and co.
+// (src/api/interviews.ts) — runs the collectionGroup("slots") scan exactly
+// once total, not per session.
+export async function freeOrphanedBookedSlotsOnce(): Promise<void> {
+  const markerRef = doc(db, "settings", "orphanedSlotsCleanup");
+  const markerSnap = await getDoc(markerRef);
+  if (markerSnap.exists()) return;
+
+  const [bookedSnap, liveInterviewsSnap, liveInvitesSnap] = await Promise.all([
+    getDocs(query(collectionGroup(db, "slots"), where("isBooked", "==", true))),
+    getDocs(query(collection(db, "interviews"), where("status", "in",
+      ["scheduled", "completed", "partially_completed", "no_show", "pending_acceptance"]))),
+    getDocs(query(collection(db, "scheduleInvites"), where("status", "in", ["pending_confirmation", "confirmed"]))),
+  ]);
+
+  const liveInterviewIds = new Set(liveInterviewsSnap.docs.map(d => d.id));
+  const liveInviteIds = new Set(liveInvitesSnap.docs.map(d => d.id));
+
+  const orphaned = bookedSnap.docs.filter(d => {
+    const data = d.data() as { interviewId?: string | null; heldByInviteId?: string | null };
+    const pointsAtLiveInterview = !!data.interviewId && liveInterviewIds.has(data.interviewId);
+    const pointsAtLiveInvite = !!data.heldByInviteId && liveInviteIds.has(data.heldByInviteId);
+    return !pointsAtLiveInterview && !pointsAtLiveInvite;
+  });
+
+  for (let i = 0; i < orphaned.length; i += 450) {
+    const batch = writeBatch(db);
+    orphaned.slice(i, i + 450).forEach(d => {
+      batch.update(d.ref, { isBooked: false, interviewId: null, heldByInviteId: null });
+    });
+    await batch.commit();
+  }
+
+  await setDoc(markerRef, { completedAt: new Date().toISOString(), count: orphaned.length });
+}
+
 export async function freeSlotsForInterview(
   interviewerId: string,
   date: string,

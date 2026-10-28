@@ -21,7 +21,7 @@ import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, reopenNoShowInterview,
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, clearNoShowInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
-  getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, freeSlotsForInterview,
+  getInterviewerAvailability, getInterviewerBusyWindows, bookSlotsForInterview, freeSlotsForInterview, freeOrphanedBookedSlotsOnce,
   getTemplate, importCompletedInterview, importScheduledInterview, markInterviewPartiallyCompleted,
   createNotification, subscribeToBlockedDates, getInterviewIntegrity,
   logInterviewHistory, getInterviewHistory,
@@ -172,6 +172,11 @@ export default function InterviewsPage() {
   // was snapshotted at creation time) get it too — needed for the Vendor
   // Dashboard's Firestore rules to correctly scope these older interviews.
   useEffect(() => { backfillVendorIdOnce().catch(err => console.error("Vendor ID backfill failed:", err)); }, []);
+  // Self-guarding — see freeOrphanedBookedSlotsOnce in src/api/availability.ts.
+  // One-time cleanup for availability slots left stuck isBooked:true by the
+  // old single-slot free on cancel/decline/delete, from before
+  // freeSlotsForInterview existed.
+  useEffect(() => { freeOrphanedBookedSlotsOnce().catch(err => console.error("Orphaned booked-slots cleanup failed:", err)); }, []);
   // Self-guarding — see seedDefaultRoundsOnce in src/api/rounds.ts. Seeds
   // the new admin-managed rounds collection with the old hardcoded round
   // lists once, so nothing existing admins relied on disappears.
@@ -492,8 +497,7 @@ export default function InterviewsPage() {
 
         if (dateChanged || timeChanged || interviewerChanged) {
           await freeSlotsForInterview(editTarget.interviewerId, editTarget.scheduledDate, editTarget.scheduledTime, editTarget.duration).catch(() => {});
-          const newSlotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
-          await markSlotBooked(form.interviewerId, newSlotId, editTarget.id).catch(() => {});
+          await bookSlotsForInterview(form.interviewerId, form.scheduledDate, form.scheduledTime, form.duration, editTarget.id).catch(() => {});
         }
 
         // Reassigning the panelist restarts their Accept/Decline — they
@@ -707,8 +711,7 @@ export default function InterviewsPage() {
           ...data, createdBy: currentUser.uid,
           ...(reassignFromId ? { reassignedFrom: reassignFromId } : {}),
         });
-        const slotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
-        await markSlotBooked(form.interviewerId, slotId, id).catch(() => {});
+        await bookSlotsForInterview(form.interviewerId, form.scheduledDate, form.scheduledTime, form.duration, id).catch(() => {});
 
         // Cross-link the declined interview to this new one — purely for
         // admin visibility (see the note under its Declined badge). Its own
@@ -1472,8 +1475,7 @@ export default function InterviewsPage() {
         };
 
         const id = await createInterview(data);
-        const slotId = `${scheduledDate}_${scheduledTime.replace(/[: ]/g, "")}`;
-        await markSlotBooked(interviewer.id, slotId, id).catch(() => {});
+        await bookSlotsForInterview(interviewer.id, scheduledDate, scheduledTime, duration || 60, id).catch(() => {});
 
         createNotification({
           type:           "interview_approval",
