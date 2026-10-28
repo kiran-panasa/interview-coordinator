@@ -156,7 +156,7 @@ export default function LeaderboardPage() {
         ) : (
           <div className="space-y-2.5">
             <p className="text-xs font-semibold text-gray-400 px-1 flex items-center gap-1.5">
-              👀 Kindly check out your fellow interviewers below too — everyone's putting in the effort.
+              👀 Kindly check out your fellow interviewers below too.
             </p>
             {rows.map(row => {
               const isMe = row.interviewer.id === userProfile?.id;
