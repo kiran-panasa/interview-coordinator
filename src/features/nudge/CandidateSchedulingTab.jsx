@@ -1486,7 +1486,7 @@ export default function CandidateSchedulingTab({
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1">
-                Reason to share with {rejectModal.candidateName.split(" ")[0]}
+                Reason to share with {rejectModal.candidateName.split(" ")[0]} <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={rejectReason}

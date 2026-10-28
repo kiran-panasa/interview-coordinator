@@ -56,7 +56,7 @@ export default function CorrectStatusModal({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Audit Remark (required)</label>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">Audit Remark <span className="text-red-500">*</span></label>
             <textarea
               rows={3}
               value={reason}

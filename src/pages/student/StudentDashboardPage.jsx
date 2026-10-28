@@ -1575,7 +1575,7 @@ export default function StudentDashboardPage() {
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-              Reason {cancelRescheduleTarget?.mode === "cancel" ? "for cancelling" : "for rescheduling"}
+              Reason {cancelRescheduleTarget?.mode === "cancel" ? "for cancelling" : "for rescheduling"} <span className="text-red-500">*</span>
             </label>
             <textarea
               rows={3} autoFocus
@@ -1593,7 +1593,7 @@ export default function StudentDashboardPage() {
             </Button>
             <Button
               variant={cancelRescheduleTarget?.mode === "cancel" ? "danger" : "primary"}
-              className="flex-1" disabled={cancelRescheduleSubmitting}
+              className="flex-1" disabled={cancelRescheduleSubmitting || !cancelRescheduleReason.trim()}
               onClick={handleCancelRescheduleSubmit}
             >
               {cancelRescheduleSubmitting

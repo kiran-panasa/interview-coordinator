@@ -1069,7 +1069,7 @@ export default function InterviewDetail() {
             A reason is required — it's shown to admins for payment reconciliation and kept as part of the audit trail.
           </p>
           <div>
-            <label className={labelCls}>Reason</label>
+            <label className={labelCls}>Reason <span className="text-red-500">*</span></label>
             <select
               value={partialReasonPreset}
               onChange={e => setPartialReasonPreset(e.target.value)}
@@ -1081,7 +1081,7 @@ export default function InterviewDetail() {
           </div>
           {partialReasonPreset === "Other" && (
             <div>
-              <label className={labelCls}>Please specify</label>
+              <label className={labelCls}>Please specify <span className="text-red-500">*</span></label>
               <textarea
                 value={partialReasonText}
                 onChange={e => setPartialReasonText(e.target.value)}
@@ -1120,7 +1120,7 @@ export default function InterviewDetail() {
             A reason is required — it's shown to the admin so they can reassign a different interviewer for this candidate.
           </p>
           <div>
-            <label className={labelCls}>Reason</label>
+            <label className={labelCls}>Reason <span className="text-red-500">*</span></label>
             <select
               value={declineReasonPreset}
               onChange={e => setDeclineReasonPreset(e.target.value)}
@@ -1132,7 +1132,7 @@ export default function InterviewDetail() {
           </div>
           {declineReasonPreset === "Other" && (
             <div>
-              <label className={labelCls}>Please specify</label>
+              <label className={labelCls}>Please specify <span className="text-red-500">*</span></label>
               <textarea
                 value={declineReasonText}
                 onChange={e => setDeclineReasonText(e.target.value)}
@@ -1171,7 +1171,7 @@ export default function InterviewDetail() {
             event will be removed and the candidate will be notified that the team will follow up to reschedule.
           </p>
           <div>
-            <label className={labelCls}>Reason</label>
+            <label className={labelCls}>Reason <span className="text-red-500">*</span></label>
             <select
               value={cancelReasonPreset}
               onChange={e => setCancelReasonPreset(e.target.value)}
@@ -1183,7 +1183,7 @@ export default function InterviewDetail() {
           </div>
           {cancelReasonPreset === "Other" && (
             <div>
-              <label className={labelCls}>Please specify</label>
+              <label className={labelCls}>Please specify <span className="text-red-500">*</span></label>
               <textarea
                 value={cancelReasonText}
                 onChange={e => setCancelReasonText(e.target.value)}
