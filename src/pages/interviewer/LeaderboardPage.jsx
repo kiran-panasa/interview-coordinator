@@ -118,7 +118,7 @@ export default function LeaderboardPage() {
             <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
               <CalendarPlus className="w-7 h-7" />
             </div>
-            <p className="text-lg font-bold">Wahh, no interviews {periodLabel} yet!</p>
+            <p className="text-lg font-bold">No interviews {periodLabel}</p>
             <p className="text-sm text-amber-50 mt-1 max-w-sm mx-auto">
               No worries — give your availability and grab a meet schedule. Someone's waiting for a panelist like you.
             </p>
@@ -138,7 +138,7 @@ export default function LeaderboardPage() {
             <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
               <PartyPopper className="w-7 h-7" />
             </div>
-            <p className="text-lg font-bold">Thank You! 🙏</p>
+            <p className="text-lg font-bold">Thank You!</p>
             <p className="text-sm text-emerald-50 mt-1">
               You've successfully completed <span className="font-extrabold text-white text-base">{myCompleted}</span> interview{myCompleted === 1 ? "" : "s"} {periodLabel}.
             </p>
