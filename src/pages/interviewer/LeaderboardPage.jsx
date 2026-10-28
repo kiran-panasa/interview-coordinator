@@ -115,12 +115,12 @@ export default function LeaderboardPage() {
             initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3, delay: 0.05 }}
             className="bg-gradient-to-br from-amber-400 to-orange-500 rounded-[1.75rem] shadow-card px-6 py-7 text-center text-white overflow-hidden relative"
           >
-            <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3 text-3xl leading-none">
-              🎯
+            <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+              <CalendarPlus className="w-7 h-7" />
             </div>
-            <p className="text-lg font-bold">Wahh, no interviews {periodLabel} yet! 😮</p>
+            <p className="text-lg font-bold">Wahh, no interviews {periodLabel} yet!</p>
             <p className="text-sm text-amber-50 mt-1 max-w-sm mx-auto">
-              Kindly add your availability and take an interview — someone's waiting for a panelist like you! 🙌
+              No worries — give your availability and grab a meet schedule. Someone's waiting for a panelist like you.
             </p>
             <p className="text-xs text-amber-50/80 mt-2.5 flex items-center justify-center gap-1.5 max-w-sm mx-auto">
               <Sparkles className="w-3.5 h-3.5 flex-shrink-0" /> {emptyStateLine}
