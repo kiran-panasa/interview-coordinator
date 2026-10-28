@@ -7,7 +7,7 @@ import { formatDate, formatDateTime } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
-  markSlotFree, freeSlotsHeldByInvite, createInterview, getTemplate, createNotification,
+  markSlotFree, freeSlotsHeldByInvite, freeSlotsForInterview, createInterview, getTemplate, createNotification,
   logInviteHistory, getPreInterviewResources, updateCandidate,
   ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory,
 } from "../../api/firestore";
@@ -461,8 +461,7 @@ export default function CandidateSchedulingTab({
                   await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: oldIv.eventId }).catch(() => {});
                 }
                 if (oldIv.interviewerId && oldIv.scheduledDate && oldIv.scheduledTime) {
-                  const oldSlotId = `${oldIv.scheduledDate}_${oldIv.scheduledTime.replace(/[: ]/g, "")}`;
-                  await markSlotFree(oldIv.interviewerId, oldSlotId).catch(() => {});
+                  await freeSlotsForInterview(oldIv.interviewerId, oldIv.scheduledDate, oldIv.scheduledTime, oldIv.duration).catch(() => {});
                 }
                 await markInterviewCancelled(inv.replacingInterviewId, {
                   reason: `Rescheduled by candidate — picked a new slot on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`,

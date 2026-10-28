@@ -128,6 +128,37 @@ export async function markSlotFree(interviewerId: string, slotId: string): Promi
   });
 }
 
+// Frees every raw availability slot doc an already-scheduled interview's
+// full duration actually spans, not just the one matching its exact start
+// time — e.g. cancelling a 60-minute interview that started at 3:00 PM must
+// also free the 3:30 slot it locked (see bookSlotForCandidate in
+// api/scheduling.ts, which locks every raw slot in [start, start+duration)
+// the same way), or that slot is left stuck "booked" forever with no invite
+// or interview left pointing at it to ever free it later. Used by every
+// cancel/decline/delete path for an already-confirmed interview — unlike
+// freeSlotsHeldByInvite (used while a booking is still only an invite),
+// this looks slots up by date+time span since a cancelled/deleted
+// interview's own heldByInviteId tag may already be gone.
+export async function freeSlotsForInterview(
+  interviewerId: string,
+  date: string,
+  time: string,
+  durationMinutes: number
+): Promise<void> {
+  if (!interviewerId || !date || !time) return;
+  const startMin = timeToMinutes(time);
+  const endMin = startMin + (durationMinutes || 30);
+  const daySnap = await getDocs(query(
+    collection(db, "availability", interviewerId, "slots"),
+    where("date", "==", date)
+  ));
+  const toFree = daySnap.docs.filter(d => {
+    const t = timeToMinutes((d.data() as { time?: string }).time || "");
+    return t >= startMin && t < endMin;
+  });
+  await Promise.all(toFree.map(d => updateDoc(d.ref, { isBooked: false, interviewId: null, heldByInviteId: null })));
+}
+
 // A longer interview can hold more than one raw slot doc (see
 // bookSlotForCandidate in api/scheduling.ts, which tags every slot it locks
 // with heldByInviteId) — this frees all of them, not just the one the

@@ -9,7 +9,7 @@ import {
 import {
   subscribeToInterview, updateInterview, markInterviewCompleted, markInterviewPartiallyCompleted, saveFeedbackDraft,
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
-  markSlotFree, markCandidateAttendance,
+  freeSlotsForInterview, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
   getActiveAdmins, getCandidate, getInterview, createNotification,
 } from "../../api/firestore";
@@ -300,8 +300,7 @@ export default function InterviewDetail() {
     if (!declineReason) return; // Confirm button is disabled without one, but guard anyway
     setSaving(true);
     await updateInterview(id, { status: "declined", declineReason });
-    const slotId = `${interview.scheduledDate}_${interview.scheduledTime.replace(/[: ]/g, "")}`;
-    await markSlotFree(interview.interviewerId, slotId).catch(() => {});
+    await freeSlotsForInterview(interview.interviewerId, interview.scheduledDate, interview.scheduledTime, interview.duration).catch(() => {});
     setInterview(iv => ({ ...iv, status: "declined", declineReason }));
     setToast({ message: "Interview declined." });
     setDeclineModalOpen(false);
@@ -374,8 +373,7 @@ export default function InterviewDetail() {
         await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: interview.eventId }).catch(() => {});
       }
       await markInterviewCancelled(id, { reason: cancelReasonValue, cancelledBy: "interviewer" });
-      const slotId = `${interview.scheduledDate}_${interview.scheduledTime.replace(/[: ]/g, "")}`;
-      await markSlotFree(interview.interviewerId, slotId).catch(() => {});
+      await freeSlotsForInterview(interview.interviewerId, interview.scheduledDate, interview.scheduledTime, interview.duration).catch(() => {});
 
       // Candidate is told the team will follow up — same wording as an
       // admin-initiated cancellation (see handleCancel in InterviewsPage.jsx)

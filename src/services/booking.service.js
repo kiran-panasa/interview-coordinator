@@ -16,7 +16,7 @@
 import {
   getUsersByIds, getTemplate, createInterview, updateScheduleInvite,
   logInviteHistory, createNotification, getPreInterviewResources,
-  getInterview, markInterviewCancelled, updateInterview, markSlotFree,
+  getInterview, markInterviewCancelled, updateInterview, freeSlotsForInterview,
   getScheduleInvite,
 } from "../api/firestore";
 import { formatDate } from "../utils/dates";
@@ -38,8 +38,7 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
         await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: oldIv.eventId }).catch(() => {});
       }
       if (oldIv.interviewerId && oldIv.scheduledDate && oldIv.scheduledTime) {
-        const oldSlotId = `${oldIv.scheduledDate}_${oldIv.scheduledTime.replace(/[: ]/g, "")}`;
-        await markSlotFree(oldIv.interviewerId, oldSlotId).catch(() => {});
+        await freeSlotsForInterview(oldIv.interviewerId, oldIv.scheduledDate, oldIv.scheduledTime, oldIv.duration).catch(() => {});
       }
       await markInterviewCancelled(replacingInterviewId, {
         reason: `Rescheduled by candidate — picked a new slot on ${formatDate(bookedDate)} at ${bookedTime}.`,
@@ -80,8 +79,7 @@ export async function cancelInterviewByCandidate(interviewId, reason) {
     await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
   }
   if (iv.interviewerId && iv.scheduledDate && iv.scheduledTime) {
-    const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
-    await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+    await freeSlotsForInterview(iv.interviewerId, iv.scheduledDate, iv.scheduledTime, iv.duration).catch(() => {});
   }
   await markInterviewCancelled(interviewId, { reason, cancelledBy: "candidate" });
   if (APPS_SCRIPT_URL && iv.interviewerEmail) {

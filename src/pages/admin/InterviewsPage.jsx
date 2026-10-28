@@ -21,7 +21,7 @@ import {
   createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, reopenNoShowInterview,
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, clearNoShowInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
-  getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, markSlotFree,
+  getInterviewerAvailability, getInterviewerBusyWindows, markSlotBooked, freeSlotsForInterview,
   getTemplate, importCompletedInterview, importScheduledInterview, markInterviewPartiallyCompleted,
   createNotification, subscribeToBlockedDates, getInterviewIntegrity,
   logInterviewHistory, getInterviewHistory,
@@ -491,8 +491,7 @@ export default function InterviewsPage() {
         }
 
         if (dateChanged || timeChanged || interviewerChanged) {
-          const oldSlotId = `${editTarget.scheduledDate}_${editTarget.scheduledTime.replace(/[: ]/g, "")}`;
-          await markSlotFree(editTarget.interviewerId, oldSlotId).catch(() => {});
+          await freeSlotsForInterview(editTarget.interviewerId, editTarget.scheduledDate, editTarget.scheduledTime, editTarget.duration).catch(() => {});
           const newSlotId = `${form.scheduledDate}_${form.scheduledTime.replace(/[: ]/g, "")}`;
           await markSlotBooked(form.interviewerId, newSlotId, editTarget.id).catch(() => {});
         }
@@ -1113,8 +1112,7 @@ export default function InterviewsPage() {
         await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
       }
       await markInterviewCancelled(iv.id, { reason: reason.trim(), cancelledBy: "admin" });
-      const slotId = `${iv.scheduledDate}_${iv.scheduledTime.replace(/[: ]/g, "")}`;
-      await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+      await freeSlotsForInterview(iv.interviewerId, iv.scheduledDate, iv.scheduledTime, iv.duration).catch(() => {});
 
       // Candidate and interviewer get different wording — the candidate is
       // told the team will follow up to reschedule, but that line doesn't
@@ -1162,8 +1160,7 @@ export default function InterviewsPage() {
       if (iv.eventId) {
         await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
       }
-      const slotId = `${iv.scheduledDate}_${(iv.scheduledTime || "").replace(/[: ]/g, "")}`;
-      await markSlotFree(iv.interviewerId, slotId).catch(() => {});
+      await freeSlotsForInterview(iv.interviewerId, iv.scheduledDate, iv.scheduledTime, iv.duration).catch(() => {});
       await deleteInterview(iv.id);
       setToast({ message: "Interview deleted." });
     } catch (e) {
