@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Medal, Award, Download,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Download,
 } from "lucide-react";
 import { formatDate, formatDateLong } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
@@ -59,6 +59,13 @@ function thisMonthRange() {
   const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const iso = d => d.toISOString().slice(0, 10);
   return { from: iso(first), to: iso(last) };
+}
+// "Overall" — a wide fixed range rather than a separate unscoped query;
+// `interviews` is already the vendor's full history (getInterviewsForVendor
+// isn't itself date-scoped), so this just stops the client-side filter
+// below from excluding anything.
+function allTimeRange() {
+  return { from: "2000-01-01", to: "2099-12-31" };
 }
 
 // Self-contained like StudentDashboardPage.jsx — its own inline sidebar
@@ -522,13 +529,11 @@ export default function VendorDashboardPage() {
               })()}
 
               {tab === "leaderboard" && (() => {
-                const range = leaderboardPeriod === "week" ? thisWeekRange() : thisMonthRange();
+                const range = leaderboardPeriod === "week" ? thisWeekRange() : leaderboardPeriod === "month" ? thisMonthRange() : allTimeRange();
                 const periodInterviews = interviews.filter(iv => iv.scheduledDate >= range.from && iv.scheduledDate <= range.to);
-                // Ranked by COMPLETED interviews (actual work done) in the
-                // period — total (scheduled+completed+everything else) shown
-                // alongside as secondary context, not the ranking metric
-                // itself, so a panelist with a lot of no-shows/cancellations
-                // doesn't outrank one who actually completed more interviews.
+                // Sorted by completed count, but nothing in the UI below
+                // labels that as a ranking — no numbering, no medals — this
+                // is a view of the team's effort, not a competition.
                 const ranked = interviewers
                   .map(ivr => {
                     const ivrInterviews = periodInterviews.filter(iv => iv.interviewerId === ivr.id);
@@ -536,12 +541,6 @@ export default function VendorDashboardPage() {
                     return { interviewer: ivr, completed, total: ivrInterviews.length };
                   })
                   .sort((a, b) => b.completed - a.completed || b.total - a.total);
-
-                const RANK_STYLE = [
-                  { icon: Trophy, badge: "bg-gradient-to-br from-amber-400 to-yellow-500 text-white", card: "border-amber-200 bg-amber-50/60" },
-                  { icon: Medal,  badge: "bg-gradient-to-br from-gray-300 to-gray-400 text-white",    card: "border-gray-200 bg-gray-50/60" },
-                  { icon: Award,  badge: "bg-gradient-to-br from-orange-400 to-amber-700 text-white", card: "border-orange-200 bg-orange-50/40" },
-                ];
 
                 return (
                 // Constrained + centered rather than stretched to the full
@@ -555,10 +554,10 @@ export default function VendorDashboardPage() {
                       <Trophy className="w-5 h-5 text-amber-500" /> Leaderboard
                     </h1>
                     <p className="text-sm text-gray-500 mt-0.5">
-                      Ranked by completed interviews, {formatDate(range.from)} to {formatDate(range.to)}.
+                      {leaderboardPeriod === "overall" ? "Completed interviews, till date." : `Completed interviews, ${formatDate(range.from)} to ${formatDate(range.to)}.`}
                     </p>
                     <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-full p-1.5 mt-4 w-fit mx-auto">
-                      {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
+                      {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
                         <button key={id} onClick={() => setLeaderboardPeriod(id)}
                           className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
                             leaderboardPeriod === id ? "bg-white text-orange-700 shadow-card" : "text-gray-500 hover:text-gray-700"
@@ -576,27 +575,21 @@ export default function VendorDashboardPage() {
                     </Card>
                   ) : (
                     <div className="space-y-2.5">
-                      {ranked.map((row, i) => {
-                        const style = RANK_STYLE[i];
-                        const RankIcon = style?.icon;
-                        return (
-                          <Card key={row.interviewer.id} className={`p-4 flex items-center gap-4 ${style?.card || ""}`}>
-                            <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${
-                              style ? style.badge : "bg-gray-100 text-gray-500"
-                            }`}>
-                              {RankIcon ? <RankIcon className="w-5 h-5" /> : i + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-gray-900 truncate">{row.interviewer.displayName || row.interviewer.email}</p>
-                              <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} this {leaderboardPeriod}</p>
-                            </div>
-                            <div className="text-center flex-shrink-0 w-16">
-                              <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
-                              <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Completed</p>
-                            </div>
-                          </Card>
-                        );
-                      })}
+                      {ranked.map(row => (
+                        <Card key={row.interviewer.id} className="p-4 flex items-center gap-4">
+                          <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                            <Trophy className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{row.interviewer.displayName || row.interviewer.email}</p>
+                            <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} {leaderboardPeriod === "overall" ? "overall" : `this ${leaderboardPeriod}`}</p>
+                          </div>
+                          <div className="text-center flex-shrink-0 w-16">
+                            <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
+                            <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Completed</p>
+                          </div>
+                        </Card>
+                      ))}
                     </div>
                   )}
                 </div>
