@@ -669,23 +669,29 @@ export default function CandidatesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsKey]);
 
-  // Bounded bulk fetch — only runs while the Status filter is actually
-  // selected, over the Template/Program/search-narrowed `filtered` set (not
-  // the whole collection). Skips candidates already covered by the cheap
-  // per-page fetch above. Refuses outright past BULK_STATUS_CANDIDATE_CAP
-  // rather than silently firing hundreds of parallel reads — the toast
-  // tells the admin how to narrow down instead.
+  // Bounded bulk fetch over the Template/Program/search/Archived-narrowed
+  // `filtered` set (not the whole collection) — runs any time that set is
+  // actually loaded (needsFullList), not just once the Status filter is
+  // picked, so the per-status counts in that dropdown (see statusCounts
+  // below) are ready before the admin even opens it. Skips candidates
+  // already covered by the cheap per-page fetch above. Past
+  // BULK_STATUS_CANDIDATE_CAP this is skipped outright rather than firing
+  // hundreds of parallel reads just to populate counts — the toast only
+  // interrupts if the admin actually tried to USE the Status filter; just
+  // browsing a large list silently shows plain labels with no counts.
   useEffect(() => {
-    if (filterStatus === "all") return;
-    const missing = filtered.filter(c => !statusByCandidateId.has(c.id));
-    if (!missing.length) return;
+    if (!needsFullList) return;
     if (filtered.length > BULK_STATUS_CANDIDATE_CAP) {
-      setToast({
-        message: `Status filter needs ${filtered.length} candidates checked — narrow down with Program, search, or the Template filter first (max ${BULK_STATUS_CANDIDATE_CAP} at a time).`,
-        type: "error",
-      });
+      if (filterStatus !== "all") {
+        setToast({
+          message: `Status filter needs ${filtered.length} candidates checked — narrow down with Program, search, or the Template filter first (max ${BULK_STATUS_CANDIDATE_CAP} at a time).`,
+          type: "error",
+        });
+      }
       return;
     }
+    const missing = filtered.filter(c => !statusByCandidateId.has(c.id));
+    if (!missing.length) return;
     let cancelled = false;
     setStatusLoading(true);
     Promise.all(missing.map(c => getCandidateTemplateStatuses(c, templatesById))).then(results => {
@@ -698,7 +704,23 @@ export default function CandidatesPage() {
     }).finally(() => { if (!cancelled) setStatusLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterStatus, filtered]);
+  }, [needsFullList, filterStatus, filtered]);
+
+  // Per-status counts for the filter dropdown (e.g. "No Show (12)") — only
+  // meaningful once every candidate in `filtered` has status data loaded
+  // (see the effect above); while that's still in flight, or `filtered`'s
+  // too large to compute at all, options just show their plain label.
+  const statusCounts = useMemo(() => {
+    if (!needsFullList || !filtered.length || filtered.length > BULK_STATUS_CANDIDATE_CAP) return null;
+    if (!filtered.every(c => statusByCandidateId.has(c.id))) return null;
+    const counts = {};
+    filtered.forEach(c => {
+      const seen = new Set();
+      (statusByCandidateId.get(c.id) || []).forEach(s => seen.add(s.status));
+      seen.forEach(status => { counts[status] = (counts[status] || 0) + 1; });
+    });
+    return counts;
+  }, [needsFullList, filtered, statusByCandidateId]);
 
   // Exports exactly what's currently filtered (Program/search/Archived/
   // Template/Status), not just the visible page. In the default scoped
@@ -839,9 +861,9 @@ export default function CandidatesPage() {
         </div>
         <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCandPage(1); }}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white cursor-pointer">
-          <option value="all">Any Status</option>
+          <option value="all">Any Status{statusCounts ? ` (${filtered.length})` : ""}</option>
           {Object.keys(STATUS_LABELS).filter(k => ["not_started", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].includes(k)).map(k => (
-            <option key={k} value={k}>{STATUS_LABELS[k]}</option>
+            <option key={k} value={k}>{STATUS_LABELS[k]}{statusCounts ? ` (${statusCounts[k] || 0})` : ""}</option>
           ))}
         </select>
         {(filterTemplateIds.length > 0 || filterStatus !== "all") && (
