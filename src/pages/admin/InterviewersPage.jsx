@@ -17,6 +17,8 @@ import Button from "../../components/Button";
 import SkillsSelect from "../../components/SkillsSelect";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
+import CursorPagination from "../../components/CursorPagination";
+import { useCursorPagination } from "../../hooks/useCursorPagination";
 import { SkeletonRows } from "../../components/Skeleton";
 import { usePagination } from "../../hooks/usePagination";
 import ImportSkillsModal from "../../features/interviewers/ImportSkillsModal";
@@ -68,73 +70,37 @@ export default function InterviewersPage() {
     (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "archived"
   );
 
-  // Server-scoped "fresh 10" page — see getInterviewersPage.
-  const [pageItems,       setPageItems]       = useState([]);
-  const [pageCursor,      setPageCursor]      = useState(null);
-  const [pageDone,        setPageDone]        = useState(false);
-  const [pageLoading,     setPageLoading]     = useState(false);
-  const [pageLoadingMore, setPageLoadingMore] = useState(false);
-  const [pageError,       setPageError]       = useState(null);
-
-  const fetchFirstPage = useCallback(async () => {
-    setPageLoading(true);
-    setPageItems([]); setPageCursor(null); setPageDone(false); setPageError(null);
+  // Server-scoped "fresh 10" page, with real page-number navigation (see
+  // useCursorPagination) instead of an ever-growing "Load more" list —
+  // honors the same index-building fallback the old effect did (full
+  // fetch, filtered client-side, page 1 only) when the (role + status +
+  // createdAt) composite index isn't ready yet.
+  const fetchInterviewersPage = useCallback(async (cursor) => {
+    if (needsFullList) return { items: [], cursor: null, done: true };
     const status = showArchived ? "archived" : "active";
     try {
-      const res = await getInterviewersPage(status, null, 10);
-      setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
+      return await getInterviewersPage(status, cursor, 10);
     } catch (err) {
-      // The composite index (role + status + createdAt) may still be
-      // building — fall back to a full fetch filtered client-side so the
-      // tab still shows correct data immediately; the fast scoped query
-      // takes back over automatically once the index is ready.
       const isIndexError = /index/i.test(err?.message || "");
-      if (isIndexError) {
-        try {
-          const all = await getAllUsers();
-          const scoped = all.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === status);
-          setPageItems(scoped.slice(0, 10));
-          setPageDone(true); // fallback mode has no cursor — "Load more" stays hidden
-        } catch (fallbackErr) {
-          console.error("Interviewers fallback fetch failed:", fallbackErr);
-          setPageError(fallbackErr.message || String(fallbackErr));
-        }
-      } else {
-        console.error("getInterviewersPage failed:", err);
-        setPageError(err.message || String(err));
+      if (isIndexError && !cursor) {
+        const all = await getAllUsers();
+        const scoped = all.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === status);
+        return { items: scoped.slice(0, 10), cursor: null, done: true };
       }
+      throw err;
     }
-    setPageLoading(false);
-  }, [showArchived]);
-
-  useEffect(() => {
-    if (needsFullList) return;
-    let cancelled = false;
-    (async () => { await fetchFirstPage(); if (cancelled) return; })();
-    return () => { cancelled = true; };
-  }, [needsFullList, fetchFirstPage]);
-
-  const loadMorePage = async () => {
-    if (pageDone || pageLoadingMore) return;
-    setPageLoadingMore(true);
-    try {
-      const status = showArchived ? "archived" : "active";
-      const res = await getInterviewersPage(status, pageCursor, 10);
-      setPageItems(prev => [...prev, ...res.items]);
-      setPageCursor(res.cursor); setPageDone(res.done);
-    } catch (err) {
-      console.error("getInterviewersPage (load more) failed:", err);
-      setPageError(err.message || String(err));
-    }
-    setPageLoadingMore(false);
-  };
+  }, [needsFullList, showArchived]);
+  const interviewersPager = useCursorPagination(fetchInterviewersPage, `${needsFullList}|${showArchived}`, 10);
+  const pageItems   = interviewersPager.items;
+  const pageLoading = interviewersPager.loading;
+  const pageError   = interviewersPager.error;
 
   // Any archive/restore/edit needs to refresh whichever data is actually
   // driving the current view, plus the (cheap, aggregation-based) tab counts.
   const refreshAfterMutation = () => {
     queryClient.invalidateQueries({ queryKey: QK.users });
     queryClient.invalidateQueries({ queryKey: QK.interviewerCounts });
-    if (!needsFullList) fetchFirstPage();
+    if (!needsFullList) interviewersPager.reload();
   };
 
   // Currently-visible tab's interviewer objects — the full-fetched+filtered
@@ -472,7 +438,7 @@ export default function InterviewersPage() {
 
       {!needsFullList && (
         <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-gray-400 mb-2">
-          Showing the {pageItems.length} most recent {showArchived ? "archived" : "active"} interviewers — search or use a filter to find anyone else.
+          Page {interviewersPager.page} of {showArchived ? "archived" : "active"} interviewers — search or use a filter to find anyone else.
         </motion.p>
       )}
 
@@ -621,12 +587,16 @@ export default function InterviewersPage() {
           </table>
           {needsFullList ? (
             <Pagination page={page} totalPages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} />
-          ) : !pageLoading && !pageDone && (
-            <div className="flex justify-center py-4 border-t border-gray-50">
-              <Button variant="secondary" onClick={loadMorePage} disabled={pageLoadingMore}>
-                {pageLoadingMore ? "Loading…" : "Load 10 more"}
-              </Button>
-            </div>
+          ) : (
+            <CursorPagination
+              page={interviewersPager.page}
+              maxReachedPage={interviewersPager.maxReachedPage}
+              done={interviewersPager.done}
+              total={counts ? (showArchived ? counts.archived : counts.active) : null}
+              pageSize={10}
+              loading={interviewersPager.loading}
+              onPageChange={interviewersPager.goToPage}
+            />
           )}
           </>
         )}

@@ -18,6 +18,8 @@ import Toast from "../../components/Toast";
 import Button from "../../components/Button";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
+import CursorPagination from "../../components/CursorPagination";
+import { useCursorPagination } from "../../hooks/useCursorPagination";
 import { SkeletonRows } from "../../components/Skeleton";
 import SkillsSelect from "../../components/SkillsSelect";
 import { STYLES as STATUS_STYLES, LABELS as STATUS_LABELS } from "../../components/Badge";
@@ -220,66 +222,30 @@ export default function CandidatesPage() {
   const programIds = useMemo(() => programs.map(p => p.id), [programs]);
   const { data: counts } = useCandidateCounts(programIds);
 
-  // Server-scoped "fresh 10 per Program" page — see getCandidatesPage.
-  const [pageItems,       setPageItems]       = useState([]);
-  const [pageCursor,      setPageCursor]      = useState(null);
-  const [pageDone,        setPageDone]        = useState(false);
-  const [pageLoading,     setPageLoading]     = useState(false);
-  const [pageLoadingMore, setPageLoadingMore] = useState(false);
-  const [pageError,       setPageError]       = useState(null);
-
-  useEffect(() => {
-    if (needsFullList) return;
-    let cancelled = false;
-    setPageLoading(true);
-    setPageItems([]); setPageCursor(null); setPageDone(false); setPageError(null);
+  // Server-scoped "fresh 10 per Program" page, with real page-number
+  // navigation (see useCursorPagination) instead of an ever-growing
+  // "Load more" list — honors the same index-building fallback the old
+  // effect did (full fetch, filtered client-side, page 1 only) when the
+  // (program + createdAt) composite index isn't ready yet.
+  const fetchCandidatesPage = useCallback(async (cursor) => {
+    if (needsFullList) return { items: [], cursor: null, done: true };
     const programId = activeProgram === "all" ? null : activeProgram;
-    getCandidatesPage(programId, null, 10).then(res => {
-      if (cancelled) return;
-      setPageItems(res.items); setPageCursor(res.cursor); setPageDone(res.done);
-    }).catch(async (err) => {
-      if (cancelled) return;
-      // The composite index (program + createdAt) may still be building —
-      // that's a one-time, self-resolving state, not a real failure. Fall
-      // back to a full fetch filtered client-side so the tab still shows
-      // correct data immediately; once the index finishes building, the
-      // next tab switch/reload picks the fast scoped query back up.
-      const isIndexError = /index/i.test(err?.message || "");
-      if (isIndexError && programId) {
-        try {
-          const all = await getCandidates();
-          if (cancelled) return;
-          const activeForProgram = all.filter(c => c.program === programId && c.archived !== true);
-          setPageItems(activeForProgram.slice(0, 10));
-          setPageDone(true); // fallback mode has no cursor — "Load more" stays hidden
-          return;
-        } catch (fallbackErr) {
-          if (cancelled) return;
-          console.error("Candidates fallback fetch failed:", fallbackErr);
-          setPageError(fallbackErr.message || String(fallbackErr));
-          return;
-        }
-      }
-      console.error("getCandidatesPage failed:", err);
-      setPageError(err.message || String(err));
-    }).finally(() => { if (!cancelled) setPageLoading(false); });
-    return () => { cancelled = true; };
-  }, [needsFullList, activeProgram]);
-
-  const loadMorePage = async () => {
-    if (pageDone || pageLoadingMore) return;
-    setPageLoadingMore(true);
     try {
-      const programId = activeProgram === "all" ? null : activeProgram;
-      const res = await getCandidatesPage(programId, pageCursor, 10);
-      setPageItems(prev => [...prev, ...res.items]);
-      setPageCursor(res.cursor); setPageDone(res.done);
+      return await getCandidatesPage(programId, cursor, 10);
     } catch (err) {
-      console.error("getCandidatesPage (load more) failed:", err);
-      setPageError(err.message || String(err));
+      const isIndexError = /index/i.test(err?.message || "");
+      if (isIndexError && programId && !cursor) {
+        const all = await getCandidates();
+        const activeForProgram = all.filter(c => c.program === programId && c.archived !== true);
+        return { items: activeForProgram.slice(0, 10), cursor: null, done: true };
+      }
+      throw err;
     }
-    setPageLoadingMore(false);
-  };
+  }, [needsFullList, activeProgram]);
+  const candPager = useCursorPagination(fetchCandidatesPage, `${needsFullList}|${activeProgram}`, 10);
+  const pageItems   = candPager.items;
+  const pageLoading = candPager.loading;
+  const pageError   = candPager.error;
 
   // Any create/archive/unarchive/delete/bulk-edit needs to update whichever
   // list is actually driving the current view — plus refresh the (cheap,
@@ -893,7 +859,7 @@ export default function CandidatesPage() {
 
       {!needsFullList && (
         <motion.p initial="hidden" animate="visible" variants={fadeUp} custom={2.5} className="text-xs text-gray-400 mb-2">
-          Showing the {pageItems.length} most recent {activeProgram === "all" ? "" : "candidates for this Program"} — search by name, UID, or email to find anyone else.
+          Page {candPager.page} of {activeProgram === "all" ? "all candidates" : "candidates for this Program"} — search by name, UID, or email to find anyone else.
         </motion.p>
       )}
 
@@ -1002,12 +968,16 @@ export default function CandidatesPage() {
         )}
         {needsFullList ? (
           <Pagination page={candPage} totalPages={candTotalPages} total={candTotal} pageSize={candPageSize} onPageChange={setCandPage} />
-        ) : !pageLoading && !pageDone && (
-          <div className="flex justify-center py-4 border-t border-gray-50">
-            <Button variant="secondary" onClick={loadMorePage} disabled={pageLoadingMore}>
-              {pageLoadingMore ? "Loading…" : "Load 10 more"}
-            </Button>
-          </div>
+        ) : (
+          <CursorPagination
+            page={candPager.page}
+            maxReachedPage={candPager.maxReachedPage}
+            done={candPager.done}
+            total={activeProgram === "all" ? tabCounts?.all : activeProgram === "unassigned" ? tabCounts?.unassigned : tabCounts?.byProgram?.[activeProgram]}
+            pageSize={10}
+            loading={candPager.loading}
+            onPageChange={candPager.goToPage}
+          />
         )}
       </motion.div>
 
