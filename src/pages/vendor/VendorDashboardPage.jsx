@@ -582,7 +582,6 @@ export default function VendorDashboardPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-900 truncate">{row.interviewer.displayName || row.interviewer.email}</p>
-                            <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} {leaderboardPeriod === "overall" ? "overall" : `this ${leaderboardPeriod}`}</p>
                           </div>
                           <div className="text-center flex-shrink-0 w-16">
                             <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
