@@ -68,7 +68,10 @@ export default function LeaderboardPage() {
 
   const myCompleted = rows.find(r => r.interviewer.id === userProfile?.id)?.completed ?? 0;
   const celebrationLine = CELEBRATION_LINES[new Date().getDate() % CELEBRATION_LINES.length];
-  const periodLabel = period === "week" ? "this week" : period === "month" ? "this month" : "overall";
+  const shortDate = iso => new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const periodLabel = period === "week" ? `this week (${shortDate(range.from)} – ${shortDate(range.to)})`
+    : period === "month" ? `this month (${shortDate(range.from)} – ${shortDate(range.to)})`
+    : "overall (till date)";
 
   return (
     <div className="p-8">
