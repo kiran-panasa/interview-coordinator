@@ -1,4 +1,5 @@
-const STYLES = {
+export const STYLES = {
+  not_started:        "bg-gray-50   text-gray-500   ring-gray-200 [&>span]:bg-gray-300",
   pending_acceptance: "bg-amber-50 text-amber-700 ring-amber-200 [&>span]:bg-amber-500",
   scheduled:          "bg-blue-50  text-blue-700  ring-blue-200 [&>span]:bg-blue-500",
   completed:          "bg-emerald-50 text-emerald-700 ring-emerald-200 [&>span]:bg-emerald-500",
@@ -23,7 +24,8 @@ const STYLES = {
   dismissed:          "bg-gray-100  text-gray-500  ring-gray-200 [&>span]:bg-gray-400",
 };
 
-const LABELS = {
+export const LABELS = {
+  not_started:        "Not Started",
   pending_acceptance: "Pending Acceptance",
   scheduled:          "Scheduled",
   completed:          "Completed",

@@ -3,18 +3,24 @@ import * as XLSX from "xlsx";
 import { motion } from "framer-motion";
 import {
   Search, Plus, Upload, UploadCloud, Users, Archive,
-  FileSpreadsheet, FileText, AlertTriangle, AlertCircle,
+  FileSpreadsheet, FileText, AlertTriangle, AlertCircle, Download,
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { createCandidate, findCandidateByUidOrEmail, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate, getCandidatesPage, getCandidates } from "../../api/firestore";
+import {
+  createCandidate, findCandidateByUidOrEmail, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate,
+  getCandidatesPage, getCandidates, getInterviewsForCandidateTemplate,
+} from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
+import { ordinalLabel } from "../../utils/strings";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import { SkeletonRows } from "../../components/Skeleton";
+import SkillsSelect from "../../components/SkillsSelect";
+import { STYLES as STATUS_STYLES, LABELS as STATUS_LABELS } from "../../components/Badge";
 import { usePagination } from "../../hooks/usePagination";
 import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
 
@@ -125,6 +131,48 @@ function downloadSampleExcel(templates = [], programs = []) {
   XLSX.writeFile(wb, "candidates_sample.xlsx");
 }
 
+// A candidate's LATEST interview for one template, plus which attempt
+// number it represents — same "only a COMPLETED interview advances the
+// count" rule the admin Interviews page's own attempt labeling already
+// uses (see attemptLabelByInterviewId there), so the two never disagree.
+// No interviews at all for this template yet -> "not_started".
+async function getLatestTemplateStatus(candidateId, templateId) {
+  const list = await getInterviewsForCandidateTemplate(candidateId, templateId).catch(() => []);
+  if (!list.length) return { status: "not_started", attemptNumber: 1 };
+  const sorted = [...list].sort((a, b) =>
+    (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`)
+  );
+  let n = 1, attemptNumber = 1, status = sorted[0].status;
+  for (const iv of sorted) {
+    attemptNumber = n;
+    status = iv.status;
+    if (iv.status === "completed") n++;
+  }
+  return { status, attemptNumber };
+}
+
+// Every assigned template's latest status for one candidate, fetched in
+// parallel — the thing the Status column and the Status filter both
+// ultimately need. Bounded by how many templates a candidate actually has
+// (almost always 1-3), not by the candidate list size.
+async function getCandidateTemplateStatuses(candidate, templatesById) {
+  const assignedIds = candidate.templateIds || [];
+  const results = await Promise.all(assignedIds.map(tid => getLatestTemplateStatus(candidate.id, tid)));
+  return assignedIds.map((tid, i) => ({
+    templateId: tid,
+    templateName: templatesById.get(tid)?.name || tid,
+    ...results[i],
+  }));
+}
+
+// A plain request can genuinely wait on at most this many candidates'
+// worth of per-template status lookups at once — each candidate costs
+// roughly one Firestore query per assigned template, so beyond this the
+// Status filter/Download-with-status would fire an unreasonable number of
+// parallel reads for one admin action. Narrowing with the Program tab,
+// search, or the Template filter is the way back under this.
+const BULK_STATUS_CANDIDATE_CAP = 150;
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CandidatesPage() {
@@ -143,13 +191,31 @@ export default function CandidatesPage() {
   const [showCSV,    setShowCSV]    = useState(false);
   const [attemptsTarget, setAttemptsTarget] = useState(null);
 
+  // Template (multi) and per-template-status (single) filters — both need
+  // the real full candidate list to filter against (not just the scoped
+  // "fresh 10" page), same as search/Archived/Unassigned already do.
+  const [filterTemplateIds, setFilterTemplateIds] = useState([]);
+  const [filterStatus,      setFilterStatus]      = useState("all");
+  const templatesById = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates]);
+  // Latest-attempt status per candidate, keyed by candidate id — a Map of
+  // candidateId -> the array getCandidateTemplateStatuses returns. Two
+  // distinct populations feed this: the cheap per-page fetch (always, for
+  // whatever's actually on screen) and the bounded bulk fetch (only while
+  // the Status filter is active or Download is clicked), see the effects
+  // below.
+  const [statusByCandidateId, setStatusByCandidateId] = useState(new Map());
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [downloading,   setDownloading]   = useState(false);
+
   // The default view only ever reads a handful of "fresh" candidates per
   // Program (see the pageItems state below) instead of the whole
   // collection. Searching, the Unassigned tab (no clean server-side query
-  // for "no program"), the Archived toggle, and CSV-import duplicate
-  // detection all genuinely need the full list, so only those trigger the
-  // real full-collection fetch — see useCandidates's `enabled` param.
-  const needsFullList = showArchived || activeProgram === "unassigned" || search.trim() !== "" || showCSV;
+  // for "no program"), the Archived toggle, CSV-import duplicate detection,
+  // and the Template/Status filters all genuinely need the full list, so
+  // only those trigger the real full-collection fetch — see useCandidates's
+  // `enabled` param.
+  const needsFullList = showArchived || activeProgram === "unassigned" || search.trim() !== "" || showCSV
+    || filterTemplateIds.length > 0 || filterStatus !== "all";
   const { data: candidates = [], isLoading } = useCandidates(needsFullList);
   const programIds = useMemo(() => programs.map(p => p.id), [programs]);
   const { data: counts } = useCandidateCounts(programIds);
@@ -545,6 +611,7 @@ export default function CandidatesPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return workingSet.filter(c => {
+      if (filterTemplateIds.length && !(c.templateIds || []).some(tid => filterTemplateIds.includes(tid))) return false;
       if (q) {
         return (
           c.name?.toLowerCase().includes(q) ||
@@ -556,15 +623,149 @@ export default function CandidatesPage() {
       if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
       return true;
     });
-  }, [workingSet, activeProgram, search]);
+  }, [workingSet, activeProgram, search, filterTemplateIds]);
 
-  const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(filtered, 10);
+  // Status can only be checked once per-template latest-status data has
+  // actually loaded for these candidates (statusByCandidateId) — see the
+  // bulk-fetch effect below, which populates it (bounded by
+  // BULK_STATUS_CANDIDATE_CAP) whenever filterStatus is active. "Matches"
+  // means at least one of the candidate's assigned templates is currently
+  // at that status, so picking "Not Started" surfaces anyone who hasn't
+  // completed everything they're assigned yet.
+  const statusFiltered = useMemo(() => {
+    if (filterStatus === "all") return filtered;
+    return filtered.filter(c => {
+      const statuses = statusByCandidateId.get(c.id);
+      return statuses?.some(s => s.status === filterStatus);
+    });
+  }, [filtered, filterStatus, statusByCandidateId]);
+
+  const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(statusFiltered, 10);
 
   // Which list actually drives the table: the fully-loaded+filtered list
-  // once search/Archived/Unassigned pulled everything in, or the scoped
-  // "fresh 10 per Program" page otherwise.
+  // once search/Archived/Unassigned/Template/Status pulled everything in,
+  // or the scoped "fresh 10 per Program" page otherwise.
   const rows = needsFullList ? pagedCandidates : pageItems;
-  const selectAllTarget = needsFullList ? filtered : pageItems;
+  const selectAllTarget = needsFullList ? statusFiltered : pageItems;
+
+  // Cheap, always-on: status for whatever's actually on screen right now
+  // (~10 candidates), independent of whether the Status filter is engaged
+  // — this is what the Status column itself renders from.
+  const rowsKey = rows.map(c => c.id).join(",");
+  useEffect(() => {
+    if (!rows.length) return;
+    let cancelled = false;
+    const toFetch = rows.filter(c => !statusByCandidateId.has(c.id));
+    if (!toFetch.length) return;
+    Promise.all(toFetch.map(c => getCandidateTemplateStatuses(c, templatesById))).then(results => {
+      if (cancelled) return;
+      setStatusByCandidateId(prev => {
+        const next = new Map(prev);
+        toFetch.forEach((c, i) => next.set(c.id, results[i]));
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowsKey]);
+
+  // Bounded bulk fetch — only runs while the Status filter is actually
+  // selected, over the Template/Program/search-narrowed `filtered` set (not
+  // the whole collection). Skips candidates already covered by the cheap
+  // per-page fetch above. Refuses outright past BULK_STATUS_CANDIDATE_CAP
+  // rather than silently firing hundreds of parallel reads — the toast
+  // tells the admin how to narrow down instead.
+  useEffect(() => {
+    if (filterStatus === "all") return;
+    const missing = filtered.filter(c => !statusByCandidateId.has(c.id));
+    if (!missing.length) return;
+    if (filtered.length > BULK_STATUS_CANDIDATE_CAP) {
+      setToast({
+        message: `Status filter needs ${filtered.length} candidates checked — narrow down with Program, search, or the Template filter first (max ${BULK_STATUS_CANDIDATE_CAP} at a time).`,
+        type: "error",
+      });
+      return;
+    }
+    let cancelled = false;
+    setStatusLoading(true);
+    Promise.all(missing.map(c => getCandidateTemplateStatuses(c, templatesById))).then(results => {
+      if (cancelled) return;
+      setStatusByCandidateId(prev => {
+        const next = new Map(prev);
+        missing.forEach((c, i) => next.set(c.id, results[i]));
+        return next;
+      });
+    }).finally(() => { if (!cancelled) setStatusLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStatus, filtered]);
+
+  // Exports exactly what's currently filtered (Program/search/Archived/
+  // Template/Status), not just the visible page. In the default scoped
+  // view (needsFullList false — no search/filter active), `candidates`
+  // itself is disabled/empty (see useCandidates's `enabled` param), so this
+  // fetches the full list fresh rather than exporting nothing; it's then
+  // scoped to the active Program tab (the only filter that can be live in
+  // that branch — search/Archived/Template/Status all force needsFullList).
+  // Status is included when it's cheap to get (already loaded, or the set
+  // is within BULK_STATUS_CANDIDATE_CAP) — otherwise the download still
+  // goes out, just without that column, rather than blocking the admin.
+  const handleDownload = async () => {
+    setDownloading(true);
+    let target = statusFiltered;
+    if (!needsFullList) {
+      try {
+        const all = await getCandidates();
+        target = all.filter(c => c.archived !== true && (activeProgram === "all" || c.program === activeProgram));
+      } catch (e) {
+        setToast({ message: `Couldn't load candidates to export: ${e.message}`, type: "error" });
+        setDownloading(false);
+        return;
+      }
+    }
+    const missing = target.filter(c => !statusByCandidateId.has(c.id));
+    let statusMap = statusByCandidateId;
+    let includeStatus = true;
+    if (missing.length) {
+      if (target.length > BULK_STATUS_CANDIDATE_CAP) {
+        includeStatus = false;
+        setToast({
+          message: `Downloaded without Status — ${target.length} candidates is over the ${BULK_STATUS_CANDIDATE_CAP} limit for that. Narrow down with Program, search, or the Template filter to include it.`,
+          type: "error",
+        });
+      } else {
+        const results = await Promise.all(missing.map(c => getCandidateTemplateStatuses(c, templatesById)));
+        statusMap = new Map(statusByCandidateId);
+        missing.forEach((c, i) => statusMap.set(c.id, results[i]));
+        setStatusByCandidateId(statusMap);
+      }
+    }
+
+    const statusText = (c) => {
+      const statuses = statusMap.get(c.id);
+      if (!statuses?.length) return "";
+      return statuses.map(s =>
+        `${s.templateName}: ${s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} - ` : ""}${STATUS_LABELS[s.status] || s.status}`
+      ).join(" | ");
+    };
+
+    const exportRows = target.map(c => ({
+      UID: isSwapped(c) ? c.name : (c.uid || ""),
+      Name: isSwapped(c) ? c.uid : (c.name || ""),
+      Email: c.email || "",
+      Program: c.program ? programName(c.program) : "",
+      Templates: (c.templateIds || []).map(tid => templatesById.get(tid)?.name).filter(Boolean).join(" | "),
+      ...(includeStatus ? { Status: statusText(c) } : {}),
+      Phone: c.phone || "",
+    }));
+    const header = ["UID", "Name", "Email", "Program", "Templates", ...(includeStatus ? ["Status"] : []), "Phone"];
+    const ws = XLSX.utils.json_to_sheet(exportRows, { header });
+    ws["!cols"] = header.map(h => ({ wch: h === "Status" ? 50 : h === "Templates" ? 36 : h === "UID" ? 16 : 22 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Candidates");
+    XLSX.writeFile(wb, `candidates_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    setDownloading(false);
+  };
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";
   const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
@@ -620,13 +821,35 @@ export default function CandidatesPage() {
         </motion.div>
       )}
 
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2} className="flex items-center gap-3 mb-5">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={2} className="flex items-center gap-3 mb-5 flex-wrap">
         <div className="relative w-full max-w-sm">
           <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input type="text" placeholder="Search by name, UID, or email…" value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full border border-gray-200 rounded-full pl-9 pr-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors" />
         </div>
+        <div className="w-52">
+          <SkillsSelect
+            skills={templates.map(t => ({ id: t.id, name: t.name }))}
+            value={filterTemplateIds}
+            onChange={ids => { setFilterTemplateIds(ids); setCandPage(1); }}
+            placeholder="All Templates"
+            searchPlaceholder="Search templates…"
+          />
+        </div>
+        <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCandPage(1); }}
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white cursor-pointer">
+          <option value="all">Any Status</option>
+          {Object.keys(STATUS_LABELS).filter(k => ["not_started", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].includes(k)).map(k => (
+            <option key={k} value={k}>{STATUS_LABELS[k]}</option>
+          ))}
+        </select>
+        {(filterTemplateIds.length > 0 || filterStatus !== "all") && (
+          <button onClick={() => { setFilterTemplateIds([]); setFilterStatus("all"); setCandPage(1); }}
+            className="text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
+            Clear
+          </button>
+        )}
         <button
           onClick={() => { setShowArchived(s => !s); setCandPage(1); setSearch(""); }}
           className={`flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border transition-colors whitespace-nowrap ${
@@ -639,6 +862,10 @@ export default function CandidatesPage() {
           ) : (
             <><Archive className="w-3.5 h-3.5" /> {`Archived${archivedCount > 0 ? ` (${archivedCount})` : ""}`}</>
           )}
+        </button>
+        <button onClick={handleDownload} disabled={downloading}
+          className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed ml-auto">
+          <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing…" : "Download"}
         </button>
       </motion.div>
 
@@ -673,14 +900,14 @@ export default function CandidatesPage() {
                     onChange={toggleAll}
                     className="accent-brand-600 w-4 h-4 cursor-pointer" />
                 </th>
-                {["Name", "UID", "Email", "Program", "Templates", ""].map(h => (
+                {["UID", "Name", "Email", "Program", "Templates", "Status", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {rows.length === 0 ? (
-                <tr><td colSpan={7} className="text-center text-gray-400 py-12">No candidates found</td></tr>
+                <tr><td colSpan={8} className="text-center text-gray-400 py-12">No candidates found</td></tr>
               ) : rows.map((c, idx) => (
                 <motion.tr
                   key={c.id}
@@ -692,13 +919,13 @@ export default function CandidatesPage() {
                       className="accent-brand-600 w-4 h-4 cursor-pointer" />
                   </td>
                   <td className="px-4 py-3">
-                    <p className="font-semibold text-gray-900">{isSwapped(c) ? c.uid : c.name}</p>
-                    {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
-                  </td>
-                  <td className="px-4 py-3">
                     <span className="font-mono text-xs text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
                       {isSwapped(c) ? c.name : (c.uid || "—")}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-gray-900">{isSwapped(c) ? c.uid : c.name}</p>
+                    {c.phone && <p className="text-xs text-gray-400">{c.phone}</p>}
                   </td>
                   <td className="px-4 py-3 text-gray-600">{c.email || "—"}</td>
                   <td className="px-4 py-3">
@@ -717,6 +944,22 @@ export default function CandidatesPage() {
                             <span key={tid} className="text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
                           ) : null;
                         })}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 min-w-[14rem]">
+                    {(c.templateIds || []).length === 0 ? (
+                      <span className="text-xs text-gray-300">—</span>
+                    ) : !statusByCandidateId.has(c.id) ? (
+                      <span className="text-xs text-gray-300">…</span>
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        {statusByCandidateId.get(c.id).map(s => (
+                          <span key={s.templateId}
+                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-fit ${STATUS_STYLES[s.status] || "bg-gray-100 text-gray-500"}`}>
+                            {s.templateName}: {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </td>
