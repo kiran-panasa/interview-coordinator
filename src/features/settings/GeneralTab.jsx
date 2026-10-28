@@ -1,9 +1,10 @@
 import { useRef, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing, Building2, Users, CalendarClock } from "lucide-react";
+import { Tag, Layers, ListChecks, Plus, Pencil, Trash2, X, FolderKanban, BellRing, Building2, Users, CalendarClock, Coffee } from "lucide-react";
 import {
   subscribeToNudgeReminderSettings, updateNudgeReminderSettings,
   subscribeToSelfBookCutoffSettings, updateSelfBookCutoffSettings,
+  subscribeToInterviewerBreakSettings, updateInterviewerBreakSettings,
   updateProgram,
 } from "../../api/firestore";
 import { useTemplates } from "../../hooks/queries";
@@ -97,6 +98,31 @@ export default function GeneralTab({
     }
   };
 
+  const [breakSettings, setBreakSettingsState] = useState(null);
+  const [breakForm,     setBreakForm]          = useState(null);
+  const [breakSaving,   setBreakSaving]        = useState(false);
+  const [breakSaved,    setBreakSaved]         = useState(false);
+
+  useEffect(() => subscribeToInterviewerBreakSettings(s => {
+    setBreakSettingsState(s);
+    setBreakForm(f => f || s);
+  }), []);
+
+  const breakDirty = breakForm && breakSettings && (
+    breakForm.afterCount !== breakSettings.afterCount || breakForm.breakMinutes !== breakSettings.breakMinutes
+  );
+
+  const handleSaveBreakSettings = async () => {
+    setBreakSaving(true);
+    try {
+      await updateInterviewerBreakSettings(breakForm, currentUser.uid);
+      setBreakSaved(true);
+      setTimeout(() => setBreakSaved(false), 2000);
+    } finally {
+      setBreakSaving(false);
+    }
+  };
+
   return (
     <div>
       {/* Nudge Reminders */}
@@ -174,6 +200,48 @@ export default function GeneralTab({
               {cutoffSaving ? "Saving…" : "Save"}
             </Button>
             {cutoffSaved && <span className="text-xs font-semibold text-emerald-600">Saved.</span>}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Interviewer Break */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+        className="mb-8"
+      >
+        <SectionTitle icon={Coffee} label="Interviewer Break" />
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
+          <p className="text-xs text-gray-400 mb-4">
+            Back-to-back interviews are fine up to this many in a row — once an interviewer hits that count with no
+            gap between them, the following slot is automatically held open for this long before a candidate can
+            book into it again. Repeats through the day (e.g. 2 on, break, 2 on, break, ...), not just once.
+          </p>
+          {!breakForm ? (
+            <p className="text-xs text-gray-400">Loading…</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Back-to-back interviews before a break</label>
+                <input type="number" min={1} max={10} value={breakForm.afterCount}
+                  onChange={e => setBreakForm(f => ({ ...f, afterCount: Math.max(1, Math.round(Number(e.target.value)) || 1) }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Break duration</label>
+                <select value={breakForm.breakMinutes}
+                  onChange={e => setBreakForm(f => ({ ...f, breakMinutes: Number(e.target.value) }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white cursor-pointer">
+                  <option value={30}>30 minutes</option>
+                  <option value={60}>1 hour</option>
+                </select>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-3 mt-4">
+            <Button variant="primary" size="sm" onClick={handleSaveBreakSettings} disabled={!breakDirty || breakSaving}>
+              {breakSaving ? "Saving…" : "Save"}
+            </Button>
+            {breakSaved && <span className="text-xs font-semibold text-emerald-600">Saved.</span>}
           </div>
         </div>
       </motion.div>

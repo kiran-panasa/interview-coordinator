@@ -217,6 +217,18 @@ export interface SelfBookCutoffSettings {
   updatedBy?: string;
 }
 
+// "Two interviews back-to-back is fine; after that, give the interviewer a
+// break before a third gets booked" — see injectConsecutiveBreaks
+// (src/utils/interviewerBreaks.js) for the actual enforcement, which turns
+// this into synthetic busy windows an interviewer's existing bookings
+// produce, so the break period is never offered as a start time at all.
+export interface InterviewerBreakSettings {
+  afterCount: number;   // consecutive back-to-back interviews before a break kicks in
+  breakMinutes: number; // length of that break
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
 export interface InviteHistoryEntry {
   id: string;
   status: string;

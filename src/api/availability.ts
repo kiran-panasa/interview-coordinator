@@ -9,6 +9,8 @@ import { getBlockedDates } from "./blockedDates";
 import { isDateBlocked } from "../utils/blockedDates";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 import { getUsersByIds } from "./users";
+import { injectConsecutiveBreaks } from "../utils/interviewerBreaks";
+import { getInterviewerBreakSettings } from "./interviewerBreakSettings";
 
 export function slotIdFor(date: string, time: string): string {
   return `${date}_${time.replace(/[: ]/g, "")}`;
@@ -239,18 +241,41 @@ export async function getBusyWindowsForInterviewers(
   return result;
 }
 
-// Total interviews ever assigned to each interviewer (any status — including
-// cancelled/declined, since the point is "has this person been given a fair
-// share of assignments over time", not "how busy are they right now") — used
-// to break ties when more than one interviewer is free for the same slot, so
-// one panelist doesn't silently absorb every booking just by sorting first.
-// A cheap server-side count, not a doc fetch, since the pool only needs the
-// number.
-async function getInterviewerLoadCounts(interviewerIds: string[]): Promise<Record<string, number>> {
+// Interviews assigned to each interviewer WITHIN the date range being
+// browsed (not all-time) — used to break ties when more than one
+// interviewer is free for the same slot, so one panelist doesn't silently
+// absorb every booking that week just by sorting first. Scoping this to the
+// window being booked, rather than an interviewer's entire history, is
+// deliberate: an interviewer who's simply been active longer (and so has a
+// much higher all-time count) would otherwise lose every tie forever
+// regardless of how light THIS week's load actually is — the thing that
+// actually needs to stay fair is "did everyone get a fair share of this
+// week's/this day's bookings", which a lifetime total doesn't track at all.
+// Same composite index (interviewerId + scheduledDate) getInterviewerBusyWindows
+// already relies on, with the same missing-index fallback.
+async function getInterviewerLoadCounts(
+  interviewerIds: string[],
+  dateStart: string,
+  dateEnd: string
+): Promise<Record<string, number>> {
   const result: Record<string, number> = {};
   await Promise.all(interviewerIds.map(async id => {
-    const snap = await getCountFromServer(query(collection(db, "interviews"), where("interviewerId", "==", id)));
-    result[id] = snap.data().count;
+    try {
+      const snap = await getCountFromServer(query(
+        collection(db, "interviews"),
+        where("interviewerId", "==", id),
+        where("scheduledDate", ">=", dateStart),
+        where("scheduledDate", "<=", dateEnd)
+      ));
+      result[id] = snap.data().count;
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes("index")) {
+        const snap = await getCountFromServer(query(collection(db, "interviews"), where("interviewerId", "==", id)));
+        result[id] = snap.data().count;
+      } else {
+        throw err;
+      }
+    }
   }));
   return result;
 }
@@ -309,9 +334,10 @@ export async function getAvailableSlots(
     return snap.docs.map(d => ({ ...(d.data() as Omit<CandidateUser, "id">), id: d.id }));
   }
 
-  const [interviewers, blockedDates] = await Promise.all([
+  const [interviewers, blockedDates, breakSettings] = await Promise.all([
     fetchEligibleInterviewers(),
     getBlockedDates(),
+    getInterviewerBreakSettings(),
   ]);
   const interviewerIdList = interviewers.map(ivr => ivr.id);
 
@@ -339,14 +365,20 @@ export async function getAvailableSlots(
       return slots;
     })),
     getBusyWindowsForInterviewers(interviewerIdList, dateStart, dateEnd),
-    getInterviewerLoadCounts(interviewerIdList),
+    getInterviewerLoadCounts(interviewerIdList, dateStart, dateEnd),
   ]);
 
   const result: AvailableSlot[] = slotsByInterviewer.flat();
   result.sort((a, b) => a.date.localeCompare(b.date) || compareTimeLabels(a.time, b.time));
 
+  // "Two back-to-back is fine, then a break" — turns each interviewer's
+  // real busy windows into the extra synthetic ones that actually enforce
+  // it, so a slot inside the break period is just never offered, same as
+  // any other genuinely busy time.
   const busyWindowsByInterviewer: Record<string, BusyWindow[]> = {};
-  busyWindowsByInterviewerMap.forEach((windows, id) => { busyWindowsByInterviewer[id] = windows; });
+  busyWindowsByInterviewerMap.forEach((windows, id) => {
+    busyWindowsByInterviewer[id] = injectConsecutiveBreaks(windows, breakSettings.afterCount, breakSettings.breakMinutes);
+  });
 
   return { slots: result, busyWindowsByInterviewer, loadByInterviewer };
 }
