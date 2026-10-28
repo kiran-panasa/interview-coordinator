@@ -25,7 +25,7 @@ export const STYLES = {
 };
 
 export const LABELS = {
-  not_started:        "Not Started",
+  not_started:        "No Interview Taken Yet",
   pending_acceptance: "Pending Acceptance",
   scheduled:          "Scheduled",
   completed:          "Completed",

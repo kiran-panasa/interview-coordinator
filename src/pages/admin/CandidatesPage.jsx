@@ -197,7 +197,7 @@ export default function CandidatesPage() {
   // the real full candidate list to filter against (not just the scoped
   // "fresh 10" page), same as search/Archived/Unassigned already do.
   const [filterTemplateIds, setFilterTemplateIds] = useState([]);
-  const [filterStatus,      setFilterStatus]      = useState("all");
+  const [filterStatuses,    setFilterStatuses]    = useState([]);
   const templatesById = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates]);
   // Latest-attempt status per candidate, keyed by candidate id — a Map of
   // candidateId -> the array getCandidateTemplateStatuses returns. Two
@@ -217,7 +217,7 @@ export default function CandidatesPage() {
   // only those trigger the real full-collection fetch — see useCandidates's
   // `enabled` param.
   const needsFullList = showArchived || activeProgram === "unassigned" || search.trim() !== "" || showCSV
-    || filterTemplateIds.length > 0 || filterStatus !== "all";
+    || filterTemplateIds.length > 0 || filterStatuses.length > 0;
   const { data: candidates = [], isLoading } = useCandidates(needsFullList);
   const programIds = useMemo(() => programs.map(p => p.id), [programs]);
   const { data: counts } = useCandidateCounts(programIds);
@@ -594,17 +594,18 @@ export default function CandidatesPage() {
   // Status can only be checked once per-template latest-status data has
   // actually loaded for these candidates (statusByCandidateId) — see the
   // bulk-fetch effect below, which populates it (bounded by
-  // BULK_STATUS_CANDIDATE_CAP) whenever filterStatus is active. "Matches"
+  // BULK_STATUS_CANDIDATE_CAP) whenever any status is selected. "Matches"
   // means at least one of the candidate's assigned templates is currently
-  // at that status, so picking "Not Started" surfaces anyone who hasn't
-  // completed everything they're assigned yet.
+  // at one of the selected statuses (OR across the selection), so picking
+  // "No Interview Taken Yet" surfaces anyone who hasn't completed
+  // everything they're assigned yet.
   const statusFiltered = useMemo(() => {
-    if (filterStatus === "all") return filtered;
+    if (filterStatuses.length === 0) return filtered;
     return filtered.filter(c => {
       const statuses = statusByCandidateId.get(c.id);
-      return statuses?.some(s => s.status === filterStatus);
+      return statuses?.some(s => filterStatuses.includes(s.status));
     });
-  }, [filtered, filterStatus, statusByCandidateId]);
+  }, [filtered, filterStatuses, statusByCandidateId]);
 
   const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(statusFiltered, 10);
 
@@ -648,7 +649,7 @@ export default function CandidatesPage() {
   useEffect(() => {
     if (!needsFullList) return;
     if (filtered.length > BULK_STATUS_CANDIDATE_CAP) {
-      if (filterStatus !== "all") {
+      if (filterStatuses.length > 0) {
         setToast({
           message: `Status filter needs ${filtered.length} candidates checked — narrow down with Program, search, or the Template filter first (max ${BULK_STATUS_CANDIDATE_CAP} at a time).`,
           type: "error",
@@ -670,7 +671,7 @@ export default function CandidatesPage() {
     }).finally(() => { if (!cancelled) setStatusLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsFullList, filterStatus, filtered]);
+  }, [needsFullList, filterStatuses, filtered]);
 
   // Per-status counts for the filter dropdown (e.g. "No Show (12)") — only
   // meaningful once every candidate in `filtered` has status data loaded
@@ -825,15 +826,19 @@ export default function CandidatesPage() {
             searchPlaceholder="Search templates…"
           />
         </div>
-        <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCandPage(1); }}
-          className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white cursor-pointer">
-          <option value="all">Any Status{statusCounts ? ` (${filtered.length})` : ""}</option>
-          {Object.keys(STATUS_LABELS).filter(k => ["not_started", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].includes(k)).map(k => (
-            <option key={k} value={k}>{STATUS_LABELS[k]}{statusCounts ? ` (${statusCounts[k] || 0})` : ""}</option>
-          ))}
-        </select>
-        {(filterTemplateIds.length > 0 || filterStatus !== "all") && (
-          <button onClick={() => { setFilterTemplateIds([]); setFilterStatus("all"); setCandPage(1); }}
+        <div className="w-56">
+          <SkillsSelect
+            skills={["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].map(k => ({
+              id: k, name: `${STATUS_LABELS[k]}${statusCounts ? ` (${statusCounts[k] || 0})` : ""}`,
+            }))}
+            value={filterStatuses}
+            onChange={ids => { setFilterStatuses(ids); setCandPage(1); }}
+            placeholder="Any Status"
+            searchPlaceholder="Search statuses…"
+          />
+        </div>
+        {(filterTemplateIds.length > 0 || filterStatuses.length > 0) && (
+          <button onClick={() => { setFilterTemplateIds([]); setFilterStatuses([]); setCandPage(1); }}
             className="text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             Clear
           </button>
