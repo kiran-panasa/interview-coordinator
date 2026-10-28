@@ -355,6 +355,12 @@ export interface Template {
   // Candidate.noShowOverrides without touching this template-wide setting.
   maxNoShows?: number | null;
   noShowBlockedMessage?: string;
+  // How many days of slots a Self Book / reschedule invite opens up for
+  // this template, from the earliest bookable date (Templates →
+  // Lifecycle → "Booking Window"). null/undefined means the platform
+  // default (DEFAULT_SELF_BOOK_WINDOW_DAYS, src/constants/templateAttempts.js)
+  // applies. See effectiveSelfBookWindowDays in api/sso-handler.js.
+  selfBookWindowDays?: number | null;
   // Whether a completed interview on this template shows its AI Report and
   // its Final Score to the candidate (Templates → Lifecycle) — independent
   // toggles, so a template can hide one without the other (e.g. show the

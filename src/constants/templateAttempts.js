@@ -20,3 +20,11 @@ export const DEFAULT_HIDDEN_SCORE_MESSAGE =
 export const DEFAULT_NO_SHOW_LIMIT = 2;
 export const DEFAULT_NO_SHOW_BLOCKED_MESSAGE =
   "You've been blocked from booking this interview after repeatedly not showing up for it. Kindly contact your program support team for any concerns.";
+
+// How many days of slots (from the earliest bookable date — see
+// computeSelfBookWindow) a Self Book / reschedule invite opens up, for a
+// template that hasn't set its own selfBookWindowDays. Per-template so a
+// quick-turnaround round can show just the next few days while a longer one
+// keeps a full week+ of options. See effectiveSelfBookWindowDays in
+// api/sso-handler.js.
+export const DEFAULT_SELF_BOOK_WINDOW_DAYS = 7;

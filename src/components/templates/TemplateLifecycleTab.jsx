@@ -4,7 +4,7 @@ import { Search, CheckCircle2 } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
-import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT } from "../../constants/templateAttempts";
+import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT, DEFAULT_SELF_BOOK_WINDOW_DAYS } from "../../constants/templateAttempts";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -58,6 +58,7 @@ export default function TemplateLifecycleTab() {
   const [scoreMessageDraft, setScoreMessageDraft] = useState({});
   const [maxNoShowsDraft,   setMaxNoShowsDraft]   = useState({});
   const [noShowMessageDraft, setNoShowMessageDraft] = useState({});
+  const [windowDaysDraft,  setWindowDaysDraft]  = useState({});
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
   const statusOf = (t) => t.status || "active";
@@ -68,6 +69,7 @@ export default function TemplateLifecycleTab() {
   const scoreMessageOf   = (t) => scoreMessageDraft[t.id] ?? (t.hiddenScoreMessage || "");
   const maxNoShowsOf     = (t) => maxNoShowsDraft[t.id] ?? (t.maxNoShows != null ? String(t.maxNoShows) : "");
   const noShowMessageOf  = (t) => noShowMessageDraft[t.id] ?? (t.noShowBlockedMessage || "");
+  const windowDaysOf     = (t) => windowDaysDraft[t.id] ?? (t.selfBookWindowDays != null ? String(t.selfBookWindowDays) : "");
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -146,6 +148,18 @@ export default function TemplateLifecycleTab() {
     saveTemplate(t, { noShowBlockedMessage: next });
   };
 
+  // Blank -> null ("use the platform default of DEFAULT_SELF_BOOK_WINDOW_DAYS").
+  // How many days of slots Self Book / reschedule opens up for this
+  // template, from the earliest bookable date — see
+  // effectiveSelfBookWindowDays in api/sso-handler.js.
+  const commitWindowDays = (t) => {
+    const raw = windowDaysOf(t).trim();
+    const next = raw === "" ? null : Math.max(1, Math.round(Number(raw)) || 1);
+    setWindowDaysDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.selfBookWindowDays ?? null)) return;
+    saveTemplate(t, { selfBookWindowDays: next });
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -190,7 +204,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "AI Report & Score", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Booking Window", "AI Report & Score", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -285,6 +299,27 @@ export default function TemplateLifecycleTab() {
                           className="w-full text-xs border border-amber-100 bg-amber-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-700 placeholder:text-gray-400"
                         />
                       )}
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[11rem] space-y-1.5">
+                      {/* Teal — distinct from Attempt Limit's sky and
+                         No-Show Limit's amber. How many days of slots
+                         Self Book / reschedule shows for this template,
+                         from the earliest bookable date. */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number" min={1}
+                          value={windowDaysOf(t)}
+                          onChange={e => setWindowDaysDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitWindowDays(t)}
+                          placeholder={`Default (${DEFAULT_SELF_BOOK_WINDOW_DAYS})`}
+                          className={`w-24 text-xs font-semibold rounded-lg px-2 py-1.5 border focus:outline-none focus:ring-1 ${
+                            windowDaysOf(t).trim() !== ""
+                              ? "bg-teal-50 border-teal-200 text-teal-700 focus:ring-teal-400"
+                              : "bg-white border-gray-200 text-gray-700 focus:ring-brand-400"
+                          }`}
+                        />
+                        <span className="text-[11px] text-gray-400">day{windowDaysOf(t) === "1" ? "" : "s"} of slots</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 align-top min-w-[16rem] space-y-1.5">
                       {/* Violet — distinct from Status's emerald/amber/gray

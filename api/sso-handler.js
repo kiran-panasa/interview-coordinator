@@ -7,6 +7,7 @@ import { sendSmsOtp } from "./_lib/sms.js";
 import {
   DEFAULT_ATTEMPT_LIMIT_MESSAGE, DEFAULT_HIDDEN_SCORE_MESSAGE,
   DEFAULT_NO_SHOW_LIMIT, DEFAULT_NO_SHOW_BLOCKED_MESSAGE,
+  DEFAULT_SELF_BOOK_WINDOW_DAYS,
 } from "../src/constants/templateAttempts.js";
 import { computeSelfBookWindow, DEFAULT_SELF_BOOK_CUTOFF_TIME } from "../src/utils/selfBookWindow.js";
 
@@ -71,6 +72,16 @@ function effectiveMaxNoShows(templateMaxNoShows, override) {
   if (templateMaxNoShows === 0) return null;
   if (typeof templateMaxNoShows === "number" && templateMaxNoShows > 0) return templateMaxNoShows;
   return DEFAULT_NO_SHOW_LIMIT;
+}
+
+// How many days of slots a Self Book / reschedule invite opens up for this
+// template, from the earliest bookable date — see
+// DEFAULT_SELF_BOOK_WINDOW_DAYS. Unlike the no-show limit, there's no
+// per-candidate override here (Manage Attempts only ever covers attempt/
+// no-show caps) — it's purely a per-template admin setting.
+function effectiveSelfBookWindowDays(templateWindowDays) {
+  if (typeof templateWindowDays === "number" && templateWindowDays > 0) return templateWindowDays;
+  return DEFAULT_SELF_BOOK_WINDOW_DAYS;
 }
 
 export default async function handler(req, res) {
@@ -655,7 +666,7 @@ async function findSkillMatchedInterviewerIds(db, templateSkills) {
 // of creating a duplicate (not one that's sat unbooked well past its own
 // window — isPastGrace — since that's effectively abandoned and reusing it
 // would just hand back the same dead-end invite forever instead of a fresh
-// 7-day one).
+// one).
 async function resolveSelfBookTarget(db, session, templateId, replacingInterviewId, rescheduleReason) {
   const candidateSnap = await db.collection("candidates").doc(session.candidateId).get();
   if (!candidateSnap.exists) return { error: "candidate_not_found", status: 404 };
@@ -730,15 +741,17 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   if (existing) {
     // Self Book is the candidate's escape hatch for "none of the dates on
     // offer actually work for me" — including when the existing invite is
-    // a Nudge-sent one with a narrower window than self-book's usual 7
-    // days. The slot picker needs a full rolling week to show, but the
-    // invite's OWN dateRangeStart/End is never touched for it — it's what
+    // a Nudge-sent one with a narrower window than self-book's own, this
+    // template's configured selfBookWindowDays. The slot picker needs its
+    // full window to show, but the invite's OWN dateRangeStart/End is
+    // never touched for it — it's what
     // an admin configured and what the Nudge card on the dashboard reads
     // directly from Firestore, so widening it here used to make that card
     // silently show a different (wrong) window than what was actually
     // sent. Instead, return a copy with an EFFECTIVE range computed
     // on the fly (never persisted) for the picker to use.
-    const minEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const windowDays = effectiveSelfBookWindowDays(capTemplate?.selfBookWindowDays);
+    const minEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const effective = {
       ...existing,
       dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < earliestDate) ? earliestDate : existing.dateRangeStart,
@@ -792,7 +805,8 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
   }
   const dateRangeStart = earliestDate;
-  const endDate = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + 7 * 24 * 60 * 60 * 1000);
+  const windowDays = effectiveSelfBookWindowDays(template.selfBookWindowDays);
+  const endDate = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000);
   const dateRangeEnd = endDate.toISOString().slice(0, 10);
   const expiresAt = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
 
