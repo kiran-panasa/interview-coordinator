@@ -266,32 +266,29 @@ async function getInterviewerLoadCounts(interviewerIds: string[]): Promise<Recor
 // evaluation form the resulting interview uses, just not for this.
 export interface AvailableSlotsResult {
   slots: AvailableSlot[];
-  // Keyed by interviewerId — plain object rather than a Map so this is
-  // JSON-serializable for the sessionStorage cache below.
+  // Keyed by interviewerId — plain object (not a Map) for a trivial reason
+  // now that there's no sessionStorage cache to (de)serialize for, but kept
+  // as-is since every caller already destructures it that way.
   busyWindowsByInterviewer: Record<string, BusyWindow[]>;
   // Keyed by interviewerId — total interviews ever assigned, used to break
   // ties fairly when more than one interviewer is free for the same slot.
   loadByInterviewer: Record<string, number>;
 }
 
+// No caching here (there used to be a 5-minute sessionStorage one) — a
+// candidate needs to see an interviewer's newly-added slot the moment it's
+// bookable, not up to 5 minutes later just because they'd opened the picker
+// recently in this same browser tab. `forceRefresh` is kept as a no-op
+// parameter rather than removed, so every existing call site (which passes
+// it after a booking conflict, or from the manual Refresh button) keeps
+// working unchanged.
 export async function getAvailableSlots(
   dateStart: string,
   dateEnd: string,
   interviewerIds: string[] | null = null,
   forceRefresh = false
 ): Promise<AvailableSlotsResult> {
-  const poolKey = interviewerIds && interviewerIds.length ? [...interviewerIds].sort().join(",") : "all";
-  const cacheKey = `avail_${poolKey}_${dateStart}_${dateEnd}`;
-  if (!forceRefresh) {
-    try {
-      const cached = sessionStorage.getItem(cacheKey);
-      if (cached) {
-        const { data, ts } = JSON.parse(cached) as { data: AvailableSlotsResult; ts: number };
-        if (Date.now() - ts < 5 * 60 * 1000) return data;
-      }
-    } catch { /* sessionStorage unavailable */ }
-  }
-
+  void forceRefresh;
   type CandidateUser = { role: string; status: string; displayName?: string; email: string; id: string };
 
   // Scoped queries only — never an unscoped full-collection read, since this
@@ -351,9 +348,5 @@ export async function getAvailableSlots(
   const busyWindowsByInterviewer: Record<string, BusyWindow[]> = {};
   busyWindowsByInterviewerMap.forEach((windows, id) => { busyWindowsByInterviewer[id] = windows; });
 
-  const data: AvailableSlotsResult = { slots: result, busyWindowsByInterviewer, loadByInterviewer };
-  try { sessionStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() })); }
-  catch { /* sessionStorage full or unavailable */ }
-
-  return data;
+  return { slots: result, busyWindowsByInterviewer, loadByInterviewer };
 }

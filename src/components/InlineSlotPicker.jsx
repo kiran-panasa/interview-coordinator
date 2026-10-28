@@ -113,6 +113,18 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invite.id]);
 
+  // Picks up a newly-added interviewer slot (or one someone else just took)
+  // while the candidate is sitting on this screen, not just the next time
+  // they reopen it — silent (no loading/refreshing spinner, doesn't touch
+  // `selected`), since this runs in the background every 30s regardless of
+  // what the candidate is doing. Stops once a slot is actually booked.
+  useEffect(() => {
+    if (booked) return;
+    const id = setInterval(() => { fetchSlots(true); }, 30_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invite.id, booked]);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     setSelected(null);
