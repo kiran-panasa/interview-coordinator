@@ -510,7 +510,19 @@ export default function InterviewsPage() {
         // to someone else, use the dedicated "Reassign Interviewer" action
         // instead (openReassign), which creates a fresh interview for the
         // new interviewer rather than mutating this one.
-        if (interviewerChanged && ["scheduled", "pending_acceptance"].includes(editTarget.status)) {
+        //
+        // Self-booked interviews (bookingSource "self_book") never had an
+        // Accept/Decline step at all — the candidate booked straight into
+        // the panelist's own published slot, confirmSelfBooking put it
+        // straight at "scheduled". Flipping one of these to
+        // pending_acceptance on reassignment left it stuck there forever
+        // (nothing — no interviewer dashboard prompt, nothing on the
+        // Student Dashboard's Scheduled tab — ever asks anyone to accept
+        // it), and skipped the calendar-reschedule branch below too, so the
+        // Meet invite kept the OLD panelist instead of the new one. These
+        // stay "scheduled" straight through a reassignment instead.
+        if (interviewerChanged && editTarget.bookingSource !== "self_book"
+          && ["scheduled", "pending_acceptance"].includes(editTarget.status)) {
           data.status = "pending_acceptance";
         }
 
