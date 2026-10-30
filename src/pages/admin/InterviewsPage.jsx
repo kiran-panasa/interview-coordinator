@@ -495,6 +495,27 @@ export default function InterviewsPage() {
           return;
         }
 
+        // Swapping the panelist needs a reason — same idea as Cancel
+        // Interview's reason prompt (handleCancel below): a plain "you've
+        // been reassigned" email with no explanation reads like something
+        // went wrong on the outgoing panelist's end even when it's purely
+        // operational (a scheduling conflict, load balancing, etc.). Asked
+        // up front, before anything is actually touched, so cancelling the
+        // prompt leaves the interview completely untouched.
+        let interviewerChangeReason = "";
+        if (interviewerChanged) {
+          const promptText = window.prompt(
+            `Reassigning from ${editTarget.interviewerName || editTarget.interviewerEmail || "the current panelist"} to ${interviewer?.displayName || interviewer?.email || "the new panelist"}.\n\nReason (shown to the outgoing panelist):`
+          );
+          if (promptText === null) { setSaving(false); return; }
+          if (!promptText.trim()) {
+            setToast({ message: "A reason is required to reassign the interviewer.", type: "error" });
+            setSaving(false);
+            return;
+          }
+          interviewerChangeReason = promptText.trim();
+        }
+
         if (dateChanged || timeChanged || interviewerChanged) {
           await freeSlotsForInterview(editTarget.interviewerId, editTarget.scheduledDate, editTarget.scheduledTime, editTarget.duration).catch(() => {});
           await bookSlotsForInterview(form.interviewerId, form.scheduledDate, form.scheduledTime, form.duration, editTarget.id).catch(() => {});
@@ -635,7 +656,7 @@ export default function InterviewsPage() {
             recipients.push({ email: data.interviewerEmail, name: data.interviewerName || "Panelist", kind: "assigned" });
           }
           if (interviewerChanged && editTarget.interviewerEmail) {
-            recipients.push({ email: editTarget.interviewerEmail, name: editTarget.interviewerName || "Panelist", kind: "removed" });
+            recipients.push({ email: editTarget.interviewerEmail, name: editTarget.interviewerName || "Panelist", kind: "removed", reason: interviewerChangeReason });
           }
           if (candidateChanged && editTarget.candidateEmail) {
             recipients.push({ email: editTarget.candidateEmail, name: editTarget.candidateName || "Candidate", kind: "removed" });
@@ -650,8 +671,9 @@ export default function InterviewsPage() {
                   ? "Action Required: Interview Assigned"
                   : `Interview Updated: ${form.round || "Interview"}`,
               body: r.kind === "removed"
-                ? `Hi ${r.name},\n\nYou are no longer on this interview — it has been reassigned.\n\n` +
-                  `If this is unexpected, please reach out to the interview coordination team.\n\n— NxtWave Team`
+                ? `Hi ${r.name},\n\nThis interview has been reassigned to another panelist and is no longer on your schedule.\n\n` +
+                  (r.reason ? `Reason: ${r.reason}\n\n` : "") +
+                  `If you have any questions, please reach out to the interview coordination team.\n\n— NxtWave Team`
                 : `Hi ${r.name},\n\nThis interview has been updated:\n\n` +
                   `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
                   `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n` +
@@ -710,6 +732,7 @@ export default function InterviewsPage() {
           calendarSyncStatus,
           calendarSyncError,
           notificationStatus,
+          ...(interviewerChangeReason ? { reassignReason: interviewerChangeReason } : {}),
         }).catch(() => {});
 
         if (calendarSyncStatus === "failed") {
