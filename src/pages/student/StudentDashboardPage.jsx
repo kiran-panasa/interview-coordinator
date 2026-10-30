@@ -1364,8 +1364,46 @@ export default function StudentDashboardPage() {
                                   {iv.scheduledDate && (
                                     <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
                                   )}
-                                  {iv.cancelReason && (
+                                  {/* Cancelled by someone other than the
+                                     candidate themselves gets a tailored,
+                                     actionable message instead of a bare
+                                     "Reason: ..." line — an interviewer
+                                     cancellation reads as "they're
+                                     unavailable, not your fault", an admin
+                                     one gets an apology, and both point
+                                     straight at picking a new slot instead
+                                     of leaving the candidate to go hunt for
+                                     "Book an Interview" themselves. A
+                                     self-cancel (cancelledBy "candidate")
+                                     keeps the plain reason — they already
+                                     know why. */}
+                                  {iv.status === "cancelled" && !iv.rescheduledTo && iv.cancelledBy === "interviewer" && (
+                                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-sm">
+                                      <p className="text-xs font-semibold text-amber-700">Your interviewer became unavailable for this slot.</p>
+                                      {iv.cancelReason && <p className="text-xs text-amber-600 mt-0.5">Reason: {iv.cancelReason}</p>}
+                                      <p className="text-xs text-amber-600 mt-0.5">This wasn't anything on your end — please pick another time that works for you.</p>
+                                    </div>
+                                  )}
+                                  {iv.status === "cancelled" && !iv.rescheduledTo && iv.cancelledBy === "admin" && (
+                                    <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 max-w-sm">
+                                      <p className="text-xs font-semibold text-blue-700">Sorry — this interview had to be cancelled by our team.</p>
+                                      {iv.cancelReason && <p className="text-xs text-blue-600 mt-0.5">Reason: {iv.cancelReason}</p>}
+                                      <p className="text-xs text-blue-600 mt-0.5">Please pick another slot to continue — apologies for the inconvenience.</p>
+                                    </div>
+                                  )}
+                                  {iv.status === "cancelled" && (!iv.cancelledBy || iv.cancelledBy === "candidate") && iv.cancelReason && (
                                     <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
+                                  )}
+                                  {iv.status !== "cancelled" && iv.cancelReason && (
+                                    <p className="text-xs text-gray-400 mt-1">Reason: {iv.cancelReason}</p>
+                                  )}
+                                  {iv.status === "cancelled" && !iv.rescheduledTo && iv.templateId && (
+                                    <button
+                                      onClick={() => handleSelfBook(iv.templateId, iv.id, `Picking a new slot after this interview was cancelled${iv.cancelledBy && iv.cancelledBy !== "candidate" ? ` (${iv.cancelledBy})` : ""}.`)}
+                                      disabled={bookingTemplateId != null}
+                                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors disabled:opacity-50">
+                                      {bookingTemplateId === iv.templateId ? "Loading…" : "Pick Another Slot →"}
+                                    </button>
                                   )}
                                   {/* Set once the new slot is actually booked
                                      (see linkRescheduledInterview) — best-
