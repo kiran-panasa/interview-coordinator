@@ -620,7 +620,12 @@ export default function InterviewsPage() {
         // update, plus anyone who was just removed from the interview.
         try {
           const recipients = [];
-          if ((dateChanged || timeChanged || interviewerChanged) && data.candidateEmail) {
+          // Candidate never sees WHO their interviewer is (same privacy
+          // stance as the booking flow itself — see InlineSlotPicker.jsx) —
+          // a pure reassignment with the date/time untouched is invisible
+          // to them and not worth an email. Still notified whenever the
+          // date/time actually moves, interviewer swap or not.
+          if ((dateChanged || timeChanged) && data.candidateEmail) {
             recipients.push({ email: data.candidateEmail, name: data.candidateName || "Candidate", kind: "updated" });
           }
           if ((dateChanged || timeChanged || candidateChanged) && !interviewerChanged && data.interviewerEmail) {
@@ -651,7 +656,11 @@ export default function InterviewsPage() {
                   `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
                   `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n` +
                   (data.meetLink ? `Meeting Link: ${data.meetLink}\n` : "") +
-                  (r.kind === "assigned" ? `\nPlease log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${editTarget.id}\n` : "") +
+                  (r.kind === "assigned"
+                    ? (resultingStatus === "pending_acceptance"
+                        ? `\nPlease log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${editTarget.id}\n`
+                        : `\nThis interview is already confirmed — no action needed from you. View it here:\n${window.location.origin}/interviewer/interviews/${editTarget.id}\n`)
+                    : "") +
                   `\n— NxtWave Team`,
               recipients: [{ email: r.email, name: r.name }],
             })));
@@ -669,7 +678,9 @@ export default function InterviewsPage() {
             recipientEmail: data.interviewerEmail,
             interviewId:    editTarget.id,
             candidateName:  data.candidateName,
-            message:        `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`,
+            message:        resultingStatus === "pending_acceptance"
+              ? `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`
+              : `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — already confirmed, no action needed.`,
             status:         "unread",
           }).catch(() => {});
         }
