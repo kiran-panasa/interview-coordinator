@@ -223,6 +223,7 @@ export default function TemplateLifecycleTab() {
         ) : filtered.length === 0 ? (
           <p className="text-center text-gray-400 py-14 text-sm">No templates match this filter.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -426,6 +427,7 @@ export default function TemplateLifecycleTab() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
