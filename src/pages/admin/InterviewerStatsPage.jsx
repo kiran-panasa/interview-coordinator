@@ -32,6 +32,11 @@ function thisMonthRange() {
   const iso = d => d.toISOString().slice(0, 10);
   return { from: iso(first), to: iso(last) };
 }
+// "Overall" — a wide fixed range rather than a separate unscoped query, same
+// pattern as the vendor dashboard's own leaderboard.
+function allTimeRange() {
+  return { from: "2000-01-01", to: "2099-12-31" };
+}
 // First name kept, everything after it masked — e.g. "Kopal Rastogi" ->
 // "Kopal *****" — so the leaderboard (visible dashboard-wide, not just to
 // the interviewer's own vendor) doesn't expose full interviewer identities.
@@ -80,11 +85,14 @@ export default function InterviewerStatsPage() {
   const { data: usersAll  = [] } = useUsers();
   const { data: vendors   = [] } = useVendors();
 
-  // Leaderboard — its own Weekly/Monthly window, independent of the Stats
-  // tab's date filter above, and ranks every active interviewer across
-  // every vendor (no vendor filter here, unlike the Stats table).
+  // Leaderboard — its own Weekly/Monthly/Overall window, independent of the
+  // Stats tab's date filter above. Ranks every active interviewer, scoped
+  // down by its own Vendor/Program filters below when set.
   const [leaderboardPeriod, setLeaderboardPeriod] = useState("week");
-  const leaderboardRange = leaderboardPeriod === "week" ? thisWeekRange() : thisMonthRange();
+  const [leaderboardVendorIds,  setLeaderboardVendorIds]  = useState([]);
+  const [leaderboardProgramIds, setLeaderboardProgramIds] = useState([]);
+  const leaderboardRange = leaderboardPeriod === "week" ? thisWeekRange()
+    : leaderboardPeriod === "month" ? thisMonthRange() : allTimeRange();
   const leaderboardInterviews = useInterviewsInDateRange(leaderboardRange.from, leaderboardRange.to);
 
   const [programIds,   setProgramIds]   = useState([]);
@@ -311,15 +319,22 @@ export default function InterviewerStatsPage() {
   // doesn't outrank one who actually completed more interviews. Same
   // ranking rule as the vendor dashboard's own leaderboard.
   const leaderboardRanked = useMemo(() => {
-    const activeInterviewers = usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active");
+    // Vendor narrows WHO shows up (current vendor membership — same "who's
+    // on this team now" read the Vendor filter dropdown itself is built
+    // from), Program narrows WHICH of their interviews count.
+    const activeInterviewers = usersAll
+      .filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active")
+      .filter(u => !leaderboardVendorIds.length || leaderboardVendorIds.includes(u.vendorId));
     return activeInterviewers
       .map(ivr => {
-        const ivrInterviews = leaderboardInterviews.filter(iv => iv.interviewerEmail === ivr.email);
+        const ivrInterviews = leaderboardInterviews
+          .filter(iv => iv.interviewerEmail === ivr.email)
+          .filter(iv => !leaderboardProgramIds.length || leaderboardProgramIds.includes(effectiveProgramOf(iv.templateId)));
         const completed = ivrInterviews.filter(iv => ["completed", "partially_completed"].includes(iv.status)).length;
         return { interviewer: ivr, completed, total: ivrInterviews.length };
       })
       .sort((a, b) => b.completed - a.completed || b.total - a.total);
-  }, [usersAll, leaderboardInterviews]);
+  }, [usersAll, leaderboardInterviews, leaderboardVendorIds, leaderboardProgramIds, templateProgramById]);
 
   const hasFilters = dateFrom !== firstOfMonthIso() || dateTo !== todayIso() ||
     programIds.length || statuses.length || templateIds.length || interviewerEmails.length || vendorIds.length || durations.length;
@@ -334,11 +349,11 @@ export default function InterviewerStatsPage() {
         className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviewer Statistics</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {view === "stats"
-              ? `Interviewer-wise interview counts by status (${dateFrom} – ${dateTo}) — widen the date range below for a longer report`
-              : "Ranked by completed interviews across every vendor — names shown first-name-only for privacy"}
-          </p>
+          {view === "stats" && (
+            <p className="text-sm text-gray-500 mt-1">
+              Interviewer-wise interview counts by status ({dateFrom} – {dateTo}) — widen the date range below for a longer report
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1.5">
@@ -365,11 +380,12 @@ export default function InterviewerStatsPage() {
         // own Leaderboard tab — no rank numbering, no medal badges, no "X
         // total interviews this week" subtext under the name. Just who did
         // how much, sorted but not scored against each other visually.
+        const leaderboardHasFilters = leaderboardVendorIds.length > 0 || leaderboardProgramIds.length > 0;
         return (
           <div className="max-w-2xl mx-auto space-y-5">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 bg-gray-100 rounded-full p-1.5 w-fit mx-auto">
-                {[["week", "Weekly"], ["month", "Monthly"]].map(([id, label]) => (
+                {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
                   <button key={id} onClick={() => setLeaderboardPeriod(id)}
                     className={`px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
                       leaderboardPeriod === id ? "bg-white text-orange-700 shadow-soft" : "text-gray-500 hover:text-gray-700"
@@ -378,7 +394,26 @@ export default function InterviewerStatsPage() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-400 mt-3">{leaderboardRange.from} – {leaderboardRange.to}</p>
+              <p className="text-xs text-gray-400 mt-3">
+                {leaderboardPeriod === "overall" ? "All time" : `${leaderboardRange.from} – ${leaderboardRange.to}`}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 flex-wrap">
+              <div className="w-52">
+                <SkillsSelect skills={vendorOptions} value={leaderboardVendorIds} onChange={setLeaderboardVendorIds}
+                  placeholder="All Vendors" searchPlaceholder="Search vendors…" />
+              </div>
+              <div className="w-52">
+                <SkillsSelect skills={programOptions} value={leaderboardProgramIds} onChange={setLeaderboardProgramIds}
+                  placeholder="All Programs" searchPlaceholder="Search programs…" />
+              </div>
+              {leaderboardHasFilters && (
+                <button onClick={() => { setLeaderboardVendorIds([]); setLeaderboardProgramIds([]); }}
+                  className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
+                  <X className="w-3.5 h-3.5" /> Clear
+                </button>
+              )}
             </div>
 
             {leaderboardRanked.length === 0 ? (
