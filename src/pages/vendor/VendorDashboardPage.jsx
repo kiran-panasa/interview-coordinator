@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Download,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Download, RefreshCw,
 } from "lucide-react";
 import { formatDate, formatDateLong } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
@@ -119,30 +119,68 @@ export default function VendorDashboardPage() {
   const [leaderboardPeriod, setLeaderboardPeriod] = useState("week");
 
   const vendorId = userProfile?.vendorContactFor;
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Everything here is a one-time fetch into plain state, not a live
+  // onSnapshot listener (unlike the admin pages) — deliberately, to keep
+  // this page cheap for a vendor contact who might leave the tab open all
+  // day. The tradeoff: an interview an admin edits/recategorizes (status
+  // correction, reassignment, reschedule) AFTER this last ran stays stale
+  // here until something re-triggers it — which is exactly what made this
+  // page's Interview Stats disagree with the admin page for the SAME
+  // filters even after the vendorId-scoping fix (both were reading the
+  // same underlying data, just at different moments in time). Re-run on
+  // mount, on an explicit Refresh click, and whenever the tab regains focus
+  // or visibility — cheap enough for how rarely a vendor contact actually
+  // triggers it, and removes the "did I just leave this open too long"
+  // guesswork from a count mismatch.
+  const loadData = async () => {
+    if (!vendorId) { setLoading(false); return; }
+    const [v, ivrs, ivs, sk, progs, tmpls] = await Promise.all([
+      getVendor(vendorId),
+      getVendorInterviewers(vendorId),
+      getInterviewsForVendor(vendorId),
+      getSkills().catch(() => []),
+      getPrograms().catch(() => []),
+      getTemplates().catch(() => []),
+    ]);
+    setVendor(v);
+    setInterviewers(ivrs);
+    setInterviews(ivs);
+    setSkills(sk);
+    setPrograms(progs);
+    setTemplates(tmpls);
+    const slots = await getSlotsForInterviewers(ivrs.map(i => i.id)).catch(() => ({}));
+    setSlotsByInterviewer(slots);
+  };
 
   useEffect(() => {
     if (!vendorId) { setLoading(false); return; }
-    (async () => {
-      setLoading(true);
-      const [v, ivrs, ivs, sk, progs, tmpls] = await Promise.all([
-        getVendor(vendorId),
-        getVendorInterviewers(vendorId),
-        getInterviewsForVendor(vendorId),
-        getSkills().catch(() => []),
-        getPrograms().catch(() => []),
-        getTemplates().catch(() => []),
-      ]);
-      setVendor(v);
-      setInterviewers(ivrs);
-      setInterviews(ivs);
-      setSkills(sk);
-      setPrograms(progs);
-      setTemplates(tmpls);
-      const slots = await getSlotsForInterviewers(ivrs.map(i => i.id)).catch(() => ({}));
-      setSlotsByInterviewer(slots);
-      setLoading(false);
-    })();
+    setLoading(true);
+    loadData().finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendorId]);
+
+  useEffect(() => {
+    if (!vendorId) return;
+    const onFocusOrVisible = () => {
+      if (document.visibilityState && document.visibilityState !== "visible") return;
+      loadData();
+    };
+    window.addEventListener("focus", onFocusOrVisible);
+    document.addEventListener("visibilitychange", onFocusOrVisible);
+    return () => {
+      window.removeEventListener("focus", onFocusOrVisible);
+      document.removeEventListener("visibilitychange", onFocusOrVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vendorId]);
+
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
 
   const initials = (userProfile?.displayName || userProfile?.email || "?").trim().charAt(0).toUpperCase();
 
@@ -294,6 +332,17 @@ export default function VendorDashboardPage() {
             <p className="text-sm font-bold text-gray-900 tracking-tight leading-tight">{vendor?.name || "Vendor"}</p>
             <p className="text-xs text-orange-600 font-semibold leading-tight">Vendor Dashboard</p>
           </div>
+        </div>
+        <div className="px-5 pb-3">
+          {/* Nothing here is live-updating (see loadData's comment) — this
+             re-pulls everything so a count an admin just corrected/
+             reassigned doesn't sit stale just because this tab's been open
+             a while. Also runs automatically on window focus/tab visibility. */}
+          <button onClick={handleManualRefresh} disabled={refreshing}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-orange-600 disabled:opacity-50 transition-colors">
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh data"}
+          </button>
         </div>
         <div className="px-3 space-y-1 flex-1">
           {NAV.map(item => {
