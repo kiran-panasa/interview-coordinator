@@ -114,6 +114,15 @@ export default function SkillsSelect({
     if (onRemoveCustom) customSkills.forEach(n => onRemoveCustom(n));
   };
 
+  // Selects every currently-visible option (respects an active search term,
+  // same as a group's own "Select all" above) — additive, so it never drops
+  // a selection that's filtered out of view by the current search text.
+  const selectAll = () => {
+    if (readOnly) return;
+    onChange([...new Set([...value, ...filtered.map(s => s.id)])]);
+  };
+  const allFilteredSelected = filtered.length > 0 && filtered.every(s => value.includes(s.id));
+
   const totalSelected = selected.length + customSkills.length;
 
   if (readOnly) {
@@ -240,11 +249,23 @@ export default function SkillsSelect({
           </div>
 
           {/* Footer */}
-          {totalSelected > 0 && (
+          {(filtered.length > 0 || totalSelected > 0) && (
             <div className="border-t border-gray-100 px-3 py-2 flex items-center justify-between">
-              <span className="text-xs text-gray-400">{totalSelected} selected</span>
-              <button type="button" onClick={clearAll}
-                className="text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
+              <span className="text-xs text-gray-400">
+                {totalSelected > 0 ? `${totalSelected} selected` : ""}
+              </span>
+              <div className="flex items-center gap-3">
+                {!hasGroups && filtered.length > 0 && !allFilteredSelected && (
+                  <button type="button" onClick={selectAll}
+                    className="text-xs text-brand-600 hover:underline">
+                    Select all{searchTrimmed ? " matching" : ""}
+                  </button>
+                )}
+                {totalSelected > 0 && (
+                  <button type="button" onClick={clearAll}
+                    className="text-xs text-gray-400 hover:text-red-500 transition-colors">Clear all</button>
+                )}
+              </div>
             </div>
           )}
         </div>,
