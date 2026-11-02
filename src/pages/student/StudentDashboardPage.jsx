@@ -1625,6 +1625,28 @@ export default function StudentDashboardPage() {
             </p>
           )}
 
+          {/* Both Cancel and Reschedule count the same way against the
+             template's cancel limit (a reschedule cancels the old interview
+             the moment the new one is confirmed — see cancelReplacedInterview
+             in booking.service.js) — so this shows regardless of mode,
+             naming the actual remaining count instead of just the generic
+             warning above, so it's not a surprise the moment it happens. */}
+          {(() => {
+            const t = templates.find(x => x.id === cancelRescheduleTarget?.templateId);
+            if (!t || t.maxCancellations == null) return null;
+            const remaining = Math.max(0, t.maxCancellations - (t.cancelCount || 0) - 1);
+            return (
+              <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl px-3.5 py-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  {remaining > 0
+                    ? <>You've used <span className="font-bold">{(t.cancelCount || 0) + 1}</span> of <span className="font-bold">{t.maxCancellations}</span> {cancelRescheduleTarget?.mode === "reschedule" ? "cancellations/reschedules" : "cancellations"} for this round after this one — <span className="font-bold">{remaining} chance{remaining === 1 ? "" : "s"}</span> left before you're blocked from booking it again.</>
+                    : <>This will use up your last chance for this round — <span className="font-bold">you'll be blocked from booking it again</span> after this. Please only proceed if you truly can't make it.</>}
+                </p>
+              </div>
+            );
+          })()}
+
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
               Reason {cancelRescheduleTarget?.mode === "cancel" ? "for cancelling" : "for rescheduling"} <span className="text-red-500">*</span>
