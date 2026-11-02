@@ -154,7 +154,7 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main className="ml-60 flex-1 min-h-screen">
+      <main className="ml-60 flex-1 min-h-screen min-w-0">
         <ErrorBoundary>
           <Outlet context={{ adhocQs }} />
         </ErrorBoundary>
