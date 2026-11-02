@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Download, X, BarChart3, Trophy, Medal, Award } from "lucide-react";
+import { Download, X, BarChart3, Trophy } from "lucide-react";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/queries";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
@@ -361,11 +361,10 @@ export default function InterviewerStatsPage() {
       </motion.div>
 
       {view === "leaderboard" ? (() => {
-        const RANK_STYLE = [
-          { icon: Trophy, badge: "bg-gradient-to-br from-amber-400 to-yellow-500 text-white", card: "border-amber-200 bg-amber-50/60" },
-          { icon: Medal,  badge: "bg-gradient-to-br from-gray-300 to-gray-400 text-white",    card: "border-gray-200 bg-gray-50/60" },
-          { icon: Award,  badge: "bg-gradient-to-br from-orange-400 to-amber-700 text-white", card: "border-orange-200 bg-orange-50/40" },
-        ];
+        // Same "effort, not competition" treatment as the vendor dashboard's
+        // own Leaderboard tab — no rank numbering, no medal badges, no "X
+        // total interviews this week" subtext under the name. Just who did
+        // how much, sorted but not scored against each other visually.
         return (
           <div className="max-w-2xl mx-auto space-y-5">
             <div className="text-center">
@@ -389,27 +388,20 @@ export default function InterviewerStatsPage() {
               </div>
             ) : (
               <div className="space-y-2.5">
-                {leaderboardRanked.map((row, i) => {
-                  const style = RANK_STYLE[i];
-                  const RankIcon = style?.icon;
-                  return (
-                    <div key={row.interviewer.id} className={`bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 flex items-center gap-4 ${style?.card || ""}`}>
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm ${
-                        style ? style.badge : "bg-gray-100 text-gray-500"
-                      }`}>
-                        {RankIcon ? <RankIcon className="w-5 h-5" /> : i + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-gray-900 truncate">{maskName(row.interviewer.displayName) || row.interviewer.email}</p>
-                        <p className="text-xs text-gray-400">{row.total} total interview{row.total !== 1 ? "s" : ""} this {leaderboardPeriod}</p>
-                      </div>
-                      <div className="text-center flex-shrink-0 w-16">
-                        <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Completed</p>
-                      </div>
+                {leaderboardRanked.map(row => (
+                  <div key={row.interviewer.id} className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 flex items-center gap-4">
+                    <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0">
+                      <Trophy className="w-4 h-4" />
                     </div>
-                  );
-                })}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 truncate">{maskName(row.interviewer.displayName) || row.interviewer.email}</p>
+                    </div>
+                    <div className="text-center flex-shrink-0 w-16">
+                      <p className="text-xl font-bold text-emerald-600">{row.completed}</p>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold">Completed</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
