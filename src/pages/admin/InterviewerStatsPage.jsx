@@ -158,10 +158,23 @@ export default function InterviewerStatsPage() {
     return [...set].sort((a, b) => a - b).map(d => ({ id: String(d), name: `${d} mins` }));
   }, [interviews]);
 
-  // An interview only carries interviewerEmail, not who that interviewer's
-  // vendor is — resolved via the same usersByEmail lookup used for the
-  // Interviewer column, so the Vendor filter (and its priorSessions
-  // crediting below) works off the interviewer's CURRENT vendor assignment.
+  // The main Vendor filter matches the interview's OWN snapshotted vendorId
+  // (see withVendorId, api/interviews.ts) — the exact same thing the Vendor
+  // Dashboard itself is scoped by (getInterviewsForVendor queries this same
+  // field, and Firestore security rules gate a vendor contact's interview
+  // reads on it too). Previously this instead did a live lookup of the
+  // interviewer's CURRENT vendorId by email, which is a genuinely different
+  // question ("who do they work for now" vs "whose vendor was this
+  // interview billed to") and silently diverged from the Vendor Dashboard's
+  // own counts whenever the two disagreed — a reassigned interviewer, or
+  // simply an email that didn't case-match the live users lookup, dropped
+  // interviews here that the Vendor Dashboard still counted.
+  const interviewBelongsToVendor = (iv) => !vendorIds.length || vendorIds.includes(iv.vendorId);
+  // priorSessions (a resumed interview's earlier session(s), see below)
+  // never went through withVendorId individually — they're nested inside
+  // the parent interview doc, not their own Firestore document — so there's
+  // no snapshot to check for them; this live by-email lookup is the only
+  // option available there specifically.
   const emailBelongsToVendor = (email) => {
     if (!vendorIds.length) return true;
     const vId = usersByEmail.get(email)?.vendorId;
@@ -177,7 +190,7 @@ export default function InterviewerStatsPage() {
       if (programIds.length && !programIds.includes(effectiveProgramOf(iv.templateId))) return false;
       if (templateIds.length && !templateIds.includes(iv.templateId)) return false;
       if (interviewerEmails.length && !interviewerEmails.includes(iv.interviewerEmail)) return false;
-      if (!emailBelongsToVendor(iv.interviewerEmail)) return false;
+      if (!interviewBelongsToVendor(iv)) return false;
       if (durations.length && !durations.includes(String(iv.duration || 60))) return false;
       return true;
     });
