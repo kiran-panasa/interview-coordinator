@@ -356,8 +356,12 @@ export default function CandidatesPage() {
       if (editTarget) {
         await updateCandidate(editTarget.id, cleanForm);
         patchFullList(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...cleanForm } : c));
-        setPageItems(prev => prev.map(c => c.id === editTarget.id ? { ...c, ...cleanForm } : c)
-          .filter(c => c.id !== editTarget.id || activeProgram === "all" || c.program === activeProgram));
+        // pageItems (candPager.items) is a server-fetched cursor page, not
+        // local state — there's no array to patch in place without also
+        // invalidating the NEXT page's start cursor (computed from this
+        // page's original contents), so a full reload of the current page
+        // is the only correct way to reflect the edit there.
+        if (!needsFullList) candPager.reload();
         setToast({ message: "Candidate updated." });
       } else {
         // Checked against Firestore directly, not whatever's in local
@@ -371,7 +375,7 @@ export default function CandidatesPage() {
           const fieldUpdates = { ...cleanForm, templateIds: mergedTemplateIds };
           await updateCandidate(existing.id, fieldUpdates);
           patchFullList(prev => prev.map(c => c.id === existing.id ? { ...c, ...fieldUpdates } : c));
-          setPageItems(prev => prev.map(c => c.id === existing.id ? { ...c, ...fieldUpdates } : c));
+          if (!needsFullList) candPager.reload();
           queryClient.invalidateQueries({ queryKey: QK.candidates });
           setToast({ message: "A candidate with this email or UID already exists — updated their existing record instead of creating a duplicate." });
         } else {
@@ -379,10 +383,14 @@ export default function CandidatesPage() {
           const id = await createCandidate({ ...cleanForm, createdBy: currentUser.uid });
           const newCandidate = { id, ...cleanForm, createdAt, createdBy: currentUser.uid };
           patchFullList(prev => [newCandidate, ...prev]);
-          // Only show it in the scoped page view if it actually belongs on
-          // the tab currently being viewed.
+          // Only reload the scoped page view if it actually belongs on the
+          // tab currently being viewed — reloads page 1 fresh (cursor pages
+          // are ordered newest-first, so a brand-new candidate shows up
+          // there; it won't retroactively appear on a later page already
+          // being viewed, same inherent cursor-pagination limitation
+          // documented in useCursorPagination).
           if (!needsFullList && (activeProgram === "all" || activeProgram === form.program)) {
-            setPageItems(prev => [newCandidate, ...prev]);
+            candPager.reload();
           }
           setToast({ message: "Candidate added." });
         }
@@ -397,7 +405,7 @@ export default function CandidatesPage() {
     if (!confirm(`Delete ${c.name}? This cannot be undone.`)) return;
     await deleteCandidate(c.id);
     patchFullList(prev => prev.filter(x => x.id !== c.id));
-    setPageItems(prev => prev.filter(x => x.id !== c.id));
+    if (!needsFullList) candPager.reload();
     invalidateCounts();
     setToast({ message: "Candidate deleted." });
   };
@@ -406,7 +414,7 @@ export default function CandidatesPage() {
     await archiveCandidate(c.id);
     patchFullList(prev => prev.map(x => x.id === c.id ? { ...x, archived: true, archivedAt: new Date().toISOString() } : x));
     // The scoped view is active-only, so an archived candidate drops out of it.
-    setPageItems(prev => prev.filter(x => x.id !== c.id));
+    if (!needsFullList) candPager.reload();
     invalidateCounts();
     setToast({ message: "Candidate archived." });
   };
@@ -421,7 +429,7 @@ export default function CandidatesPage() {
   const handleSwapNameUID = async (c) => {
     await updateCandidate(c.id, { name: c.uid, uid: c.name });
     patchFullList(prev => prev.map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
-    setPageItems(prev => prev.map(x => x.id === c.id ? { ...x, name: c.uid, uid: c.name } : x));
+    if (!needsFullList) candPager.reload();
     setToast({ message: "Name and UID fixed." });
   };
 
@@ -436,14 +444,7 @@ export default function CandidatesPage() {
       if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
       await Promise.all([...selected].map(id => updateCandidate(id, updates)));
       patchFullList(prev => prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c));
-      setPageItems(prev => {
-        const mapped = prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c);
-        // Reassigning to a different Program means it no longer belongs
-        // on a Program-scoped tab.
-        return updates.program && activeProgram !== "all"
-          ? mapped.filter(c => c.program === activeProgram)
-          : mapped;
-      });
+      if (!needsFullList) candPager.reload();
       invalidateCounts();
       setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
       setShowBulk(false);
