@@ -20,7 +20,7 @@ import {
   getAllUsers, getInvites,
   getSkills, createSkill, updateSkill, deleteSkill,
   getRounds, createRound, updateRound, deleteRound,
-  getVendors, createVendor, updateVendor, deleteVendor, setVendorMembers,
+  getVendors, createVendor, updateVendor, deleteVendor, setVendorMembers, resyncVendorInterviews,
   getPrograms, createProgram, updateProgram, deleteProgram,
   getTemplates, updateTemplate, getCandidates, updateCandidate,
   getBlockedDates, createBlockedDate, updateBlockedDate, deleteBlockedDate,
@@ -124,6 +124,7 @@ export default function SettingsPage() {
   const [vendorMemberIds, setVendorMemberIds] = useState(new Set());
   const [vendorMemberSearch, setVendorMemberSearch] = useState("");
   const [vendorMembersSaving, setVendorMembersSaving] = useState(false);
+  const [vendorResyncing, setVendorResyncing] = useState(false);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteForm,      setInviteForm]      = useState(BLANK_INVITE);
@@ -564,6 +565,26 @@ export default function SettingsPage() {
       setToast({ message: e.message, type: "error" });
     }
     setVendorMembersSaving(false);
+  };
+
+  // One-off fix for members who were already on this vendor before
+  // setVendorMembers started keeping interview records in sync (or whose
+  // records drifted some other way) — an interview's vendorId is only ever
+  // snapshotted once, at creation time, so an interviewer added to a vendor
+  // AFTER already running interviews left those older ones with no vendorId
+  // at all, invisible to that vendor's own dashboard (Firestore rules gate
+  // interview reads on vendorId matching exactly). Safe to run anytime —
+  // idempotent, only touches records that are actually out of sync.
+  const handleResyncVendorInterviews = async () => {
+    if (!managingVendor) return;
+    setVendorResyncing(true);
+    try {
+      const count = await resyncVendorInterviews(managingVendor.id);
+      setToast({ message: count > 0 ? `Fixed ${count} interview record(s) for "${managingVendor.name}".` : `Everything for "${managingVendor.name}" was already in sync.` });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setVendorResyncing(false);
   };
 
   // ── Programs handlers ─────────────────────────────────────────────────────
@@ -1025,6 +1046,11 @@ export default function SettingsPage() {
           <p className="text-xs text-gray-400">
             Check who belongs to this vendor. An interviewer can only be under one vendor at a time — checking them here moves them out of any other vendor. Unchecked and never assigned means they're independent, not tied to any vendor.
           </p>
+          <button type="button" onClick={handleResyncVendorInterviews} disabled={vendorResyncing}
+            className="text-xs font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-50 transition-colors"
+            title="Re-stamp this vendor onto any current member's older interview records that are missing it — fixes a panelist's counts not showing up on this vendor's own dashboard.">
+            {vendorResyncing ? "Fixing interview records…" : "Fix missing interview records for current members"}
+          </button>
           <div className="relative">
             <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input

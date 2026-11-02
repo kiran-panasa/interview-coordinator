@@ -64,18 +64,63 @@ export async function deleteVendor(id: string): Promise<void> {
 // "Manage Interviewers" picker with the full set of ids that should now
 // belong to this vendor (both newly checked and newly unchecked are in
 // scope; a member who stays checked is written again, harmlessly).
+// Keeps an interviewer's EXISTING interview records in sync with their new
+// vendor assignment. An interview's vendorId is a snapshot taken at
+// creation time (see withVendorId, api/interviews.ts) — deliberately not
+// kept live-updated on every read — so an interviewer added to a vendor
+// AFTER they'd already run interviews left those older records with no
+// vendorId at all, invisible to that vendor's dashboard forever (Firestore
+// security rules gate interview reads on vendorId matching exactly; there's
+// no client-side workaround for a stale/missing snapshot). Called for both
+// directions: newly added (backfill to the new vendorId) and removed
+// (clear back to null, same as a brand-new interview with no vendor yet).
+async function resyncInterviewerVendorId(interviewerId: string, vendorId: string | null): Promise<void> {
+  const snap = await getDocs(query(collection(db, "interviews"), where("interviewerId", "==", interviewerId)));
+  const targets = snap.docs.filter(d => ((d.data() as { vendorId?: string | null }).vendorId || null) !== vendorId);
+  for (let i = 0; i < targets.length; i += 450) {
+    const batch = writeBatch(db);
+    targets.slice(i, i + 450).forEach(d => batch.update(d.ref, { vendorId }));
+    await batch.commit();
+  }
+}
+
 export async function setVendorMembers(vendorId: string, interviewerIds: string[]): Promise<void> {
   const currentSnap = await getDocs(query(collection(db, "users"), where("vendorId", "==", vendorId)));
   const currentIds = new Set(currentSnap.docs.map(d => d.id));
   const nextIds = new Set(interviewerIds);
+  const added   = [...nextIds].filter(id => !currentIds.has(id));
+  const removed = [...currentIds].filter(id => !nextIds.has(id));
 
   const batch = writeBatch(db);
   let writes = 0;
-  currentIds.forEach(id => {
-    if (!nextIds.has(id)) { batch.update(doc(db, "users", id), { vendorId: null }); writes++; }
-  });
-  nextIds.forEach(id => {
-    if (!currentIds.has(id)) { batch.update(doc(db, "users", id), { vendorId }); writes++; }
-  });
+  removed.forEach(id => { batch.update(doc(db, "users", id), { vendorId: null }); writes++; });
+  added.forEach(id   => { batch.update(doc(db, "users", id), { vendorId }); writes++; });
   if (writes) await batch.commit();
+
+  await Promise.all([
+    ...added.map(id => resyncInterviewerVendorId(id, vendorId)),
+    ...removed.map(id => resyncInterviewerVendorId(id, null)),
+  ]);
+}
+
+// On-demand fix for members who were already on this vendor BEFORE
+// resyncInterviewerVendorId existed, or whose interview records drifted out
+// of sync some other way — re-stamps vendorId onto every CURRENT member's
+// interviews unconditionally (idempotent, safe to run repeatedly), without
+// needing to remove and re-add them through setVendorMembers to trigger it.
+export async function resyncVendorInterviews(vendorId: string): Promise<number> {
+  const membersSnap = await getDocs(query(collection(db, "users"), where("vendorId", "==", vendorId)));
+  const memberIds = membersSnap.docs.map(d => d.id);
+  let total = 0;
+  for (const id of memberIds) {
+    const snap = await getDocs(query(collection(db, "interviews"), where("interviewerId", "==", id)));
+    const targets = snap.docs.filter(d => ((d.data() as { vendorId?: string | null }).vendorId || null) !== vendorId);
+    total += targets.length;
+    for (let i = 0; i < targets.length; i += 450) {
+      const batch = writeBatch(db);
+      targets.slice(i, i + 450).forEach(d => batch.update(d.ref, { vendorId }));
+      await batch.commit();
+    }
+  }
+  return total;
 }
