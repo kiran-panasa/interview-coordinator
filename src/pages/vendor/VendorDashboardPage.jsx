@@ -10,6 +10,8 @@ import { getVendor, getVendorInterviewers } from "../../api/vendors";
 import { getInterviewsForVendor } from "../../api/interviews";
 import { getSlotsForInterviewers } from "../../api/availability";
 import { getSkills } from "../../api/skills";
+import { getPrograms } from "../../api/programs";
+import { getTemplates } from "../../api/templates";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
 import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -84,6 +86,8 @@ export default function VendorDashboardPage() {
   const [interviews, setInterviews] = useState([]);
   const [slotsByInterviewer, setSlotsByInterviewer] = useState({});
   const [skills, setSkills] = useState([]);
+  const [programs, setPrograms] = useState([]);
+  const [templates, setTemplates] = useState([]);
 
   // Shared by Panelists (interview counts) and Interview Stats — both are
   // "how much activity happened" views over the same historical window.
@@ -98,6 +102,7 @@ export default function VendorDashboardPage() {
   const [slotSearch,   setSlotSearch]   = useState("");
   const [statsSearch,  setStatsSearch]  = useState("");
   const [statsDurations, setStatsDurations] = useState([]);
+  const [statsProgramIds, setStatsProgramIds] = useState([]);
   const [panelistSearch, setPanelistSearch] = useState("");
   // Weekly/Monthly toggle for the Leaderboard tab — its own period concept,
   // distinct from the Panelists/Stats date-range filter above.
@@ -109,16 +114,20 @@ export default function VendorDashboardPage() {
     if (!vendorId) { setLoading(false); return; }
     (async () => {
       setLoading(true);
-      const [v, ivrs, ivs, sk] = await Promise.all([
+      const [v, ivrs, ivs, sk, progs, tmpls] = await Promise.all([
         getVendor(vendorId),
         getVendorInterviewers(vendorId),
         getInterviewsForVendor(vendorId),
         getSkills().catch(() => []),
+        getPrograms().catch(() => []),
+        getTemplates().catch(() => []),
       ]);
       setVendor(v);
       setInterviewers(ivrs);
       setInterviews(ivs);
       setSkills(sk);
+      setPrograms(progs);
+      setTemplates(tmpls);
       const slots = await getSlotsForInterviewers(ivrs.map(i => i.id)).catch(() => ({}));
       setSlotsByInterviewer(slots);
       setLoading(false);
@@ -159,7 +168,15 @@ export default function VendorDashboardPage() {
   const statsDurationOptions = [...new Set(statsInterviews.map(iv => iv.duration || 60))]
     .sort((a, b) => a - b)
     .map(d => ({ id: String(d), name: `${d} mins` }));
-  const statsDurationFiltered = statsInterviews.filter(iv => !statsDurations.length || statsDurations.includes(String(iv.duration || 60)));
+  // Program -> every template under it (any duration) — selecting a Program
+  // is never narrower than Duration; the two filters combine (AND), they
+  // don't override each other, so picking a Program still shows both its
+  // 60m and 90m templates unless Duration is ALSO explicitly narrowed.
+  const templateProgramById = new Map(templates.map(t => [t.id, t.program || ""]));
+  const programOptions = programs.map(p => ({ id: p.id, name: p.name }));
+  const statsDurationFiltered = statsInterviews
+    .filter(iv => !statsDurations.length || statsDurations.includes(String(iv.duration || 60)))
+    .filter(iv => !statsProgramIds.length || statsProgramIds.includes(templateProgramById.get(iv.templateId)));
 
   // Detailed per-panelist breakdown, same shape/columns as the admin
   // Interviewer Statistics page (src/pages/admin/InterviewerStatsPage.jsx)
@@ -178,29 +195,60 @@ export default function VendorDashboardPage() {
     if (entries.length === 0) return String(count);
     return entries.map(([mins, n]) => `${mins}m: ${n}`).join(", ");
   };
-  const detailedStats = interviewers
-    .filter(ivr => !statsSearch.trim() || (ivr.displayName || ivr.email || "").toLowerCase().includes(statsSearch.trim().toLowerCase()))
-    .map(ivr => {
-      const row = { email: ivr.email, name: ivr.displayName || ivr.email };
+  // Rows are derived from the interviews themselves (every interviewerId
+  // actually present in statsDurationFiltered), not just from the vendor's
+  // CURRENT live roster (getVendorInterviewers) — a panelist's interview
+  // keeps THIS vendor's id snapshotted on it forever once run (see
+  // withVendorId, api/interviews.ts), but if they've since been reassigned
+  // to a different vendor or removed, they drop out of the live roster.
+  // Iterating just `interviewers` silently hid that panelist's entire row
+  // here while the admin Interviewer Statistics page (which groups by
+  // whatever's on the interview record, not by current vendor assignment)
+  // still showed them — the counts looked like they disagreed when really
+  // this page was just dropping rows the other wasn't. Still seeded with
+  // every CURRENT roster member first so an active panelist with zero
+  // activity this period still shows a 0 row.
+  const interviewerById = new Map(interviewers.map(ivr => [ivr.id, ivr]));
+  const statsRowsMap = new Map();
+  const ensureStatsRow = (id, name, email) => {
+    if (!statsRowsMap.has(id)) {
+      const row = { email, name };
       COUNT_FIELDS.forEach(f => { row[f] = 0; row[`${f}ByDuration`] = {}; });
-      const bump = (field, duration) => {
-        row[field]++;
-        const d = duration || 60;
-        row[`${field}ByDuration`][d] = (row[`${field}ByDuration`][d] || 0) + 1;
-      };
-      statsDurationFiltered.filter(iv => iv.interviewerId === ivr.id).forEach(iv => {
-        if (iv.status === "completed") {
-          if (iv.resumedFromPartial) bump("completedResumed", iv.duration);
-          else bump("completed", iv.duration);
-        }
-        else if (iv.status === "partially_completed") bump("partiallyCompleted", iv.duration);
-        else if (iv.status === "cancelled") bump("cancelled", iv.duration);
-        else if (iv.status === "no_show") bump("noShow", iv.duration);
-        else if (iv.status === "declined") bump("declined", iv.duration);
-      });
-      COUNT_FIELDS.forEach(f => { row[`${f}Display`] = formatBreakdownCell(row[f], row[`${f}ByDuration`]); });
-      return row;
-    });
+      statsRowsMap.set(id, row);
+    }
+    return statsRowsMap.get(id);
+  };
+  interviewers.forEach(ivr => ensureStatsRow(ivr.id, ivr.displayName || ivr.email, ivr.email));
+  statsDurationFiltered.forEach(iv => {
+    if (!iv.interviewerId) return;
+    const known = interviewerById.get(iv.interviewerId);
+    const row = ensureStatsRow(
+      iv.interviewerId,
+      known?.displayName || iv.interviewerName || known?.email || iv.interviewerEmail || "(unknown)",
+      known?.email || iv.interviewerEmail || ""
+    );
+    const bump = (field, duration) => {
+      row[field]++;
+      const d = duration || 60;
+      row[`${field}ByDuration`][d] = (row[`${field}ByDuration`][d] || 0) + 1;
+    };
+    if (iv.status === "completed") {
+      if (iv.resumedFromPartial) bump("completedResumed", iv.duration);
+      else bump("completed", iv.duration);
+    }
+    else if (iv.status === "partially_completed") bump("partiallyCompleted", iv.duration);
+    else if (iv.status === "cancelled") bump("cancelled", iv.duration);
+    else if (iv.status === "no_show") bump("noShow", iv.duration);
+    else if (iv.status === "declined") bump("declined", iv.duration);
+  });
+  const detailedStats = [...statsRowsMap.values()]
+    .filter(row => !statsSearch.trim() || (row.name || row.email || "").toLowerCase().includes(statsSearch.trim().toLowerCase()))
+    .map(row => {
+      const out = { ...row };
+      COUNT_FIELDS.forEach(f => { out[`${f}Display`] = formatBreakdownCell(row[f], row[`${f}ByDuration`]); });
+      return out;
+    })
+    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   const detailedTotals = (() => {
     const acc = { email: "", name: "" };
     COUNT_FIELDS.forEach(f => { acc[f] = 0; acc[`${f}ByDuration`] = {}; });
@@ -369,6 +417,11 @@ export default function VendorDashboardPage() {
                     <div>
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Date Range</label>
                       <DateFilterBar from={statsDateFrom} to={statsDateTo} setFrom={setStatsDateFrom} setTo={setStatsDateTo} />
+                    </div>
+                    <div className="w-52">
+                      <label className="block text-xs font-semibold text-gray-500 mb-1">Program</label>
+                      <SkillsSelect skills={programOptions} value={statsProgramIds} onChange={setStatsProgramIds}
+                        placeholder="All Programs" searchPlaceholder="Search programs…" />
                     </div>
                     <div className="w-44">
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
