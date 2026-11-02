@@ -401,9 +401,18 @@ export default function InterviewsPage() {
   const handleSave = async () => {
     if (!form.candidateId || !form.interviewerId || !form.scheduledDate || !form.scheduledTime || !form.duration || !form.round)
       return setToast({ message: "Fill in all required fields.", type: "error" });
-    const chosenStart = parseInterviewStart(form.scheduledDate, form.scheduledTime);
-    if (chosenStart && chosenStart < new Date())
-      return setToast({ message: "Cannot schedule an interview in the past — please pick a future date and time.", type: "error" });
+    // Only blocks an actual NEW move into the past — editing an interview
+    // that's already in the past (fixing its duration, notes, round, etc.
+    // after it happened) without touching its date/time must stay allowed,
+    // or an admin could never correct a mistake on anything once its own
+    // scheduled time has passed. Still blocks moving it to a DIFFERENT past
+    // date/time, same as creating a brand-new interview in the past.
+    const dateTimeChanged = !editTarget || editTarget.scheduledDate !== form.scheduledDate || editTarget.scheduledTime !== form.scheduledTime;
+    if (dateTimeChanged) {
+      const chosenStart = parseInterviewStart(form.scheduledDate, form.scheduledTime);
+      if (chosenStart && chosenStart < new Date())
+        return setToast({ message: "Cannot schedule an interview in the past — please pick a future date and time.", type: "error" });
+    }
 
     if (resumeTarget) {
       setSaving(true);
