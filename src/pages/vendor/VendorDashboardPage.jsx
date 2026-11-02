@@ -27,6 +27,16 @@ function Card({ children, className = "" }) {
   return <div className={`bg-white rounded-[1.75rem] border border-gray-100 shadow-soft ${className}`}>{children}</div>;
 }
 
+// Same bucket, same reasoning, as the admin Interviewer Statistics page
+// (src/pages/admin/InterviewerStatsPage.jsx) — an interview whose template
+// has no Program set (or whose template no longer exists) is its own real,
+// selectable bucket rather than silently invisible the moment ANY Program
+// filter is active. Without this, this page's own Program filter and the
+// admin page's per-program totals would each drop a different set of
+// "uncategorized" interviews, so the two could never be reconciled by
+// summing programs.
+const UNASSIGNED_PROGRAM_ID = "__unassigned__";
+
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function inDays(n) {
   const d = new Date(); d.setDate(d.getDate() + n);
@@ -172,11 +182,12 @@ export default function VendorDashboardPage() {
   // is never narrower than Duration; the two filters combine (AND), they
   // don't override each other, so picking a Program still shows both its
   // 60m and 90m templates unless Duration is ALSO explicitly narrowed.
-  const templateProgramById = new Map(templates.map(t => [t.id, t.program || ""]));
-  const programOptions = programs.map(p => ({ id: p.id, name: p.name }));
+  const templateProgramById = new Map(templates.map(t => [t.id, t.program || UNASSIGNED_PROGRAM_ID]));
+  const effectiveProgramOf = (templateId) => templateProgramById.get(templateId) || UNASSIGNED_PROGRAM_ID;
+  const programOptions = [...programs.map(p => ({ id: p.id, name: p.name })), { id: UNASSIGNED_PROGRAM_ID, name: "Unassigned / No Program" }];
   const statsDurationFiltered = statsInterviews
     .filter(iv => !statsDurations.length || statsDurations.includes(String(iv.duration || 60)))
-    .filter(iv => !statsProgramIds.length || statsProgramIds.includes(templateProgramById.get(iv.templateId)));
+    .filter(iv => !statsProgramIds.length || statsProgramIds.includes(effectiveProgramOf(iv.templateId)));
 
   // Detailed per-panelist breakdown, same shape/columns as the admin
   // Interviewer Statistics page (src/pages/admin/InterviewerStatsPage.jsx)

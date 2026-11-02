@@ -55,6 +55,19 @@ const STATUS_OPTIONS = [
 ];
 const RELEVANT_STATUSES = STATUS_OPTIONS.map(s => s.id);
 
+// A real, selectable bucket for "this interview's template has no Program
+// set (or the template itself no longer exists)" — not silently invisible.
+// Every program-scoped filter below treats this as every other program id:
+// an interview falls into exactly one bucket, real or this one, so summing
+// every program's total (including this one) always reconstructs the
+// unfiltered total exactly. Before this existed, such an interview simply
+// vanished the moment ANY Program filter was active (it matched neither
+// Academy nor Edge nor anything else), which is what made "Academy total +
+// Edge total" come out lower than the Vendor Dashboard's own unfiltered
+// total for the same vendor — not a vendor-scoping bug, a silently-dropped
+// third bucket.
+const UNASSIGNED_PROGRAM_ID = "__unassigned__";
+
 const inputCls = "border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500";
 
 export default function InterviewerStatsPage() {
@@ -82,13 +95,16 @@ export default function InterviewerStatsPage() {
   const [durations,    setDurations]    = useState([]);
 
   const templateProgramById = useMemo(
-    () => new Map(templates.map(t => [t.id, t.program || ""])),
+    () => new Map(templates.map(t => [t.id, t.program || UNASSIGNED_PROGRAM_ID])),
     [templates]
   );
+  // Falls back to UNASSIGNED_PROGRAM_ID for a templateId the map has no
+  // entry for too (a deleted/missing template), not just a blank .program.
+  const effectiveProgramOf = (templateId) => templateProgramById.get(templateId) || UNASSIGNED_PROGRAM_ID;
   const usersByEmail = useMemo(() => new Map(usersAll.map(u => [u.email, u])), [usersAll]);
 
   const programOptions = useMemo(
-    () => programs.map(p => ({ id: p.id, name: p.name })),
+    () => [...programs.map(p => ({ id: p.id, name: p.name })), { id: UNASSIGNED_PROGRAM_ID, name: "Unassigned / No Program" }],
     [programs]
   );
   // Every template that's actually had an interview run against it in the
@@ -104,14 +120,14 @@ export default function InterviewerStatsPage() {
     const set = new Set();
     interviews.forEach(iv => {
       if (!iv.templateId || !RELEVANT_STATUSES.includes(iv.status)) return;
-      if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return;
+      if (programIds.length && !programIds.includes(effectiveProgramOf(iv.templateId))) return;
       set.add(iv.templateId);
     });
     return set;
   }, [interviews, programIds, templateProgramById]);
   const templateOptions = useMemo(
     () => templates
-      .filter(t => !programIds.length || !t.program || programIds.includes(t.program))
+      .filter(t => !programIds.length || programIds.includes(t.program || UNASSIGNED_PROGRAM_ID))
       .filter(t => usedTemplateIds.has(t.id))
       .map(t => ({ id: t.id, name: t.name })),
     [templates, programIds, usedTemplateIds]
@@ -158,7 +174,7 @@ export default function InterviewerStatsPage() {
       if (!effectiveStatuses.includes(iv.status)) return false;
       if (dateFrom && iv.scheduledDate < dateFrom) return false;
       if (dateTo   && iv.scheduledDate > dateTo)   return false;
-      if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return false;
+      if (programIds.length && !programIds.includes(effectiveProgramOf(iv.templateId))) return false;
       if (templateIds.length && !templateIds.includes(iv.templateId)) return false;
       if (interviewerEmails.length && !interviewerEmails.includes(iv.interviewerEmail)) return false;
       if (!emailBelongsToVendor(iv.interviewerEmail)) return false;
@@ -238,7 +254,7 @@ export default function InterviewerStatsPage() {
           if (!s.scheduledDate) return;
           if (dateFrom && s.scheduledDate < dateFrom) return;
           if (dateTo   && s.scheduledDate > dateTo)   return;
-          if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return;
+          if (programIds.length && !programIds.includes(effectiveProgramOf(iv.templateId))) return;
           if (templateIds.length && !templateIds.includes(iv.templateId)) return;
           if (interviewerEmails.length && !interviewerEmails.includes(s.interviewerEmail)) return;
           if (!emailBelongsToVendor(s.interviewerEmail)) return;
