@@ -1640,17 +1640,6 @@ export default function InterviewsPage() {
     return true;
   }), [workingSet, activeProgram, templateProgram]);
 
-  // Which vendor each interviewer email currently belongs to — an interview
-  // only ever stores interviewerEmail, not the vendor, so this resolves it
-  // the same way Interviewer Stats does (current assignment, not a
-  // snapshot at scheduling time). Declared before `filtered` below, which
-  // depends on it.
-  const vendorByEmail = useMemo(() => {
-    const map = {};
-    usersAll.forEach(u => { if (u.email && u.vendorId) map[u.email] = u.vendorId; });
-    return map;
-  }, [usersAll]);
-
   // A search query bypasses the active Program tab (searches workingSet,
   // not the tab-scoped programWorkingSet) — otherwise a candidate on a
   // different tab than the one you happen to be viewing silently returns
@@ -1664,7 +1653,17 @@ export default function InterviewsPage() {
       if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
       if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
       if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
-      if (filterVendor   !== "All" && vendorByEmail[i.interviewerEmail] !== filterVendor) return false;
+      // Matches the interview's OWN snapshotted vendorId (see withVendorId,
+      // api/interviews.ts) — the same field the Vendor Dashboard and
+      // Firestore's own security rules go by, not a live lookup of the
+      // interviewer's CURRENT vendor assignment. A live lookup silently
+      // diverges from the Vendor Dashboard's own counts the moment an
+      // interviewer is reassigned to a different vendor (or removed), which
+      // is what made this page's Vendor-filtered count disagree with
+      // Interviewer Statistics for the same filters — same root cause
+      // already fixed there, see InterviewerStatsPage.jsx's
+      // interviewBelongsToVendor.
+      if (filterVendor   !== "All" && i.vendorId !== filterVendor) return false;
       if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
       if (filterSource   !== "All" && i.bookingSource !== filterSource) return false;
       if (candSearch) {
@@ -1674,7 +1673,7 @@ export default function InterviewsPage() {
       }
       return true;
     });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, filterSource, candSearch, vendorByEmail]);
+  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, filterSource, candSearch]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
