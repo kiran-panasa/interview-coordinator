@@ -9,7 +9,7 @@ import { useAuth } from "../../AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   createCandidate, findCandidateByUidOrEmail, updateCandidate, deleteCandidate, archiveCandidate, unarchiveCandidate,
-  getCandidatesPage, getCandidates, getInterviewsForCandidateTemplate,
+  getCandidatesPage, getCandidates, getInterviewsForCandidateTemplate, getInterviewsForTemplates,
 } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
 import { ordinalLabel } from "../../utils/strings";
@@ -167,13 +167,59 @@ async function getCandidateTemplateStatuses(candidate, templatesById) {
   }));
 }
 
-// A plain request can genuinely wait on at most this many candidates'
-// worth of per-template status lookups at once — each candidate costs
-// roughly one Firestore query per assigned template, so beyond this the
-// Status filter/Download-with-status would fire an unreasonable number of
-// parallel reads for one admin action. Narrowing with the Program tab,
-// search, or the Template filter is the way back under this.
-const BULK_STATUS_CANDIDATE_CAP = 150;
+// Same "only a COMPLETED interview advances the attempt count" rule as
+// getLatestTemplateStatus above, computed for every (candidateId,
+// templateId) pair found in one already-fetched interview list — O(n) in
+// memory instead of one Firestore read per candidate. Keyed by
+// "${candidateId}|${templateId}". Paired with getInterviewsForTemplates
+// (api/interviews.ts), which fetches every interview across a set of
+// templates in a handful of chunked queries regardless of how many
+// candidates are assigned to them — this is what lets the Status
+// filter/column/export scale with template count (bounded, tens not
+// thousands) instead of candidate count, where the old one-query-per-
+// candidate approach needed a hard cap (BULK_STATUS_CANDIDATE_CAP) and
+// silently only checked whatever was already cached once a list exceeded
+// it — which is why e.g. filtering by "No Show" on the unscoped "All" tab
+// could show far fewer matches than actually existed.
+function computeLatestStatusByPair(interviews) {
+  const byPair = new Map();
+  interviews.forEach(iv => {
+    if (!iv.candidateId || !iv.templateId) return;
+    const key = `${iv.candidateId}|${iv.templateId}`;
+    if (!byPair.has(key)) byPair.set(key, []);
+    byPair.get(key).push(iv);
+  });
+  const result = new Map();
+  byPair.forEach((list, key) => {
+    const sorted = [...list].sort((a, b) =>
+      (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`)
+    );
+    let n = 1, attemptNumber = 1, status = sorted[0].status;
+    for (const iv of sorted) {
+      attemptNumber = n;
+      status = iv.status;
+      if (iv.status === "completed") n++;
+    }
+    result.set(key, { status, attemptNumber });
+  });
+  return result;
+}
+
+// Same output shape as getCandidateTemplateStatuses above, but reads from
+// an already-computed bulk pair map (computeLatestStatusByPair) instead of
+// making its own Firestore calls.
+function statusesFromBulkPairMap(candidate, templatesById, pairMap) {
+  const assignedIds = candidate.templateIds || [];
+  return assignedIds.map(tid => {
+    const found = pairMap.get(`${candidate.id}|${tid}`);
+    return {
+      templateId: tid,
+      templateName: templatesById.get(tid)?.name || tid,
+      status: found?.status || "not_started",
+      attemptNumber: found?.attemptNumber || 1,
+    };
+  });
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -593,8 +639,8 @@ export default function CandidatesPage() {
 
   // Status can only be checked once per-template latest-status data has
   // actually loaded for these candidates (statusByCandidateId) — see the
-  // bulk-fetch effect below, which populates it (bounded by
-  // BULK_STATUS_CANDIDATE_CAP) whenever any status is selected. "Matches"
+  // bulk-fetch effect below, which populates it whenever any status is
+  // selected. "Matches"
   // means at least one of the candidate's assigned templates is currently
   // at one of the selected statuses (OR across the selection), so picking
   // "No Interview Taken Yet" surfaces anyone who hasn't completed
@@ -636,49 +682,47 @@ export default function CandidatesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rowsKey]);
 
-  // Bounded bulk fetch over the Template/Program/search/Archived-narrowed
-  // `filtered` set (not the whole collection) — runs any time that set is
-  // actually loaded (needsFullList), not just once the Status filter is
-  // picked, so the per-status counts in that dropdown (see statusCounts
-  // below) are ready before the admin even opens it. Skips candidates
-  // already covered by the cheap per-page fetch above. Past
-  // BULK_STATUS_CANDIDATE_CAP this is skipped outright rather than firing
-  // hundreds of parallel reads just to populate counts — the toast only
-  // interrupts if the admin actually tried to USE the Status filter; just
-  // browsing a large list silently shows plain labels with no counts.
+  // Bulk fetch over the Template/Program/search/Archived-narrowed `filtered`
+  // set (not the whole collection) — runs any time that set is actually
+  // loaded (needsFullList), not just once the Status filter is picked, so
+  // the per-status counts in that dropdown (see statusCounts below) are
+  // ready before the admin even opens it. Skips candidates already covered
+  // by the cheap per-page fetch above. Scales with how many DISTINCT
+  // templates are involved (getInterviewsForTemplates), not with how many
+  // candidates are in `filtered` — so this covers the entire "All" tab
+  // (1800+ candidates) in a handful of queries instead of one per
+  // candidate, with nothing silently skipped.
   useEffect(() => {
     if (!needsFullList) return;
-    if (filtered.length > BULK_STATUS_CANDIDATE_CAP) {
-      if (filterStatuses.length > 0) {
-        setToast({
-          message: `Status filter needs ${filtered.length} candidates checked — narrow down with Program, search, or the Template filter first (max ${BULK_STATUS_CANDIDATE_CAP} at a time).`,
-          type: "error",
-        });
-      }
-      return;
-    }
     const missing = filtered.filter(c => !statusByCandidateId.has(c.id));
     if (!missing.length) return;
+    const neededTemplateIds = [...new Set(missing.flatMap(c => c.templateIds || []))];
+    if (!neededTemplateIds.length) return;
     let cancelled = false;
     setStatusLoading(true);
-    Promise.all(missing.map(c => getCandidateTemplateStatuses(c, templatesById))).then(results => {
+    getInterviewsForTemplates(neededTemplateIds).then(interviews => {
       if (cancelled) return;
+      const pairMap = computeLatestStatusByPair(interviews);
       setStatusByCandidateId(prev => {
         const next = new Map(prev);
-        missing.forEach((c, i) => next.set(c.id, results[i]));
+        missing.forEach(c => next.set(c.id, statusesFromBulkPairMap(c, templatesById, pairMap)));
         return next;
       });
+    }).catch(err => {
+      if (cancelled) return;
+      console.error("Bulk status fetch failed:", err);
+      setToast({ message: `Couldn't load candidate statuses: ${err.message}`, type: "error" });
     }).finally(() => { if (!cancelled) setStatusLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [needsFullList, filterStatuses, filtered]);
+  }, [needsFullList, filtered, templatesById]);
 
   // Per-status counts for the filter dropdown (e.g. "No Show (12)") — only
   // meaningful once every candidate in `filtered` has status data loaded
-  // (see the effect above); while that's still in flight, or `filtered`'s
-  // too large to compute at all, options just show their plain label.
+  // (see the effect above); while that's still in flight, options just
+  // show their plain label.
   const statusCounts = useMemo(() => {
-    if (!needsFullList || !filtered.length || filtered.length > BULK_STATUS_CANDIDATE_CAP) return null;
+    if (!needsFullList || !filtered.length) return null;
     if (!filtered.every(c => statusByCandidateId.has(c.id))) return null;
     const counts = {};
     filtered.forEach(c => {
@@ -696,9 +740,9 @@ export default function CandidatesPage() {
   // fetches the full list fresh rather than exporting nothing; it's then
   // scoped to the active Program tab (the only filter that can be live in
   // that branch — search/Archived/Template/Status all force needsFullList).
-  // Status is included when it's cheap to get (already loaded, or the set
-  // is within BULK_STATUS_CANDIDATE_CAP) — otherwise the download still
-  // goes out, just without that column, rather than blocking the admin.
+  // Status is included whenever it can actually be resolved — scales with
+  // template count (getInterviewsForTemplates), not candidate count, so
+  // there's no longer a size this has to fall back and skip it for.
   const handleDownload = async () => {
     setDownloading(true);
     let target = statusFiltered;
@@ -714,19 +758,16 @@ export default function CandidatesPage() {
     }
     const missing = target.filter(c => !statusByCandidateId.has(c.id));
     let statusMap = statusByCandidateId;
-    let includeStatus = true;
     if (missing.length) {
-      if (target.length > BULK_STATUS_CANDIDATE_CAP) {
-        includeStatus = false;
-        setToast({
-          message: `Downloaded without Status — ${target.length} candidates is over the ${BULK_STATUS_CANDIDATE_CAP} limit for that. Narrow down with Program, search, or the Template filter to include it.`,
-          type: "error",
-        });
-      } else {
-        const results = await Promise.all(missing.map(c => getCandidateTemplateStatuses(c, templatesById)));
+      try {
+        const neededTemplateIds = [...new Set(missing.flatMap(c => c.templateIds || []))];
+        const interviews = neededTemplateIds.length ? await getInterviewsForTemplates(neededTemplateIds) : [];
+        const pairMap = computeLatestStatusByPair(interviews);
         statusMap = new Map(statusByCandidateId);
-        missing.forEach((c, i) => statusMap.set(c.id, results[i]));
+        missing.forEach(c => statusMap.set(c.id, statusesFromBulkPairMap(c, templatesById, pairMap)));
         setStatusByCandidateId(statusMap);
+      } catch (e) {
+        setToast({ message: `Downloaded without Status — couldn't load it (${e.message}).`, type: "error" });
       }
     }
 
@@ -744,10 +785,10 @@ export default function CandidatesPage() {
       Email: c.email || "",
       Program: c.program ? programName(c.program) : "",
       Templates: (c.templateIds || []).map(tid => templatesById.get(tid)?.name).filter(Boolean).join(" | "),
-      ...(includeStatus ? { Status: statusText(c) } : {}),
+      Status: statusText(c),
       Phone: c.phone || "",
     }));
-    const header = ["UID", "Name", "Email", "Program", "Templates", ...(includeStatus ? ["Status"] : []), "Phone"];
+    const header = ["UID", "Name", "Email", "Program", "Templates", "Status", "Phone"];
     const ws = XLSX.utils.json_to_sheet(exportRows, { header });
     ws["!cols"] = header.map(h => ({ wch: h === "Status" ? 50 : h === "Templates" ? 36 : h === "UID" ? 16 : 22 }));
     const wb = XLSX.utils.book_new();

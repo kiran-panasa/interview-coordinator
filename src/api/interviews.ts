@@ -80,6 +80,24 @@ export async function getInterviewsForCandidateTemplate(
   return snap.docs.map(d => ({ ...(d.data() as Interview), id: d.id }));
 }
 
+// Every interview across ANY of the given templates, in one bulk sweep —
+// used by CandidatesPage.jsx to compute every candidate's latest-attempt
+// status per template (the Status column/filter) without needing one
+// Firestore read per CANDIDATE, which stops scaling well past a few
+// hundred. Chunked at 30 (Firestore's "in" cap); scales with how many
+// templates exist (bounded, slow-growing — tens, not thousands), not with
+// candidate count, so it stays cheap even across the whole candidate base.
+export async function getInterviewsForTemplates(templateIds: string[]): Promise<Interview[]> {
+  const ids = [...new Set(templateIds)].filter(Boolean);
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+  const results = await Promise.all(chunks.map(chunk =>
+    getDocs(query(collection(db, "interviews"), where("templateId", "in", chunk)))
+  ));
+  return results.flatMap(snap => snap.docs.map(d => ({ ...(d.data() as Interview), id: d.id })));
+}
+
 // Denormalizes the candidate's own external UserID (Candidate.uid, e.g.
 // "STU-2024-001") onto the interview at creation time — same pattern as
 // candidateName/candidateEmail already being snapshotted by callers, done
