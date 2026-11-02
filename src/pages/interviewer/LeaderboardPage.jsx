@@ -120,7 +120,7 @@ export default function LeaderboardPage() {
             </div>
             <p className="text-lg font-bold">No interviews {periodLabel}</p>
             <p className="text-sm text-amber-50 mt-1 max-w-sm mx-auto">
-              No worries — give your availability and grab a meet schedule. Someone's waiting for a panelist like you.
+              No worries — give your availability and contribute more. Your time could inspire someone's next step.
             </p>
             <p className="text-xs text-amber-50/80 mt-2.5 flex items-center justify-center gap-1.5 max-w-sm mx-auto">
               <Sparkles className="w-3.5 h-3.5 flex-shrink-0" /> {emptyStateLine}
