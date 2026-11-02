@@ -947,10 +947,24 @@ export default function CandidatesPage() {
                       <span className="text-xs text-gray-300">…</span>
                     ) : (
                       <div className="flex flex-col gap-1">
+                        {/* ring-1 ring-inset + the colored dot are what
+                           actually make each status visually distinct —
+                           STATUS_STYLES only carries the ring COLOR, not
+                           the ring itself, so reusing it bare (as before)
+                           rendered every status as near-identical pale
+                           text with no visible border or dot. Template
+                           name kept but de-emphasized (the Templates
+                           column already shows it in full) so the eye
+                           catches the colored status first. */}
                         {statusByCandidateId.get(c.id).map(s => (
                           <span key={s.templateId}
-                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full w-fit ${STATUS_STYLES[s.status] || "bg-gray-100 text-gray-500"}`}>
-                            {s.templateName}: {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                            title={`${s.templateName}: ${STATUS_LABELS[s.status] || s.status}`}
+                            className={`inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full ring-1 ring-inset w-fit max-w-full ${STATUS_STYLES[s.status] || "bg-gray-100 text-gray-500 ring-gray-200"}`}>
+                            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" />
+                            <span className="truncate opacity-70 font-medium">{s.templateName}:</span>
+                            <span className="font-bold whitespace-nowrap">
+                              {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                            </span>
                           </span>
                         ))}
                       </div>
@@ -985,6 +999,29 @@ export default function CandidatesPage() {
           />
         )}
       </motion.div>
+
+      {/* Status color legend — the Status column's colors otherwise have
+         no explanation anywhere on the page (what's amber vs. orange vs.
+         red isn't self-evident at a glance). Dot colors kept as their own
+         explicit map (matching Badge.jsx's STYLES) rather than parsed out
+         of STATUS_STYLES, so this never silently breaks if that string's
+         shape changes. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-4 px-1">
+        {[
+          ["not_started", "bg-gray-300"],
+          ["scheduled", "bg-blue-500"],
+          ["completed", "bg-emerald-500"],
+          ["partially_completed", "bg-amber-500"],
+          ["cancelled", "bg-gray-400"],
+          ["declined", "bg-red-500"],
+          ["no_show", "bg-orange-500"],
+        ].map(([k, dot]) => (
+          <span key={k} className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+            {STATUS_LABELS[k] || k}
+          </span>
+        ))}
+      </div>
 
       {/* Add / Edit modal */}
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editTarget ? "Edit Candidate" : "Add Candidate"} wide>
