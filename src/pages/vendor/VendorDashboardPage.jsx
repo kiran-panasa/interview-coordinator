@@ -222,7 +222,16 @@ export default function VendorDashboardPage() {
   // 60m and 90m templates unless Duration is ALSO explicitly narrowed.
   const templateProgramById = new Map(templates.map(t => [t.id, t.program || UNASSIGNED_PROGRAM_ID]));
   const effectiveProgramOf = (templateId) => templateProgramById.get(templateId) || UNASSIGNED_PROGRAM_ID;
-  const programOptions = [...programs.map(p => ({ id: p.id, name: p.name })), { id: UNASSIGNED_PROGRAM_ID, name: "Unassigned / No Program" }];
+  // Only programs this vendor's own interviews (in the current date range)
+  // actually have at least one of — not every program that exists platform-
+  // wide. Not offered as its own selectable option (keeps the dropdown to
+  // real programs only) — but effectiveProgramOf/UNASSIGNED_PROGRAM_ID
+  // still back the counts below, so an interview with no resolvable program
+  // still shows up correctly whenever NO program filter is active.
+  const usedProgramIds = new Set(
+    statsInterviews.map(iv => effectiveProgramOf(iv.templateId)).filter(id => id !== UNASSIGNED_PROGRAM_ID)
+  );
+  const programOptions = programs.filter(p => usedProgramIds.has(p.id)).map(p => ({ id: p.id, name: p.name }));
   const statsDurationFiltered = statsInterviews
     .filter(iv => !statsDurations.length || statsDurations.includes(String(iv.duration || 60)))
     .filter(iv => !statsProgramIds.length || statsProgramIds.includes(effectiveProgramOf(iv.templateId)));

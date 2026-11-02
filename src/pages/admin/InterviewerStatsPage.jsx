@@ -103,8 +103,13 @@ export default function InterviewerStatsPage() {
   const effectiveProgramOf = (templateId) => templateProgramById.get(templateId) || UNASSIGNED_PROGRAM_ID;
   const usersByEmail = useMemo(() => new Map(usersAll.map(u => [u.email, u])), [usersAll]);
 
+  // Not offered as its own selectable option (keeps the dropdown to real
+  // programs only) — but effectiveProgramOf/UNASSIGNED_PROGRAM_ID still
+  // back every program-scoped count below, so an interview with no
+  // resolvable program still shows up correctly whenever NO program filter
+  // is active (the "All" view), it just can't be isolated on its own here.
   const programOptions = useMemo(
-    () => [...programs.map(p => ({ id: p.id, name: p.name })), { id: UNASSIGNED_PROGRAM_ID, name: "Unassigned / No Program" }],
+    () => programs.map(p => ({ id: p.id, name: p.name })),
     [programs]
   );
   // Every template that's actually had an interview run against it in the
