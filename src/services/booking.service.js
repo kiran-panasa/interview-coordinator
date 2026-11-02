@@ -30,7 +30,16 @@ const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 // the same "Rescheduled by candidate — picked a new slot on ..." reason
 // admin-confirmed reschedules already use — never blocks confirming the
 // NEW booking if any of this fails.
-async function cancelReplacedInterview(replacingInterviewId, newInterviewId, bookedDate, bookedTime) {
+//
+// rescheduleReason is the mandatory reason the candidate typed in the
+// Request Reschedule modal (CancelRescheduleModal.jsx) — it used to be
+// collected and stored on the new invite's own rescheduleReason field but
+// never actually surfaced anywhere: this function always wrote its own
+// generic "picked a new slot on <date>" reason over it, so the candidate's
+// OWN words never showed up as this interview's cancel reason on the
+// Student Dashboard. Appended here instead of replacing the date/time
+// context, since both are useful (when, and why).
+async function cancelReplacedInterview(replacingInterviewId, newInterviewId, bookedDate, bookedTime, rescheduleReason) {
   try {
     const oldIv = await getInterview(replacingInterviewId);
     if (oldIv && oldIv.status !== "cancelled") {
@@ -41,7 +50,8 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
         await freeSlotsForInterview(oldIv.interviewerId, oldIv.scheduledDate, oldIv.scheduledTime, oldIv.duration).catch(() => {});
       }
       await markInterviewCancelled(replacingInterviewId, {
-        reason: `Rescheduled by candidate — picked a new slot on ${formatDate(bookedDate)} at ${bookedTime}.`,
+        reason: `Rescheduled by candidate — picked a new slot on ${formatDate(bookedDate)} at ${bookedTime}.`
+          + (rescheduleReason ? ` Reason: ${rescheduleReason}` : ""),
         cancelledBy: "candidate",
       });
       if (APPS_SCRIPT_URL && oldIv.interviewerEmail) {
@@ -149,7 +159,7 @@ export async function confirmSelfBooking(inviteId) {
     // Fire-and-forget, deliberately not awaited — same as the admin path —
     // so a slow cancel-the-old-one step never delays the candidate seeing
     // their new booking confirmed.
-    cancelReplacedInterview(invite.replacingInterviewId, interviewId, invite.bookedDate, invite.bookedTime);
+    cancelReplacedInterview(invite.replacingInterviewId, interviewId, invite.bookedDate, invite.bookedTime, invite.rescheduleReason);
   }
 
   const { scheduleInterviewMeet } = await import("../api/interviews");

@@ -464,7 +464,8 @@ export default function CandidateSchedulingTab({
                   await freeSlotsForInterview(oldIv.interviewerId, oldIv.scheduledDate, oldIv.scheduledTime, oldIv.duration).catch(() => {});
                 }
                 await markInterviewCancelled(inv.replacingInterviewId, {
-                  reason: `Rescheduled by candidate — picked a new slot on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`,
+                  reason: `Rescheduled by candidate — picked a new slot on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`
+                    + (inv.rescheduleReason ? ` Reason: ${inv.rescheduleReason}` : ""),
                   cancelledBy: "admin",
                 });
                 if (APPS_SCRIPT_URL && oldIv.interviewerEmail) {

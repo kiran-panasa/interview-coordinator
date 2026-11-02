@@ -475,6 +475,15 @@ export default function StudentDashboardPage() {
         body: JSON.stringify({
           templateId: selfBookDraft.templateId,
           ...(selfBookDraft.replacingInterviewId ? { replacingInterviewId: selfBookDraft.replacingInterviewId } : {}),
+          // selfBookDraft.rescheduleReason came back from self-book-start
+          // (the read-only preview call) but was never actually forwarded
+          // here, at the real invite-creation call — so the candidate's own
+          // mandatory reason, though collected, silently never reached the
+          // invite it was supposed to end up on, and cancelReplacedInterview
+          // (booking.service.js) had nothing to show but its own generic
+          // "picked a new slot on <date>" text once the old interview got
+          // cancelled.
+          ...(selfBookDraft.rescheduleReason ? { rescheduleReason: selfBookDraft.rescheduleReason } : {}),
         }),
       });
       const json = await res.json();
