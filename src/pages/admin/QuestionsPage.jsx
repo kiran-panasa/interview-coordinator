@@ -7,11 +7,12 @@ import {
 } from "lucide-react";
 import {
   getQuestions, getQuestionsPage, createQuestion, updateQuestion, archiveQuestion, deleteQuestion,
-  approveAdhocQuestion, rejectAdhocQuestion,
+  approveAdhocQuestion, rejectAdhocQuestion, getAllAdhocQuestions,
   addQuestionToTemplate, removeQuestionFromTemplate,
   getUsersByIds,
 } from "../../api/firestore";
 import { useSkills, useTemplates, useQuestionCounts, QK } from "../../hooks/queries";
+import { useAuth } from "../../AuthContext";
 import { parseCSV as parseQuestionCSV, downloadSampleCSV } from "../../utils/questionCSV";
 import QuestionForm from "../../components/questions/QuestionForm";
 import Modal from "../../components/Modal";
@@ -39,8 +40,36 @@ const BLANK_BULK = {
 
 export default function QuestionsPage() {
   const queryClient = useQueryClient();
+  const { currentUser, userProfile } = useAuth();
+  const reviewerName = userProfile?.displayName || userProfile?.email || currentUser?.email || "Admin";
   const { adhocQs = [] } = useOutletContext() || {};
   const [activeTab,    setActiveTab]    = useState("bank");
+
+  // Full pending/approved/rejected history for the Review Queue tab — a
+  // separate, one-time fetch from `adhocQs` above (which stays scoped to
+  // "pending" only, since that's what drives the sidebar badge on EVERY
+  // admin page load and needs to stay cheap). Lazy: only fetched once the
+  // Review Queue tab is actually opened, not on every QuestionsPage visit.
+  const [adhocHistory, setAdhocHistory] = useState(null);
+  const [adhocHistoryLoading, setAdhocHistoryLoading] = useState(false);
+  useEffect(() => {
+    if (activeTab !== "review" || adhocHistory !== null || adhocHistoryLoading) return;
+    setAdhocHistoryLoading(true);
+    getAllAdhocQuestions()
+      .then(setAdhocHistory)
+      .catch(err => { console.error("Failed to load ad-hoc question history:", err); setAdhocHistory([]); })
+      .finally(() => setAdhocHistoryLoading(false));
+  }, [activeTab, adhocHistory, adhocHistoryLoading]);
+  // Replaces a stale entry in the cached history the moment this admin
+  // approves/rejects one themselves, so it shows correctly without needing
+  // a full refetch (see handleApprove/handleReject below).
+  const patchAdhocHistory = (id, patch) => {
+    setAdhocHistory(prev => prev && prev.map(q => q.id === id ? { ...q, ...patch } : q));
+  };
+  // The Review Queue renders this — the full history once loaded, falling
+  // back to the pending-only list (still correct, just incomplete) while
+  // it's still loading or hasn't been requested yet.
+  const adhocQsForReview = adhocHistory ?? adhocQs;
 
   // Resolves the submitting interviewer's name for the Review Queue —
   // only for ad-hoc questions that predate interviewerName being
@@ -51,7 +80,7 @@ export default function QuestionsPage() {
   const fetchedInterviewerIdsRef = useRef(new Set());
   useEffect(() => {
     const missingIds = [...new Set(
-      adhocQs.filter(q => !q.interviewerName && q.interviewerId).map(q => q.interviewerId)
+      adhocQsForReview.filter(q => !q.interviewerName && q.interviewerId).map(q => q.interviewerId)
     )].filter(id => !fetchedInterviewerIdsRef.current.has(id));
     if (missingIds.length === 0) return;
     missingIds.forEach(id => fetchedInterviewerIdsRef.current.add(id));
@@ -62,7 +91,7 @@ export default function QuestionsPage() {
         return next;
       });
     }).catch(err => console.error("Failed to resolve ad-hoc question submitters:", err));
-  }, [adhocQs]);
+  }, [adhocQsForReview]);
   const { data: skills    = [] } = useSkills();
   const { data: templates = [] } = useTemplates();
   const { data: counts    = null } = useQuestionCounts();
@@ -607,9 +636,13 @@ export default function QuestionsPage() {
     setSaving(true);
     try {
       const { templateIds, ...questionData } = approveForm;
-      const qid = await approveAdhocQuestion(approveTarget.id, questionData);
+      const qid = await approveAdhocQuestion(approveTarget.id, questionData, reviewerName);
       await syncTemplates(qid, templateIds, []);
       refreshAfterMutation();
+      patchAdhocHistory(approveTarget.id, {
+        status: "approved", promotedQuestionId: qid, reviewedBy: reviewerName,
+        reviewedAt: new Date().toISOString(), approvedText: questionData.text,
+      });
       setApproveTarget(null);
       setToast({ message: "Question approved and added to the bank." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
@@ -617,9 +650,19 @@ export default function QuestionsPage() {
   };
 
   const handleReject = async (q) => {
-    if (!confirm("Reject this question? It won't be added to the bank.")) return;
+    // Mandatory, same reasoning as every other reject/cancel reason in this
+    // app — "rejected" with no explanation left the interviewer who
+    // submitted it with nothing to learn from, and no one reviewing the
+    // queue later could tell why.
+    const reason = window.prompt("Reject this question? It won't be added to the bank.\n\nReason (kept on record):");
+    if (reason === null) return;
+    if (!reason.trim()) { setToast({ message: "A reason is required to reject.", type: "error" }); return; }
     try {
-      await rejectAdhocQuestion(q.id, "content_team");
+      await rejectAdhocQuestion(q.id, reviewerName, reason.trim());
+      patchAdhocHistory(q.id, {
+        status: "rejected", reviewedBy: reviewerName,
+        reviewedAt: new Date().toISOString(), rejectionReason: reason.trim(),
+      });
       setToast({ message: "Question rejected." });
     } catch (e) { setToast({ message: e.message, type: "error" }); }
   };
@@ -761,7 +804,7 @@ export default function QuestionsPage() {
       {/* ── Review Queue tab ── */}
       {activeTab === "review" && (
         <AdhocReviewTab
-          adhocQs={adhocQs} pendingAdhoc={pendingAdhoc}
+          adhocQs={adhocQsForReview} pendingAdhoc={pendingAdhoc} historyLoading={adhocHistory === null && adhocHistoryLoading}
           interviewerNameById={interviewerNameById} templateNameById={templateNameById}
           openApprove={openApprove} handleReject={handleReject}
         />

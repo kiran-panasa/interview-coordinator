@@ -1,11 +1,16 @@
 import { motion } from "framer-motion";
-import { Inbox, CheckCircle2, XCircle } from "lucide-react";
-import { formatDateShort } from "../../utils/dates";
+import { Inbox, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { formatDateTime } from "../../utils/dates";
 
-export default function AdhocReviewTab({ adhocQs, pendingAdhoc, interviewerNameById = {}, templateNameById, openApprove, handleReject }) {
+export default function AdhocReviewTab({ adhocQs, pendingAdhoc, historyLoading, interviewerNameById = {}, templateNameById, openApprove, handleReject }) {
   return (
     <div className="space-y-4">
-      {adhocQs.length === 0 ? (
+      {historyLoading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-2 bg-white rounded-[1.75rem] border border-gray-100 shadow-soft">
+          <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+          <p className="text-sm text-gray-400">Loading review history…</p>
+        </div>
+      ) : adhocQs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-2 bg-white rounded-[1.75rem] border border-gray-100 shadow-soft">
           <Inbox className="w-10 h-10 text-gray-200" strokeWidth={1.5} />
           <p className="text-sm text-gray-400">No questions in the review queue.</p>
@@ -34,16 +39,49 @@ export default function AdhocReviewTab({ adhocQs, pendingAdhoc, interviewerNameB
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 leading-snug whitespace-pre-wrap">{q.text}</p>
+                    {/* An admin can edit the submitted text before approving
+                       it (see handleApprove) — when that happened, show
+                       both the original submission and what it was actually
+                       approved as, instead of silently only ever showing
+                       one or the other. */}
+                    {q.status === "approved" && q.approvedText && q.approvedText.trim() !== q.text.trim() ? (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-gray-400">
+                          <span className="font-semibold uppercase tracking-wide">Originally submitted</span>
+                        </p>
+                        <p className="text-sm text-gray-500 leading-snug whitespace-pre-wrap line-through decoration-gray-300">{q.text}</p>
+                        <p className="text-xs text-emerald-600">
+                          <span className="font-semibold uppercase tracking-wide">Approved as</span>
+                        </p>
+                        <p className="text-sm font-medium text-gray-800 leading-snug whitespace-pre-wrap">{q.approvedText}</p>
+                      </div>
+                    ) : (
+                      <p className="text-sm font-medium text-gray-800 leading-snug whitespace-pre-wrap">{q.text}</p>
+                    )}
                     <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-400">
                       {panelistName && <span>Panelist: <span className="font-semibold text-gray-600">{panelistName}</span></span>}
                       {sectionName  && <span>Section: <span className="font-semibold text-gray-600">{sectionName}</span></span>}
                       {q.interviewId && <span>Interview: <span className="font-mono text-gray-500">#{q.interviewId.slice(0, 8)}</span></span>}
-                      {q.createdAt   && <span>{formatDateShort(q.createdAt)}</span>}
+                      {q.createdAt   && <span>Submitted {formatDateTime(q.createdAt)}</span>}
                       {q.status === "approved" && q.promotedQuestionId && (
                         <span className="text-emerald-600">Promoted → #{q.promotedQuestionId.slice(0, 8)}</span>
                       )}
                     </div>
+                    {/* Review attribution — who decided, and when. Shown
+                       for both approved and rejected so the queue doubles
+                       as an audit trail, not just a live inbox. */}
+                    {q.status !== "pending" && (q.reviewedBy || q.reviewedAt) && (
+                      <p className="text-xs text-gray-400 mt-1.5">
+                        {q.status === "approved" ? "Approved" : "Rejected"} by{" "}
+                        <span className="font-semibold text-gray-600">{q.reviewedBy || "—"}</span>
+                        {q.reviewedAt && <> · {formatDateTime(q.reviewedAt)}</>}
+                      </p>
+                    )}
+                    {q.status === "rejected" && q.rejectionReason && (
+                      <p className="text-xs text-gray-500 mt-1.5 bg-gray-100 border border-gray-200 rounded-lg px-2.5 py-1.5">
+                        <span className="font-semibold text-gray-600">Reason: </span>{q.rejectionReason}
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${statusBadge}`}>{q.status}</span>

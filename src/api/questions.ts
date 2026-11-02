@@ -183,21 +183,43 @@ export async function createAdhocQuestion(
 
 export async function approveAdhocQuestion(
   adhocId: string,
-  questionData: Omit<Question, "id" | "status" | "usageCount" | "createdAt">
+  questionData: Omit<Question, "id" | "status" | "usageCount" | "createdAt">,
+  reviewedBy: string
 ): Promise<string> {
   const questionId = await createQuestion(questionData);
   await updateDoc(doc(db, "adhocQuestions", adhocId), {
     status: "approved",
     promotedQuestionId: questionId,
+    reviewedBy,
     reviewedAt: new Date().toISOString(),
+    // The original submission (`text`) is left untouched — this is the
+    // "after" an admin may have edited it to before approving, kept
+    // alongside it so the Review Queue history can show both.
+    approvedText: questionData.text,
   });
   return questionId;
 }
 
-export async function rejectAdhocQuestion(adhocId: string, reviewedBy: string): Promise<void> {
+export async function rejectAdhocQuestion(adhocId: string, reviewedBy: string, reason: string): Promise<void> {
   await updateDoc(doc(db, "adhocQuestions", adhocId), {
     status: "rejected",
     reviewedBy,
     reviewedAt: new Date().toISOString(),
+    rejectionReason: reason,
   });
+}
+
+// Full history — pending, approved, and rejected — for the Review Queue's
+// history view. Deliberately NOT what useAdhocQuestions/
+// subscribeToAdhocQuestions (the sidebar badge, running on every admin page
+// load) reads — that stays scoped to "pending" only, cheap by design. This
+// is only ever called once, when the Review Queue tab itself is actually
+// open. No status filter, so it's one unbounded read of the whole
+// collection — ad-hoc submissions are a low-volume, human-paced stream
+// (interviewers submitting questions during interviews), not a
+// high-cardinality one, so this is expected to stay small for a long time;
+// revisit with real pagination (see getQuestionsPage) if that changes.
+export async function getAllAdhocQuestions(): Promise<AdhocQuestion[]> {
+  const snap = await getDocs(query(collection(db, "adhocQuestions"), orderBy("createdAt", "desc")));
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as AdhocQuestion));
 }

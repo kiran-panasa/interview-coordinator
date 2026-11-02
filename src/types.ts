@@ -451,6 +451,15 @@ export interface AdhocQuestion {
   promotedQuestionId?: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  // Reason an admin gave when rejecting (mandatory — see handleReject in
+  // QuestionsPage.jsx). Absent on anything rejected before this existed.
+  rejectionReason?: string;
+  // The question text as actually approved — an admin can edit the
+  // interviewer's original submission before approving it (see
+  // handleApprove), so this can differ from `text` above (the original
+  // submission, never overwritten). Lets the Review Queue history show
+  // both the "before" (text) and "after" (approvedText) when they diverge.
+  approvedText?: string;
   createdAt: string;
   interviewId?: string;
   candidateId?: string;
