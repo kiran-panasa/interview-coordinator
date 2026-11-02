@@ -21,6 +21,15 @@ export const DEFAULT_NO_SHOW_LIMIT = 2;
 export const DEFAULT_NO_SHOW_BLOCKED_MESSAGE =
   "You've been blocked from booking this interview after repeatedly not showing up for it. Kindly contact your program support team for any concerns.";
 
+// Same on-by-default shape as the no-show limit above, but for the
+// candidate cancelling their own booking repeatedly — only counts
+// cancellations where cancelledBy === "candidate" (an admin or interviewer
+// cancelling on them never counts against them). See
+// effectiveMaxCancellations in api/sso-handler.js.
+export const DEFAULT_CANCEL_LIMIT = 3;
+export const DEFAULT_CANCEL_BLOCKED_MESSAGE =
+  "You've been blocked from booking this interview after repeatedly cancelling it. Kindly contact your program support team for any concerns.";
+
 // How many days of slots (from the earliest bookable date — see
 // computeSelfBookWindow) a Self Book / reschedule invite opens up, for a
 // template that hasn't set its own selfBookWindowDays. Per-template so a

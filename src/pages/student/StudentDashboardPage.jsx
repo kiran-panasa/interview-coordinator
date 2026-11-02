@@ -447,6 +447,9 @@ export default function StudentDashboardPage() {
       } else if (json?.error === "no_show_limit_reached") {
         alert(json.message || "You've been blocked from booking this interview due to repeated no-shows.");
         loadDashboard();
+      } else if (json?.error === "cancel_limit_reached") {
+        alert(json.message || "You've been blocked from booking this interview due to repeated cancellations.");
+        loadDashboard();
       } else {
         // Surfaces the actual failure (e.g. template_not_assigned) instead
         // of a generic message that looks identical whether the request
@@ -962,13 +965,15 @@ export default function StudentDashboardPage() {
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {notStarted.map((t, i) => {
-                          // Two independent reasons a template can be
-                          // blocked — too many completed attempts, or too
-                          // many no-shows — shown with their own message,
+                          // Three independent reasons a template can be
+                          // blocked — too many completed attempts, too many
+                          // no-shows, or too many candidate-initiated
+                          // cancellations — shown with their own message,
                           // but otherwise rendered identically (disabled
                           // card, no Find Slots button).
-                          const blocked = t.limitReached || t.noShowBlocked;
-                          const blockedMessage = t.limitReached ? t.attemptLimitMessage : t.noShowBlockedMessage;
+                          const blocked = t.limitReached || t.noShowBlocked || t.cancelBlocked;
+                          const blockedMessage = t.limitReached ? t.attemptLimitMessage
+                            : t.noShowBlocked ? t.noShowBlockedMessage : t.cancelBlockedMessage;
                           return (
                           <motion.button key={t.id} initial="hidden" animate="visible" custom={i} variants={fadeUp}
                             onClick={() => { if (!blocked) handleSelfBook(t.id); }}

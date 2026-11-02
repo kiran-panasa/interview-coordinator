@@ -7,6 +7,7 @@ import { sendSmsOtp } from "./_lib/sms.js";
 import {
   DEFAULT_ATTEMPT_LIMIT_MESSAGE, DEFAULT_HIDDEN_SCORE_MESSAGE,
   DEFAULT_NO_SHOW_LIMIT, DEFAULT_NO_SHOW_BLOCKED_MESSAGE,
+  DEFAULT_CANCEL_LIMIT, DEFAULT_CANCEL_BLOCKED_MESSAGE,
   DEFAULT_SELF_BOOK_WINDOW_DAYS,
 } from "../src/constants/templateAttempts.js";
 import { computeSelfBookWindow, DEFAULT_SELF_BOOK_CUTOFF_TIME } from "../src/utils/selfBookWindow.js";
@@ -72,6 +73,20 @@ function effectiveMaxNoShows(templateMaxNoShows, override) {
   if (templateMaxNoShows === 0) return null;
   if (typeof templateMaxNoShows === "number" && templateMaxNoShows > 0) return templateMaxNoShows;
   return DEFAULT_NO_SHOW_LIMIT;
+}
+
+// Same shape as effectiveMaxNoShows above, but for the candidate cancelling
+// their own booking repeatedly — on by default (DEFAULT_CANCEL_LIMIT), an
+// admin opts a template OUT entirely by setting maxCancellations to exactly
+// 0, and candidate.cancelOverrides works exactly like noShowOverrides (0 =
+// unlimited for just this candidate — the "unblock them" action; a
+// positive integer = their personal cap).
+function effectiveMaxCancellations(templateMaxCancellations, override) {
+  if (override === 0) return null;
+  if (typeof override === "number" && override > 0) return override;
+  if (templateMaxCancellations === 0) return null;
+  if (typeof templateMaxCancellations === "number" && templateMaxCancellations > 0) return templateMaxCancellations;
+  return DEFAULT_CANCEL_LIMIT;
 }
 
 // How many days of slots a Self Book / reschedule invite opens up for this
@@ -307,6 +322,8 @@ async function me(req, res) {
       // maxAttempts, where blank means unlimited) — see effectiveMaxNoShows.
       maxNoShows: s.data().maxNoShows ?? null,
       noShowBlockedMessage: s.data().noShowBlockedMessage || "",
+      maxCancellations: s.data().maxCancellations ?? null,
+      cancelBlockedMessage: s.data().cancelBlockedMessage || "",
     }));
 
   // Only invites for templates CURRENTLY assigned to this candidate —
@@ -427,12 +444,15 @@ async function me(req, res) {
   // just disappearing with no explanation.
   const completedCountByTemplateId = {};
   const noShowCountByTemplateId = {};
+  const cancelCountByTemplateId = {};
   interviews.forEach(iv => {
     if (!iv.templateId) return;
     if (iv.status === "completed") {
       completedCountByTemplateId[iv.templateId] = (completedCountByTemplateId[iv.templateId] || 0) + 1;
     } else if (iv.status === "no_show") {
       noShowCountByTemplateId[iv.templateId] = (noShowCountByTemplateId[iv.templateId] || 0) + 1;
+    } else if (iv.status === "cancelled" && iv.cancelledBy === "candidate") {
+      cancelCountByTemplateId[iv.templateId] = (cancelCountByTemplateId[iv.templateId] || 0) + 1;
     }
   });
   const templatesWithAttempts = templates.map(t => {
@@ -442,6 +462,9 @@ async function me(req, res) {
     const noShowEffectiveMax = effectiveMaxNoShows(t.maxNoShows, candidate.noShowOverrides?.[t.id]);
     const noShowCount = noShowCountByTemplateId[t.id] || 0;
     const noShowBlocked = noShowEffectiveMax != null && noShowCount >= noShowEffectiveMax;
+    const cancelEffectiveMax = effectiveMaxCancellations(t.maxCancellations, candidate.cancelOverrides?.[t.id]);
+    const cancelCount = cancelCountByTemplateId[t.id] || 0;
+    const cancelBlocked = cancelEffectiveMax != null && cancelCount >= cancelEffectiveMax;
     return {
       ...t, attemptsUsed,
       // Overwritten with the candidate-specific EFFECTIVE cap (override
@@ -455,6 +478,10 @@ async function me(req, res) {
       noShowCount,
       noShowBlocked,
       noShowBlockedMessage: noShowBlocked ? (t.noShowBlockedMessage || DEFAULT_NO_SHOW_BLOCKED_MESSAGE) : "",
+      maxCancellations: cancelEffectiveMax,
+      cancelCount,
+      cancelBlocked,
+      cancelBlockedMessage: cancelBlocked ? (t.cancelBlockedMessage || DEFAULT_CANCEL_BLOCKED_MESSAGE) : "",
     };
   });
 
@@ -727,6 +754,26 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
         error: "no_show_limit_reached",
         status: 403,
         message: capTemplate?.noShowBlockedMessage || DEFAULT_NO_SHOW_BLOCKED_MESSAGE,
+      };
+    }
+  }
+
+  // Cancel block — same defense-in-depth reasoning as the attempt/no-show
+  // caps above. Only counts cancellations where cancelledBy === "candidate"
+  // — an admin or interviewer cancelling on them never counts against them.
+  const cancelEffectiveMax = effectiveMaxCancellations(capTemplate?.maxCancellations, candidate.cancelOverrides?.[templateId]);
+  if (cancelEffectiveMax != null) {
+    const cancelSnap = await db.collection("interviews")
+      .where("candidateId", "==", session.candidateId)
+      .where("templateId", "==", templateId)
+      .where("status", "==", "cancelled")
+      .where("cancelledBy", "==", "candidate")
+      .get();
+    if (cancelSnap.size >= cancelEffectiveMax) {
+      return {
+        error: "cancel_limit_reached",
+        status: 403,
+        message: capTemplate?.cancelBlockedMessage || DEFAULT_CANCEL_BLOCKED_MESSAGE,
       };
     }
   }

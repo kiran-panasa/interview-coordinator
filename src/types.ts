@@ -129,6 +129,13 @@ export interface Candidate {
   // admin's "unblock him" action. See effectiveMaxNoShows in
   // api/sso-handler.js.
   noShowOverrides?: Record<string, number>;
+  // Same shape/semantics as noShowOverrides above, but for the cancel block
+  // (Candidates → kebab → "Manage Attempts & No-Shows") — map of templateId
+  // -> override. No entry means "use the template's own maxCancellations
+  // (or the platform default of 3 if the template's never set one)"; 0
+  // means unlimited cancellations for just this candidate — the admin's
+  // "unblock him" action. See effectiveMaxCancellations in api/sso-handler.js.
+  cancelOverrides?: Record<string, number>;
   createdAt: string;
   createdBy?: string;
 }
@@ -355,6 +362,19 @@ export interface Template {
   // Candidate.noShowOverrides without touching this template-wide setting.
   maxNoShows?: number | null;
   noShowBlockedMessage?: string;
+  // Cancel block (Templates → Lifecycle) — same on-by-default shape as
+  // maxNoShows above: null/undefined means the platform default
+  // (DEFAULT_CANCEL_LIMIT, src/constants/templateAttempts.js) applies, not
+  // unlimited; exactly 0 opts a template OUT of the block entirely. Counts
+  // interviews whose CURRENT status is "cancelled" AND cancelledBy ===
+  // "candidate" for this candidate+template — an admin or interviewer
+  // cancellation never counts against the candidate. Once reached, Self
+  // Book refuses new bookings (resolveSelfBookTarget in api/sso-handler.js)
+  // with cancelBlockedMessage (falls back to DEFAULT_CANCEL_BLOCKED_MESSAGE
+  // when blank). An admin can grant a specific candidate more chances via
+  // Candidate.cancelOverrides without touching this template-wide setting.
+  maxCancellations?: number | null;
+  cancelBlockedMessage?: string;
   // How many days of slots a Self Book / reschedule invite opens up for
   // this template, from the earliest bookable date (Templates →
   // Lifecycle → "Booking Window"). null/undefined means the platform

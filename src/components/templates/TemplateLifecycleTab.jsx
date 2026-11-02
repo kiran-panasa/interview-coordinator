@@ -4,7 +4,7 @@ import { Search, CheckCircle2 } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
-import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT, DEFAULT_SELF_BOOK_WINDOW_DAYS } from "../../constants/templateAttempts";
+import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT, DEFAULT_CANCEL_LIMIT, DEFAULT_SELF_BOOK_WINDOW_DAYS } from "../../constants/templateAttempts";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -58,6 +58,8 @@ export default function TemplateLifecycleTab() {
   const [scoreMessageDraft, setScoreMessageDraft] = useState({});
   const [maxNoShowsDraft,   setMaxNoShowsDraft]   = useState({});
   const [noShowMessageDraft, setNoShowMessageDraft] = useState({});
+  const [maxCancelsDraft,   setMaxCancelsDraft]   = useState({});
+  const [cancelMessageDraft, setCancelMessageDraft] = useState({});
   const [windowDaysDraft,  setWindowDaysDraft]  = useState({});
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
@@ -69,6 +71,8 @@ export default function TemplateLifecycleTab() {
   const scoreMessageOf   = (t) => scoreMessageDraft[t.id] ?? (t.hiddenScoreMessage || "");
   const maxNoShowsOf     = (t) => maxNoShowsDraft[t.id] ?? (t.maxNoShows != null ? String(t.maxNoShows) : "");
   const noShowMessageOf  = (t) => noShowMessageDraft[t.id] ?? (t.noShowBlockedMessage || "");
+  const maxCancelsOf     = (t) => maxCancelsDraft[t.id] ?? (t.maxCancellations != null ? String(t.maxCancellations) : "");
+  const cancelMessageOf  = (t) => cancelMessageDraft[t.id] ?? (t.cancelBlockedMessage || "");
   const windowDaysOf     = (t) => windowDaysDraft[t.id] ?? (t.selfBookWindowDays != null ? String(t.selfBookWindowDays) : "");
 
   const filtered = useMemo(() => {
@@ -148,6 +152,24 @@ export default function TemplateLifecycleTab() {
     saveTemplate(t, { noShowBlockedMessage: next });
   };
 
+  // Same blank -> null ("use the platform default of DEFAULT_CANCEL_LIMIT")
+  // shape as commitMaxNoShows above. Typing 0 is how an admin explicitly
+  // opts a template out of the cancel block entirely.
+  const commitMaxCancels = (t) => {
+    const raw = maxCancelsOf(t).trim();
+    const next = raw === "" ? null : Math.max(0, Math.round(Number(raw)) || 0);
+    setMaxCancelsDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.maxCancellations ?? null)) return;
+    saveTemplate(t, { maxCancellations: next });
+  };
+
+  const commitCancelMessage = (t) => {
+    const next = cancelMessageOf(t).trim();
+    setCancelMessageDraft(d => { const n = { ...d }; delete n[t.id]; return n; });
+    if (next === (t.cancelBlockedMessage || "")) return;
+    saveTemplate(t, { cancelBlockedMessage: next });
+  };
+
   // Blank -> null ("use the platform default of DEFAULT_SELF_BOOK_WINDOW_DAYS").
   // How many days of slots Self Book / reschedule opens up for this
   // template, from the earliest bookable date — see
@@ -204,7 +226,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Booking Window", "AI Report & Score", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Cancel Limit", "Booking Window", "AI Report & Score", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -297,6 +319,40 @@ export default function TemplateLifecycleTab() {
                           onBlur={() => commitNoShowMessage(t)}
                           placeholder="Leave blank to use the default message shown to candidates."
                           className="w-full text-xs border border-amber-100 bg-amber-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-amber-400 text-gray-700 placeholder:text-gray-400"
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[14rem] space-y-1.5">
+                      {/* Rose — distinct from Attempt Limit's sky and
+                         No-Show Limit's amber. Also on by default and
+                         actually blocks booking, same reasoning as No-Show
+                         Limit, but kept visually distinct from it since
+                         they're two separate counters a candidate could hit
+                         independently. */}
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number" min={0}
+                          value={maxCancelsOf(t)}
+                          onChange={e => setMaxCancelsDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitMaxCancels(t)}
+                          placeholder={`Default (${DEFAULT_CANCEL_LIMIT})`}
+                          className={`w-24 text-xs font-semibold rounded-lg px-2 py-1.5 border focus:outline-none focus:ring-1 ${
+                            t.maxCancellations === 0
+                              ? "bg-white border-gray-200 text-gray-700 focus:ring-brand-400"
+                              : "bg-rose-50 border-rose-200 text-rose-700 focus:ring-rose-400"
+                          }`}
+                        />
+                        <span className="text-[11px] text-gray-400">cancel{maxCancelsOf(t) === "1" ? "" : "s"} max</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400">0 = no limit for this template. Blank uses the default. Only counts the candidate's own cancellations.</p>
+                      {t.maxCancellations !== 0 && (
+                        <textarea
+                          rows={2}
+                          value={cancelMessageOf(t)}
+                          onChange={e => setCancelMessageDraft(d => ({ ...d, [t.id]: e.target.value }))}
+                          onBlur={() => commitCancelMessage(t)}
+                          placeholder="Leave blank to use the default message shown to candidates."
+                          className="w-full text-xs border border-rose-100 bg-rose-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-rose-400 text-gray-700 placeholder:text-gray-400"
                         />
                       )}
                     </td>
