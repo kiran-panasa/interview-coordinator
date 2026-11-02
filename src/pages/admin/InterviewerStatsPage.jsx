@@ -91,14 +91,30 @@ export default function InterviewerStatsPage() {
     () => programs.map(p => ({ id: p.id, name: p.name })),
     [programs]
   );
-  // Scoped to the selected Program(s) — same "pick a program first to
-  // narrow the template list" pattern as the Add Candidate form. Templates
-  // with no program set are always included so nothing becomes unreachable.
+  // Every template that's actually had an interview run against it in the
+  // current date range (any RELEVANT_STATUSES outcome) — not every template
+  // that merely exists. A program can accumulate templates nobody's used in
+  // months (drafts, retired rounds, ones for a different cohort); listing
+  // all of them here just makes the admin scroll past dozens of empty
+  // options to find one that was actually held. Scoped by date range and
+  // Program only, not by the OTHER filters below (Vendor/Interviewer/
+  // Duration/Status) — narrowing by who ran it shouldn't also shrink which
+  // templates show up to pick from.
+  const usedTemplateIds = useMemo(() => {
+    const set = new Set();
+    interviews.forEach(iv => {
+      if (!iv.templateId || !RELEVANT_STATUSES.includes(iv.status)) return;
+      if (programIds.length && !programIds.includes(templateProgramById.get(iv.templateId))) return;
+      set.add(iv.templateId);
+    });
+    return set;
+  }, [interviews, programIds, templateProgramById]);
   const templateOptions = useMemo(
     () => templates
       .filter(t => !programIds.length || !t.program || programIds.includes(t.program))
+      .filter(t => usedTemplateIds.has(t.id))
       .map(t => ({ id: t.id, name: t.name })),
-    [templates, programIds]
+    [templates, programIds, usedTemplateIds]
   );
   // Clear any selected template that no longer applies once the Program
   // filter narrows (mirrors the Add Candidate form's Program->Template reset).
