@@ -12,6 +12,16 @@ import { SkeletonRows } from "../../components/Skeleton";
 
 const TABS = ["Upcoming", "Past", "All"];
 
+// Who actually cancelled it matters — "You cancelled" reads very
+// differently from "Cancelled by admin" or "Cancelled by candidate", and
+// legacy records from before cancelledBy existed have neither.
+function cancelledByLabel(cancelledBy) {
+  if (cancelledBy === "interviewer") return "You cancelled";
+  if (cancelledBy === "admin")       return "Cancelled by admin";
+  if (cancelledBy === "candidate")   return "Cancelled by candidate";
+  return "Cancelled";
+}
+
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
@@ -135,15 +145,29 @@ export default function MyInterviewsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-4 py-3 max-w-[18rem]">
                       {i.meetLink && i.status === "scheduled" && (
                         <a href={i.meetLink} target="_blank" rel="noreferrer"
-                          className="text-xs text-emerald-700 font-semibold hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mr-3">
+                          className="text-xs text-emerald-700 font-semibold hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mr-3 whitespace-nowrap">
                           Join Meet
                         </a>
                       )}
-                      <Link to={`/interviewer/interviews/${i.id}`}
-                        className="text-xs text-emerald-600 font-semibold hover:text-emerald-700">View</Link>
+                      {/* The reason itself, right here — no need to open
+                         View just to find out why a cancelled/declined
+                         interview says what it says. */}
+                      {i.status === "cancelled" ? (
+                        <p className="text-xs text-gray-500 truncate" title={i.cancelReason || ""}>
+                          {cancelledByLabel(i.cancelledBy)}
+                          {i.cancelReason ? `: ${i.cancelReason}` : " (no reason given)"}
+                        </p>
+                      ) : i.status === "declined" ? (
+                        <p className="text-xs text-gray-500 truncate" title={i.declineReason || ""}>
+                          {i.declineReason ? `Reason: ${i.declineReason}` : "No reason given"}
+                        </p>
+                      ) : (
+                        <Link to={`/interviewer/interviews/${i.id}`}
+                          className="text-xs text-emerald-600 font-semibold hover:text-emerald-700 whitespace-nowrap">View</Link>
+                      )}
                     </td>
                   </motion.tr>
                 ))}
