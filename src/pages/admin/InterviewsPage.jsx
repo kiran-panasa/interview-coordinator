@@ -572,14 +572,49 @@ export default function InterviewsPage() {
               }).catch(() => {});
             }
 
-            // A fresh record for the new panelist, same shape (and same
-            // Accept/Decline flow) as a plain "Schedule Interview" —
-            // defaults to pending_acceptance, gets its own Meet link once
-            // accepted or an admin sends the invite.
-            const newId = await createInterview({ ...data, createdBy: currentUser.uid, reassignedFrom: editTarget.id });
+            // Self-booked interviews skip Accept/Decline entirely — the
+            // candidate already confirmed this exact slot themselves (see
+            // confirmSelfBooking in booking.service.js), so the
+            // replacement has to land already "scheduled" with its own
+            // Meet link right away instead of sitting at
+            // pending_acceptance waiting on the new interviewer to log in.
+            // Otherwise the candidate's confirmed booking (now invisible
+            // as a reassignedTo record on StudentDashboardPage) would be
+            // stranded with no working link until someone accepts — the
+            // exact disruption reassigning the panelist shouldn't cause.
+            const isSelfBookReassign = editTarget.bookingSource === "self_book";
+
+            // A fresh record for the new panelist. For an admin-scheduled
+            // interview this is the normal "Schedule Interview" shape —
+            // pending_acceptance, Meet link once accepted/invited. For a
+            // self-booked one it's forced straight to "scheduled" above.
+            // `data.meetLink` is the OLD (now-cancelled) event's link,
+            // carried over from the edit form — it must NOT follow onto
+            // the new doc, or scheduleInterviewMeet/accept would see it
+            // already "has a link" and skip creating a real one.
+            const { meetLink: _staleMeetLink, ...newInterviewData } = data;
+            const newId = await createInterview({
+              ...newInterviewData,
+              ...(isSelfBookReassign ? { status: "scheduled" } : {}),
+              createdBy: currentUser.uid,
+              reassignedFrom: editTarget.id,
+            });
             await updateInterview(editTarget.id, { reassignedTo: newId }).catch(() => {});
 
-            if (form.interviewerId) {
+            if (isSelfBookReassign) {
+              await scheduleInterviewMeet(newId).catch(() => {});
+              if (form.interviewerId) {
+                createNotification({
+                  type:           "interview_approval",
+                  recipientId:    form.interviewerId,
+                  recipientEmail: data.interviewerEmail,
+                  interviewId:    newId,
+                  candidateName:  data.candidateName,
+                  message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime}.`,
+                  status:         "unread",
+                }).catch(() => {});
+              }
+            } else if (form.interviewerId) {
               createNotification({
                 type:           "interview_approval",
                 recipientId:    form.interviewerId,
@@ -627,7 +662,10 @@ export default function InterviewsPage() {
               reassignReason: interviewerChangeReason,
             }).catch(() => {});
 
-            setToast({ message: "Reassigned — the outgoing panelist's record now shows Cancelled, and the new panelist has been notified." });
+            setToast({ message: isSelfBookReassign
+              ? "Reassigned — the outgoing panelist's record now shows Cancelled, the new panelist has a confirmed Meet link, and the candidate's booking wasn't affected."
+              : "Reassigned — the outgoing panelist's record now shows Cancelled, and the new panelist has been notified."
+            });
             setShowModal(false);
           } catch (e) {
             setToast({ message: e.message, type: "error" });

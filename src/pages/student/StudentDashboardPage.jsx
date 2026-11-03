@@ -516,7 +516,15 @@ export default function StudentDashboardPage() {
     );
   }
 
-  const { candidate, templates = [], interviews = [], pendingInvites = [] } = data;
+  const { candidate, templates = [], interviews: allInterviews = [], pendingInvites = [] } = data;
+  // reassignedTo is set ONLY when an admin swaps out the interviewer on an
+  // already-live interview (or re-homes a declined one) — the candidate's
+  // own date/time/slot never changes in that flow, so the superseded old
+  // record (the one that gets marked cancelled to give the outgoing
+  // interviewer a trace) should stay invisible here. Without this filter
+  // the candidate would see a confusing "Cancelled" card for an interview
+  // that, from their side, was never actually disrupted.
+  const interviews = allInterviews.filter(iv => !iv.reassignedTo);
   // "1st Attempt"/"2nd Attempt"/... — when there's more than one interview
   // for the SAME template (a reschedule, or a genuine retake), both this
   // dashboard and the admin's Interviews page should show which attempt
