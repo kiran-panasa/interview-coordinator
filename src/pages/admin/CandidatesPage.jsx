@@ -39,6 +39,15 @@ import { splitCSVRow } from "../../utils/csv";
 
 const isSwapped = (c) => isUUID(c.name) && !!c.uid && !isUUID(c.uid);
 
+// A real, selectable bucket in the Status filter for "this candidate has
+// zero templates assigned at all" — distinct from "not_started"/"No
+// Interview Taken Yet" (which means they DO have a template, just haven't
+// booked it yet). Without an explicit bucket for this, such a candidate
+// matched none of the filter's statuses, which is what made the Status
+// dropdown's per-option counts sum to LESS than the program tab's own
+// total candidate count.
+const NO_TEMPLATE_STATUS = "__no_template__";
+
 // Outline-only variant of Badge.jsx's STATUS_STYLES for the Status column's
 // pills — a filled background behind both the template name AND the status
 // word read as two overlapping highlight blocks rather than one clean
@@ -686,10 +695,17 @@ export default function CandidatesPage() {
   // means at least one of the candidate's assigned templates is currently
   // at one of the selected statuses (OR across the selection), so picking
   // "No Interview Taken Yet" surfaces anyone who hasn't completed
-  // everything they're assigned yet.
+  // everything they're assigned yet. NO_TEMPLATE_STATUS is its own pseudo-
+  // status for a candidate with zero templates assigned at all — distinct
+  // from "No Interview Taken Yet" (which means they DO have a template but
+  // haven't started it). Without this bucket, such a candidate matched
+  // none of the real statuses, so they counted toward the tab's total but
+  // never toward any status count — which is exactly why summing every
+  // status count came out lower than the program tab's own total.
   const statusFiltered = useMemo(() => {
     if (filterStatuses.length === 0) return filtered;
     return filtered.filter(c => {
+      if (filterStatuses.includes(NO_TEMPLATE_STATUS) && (c.templateIds || []).length === 0) return true;
       const statuses = statusByCandidateId.get(c.id);
       return statuses?.some(s => filterStatuses.includes(s.status));
     });
@@ -768,6 +784,10 @@ export default function CandidatesPage() {
     if (!filtered.every(c => statusByCandidateId.has(c.id))) return null;
     const counts = {};
     filtered.forEach(c => {
+      if ((c.templateIds || []).length === 0) {
+        counts[NO_TEMPLATE_STATUS] = (counts[NO_TEMPLATE_STATUS] || 0) + 1;
+        return;
+      }
       const seen = new Set();
       (statusByCandidateId.get(c.id) || []).forEach(s => seen.add(s.status));
       seen.forEach(status => { counts[status] = (counts[status] || 0) + 1; });
@@ -911,9 +931,17 @@ export default function CandidatesPage() {
         </div>
         <div className="w-56">
           <SkillsSelect
-            skills={["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].map(k => ({
-              id: k, name: `${STATUS_LABELS[k]}${statusCounts ? ` (${statusCounts[k] || 0})` : ""}`,
-            }))}
+            skills={[
+              ...["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].map(k => ({
+                id: k, name: `${STATUS_LABELS[k]}${statusCounts ? ` (${statusCounts[k] || 0})` : ""}`,
+              })),
+              // Its own bucket, not folded into "No Interview Taken Yet" —
+              // that means "has a template, hasn't booked it"; this means
+              // "has no template at all" (e.g. uploaded but never
+              // assigned a round). Keeping them separate is also what lets
+              // every status count add up to the tab's own total.
+              { id: NO_TEMPLATE_STATUS, name: `No Templates Assigned${statusCounts ? ` (${statusCounts[NO_TEMPLATE_STATUS] || 0})` : ""}` },
+            ]}
             value={filterStatuses}
             onChange={ids => { setFilterStatuses(ids); setCandPage(1); }}
             placeholder="Any Status"
