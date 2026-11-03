@@ -514,7 +514,7 @@ export default function InterviewsPage() {
         let interviewerChangeReason = "";
         if (interviewerChanged) {
           const promptText = window.prompt(
-            `Reassigning from ${editTarget.interviewerName || editTarget.interviewerEmail || "the current panelist"} to ${interviewer?.displayName || interviewer?.email || "the new panelist"}.\n\nReason (shown to the outgoing panelist):`
+            `Reassigning from ${editTarget.interviewerName || editTarget.interviewerEmail || "the current panelist"} to ${interviewer?.displayName || interviewer?.email || "the new panelist"}.\n\nReason (recorded on the outgoing panelist's own record):`
           );
           if (promptText === null) { setSaving(false); return; }
           if (!promptText.trim()) {
@@ -525,35 +525,103 @@ export default function InterviewsPage() {
           interviewerChangeReason = promptText.trim();
         }
 
+        // Reassigning away from a panelist on an interview still genuinely
+        // in flight (or a self-booked one, which skips Accept/Decline
+        // entirely and lives at "scheduled" the whole time) is handled as
+        // a full cancel-of-the-old + create-of-the-new, not an in-place
+        // swap — so the outgoing panelist keeps a permanent "Cancelled"
+        // record of their own (with the reason above) in their My
+        // Interviews instead of the interview just silently vanishing from
+        // their list the instant someone else takes it over. Mirrors the
+        // dedicated "Reassign Interviewer" action already used for
+        // declined interviews (openReassign) — this reaches the same
+        // outcome from the plain Edit modal too. A correction of WHO ran a
+        // terminal (completed/cancelled/declined/no-show) interview is a
+        // data fix, not a live handoff, so that case keeps the old simple
+        // in-place update below instead.
+        const isLiveReassignment = interviewerChanged && (
+          editTarget.bookingSource === "self_book"
+            ? editTarget.status === "scheduled"
+            : ["scheduled", "pending_acceptance"].includes(editTarget.status)
+        );
+
+        if (isLiveReassignment) {
+          try {
+            await freeSlotsForInterview(editTarget.interviewerId, editTarget.scheduledDate, editTarget.scheduledTime, editTarget.duration).catch(() => {});
+            await bookSlotsForInterview(form.interviewerId, form.scheduledDate, form.scheduledTime, form.duration, editTarget.id).catch(() => {});
+
+            if (editTarget.eventId && APPS_SCRIPT_URL) {
+              await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: editTarget.eventId }).catch(() => {});
+            }
+            await markInterviewCancelled(editTarget.id, { reason: interviewerChangeReason, cancelledBy: "admin" });
+
+            // A fresh record for the new panelist, same shape (and same
+            // Accept/Decline flow) as a plain "Schedule Interview" —
+            // defaults to pending_acceptance, gets its own Meet link once
+            // accepted or an admin sends the invite.
+            const newId = await createInterview({ ...data, createdBy: currentUser.uid, reassignedFrom: editTarget.id });
+            await updateInterview(editTarget.id, { reassignedTo: newId }).catch(() => {});
+
+            if (form.interviewerId) {
+              createNotification({
+                type:           "interview_approval",
+                recipientId:    form.interviewerId,
+                recipientEmail: data.interviewerEmail,
+                interviewId:    newId,
+                candidateName:  data.candidateName,
+                message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`,
+                status:         "unread",
+              }).catch(() => {});
+              if (APPS_SCRIPT_URL && data.interviewerEmail) {
+                callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+                  action:  "sendEmail",
+                  subject: "Action Required: Interview Assigned",
+                  body:
+                    `Hi ${data.interviewerName || "there"},\n\nYou have a new interview scheduled:\n\n` +
+                    `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
+                    `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n` +
+                    `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${newId}\n\n` +
+                    `Thank you.`,
+                  recipients: [{ email: data.interviewerEmail, name: data.interviewerName || data.interviewerEmail }],
+                }).catch(() => {});
+              }
+            }
+
+            // Candidate never sees WHO their interviewer is (same privacy
+            // stance as the booking flow itself) — only worth telling them
+            // if the date/time ALSO moved in this same save.
+            if ((dateChanged || timeChanged) && data.candidateEmail && APPS_SCRIPT_URL) {
+              callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+                action:  "sendEmail",
+                subject: `Interview Updated: ${form.round || "Interview"}`,
+                body:
+                  `Hi ${data.candidateName},\n\nThis interview has been updated:\n\n` +
+                  `Round: ${form.round}\nDate: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n— NxtWave Team`,
+                recipients: [{ email: data.candidateEmail, name: data.candidateName }],
+              }).catch(() => {});
+            }
+
+            await logInterviewHistory(editTarget.id, {
+              changes: [{ field: "interviewerId", label: "Interviewer", from: editTarget.interviewerName, to: data.interviewerName }],
+              changedBy: currentUser.uid,
+              changedByName: userProfile?.displayName || userProfile?.email || currentUser.email || "Admin",
+              calendarSyncStatus: "not_applicable",
+              notificationStatus: "sent",
+              reassignReason: interviewerChangeReason,
+            }).catch(() => {});
+
+            setToast({ message: "Reassigned — the outgoing panelist's record now shows Cancelled, and the new panelist has been notified." });
+            setShowModal(false);
+          } catch (e) {
+            setToast({ message: e.message, type: "error" });
+          }
+          setSaving(false);
+          return;
+        }
+
         if (dateChanged || timeChanged || interviewerChanged) {
           await freeSlotsForInterview(editTarget.interviewerId, editTarget.scheduledDate, editTarget.scheduledTime, editTarget.duration).catch(() => {});
           await bookSlotsForInterview(form.interviewerId, form.scheduledDate, form.scheduledTime, form.duration, editTarget.id).catch(() => {});
-        }
-
-        // Reassigning the panelist restarts their Accept/Decline — they
-        // shouldn't inherit the previous panelist's acceptance of a slot
-        // they never agreed to. Only for interviews still in flight; never
-        // touch the status of a completed/cancelled/no-show/declined
-        // record via plain Edit — a declined interview's own status/
-        // declineReason are meant to stay exactly as the original
-        // interviewer left them (their own permanent record). To hand it
-        // to someone else, use the dedicated "Reassign Interviewer" action
-        // instead (openReassign), which creates a fresh interview for the
-        // new interviewer rather than mutating this one.
-        //
-        // Self-booked interviews (bookingSource "self_book") never had an
-        // Accept/Decline step at all — the candidate booked straight into
-        // the panelist's own published slot, confirmSelfBooking put it
-        // straight at "scheduled". Flipping one of these to
-        // pending_acceptance on reassignment left it stuck there forever
-        // (nothing — no interviewer dashboard prompt, nothing on the
-        // Student Dashboard's Scheduled tab — ever asks anyone to accept
-        // it), and skipped the calendar-reschedule branch below too, so the
-        // Meet invite kept the OLD panelist instead of the new one. These
-        // stay "scheduled" straight through a reassignment instead.
-        if (interviewerChanged && editTarget.bookingSource !== "self_book"
-          && ["scheduled", "pending_acceptance"].includes(editTarget.status)) {
-          data.status = "pending_acceptance";
         }
 
         await updateInterview(editTarget.id, data);
