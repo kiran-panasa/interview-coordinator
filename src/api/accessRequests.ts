@@ -1,6 +1,6 @@
 import { db } from "../firebase";
 import {
-  collection, doc, setDoc, deleteDoc, query, where, orderBy, limit, onSnapshot,
+  collection, doc, setDoc, deleteDoc, query, where, onSnapshot,
 } from "firebase/firestore";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
 
@@ -25,9 +25,13 @@ export interface AccessRequestResolution {
 // "student_not_found" slice: a student whose Forms account has no matching
 // candidate record in our own Candidates list, which is exactly the "Oops"
 // screen Forms shows them with no way for us to help unless an admin can
-// actually see it happened. Capped at the most recent 500 — this is a
-// diagnostic/convenience surface, not a source of truth, so anything older
-// than the last 500 failed attempts is already long stale.
+// actually see it happened. Single equality filter only, deliberately no
+// orderBy/limit here — combining those needs a composite index that
+// doesn't exist, and since this hook loads on every admin page (see
+// AdminLayout's badge count), a missing-index error here would break the
+// whole admin portal's connection-lost banner, not just this one page.
+// Recency sorting/trimming happens client-side instead, in
+// groupAccessRequests (src/utils/accessRequests.js).
 const LOG_COLLECTION        = "ssoTokenRequestLog";
 const RESOLUTIONS_COLLECTION = "accessRequestResolutions";
 
@@ -38,8 +42,6 @@ export function subscribeToFailedAccessRequests(
     query(
       collection(db, LOG_COLLECTION),
       where("outcome", "==", "student_not_found"),
-      orderBy("at", "desc"),
-      limit(500)
     ),
     snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as AccessRequestLog))),
     err => reportFirestoreListenerError(`${LOG_COLLECTION}:student_not_found`, err)
