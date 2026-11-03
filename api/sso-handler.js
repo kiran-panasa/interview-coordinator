@@ -430,6 +430,13 @@ async function me(req, res) {
         cancelReason: iv.cancelReason || "",
         cancelledBy: iv.cancelledBy || "",
         rescheduledTo: iv.rescheduledTo || "",
+        // Set ONLY when an admin swaps out the interviewer (or re-homes a
+        // declined interview) — see InterviewsPage.jsx's isLiveReassignment/
+        // openReassign. The candidate's own date/time never changes in that
+        // flow, so StudentDashboardPage filters this interview out
+        // entirely once it's set, same idea as rescheduledTo above but for
+        // an admin-driven swap instead of the candidate's own reschedule.
+        reassignedTo: iv.reassignedTo || "",
         createdAt: iv.createdAt || "",
         updatedAt: iv.updatedAt || "",
       };
