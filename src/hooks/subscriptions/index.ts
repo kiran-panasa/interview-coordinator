@@ -8,3 +8,5 @@ export { useScheduleInvites } from "./useScheduleInvites";
 export { usePendingScheduleInvites } from "./usePendingScheduleInvites";
 export { useInboundRequests } from "./useInboundRequests";
 export { usePendingInboundRequests } from "./usePendingInboundRequests";
+export { useFailedAccessRequests } from "./useFailedAccessRequests";
+export { useAccessRequestResolutions } from "./useAccessRequestResolutions";
