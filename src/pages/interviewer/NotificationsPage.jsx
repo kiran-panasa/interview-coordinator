@@ -41,7 +41,7 @@ export default function NotificationsPage() {
 
   const allNotifications = useUserNotifications(currentUser.uid);
   const notifications    = allNotifications.filter(n =>
-    n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval"
+    n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval" || n.type === "interview_cancelled"
   );
 
   const nudges   = notifications;
@@ -193,6 +193,11 @@ export default function NotificationsPage() {
                           <p className="text-sm font-bold text-gray-900">New Interview — {n.candidateName || "Candidate"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
                         </>
+                      ) : n.type === "interview_cancelled" ? (
+                        <>
+                          <p className="text-sm font-bold text-gray-900">Interview Cancelled — {n.candidateName || "Candidate"}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
+                        </>
                       ) : (
                         <>
                           <p className="text-sm font-bold text-gray-900">
@@ -212,7 +217,7 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                   {n.type === "nudge" && responded && statusBadge(n.status)}
-                  {(n.type === "feedback_reminder" || n.type === "interview_approval") && !isNew && (
+                  {(n.type === "feedback_reminder" || n.type === "interview_approval" || n.type === "interview_cancelled") && !isNew && (
                     <span className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">Seen</span>
                   )}
                 </div>
@@ -230,6 +235,20 @@ export default function NotificationsPage() {
                     className="flex items-center justify-center gap-2 bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-full hover:bg-emerald-700 transition-colors"
                   >
                     {n.type === "interview_approval" ? "Review & Respond →" : "Go to Interview →"}
+                  </Link>
+                )}
+
+                {/* Actions — interview cancelled: goes to the My Interviews
+                   list with that row highlighted, not the detail page —
+                   the record itself (reason, who cancelled) lives inline
+                   in that row now, not behind a separate detail view. */}
+                {n.type === "interview_cancelled" && isNew && n.interviewId && (
+                  <Link
+                    to={`/interviewer/interviews?highlight=${n.interviewId}`}
+                    onClick={() => updateNotification(n.id, { status: "read" })}
+                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white text-sm font-semibold py-2.5 rounded-full hover:bg-emerald-700 transition-colors"
+                  >
+                    View in My Interviews →
                   </Link>
                 )}
 

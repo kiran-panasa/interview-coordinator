@@ -54,6 +54,21 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
           + (rescheduleReason ? ` Reason: ${rescheduleReason}` : ""),
         cancelledBy: "candidate",
       });
+      // In-app notification, not just the email below — an email is easy
+      // to miss/delete, and nothing else on this interviewer's side ever
+      // told them this slot was gone until they happened to revisit My
+      // Interviews and noticed it had flipped to Cancelled on its own.
+      if (oldIv.interviewerId) {
+        createNotification({
+          type:           "interview_cancelled",
+          recipientId:    oldIv.interviewerId,
+          recipientEmail: oldIv.interviewerEmail,
+          interviewId:    replacingInterviewId,
+          candidateName:  oldIv.candidateName,
+          message:        `Your interview with ${oldIv.candidateName || "a candidate"} on ${formatDate(oldIv.scheduledDate)} at ${oldIv.scheduledTime} was cancelled — the candidate rescheduled to a new slot.`,
+          status:         "unread",
+        }).catch(() => {});
+      }
       if (APPS_SCRIPT_URL && oldIv.interviewerEmail) {
         callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
           action:  "sendEmail",
@@ -92,6 +107,19 @@ export async function cancelInterviewByCandidate(interviewId, reason) {
     await freeSlotsForInterview(iv.interviewerId, iv.scheduledDate, iv.scheduledTime, iv.duration).catch(() => {});
   }
   await markInterviewCancelled(interviewId, { reason, cancelledBy: "candidate" });
+  // In-app notification, not just the email below — see the matching note
+  // in cancelReplacedInterview above.
+  if (iv.interviewerId) {
+    createNotification({
+      type:           "interview_cancelled",
+      recipientId:    iv.interviewerId,
+      recipientEmail: iv.interviewerEmail,
+      interviewId,
+      candidateName:  iv.candidateName,
+      message:        `Your interview with ${iv.candidateName || "a candidate"} on ${formatDate(iv.scheduledDate)} at ${iv.scheduledTime} was cancelled by the candidate. Reason: ${reason}`,
+      status:         "unread",
+    }).catch(() => {});
+  }
   if (APPS_SCRIPT_URL && iv.interviewerEmail) {
     callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
       action:  "sendEmail",

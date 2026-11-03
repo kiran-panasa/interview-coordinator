@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { formatDate, parseInterviewStart } from "../../utils/dates";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { useAuth } from "../../AuthContext";
@@ -30,8 +30,14 @@ const fadeUp = {
 export default function MyInterviewsPage() {
   const { userProfile } = useAuth();
   const interviews = useInterviewerInterviews(userProfile?.email, userProfile?.id);
-  const [tab, setTab] = useState("Upcoming");
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get("highlight");
+  // A notification click can point at a cancelled/old interview that the
+  // default Upcoming/All-status view would filter out — force both open
+  // so the target row is guaranteed to actually be on screen.
+  const [tab, setTab] = useState(highlightId ? "All" : "Upcoming");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [highlightedRow, setHighlightedRow] = useState(highlightId || null);
 
   // interviews starts out as the hook's initial [] and is replaced with a new
   // array reference the moment the first Firestore snapshot arrives — compare
@@ -68,6 +74,25 @@ export default function MyInterviewsPage() {
   const uniqueStatuses = [...new Set(interviews.map(i => i.status))].filter(Boolean).sort();
 
   const { paged, page, setPage, totalPages, total, pageSize } = usePagination(filtered);
+
+  // Jump to whichever page the highlighted interview actually lands on,
+  // then scroll to it and fade the ring out — a notification only tells
+  // you the interview exists, not which page of the list it's on.
+  useEffect(() => {
+    if (!highlightId || !loaded) return;
+    const idx = filtered.findIndex(i => i.id === highlightId);
+    if (idx === -1) return;
+    const targetPage = Math.floor(idx / pageSize) + 1;
+    if (targetPage !== page) {
+      setPage(targetPage);
+      return;
+    }
+    const t1 = setTimeout(() => {
+      document.getElementById(`myiv-row-${highlightId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    const t2 = setTimeout(() => setHighlightedRow(null), 2500);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [highlightId, loaded, filtered, pageSize, page, setPage]);
 
   return (
     <div className="p-8">
@@ -128,8 +153,9 @@ export default function MyInterviewsPage() {
                 ) : paged.map((i, idx) => (
                   <motion.tr
                     key={i.id}
+                    id={`myiv-row-${i.id}`}
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
-                    className="hover:bg-gray-50/70 transition-colors"
+                    className={`hover:bg-gray-50/70 transition-colors ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : ""}`}
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900">{i.candidateName}</td>
                     <td className="px-4 py-3 text-gray-600">{i.roleAppliedFor || "—"}</td>

@@ -554,6 +554,23 @@ export default function InterviewsPage() {
               await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: editTarget.eventId }).catch(() => {});
             }
             await markInterviewCancelled(editTarget.id, { reason: interviewerChangeReason, cancelledBy: "admin" });
+            // In-app notification for the outgoing panelist, not just the
+            // "removed" email further below — same reasoning as every
+            // other cancel path (see cancelInterviewByCandidate and
+            // handleCancel above): an email is easy to miss, and this is
+            // what makes the Cancelled record on their own My Interviews
+            // actually discoverable instead of just quietly sitting there.
+            if (editTarget.interviewerId) {
+              createNotification({
+                type:           "interview_cancelled",
+                recipientId:    editTarget.interviewerId,
+                recipientEmail: editTarget.interviewerEmail,
+                interviewId:    editTarget.id,
+                candidateName:  editTarget.candidateName,
+                message:        `Your interview with ${editTarget.candidateName || "a candidate"} on ${formatDate(editTarget.scheduledDate)} at ${editTarget.scheduledTime} was cancelled. Reason: ${interviewerChangeReason}`,
+                status:         "unread",
+              }).catch(() => {});
+            }
 
             // A fresh record for the new panelist, same shape (and same
             // Accept/Decline flow) as a plain "Schedule Interview" —
@@ -1273,6 +1290,21 @@ export default function InterviewsPage() {
       }
 
       notifyAdmins("interview_cancelled", `Interview with ${iv.candidateName} on ${formatDate(iv.scheduledDate)} was cancelled.`, iv);
+      // In-app notification for the interviewer themselves, not just the
+      // email above and the other admins — an email is easy to miss, and
+      // nothing else told them this slot was gone until they happened to
+      // revisit My Interviews and noticed it.
+      if (iv.interviewerId) {
+        createNotification({
+          type:           "interview_cancelled",
+          recipientId:    iv.interviewerId,
+          recipientEmail: iv.interviewerEmail,
+          interviewId:    iv.id,
+          candidateName:  iv.candidateName,
+          message:        `Your interview with ${iv.candidateName || "a candidate"} on ${formatDate(iv.scheduledDate)} at ${iv.scheduledTime} was cancelled. Reason: ${reason.trim()}`,
+          status:         "unread",
+        }).catch(() => {});
+      }
       setToast({ message: "Interview cancelled and both parties notified by email." });
     } catch (e) {
       setToast({ message: e.message, type: "error" });
