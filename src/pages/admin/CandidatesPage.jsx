@@ -22,6 +22,7 @@ import CursorPagination from "../../components/CursorPagination";
 import { useCursorPagination } from "../../hooks/useCursorPagination";
 import { SkeletonRows } from "../../components/Skeleton";
 import SkillsSelect from "../../components/SkillsSelect";
+import DatePicker from "../../components/DatePicker";
 import { LABELS as STATUS_LABELS } from "../../components/Badge";
 import { usePagination } from "../../hooks/usePagination";
 import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
@@ -267,11 +268,16 @@ export default function CandidatesPage() {
   const [showCSV,    setShowCSV]    = useState(false);
   const [attemptsTarget, setAttemptsTarget] = useState(null);
 
-  // Template (multi) and per-template-status (single) filters — both need
-  // the real full candidate list to filter against (not just the scoped
-  // "fresh 10" page), same as search/Archived/Unassigned already do.
+  // Template (multi), per-template-status (multi), and Date Added (range)
+  // filters — all need the real full candidate list to filter against (not
+  // just the scoped "fresh 10" page), same as search/Archived/Unassigned
+  // already do. Date Added filters on candidate.createdAt — when a
+  // candidate's own record was added/imported, not any interview date —
+  // for checking the status of a specific upload batch.
   const [filterTemplateIds, setFilterTemplateIds] = useState([]);
   const [filterStatuses,    setFilterStatuses]    = useState([]);
+  const [filterDateFrom,    setFilterDateFrom]    = useState("");
+  const [filterDateTo,      setFilterDateTo]      = useState("");
   const templatesById = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates]);
   // Latest-attempt status per candidate, keyed by candidate id — a Map of
   // candidateId -> the array getCandidateTemplateStatuses returns. Two
@@ -291,7 +297,7 @@ export default function CandidatesPage() {
   // only those trigger the real full-collection fetch — see useCandidates's
   // `enabled` param.
   const needsFullList = showArchived || activeProgram === "unassigned" || search.trim() !== "" || showCSV
-    || filterTemplateIds.length > 0 || filterStatuses.length > 0;
+    || filterTemplateIds.length > 0 || filterStatuses.length > 0 || !!filterDateFrom || !!filterDateTo;
   const { data: candidates = [], isLoading } = useCandidates(needsFullList);
   const programIds = useMemo(() => programs.map(p => p.id), [programs]);
   const { data: counts } = useCandidateCounts(programIds);
@@ -653,6 +659,13 @@ export default function CandidatesPage() {
     const q = search.trim().toLowerCase();
     return workingSet.filter(c => {
       if (filterTemplateIds.length && !(c.templateIds || []).some(tid => filterTemplateIds.includes(tid))) return false;
+      // createdAt is a full ISO timestamp; comparing it against a plain
+      // YYYY-MM-DD bound as a string still sorts correctly (ISO 8601's
+      // lexical order matches chronological order), and filterDateTo is
+      // treated as inclusive of the whole day by comparing against its
+      // date-only prefix.
+      if (filterDateFrom && (!c.createdAt || c.createdAt < filterDateFrom)) return false;
+      if (filterDateTo && (!c.createdAt || c.createdAt.slice(0, 10) > filterDateTo)) return false;
       if (q) {
         return (
           c.name?.toLowerCase().includes(q) ||
@@ -664,7 +677,7 @@ export default function CandidatesPage() {
       if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
       return true;
     });
-  }, [workingSet, activeProgram, search, filterTemplateIds]);
+  }, [workingSet, activeProgram, search, filterTemplateIds, filterDateFrom, filterDateTo]);
 
   // Status can only be checked once per-template latest-status data has
   // actually loaded for these candidates (statusByCandidateId) — see the
@@ -907,8 +920,20 @@ export default function CandidatesPage() {
             searchPlaceholder="Search statuses…"
           />
         </div>
-        {(filterTemplateIds.length > 0 || filterStatuses.length > 0) && (
-          <button onClick={() => { setFilterTemplateIds([]); setFilterStatuses([]); setCandPage(1); }}
+        {/* Date Added — candidate.createdAt, i.e. when the record itself
+           was added/imported, not any interview date. Lets an admin pull
+           up just the batch from one CSV upload and check its statuses. */}
+        <div className="flex items-center gap-1.5">
+          <DatePicker value={filterDateFrom} onChange={e => { setFilterDateFrom(e.target.value); setCandPage(1); }}
+            placeholder="Added from"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white" />
+          <span className="text-gray-400 text-sm">–</span>
+          <DatePicker value={filterDateTo} min={filterDateFrom || undefined} onChange={e => { setFilterDateTo(e.target.value); setCandPage(1); }}
+            placeholder="to"
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-white" />
+        </div>
+        {(filterTemplateIds.length > 0 || filterStatuses.length > 0 || filterDateFrom || filterDateTo) && (
+          <button onClick={() => { setFilterTemplateIds([]); setFilterStatuses([]); setFilterDateFrom(""); setFilterDateTo(""); setCandPage(1); }}
             className="text-sm text-gray-500 hover:text-gray-800 px-2 transition-colors">
             Clear
           </button>
