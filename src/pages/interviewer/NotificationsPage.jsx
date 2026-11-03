@@ -41,7 +41,7 @@ export default function NotificationsPage() {
 
   const allNotifications = useUserNotifications(currentUser.uid);
   const notifications    = allNotifications.filter(n =>
-    n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval" || n.type === "interview_cancelled"
+    n.type === "nudge" || n.type === "feedback_reminder" || n.type === "interview_approval" || n.type === "interview_cancelled" || n.type === "interview_rescheduled"
   );
 
   const nudges   = notifications;
@@ -198,6 +198,11 @@ export default function NotificationsPage() {
                           <p className="text-sm font-bold text-gray-900">Interview Cancelled — {n.candidateName || "Candidate"}</p>
                           <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
                         </>
+                      ) : n.type === "interview_rescheduled" ? (
+                        <>
+                          <p className="text-sm font-bold text-gray-900">Interview Rescheduled — {n.candidateName || "Candidate"}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{n.createdAt ? formatDateTime(n.createdAt) : ""}</p>
+                        </>
                       ) : (
                         <>
                           <p className="text-sm font-bold text-gray-900">
@@ -217,7 +222,7 @@ export default function NotificationsPage() {
                     </div>
                   </div>
                   {n.type === "nudge" && responded && statusBadge(n.status)}
-                  {(n.type === "feedback_reminder" || n.type === "interview_approval" || n.type === "interview_cancelled") && !isNew && (
+                  {(n.type === "feedback_reminder" || n.type === "interview_approval" || n.type === "interview_cancelled" || n.type === "interview_rescheduled") && !isNew && (
                     <span className="text-xs font-semibold text-gray-400 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded-full">Seen</span>
                   )}
                 </div>
@@ -242,7 +247,7 @@ export default function NotificationsPage() {
                    list with that row highlighted, not the detail page —
                    the record itself (reason, who cancelled) lives inline
                    in that row now, not behind a separate detail view. */}
-                {n.type === "interview_cancelled" && isNew && n.interviewId && (
+                {(n.type === "interview_cancelled" || n.type === "interview_rescheduled") && isNew && n.interviewId && (
                   <Link
                     to={`/interviewer/interviews?highlight=${n.interviewId}`}
                     onClick={() => updateNotification(n.id, { status: "read" })}
