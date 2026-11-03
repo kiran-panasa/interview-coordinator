@@ -17,7 +17,7 @@ import {
   getUsersByIds, getTemplate, createInterview, updateScheduleInvite,
   logInviteHistory, createNotification, getPreInterviewResources,
   getInterview, markInterviewCancelled, updateInterview, freeSlotsForInterview,
-  getScheduleInvite,
+  getScheduleInvite, getUserByEmail,
 } from "../api/firestore";
 import { formatDate } from "../utils/dates";
 import { callAppsScript } from "../lib/appsScript";
@@ -58,10 +58,15 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
       // to miss/delete, and nothing else on this interviewer's side ever
       // told them this slot was gone until they happened to revisit My
       // Interviews and noticed it had flipped to Cancelled on its own.
-      if (oldIv.interviewerId) {
+      // interviewerId isn't reliably set on every interview doc (some
+      // older records only ever got interviewerEmail) — fall back to a
+      // live lookup by email so the notification doesn't silently never
+      // get created just because this one field is missing.
+      const oldIvInterviewerId = oldIv.interviewerId || (oldIv.interviewerEmail ? (await getUserByEmail(oldIv.interviewerEmail))?.id : null);
+      if (oldIvInterviewerId) {
         createNotification({
           type:           "interview_cancelled",
-          recipientId:    oldIv.interviewerId,
+          recipientId:    oldIvInterviewerId,
           recipientEmail: oldIv.interviewerEmail,
           interviewId:    replacingInterviewId,
           candidateName:  oldIv.candidateName,
@@ -108,11 +113,13 @@ export async function cancelInterviewByCandidate(interviewId, reason) {
   }
   await markInterviewCancelled(interviewId, { reason, cancelledBy: "candidate" });
   // In-app notification, not just the email below — see the matching note
-  // in cancelReplacedInterview above.
-  if (iv.interviewerId) {
+  // in cancelReplacedInterview above (same interviewerId-may-be-missing
+  // fallback).
+  const ivInterviewerId = iv.interviewerId || (iv.interviewerEmail ? (await getUserByEmail(iv.interviewerEmail))?.id : null);
+  if (ivInterviewerId) {
     createNotification({
       type:           "interview_cancelled",
-      recipientId:    iv.interviewerId,
+      recipientId:    ivInterviewerId,
       recipientEmail: iv.interviewerEmail,
       interviewId,
       candidateName:  iv.candidateName,

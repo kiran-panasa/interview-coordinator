@@ -109,6 +109,17 @@ export default function InterviewsPage() {
     usersAll.filter(u => (u.role === "interviewer" || u.role === "interviewer_content") && u.status === "active"),
     [usersAll]
   );
+  // interviewerId isn't reliably set on every interview doc — some only
+  // ever got interviewerEmail (see subscribeToInterviewerInterviews's own
+  // dual id/email match, api/interviews.ts). A notification's recipientId
+  // has to be the real Firebase Auth uid (useUserNotifications matches on
+  // that alone, no email fallback), so resolve it from the live
+  // interviewers list by email whenever the interview doc's own
+  // interviewerId is missing — otherwise the notification silently never
+  // gets created at all, even though the row itself still shows up fine
+  // (via the email match) on that interviewer's own My Interviews.
+  const resolveInterviewerUserId = (interviewerId, interviewerEmail) =>
+    interviewerId || interviewers.find(u => (u.email || "").toLowerCase() === (interviewerEmail || "").toLowerCase())?.id || "";
   // Interviews page now only ever reads the currently-selected date window
   // (defaults to yesterday+today) instead of the whole collection — see
   // useInterviewsInDateRange / subscribeToInterviewsInDateRange. Declared
@@ -560,10 +571,11 @@ export default function InterviewsPage() {
             // handleCancel above): an email is easy to miss, and this is
             // what makes the Cancelled record on their own My Interviews
             // actually discoverable instead of just quietly sitting there.
-            if (editTarget.interviewerId) {
+            const outgoingInterviewerId = resolveInterviewerUserId(editTarget.interviewerId, editTarget.interviewerEmail);
+            if (outgoingInterviewerId) {
               createNotification({
                 type:           "interview_cancelled",
-                recipientId:    editTarget.interviewerId,
+                recipientId:    outgoingInterviewerId,
                 recipientEmail: editTarget.interviewerEmail,
                 interviewId:    editTarget.id,
                 candidateName:  editTarget.candidateName,
@@ -1332,10 +1344,11 @@ export default function InterviewsPage() {
       // email above and the other admins — an email is easy to miss, and
       // nothing else told them this slot was gone until they happened to
       // revisit My Interviews and noticed it.
-      if (iv.interviewerId) {
+      const cancelledInterviewerId = resolveInterviewerUserId(iv.interviewerId, iv.interviewerEmail);
+      if (cancelledInterviewerId) {
         createNotification({
           type:           "interview_cancelled",
-          recipientId:    iv.interviewerId,
+          recipientId:    cancelledInterviewerId,
           recipientEmail: iv.interviewerEmail,
           interviewId:    iv.id,
           candidateName:  iv.candidateName,
@@ -1425,10 +1438,11 @@ export default function InterviewsPage() {
     if (!confirm(`Reopen "${iv.candidateName}"'s interview?\n\nThis clears the no-show mark so ${iv.interviewerName || "the panelist"} can confirm attendance and submit feedback.`)) return;
     try {
       await reopenNoShowInterview(iv.id);
-      if (iv.interviewerId) {
+      const reopenedInterviewerId = resolveInterviewerUserId(iv.interviewerId, iv.interviewerEmail);
+      if (reopenedInterviewerId) {
         createNotification({
           type:           "feedback_reminder",
-          recipientId:    iv.interviewerId,
+          recipientId:    reopenedInterviewerId,
           recipientEmail: iv.interviewerEmail,
           interviewId:    iv.id,
           candidateName:  iv.candidateName,
