@@ -693,13 +693,20 @@ export interface Interview {
   createdAt: string;
   updatedAt?: string;
 
-  // ── Partial completion → Reschedule & Resume ──────────────────────────────
-  // Set on the NEW interview record created by "Reschedule & Resume" (see
-  // resumePartiallyCompletedInterview in api/interviews.ts) — true whenever
-  // this record picks up where an earlier Partially Completed interview
-  // left off, so every view can tell this apart from an ordinary interview
-  // — most importantly so a finished "Completed" here is never confused
-  // with a normal full interview for payment purposes.
+  // ── Partial completion → Reschedule & Resume (REMOVED — read-only now) ────
+  // "Reschedule & Resume" no longer exists as an action (a Partially
+  // Completed interview is never carried forward — "Schedule a Meet"
+  // creates a totally fresh, unlinked interview instead). These fields are
+  // kept only so historical records resumed before the removal still
+  // display correctly (InterviewDetail.jsx, InterviewsPage.jsx's "Resumed
+  // by"/"Continues ... session" badges) — nothing writes them anymore.
+  //
+  // Was set on the NEW interview record created by "Reschedule & Resume" —
+  // true whenever that record picked up where an earlier Partially
+  // Completed interview left off, so every view could tell it apart from
+  // an ordinary interview — most importantly so a finished "Completed"
+  // there was never confused with a normal full interview for payment
+  // purposes.
   resumedFromPartial?: boolean;
   // Points back at the Partially Completed interview this one continues.
   // That original record is left completely untouched (status, feedback,
