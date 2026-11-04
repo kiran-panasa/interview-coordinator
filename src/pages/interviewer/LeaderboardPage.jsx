@@ -5,6 +5,7 @@ import { Trophy, PartyPopper, Sparkles, CalendarPlus } from "lucide-react";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useUsers } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
+import { countsAsCompletedWork } from "../../utils/interviewCompletionStats";
 
 // Same ISO week (Monday–Sunday) / calendar month helpers as the admin and
 // vendor leaderboards, so all three agree on what "this week"/"this month"
@@ -72,7 +73,7 @@ export default function LeaderboardPage() {
     return activeInterviewers
       .map(ivr => ({
         interviewer: ivr,
-        completed: interviews.filter(iv => iv.interviewerEmail === ivr.email && ["completed", "partially_completed"].includes(iv.status)).length,
+        completed: interviews.filter(iv => iv.interviewerEmail === ivr.email && countsAsCompletedWork(iv)).length,
       }))
       .sort((a, b) => b.completed - a.completed);
   }, [usersAll, interviews]);

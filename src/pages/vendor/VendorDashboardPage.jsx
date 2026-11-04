@@ -13,6 +13,7 @@ import { getSkills } from "../../api/skills";
 import { getPrograms } from "../../api/programs";
 import { getTemplates } from "../../api/templates";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
+import { countsAsCompletedWork } from "../../utils/interviewCompletionStats";
 import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
 
@@ -294,7 +295,12 @@ export default function VendorDashboardPage() {
       if (iv.resumedFromPartial) bump("completedResumed", iv.duration);
       else bump("completed", iv.duration);
     }
-    else if (iv.status === "partially_completed") bump("partiallyCompleted", iv.duration);
+    // A partial that's since been resumed (resumedAsInterviewId set) no
+    // longer counts here at all — the resumed session is a separate doc
+    // already counted above under completed/completedResumed. Without
+    // this, every resumed interview was billed as both a partial AND a
+    // completed session.
+    else if (iv.status === "partially_completed" && !iv.resumedAsInterviewId) bump("partiallyCompleted", iv.duration);
     else if (iv.status === "cancelled") bump("cancelled", iv.duration);
     else if (iv.status === "no_show") bump("noShow", iv.duration);
     else if (iv.status === "declined") bump("declined", iv.duration);
@@ -659,7 +665,7 @@ export default function VendorDashboardPage() {
                 const ranked = interviewers
                   .map(ivr => {
                     const ivrInterviews = periodInterviews.filter(iv => iv.interviewerId === ivr.id);
-                    const completed = ivrInterviews.filter(iv => ["completed", "partially_completed"].includes(iv.status)).length;
+                    const completed = ivrInterviews.filter(countsAsCompletedWork).length;
                     return { interviewer: ivr, completed, total: ivrInterviews.length };
                   })
                   .sort((a, b) => b.completed - a.completed || b.total - a.total);

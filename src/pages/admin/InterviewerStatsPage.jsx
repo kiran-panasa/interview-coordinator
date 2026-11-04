@@ -4,6 +4,7 @@ import { Download, X, BarChart3, Trophy } from "lucide-react";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/queries";
 import { exportInterviewerStats } from "../../utils/interviewerStatsExport";
+import { countsAsCompletedWork } from "../../utils/interviewCompletionStats";
 import SkillsSelect from "../../components/SkillsSelect";
 
 // Defaults the report to the current month instead of reading the entire
@@ -263,7 +264,12 @@ export default function InterviewerStatsPage() {
         if (iv.resumedFromPartial) bump(row, "completedResumed", iv.duration);
         else bump(row, "completed", iv.duration);
       }
-      else if (iv.status === "partially_completed") bump(row, "partiallyCompleted", iv.duration);
+      // A partial that's since been resumed (resumedAsInterviewId set) no
+      // longer counts here at all — the resumed session is a separate doc
+      // already counted above under completed/completedResumed. Without
+      // this, every resumed interview was counted as both a partial AND a
+      // completed session, inflating the Vendor invoice count by one.
+      else if (iv.status === "partially_completed" && !iv.resumedAsInterviewId) bump(row, "partiallyCompleted", iv.duration);
       else if (iv.status === "cancelled") bump(row, "cancelled", iv.duration);
       else if (iv.status === "no_show") bump(row, "noShow", iv.duration);
       else if (iv.status === "declined") bump(row, "declined", iv.duration);
@@ -330,7 +336,7 @@ export default function InterviewerStatsPage() {
         const ivrInterviews = leaderboardInterviews
           .filter(iv => iv.interviewerEmail === ivr.email)
           .filter(iv => !leaderboardProgramIds.length || leaderboardProgramIds.includes(effectiveProgramOf(iv.templateId)));
-        const completed = ivrInterviews.filter(iv => ["completed", "partially_completed"].includes(iv.status)).length;
+        const completed = ivrInterviews.filter(countsAsCompletedWork).length;
         return { interviewer: ivr, completed, total: ivrInterviews.length };
       })
       .sort((a, b) => b.completed - a.completed || b.total - a.total);
