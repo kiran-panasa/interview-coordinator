@@ -5,7 +5,7 @@ import { useAuth } from "../../AuthContext";
 import {
   LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Download, RefreshCw,
 } from "lucide-react";
-import { formatDate, formatDateLong } from "../../utils/dates";
+import { formatDate, formatDateLong, formatTimeLabel } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
 import { getInterviewsForVendor } from "../../api/interviews";
 import { getSlotsForInterviewers } from "../../api/availability";
@@ -639,7 +639,7 @@ export default function VendorDashboardPage() {
                                           className={`text-[11px] font-semibold px-2 py-1 rounded-full border ${
                                             s.isBooked ? "bg-gray-50 text-gray-300 border-gray-100 cursor-not-allowed" : "bg-white text-gray-700 border-gray-200"
                                           }`}>
-                                          {s.time}
+                                          {formatTimeLabel(s.time)}
                                         </span>
                                       ))}
                                     </div>

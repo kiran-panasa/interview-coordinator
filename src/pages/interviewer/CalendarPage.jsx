@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, X, Video, CalendarDays } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useInterviewerInterviews } from "../../hooks/subscriptions";
-import { compareTimeLabels, timeToMinutes } from "../../utils/dates";
+import { compareTimeLabels, timeToMinutes, formatTimeLabel } from "../../utils/dates";
 
 const DAY_LABELS       = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAY_LABELS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
@@ -212,10 +212,10 @@ export default function CalendarPage() {
                   <div className="mt-1.5 space-y-1">
                     {visible.map(iv => (
                       <Link key={iv.id} to={`/interviewer/interviews/${iv.id}`}
-                        title={`${iv.scheduledTime} · ${iv.candidateName} · ${iv.round || iv.templateName || "Interview"}`}
+                        title={`${formatTimeLabel(iv.scheduledTime)} · ${iv.candidateName} · ${iv.round || iv.templateName || "Interview"}`}
                         className={`flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md truncate transition-colors ${STATUS_CHIP[iv.status] || "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[iv.status] || "bg-gray-300"}`} />
-                        <span className="truncate">{iv.scheduledTime} {iv.candidateName}</span>
+                        <span className="truncate">{formatTimeLabel(iv.scheduledTime)} {iv.candidateName}</span>
                       </Link>
                     ))}
                     {extra > 0 && (
@@ -269,7 +269,7 @@ export default function CalendarPage() {
                     className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 transition-colors">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{iv.candidateName}</p>
-                      <p className="text-xs text-gray-400">{iv.scheduledTime} · {iv.round || iv.templateName || "Interview"}</p>
+                      <p className="text-xs text-gray-400">{formatTimeLabel(iv.scheduledTime)} · {iv.round || iv.templateName || "Interview"}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       {iv.meetLink && iv.status === "scheduled" && (
@@ -400,7 +400,7 @@ function DayView({ year, month, cells, selectedDay, setSelectedDay, todayIso, by
               const widthPct = 100 / colCount;
               return (
                 <Link key={iv.id} to={`/interviewer/interviews/${iv.id}`}
-                  title={`${iv.scheduledTime} · ${iv.candidateName} · ${iv.round || iv.templateName || "Interview"}`}
+                  title={`${formatTimeLabel(iv.scheduledTime)} · ${iv.candidateName} · ${iv.round || iv.templateName || "Interview"}`}
                   className={`absolute rounded-lg px-2 py-1 text-white shadow-soft hover:shadow-card hover:brightness-95 transition-all overflow-hidden ${STATUS_BLOCK[iv.status] || "bg-gray-400"}`}
                   style={{
                     top: start * PX_PER_MIN + 1,
@@ -408,7 +408,7 @@ function DayView({ year, month, cells, selectedDay, setSelectedDay, todayIso, by
                     left: `calc(56px + ${colIndex * widthPct}% + 4px)`,
                     width: `calc(${widthPct}% - 8px)`,
                   }}>
-                  <p className="text-[11px] font-bold leading-tight truncate">{iv.scheduledTime} {iv.candidateName}</p>
+                  <p className="text-[11px] font-bold leading-tight truncate">{formatTimeLabel(iv.scheduledTime)} {iv.candidateName}</p>
                   <p className="text-[10px] leading-tight opacity-90 truncate">{iv.round || iv.templateName || "Interview"}</p>
                 </Link>
               );

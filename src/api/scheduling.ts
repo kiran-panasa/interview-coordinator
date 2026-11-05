@@ -4,7 +4,7 @@ import {
   query, where, orderBy, onSnapshot, runTransaction,
 } from "firebase/firestore";
 import type { ScheduleInvite, OtpVerification, InviteHistoryEntry, Interview } from "../types";
-import { parseInterviewStart, timeToMinutes, addMinutesToTimeLabel } from "../utils/dates";
+import { parseInterviewStart, timeToMinutes, addMinutesToTimeLabel, formatTimeLabel } from "../utils/dates";
 import { findBlockedDateFor } from "./blockedDates";
 import { freeSlotsHeldByInvite, BUSY_EXCLUDED_STATUSES } from "./availability";
 import { reportFirestoreListenerError } from "../utils/firestoreSubscribe";
@@ -252,7 +252,7 @@ export async function bookSlotForCandidate(
     if (overlap) {
       const overlapEnd = addMinutesToTimeLabel(overlap.time, overlap.duration);
       throw new Error(
-        `Nice try, but you can't be in two interviews at once — you're already booked for ${overlap.round} on ${bookedDate} from ${overlap.time} to ${overlapEnd}. Please pick a time that doesn't overlap.`
+        `Nice try, but you can't be in two interviews at once — you're already booked for ${overlap.round} on ${bookedDate} from ${formatTimeLabel(overlap.time)} to ${formatTimeLabel(overlapEnd)}. Please pick a time that doesn't overlap.`
       );
     }
   }

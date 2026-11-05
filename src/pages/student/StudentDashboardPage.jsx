@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
   CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle,
 } from "lucide-react";
-import { formatDate, parseInterviewStart, formatDateTime } from "../../utils/dates";
+import { formatDate, parseInterviewStart, formatDateTime, formatTimeLabel } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
 import { getPreInterviewResources } from "../../api/firestore";
 import { cancelInterviewByCandidate } from "../../services/booking.service";
@@ -845,7 +845,7 @@ export default function StudentDashboardPage() {
                               <div>
                                 <p className="font-bold text-gray-900">{iv.title}</p>
                                 <p className="text-sm font-semibold text-gray-600 mt-0.5">
-                                  {formatDate(iv.date)} · {iv.time}{iv.duration ? ` · ${iv.duration}m` : ""}
+                                  {formatDate(iv.date)} · {formatTimeLabel(iv.time)}{iv.duration ? ` · ${iv.duration}m` : ""}
                                 </p>
                               </div>
                             </div>
@@ -1184,7 +1184,7 @@ export default function StudentDashboardPage() {
                             <div className="min-w-0">
                               <p className="text-sm text-gray-900 font-bold truncate">{inv.round || inv.templateName || "Interview"}</p>
                               <p className="text-xs text-gray-500 mt-0.5">
-                                {inv.bookedDate ? `${formatDate(inv.bookedDate)} · ${inv.bookedTime}` : "Slot selected"} — no changes can be made now.
+                                {inv.bookedDate ? `${formatDate(inv.bookedDate)} · ${formatTimeLabel(inv.bookedTime)}` : "Slot selected"} — no changes can be made now.
                                 You'll get a confirmation email once an admin approves it.
                               </p>
                             </div>
@@ -1329,7 +1329,7 @@ export default function StudentDashboardPage() {
                                   {iv.scheduledDate && (
                                     <p className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mt-1">
                                       <CalendarClock className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                                      {formatDate(iv.scheduledDate)} · {iv.scheduledTime} · {iv.duration}m
+                                      {formatDate(iv.scheduledDate)} · {formatTimeLabel(iv.scheduledTime)} · {iv.duration}m
                                     </p>
                                   )}
                                 </div>
@@ -1384,7 +1384,7 @@ export default function StudentDashboardPage() {
                                     )}
                                   </div>
                                   {iv.scheduledDate && (
-                                    <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {iv.scheduledTime}</p>
+                                    <p className="text-sm font-medium text-gray-500 mt-1">{formatDate(iv.scheduledDate)} · {formatTimeLabel(iv.scheduledTime)}</p>
                                   )}
                                   {/* Cancelled by someone other than the
                                      candidate themselves gets a tailored,
@@ -1522,7 +1522,7 @@ export default function StudentDashboardPage() {
                             </div>
                             {n.date && (
                               <p className="text-xs text-gray-400 mt-0.5">
-                                Was {formatDate(n.date)} · {n.time}
+                                Was {formatDate(n.date)} · {formatTimeLabel(n.time)}
                               </p>
                             )}
                             <p className="text-sm text-gray-600 mt-2">

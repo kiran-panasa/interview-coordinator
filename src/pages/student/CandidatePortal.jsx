@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, LogIn, Smartphone, AlertTriangle } from "lucide-react";
-import { formatDate } from "../../utils/dates";
+import { formatDate, formatTimeLabel } from "../../utils/dates";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -471,7 +471,7 @@ export default function CandidatePortal() {
                         </div>
                         {inv.status === "confirmed" && inv.bookedDate && (
                           <p className="text-xs text-emerald-700 font-semibold mt-2">
-                            {formatDate(inv.bookedDate)} · {inv.bookedTime}
+                            {formatDate(inv.bookedDate)} · {formatTimeLabel(inv.bookedTime)}
                           </p>
                         )}
                       </div>

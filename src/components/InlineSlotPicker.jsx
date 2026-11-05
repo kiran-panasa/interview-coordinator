@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Loader2, RefreshCw, PartyPopper, Copy, Check } from "lucide-react";
-import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel } from "../utils/dates";
+import { formatDateLong, formatDate, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel, formatTimeLabel } from "../utils/dates";
 import {
   updateScheduleInvite, getAvailableSlots, bookSlotForCandidate, getActiveAdmins,
 } from "../api/firestore";
@@ -193,7 +193,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
     const rows = [
       { label: "Interview", value: booked.round },
       { label: "Date", value: formatDateLong(booked.date) },
-      { label: "Time", value: `${booked.time} · ${booked.duration} min` },
+      { label: "Time", value: `${formatTimeLabel(booked.time)} · ${booked.duration} min` },
     ];
     return (
       <motion.div
@@ -336,7 +336,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
                     ? "bg-brand-600 text-white border-brand-600 shadow-card"
                     : "bg-white text-gray-700 border-gray-200 shadow-soft hover:border-brand-300 hover:bg-brand-50 hover:-translate-y-0.5"
               }`}>
-              {s.time} – {slotEnd}
+              {formatTimeLabel(s.time)} – {formatTimeLabel(slotEnd)}
               {/* Visible label, not just a hover tooltip — easy to miss on
                  a greyed-out button, especially on mobile where hover
                  doesn't exist at all. */}
@@ -348,7 +348,7 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
 
       {selected ? (
         <div className="bg-brand-50 border border-brand-200 rounded-full px-4 py-2.5 text-sm text-brand-800 font-medium text-center">
-          Selected: {formatDateLong(selected.date)} · {selected.time}
+          Selected: {formatDateLong(selected.date)} · {formatTimeLabel(selected.time)}
         </div>
       ) : (
         <p className="text-xs text-gray-400 text-center">Select a slot above to continue.</p>

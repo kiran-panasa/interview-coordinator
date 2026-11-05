@@ -2,7 +2,7 @@ import { useRef } from "react";
 import { Upload, Download, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 import Modal from "../../components/Modal";
 import Button from "../../components/Button";
-import { formatDate } from "../../utils/dates";
+import { formatDate, formatTimeLabel } from "../../utils/dates";
 
 function csvCell(v) {
   const s = String(v ?? "");
@@ -231,7 +231,7 @@ export default function ImportModal({
                             {row.resolved.scheduledDate ? formatDate(row.resolved.scheduledDate) : <span className="text-red-500">{row.raw.date}</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">
-                            {row.resolved.scheduledTime || <span className="text-red-500">{row.raw.time}</span>}
+                            {row.resolved.scheduledTime ? formatTimeLabel(row.resolved.scheduledTime) : <span className="text-red-500">{row.raw.time}</span>}
                           </td>
                           <td className="px-3 py-2 text-gray-600">{row.raw.round}</td>
                           <td className="px-3 py-2">

@@ -65,6 +65,33 @@ export function compareTimeLabels(a: string, b: string): number {
   return timeToMinutes(a) - timeToMinutes(b);
 }
 
+// Normalizes either a 24-hour "HH:MM" (native <input type="time">, used by
+// the admin's TimePicker) or an already-12-hour "h:mm AM/PM" label (used by
+// the self-book/availability slot system) into one consistent "h:mm AM/PM"
+// display string. scheduledTime is stored in whichever format the flow
+// that set it used (see timeToMinutes above) — without normalizing at
+// display time, the exact same kind of booking shows "19:30" in one place
+// and "07:30 PM" in another depending purely on which flow created it, not
+// anything about the booking itself. Only ever use this for DISPLAY — never
+// on a value bound to an <input>, which still needs its native format.
+export function formatTimeLabel(label: string | null | undefined): string {
+  if (!label) return "—";
+  const trimmed = String(label).trim();
+  const ampm = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (ampm) {
+    const h = parseInt(ampm[1], 10);
+    return `${h}:${ampm[2]} ${ampm[3].toUpperCase()}`;
+  }
+  const hhmm = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if (hhmm) {
+    let h = parseInt(hhmm[1], 10);
+    const period = h >= 12 ? "PM" : "AM";
+    h = h % 12; if (h === 0) h = 12;
+    return `${h}:${hhmm[2]} ${period}`;
+  }
+  return trimmed; // unrecognized shape — show as-is rather than hide it
+}
+
 // "18:00" -> 1080 — for 24-hour "HH:MM" <input type="time"> values (as
 // opposed to timeToMinutes above, which parses "3:00 PM" style labels).
 export function hhmmToMinutes(hhmm: string | null | undefined): number | null {

@@ -5,6 +5,7 @@ import Button from "../../components/Button";
 import DatePicker from "../../components/DatePicker";
 import TimePicker from "../../components/TimePicker";
 import SearchableSelect from "../../components/SearchableSelect";
+import { formatTimeLabel } from "../../utils/dates";
 
 const OTHER_VALUE = "__other__";
 
@@ -94,7 +95,7 @@ export default function ScheduleInterviewModal({
                       ? "bg-brand-600 text-white border-brand-600"
                       : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
                   }`}>
-                  {t}
+                  {formatTimeLabel(t)}
                 </button>
               ))}
             </div>

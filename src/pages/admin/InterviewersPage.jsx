@@ -7,7 +7,7 @@ import {
   RotateCcw, Users, AlertTriangle, ExternalLink, Upload,
 } from "lucide-react";
 import { getInterviewerAvailability, updateUser, getInterviewersPage, getAllUsers, getSkills, createSkill, bulkUpdateUserSkills } from "../../api/firestore";
-import { compareTimeLabels } from "../../utils/dates";
+import { compareTimeLabels, formatTimeLabel } from "../../utils/dates";
 import { useSkills, useUsers, useInterviewerCounts, useVendors, QK } from "../../hooks/queries";
 import { useAuth } from "../../AuthContext";
 import { BOOTSTRAP_EMAIL } from "../../constants/roles";
@@ -652,7 +652,7 @@ export default function InterviewersPage() {
                       {flaggedSlots.length} conflict{flaggedSlots.length !== 1 ? "s" : ""} flagged by interviewer
                     </p>
                     <p className="text-xs text-red-500 mt-0.5">
-                      {flaggedSlots.map(s => `${s.date} at ${s.time}`).join(" · ")}
+                      {flaggedSlots.map(s => `${s.date} at ${formatTimeLabel(s.time)}`).join(" · ")}
                     </p>
                     <p className="text-xs text-red-400 mt-1">Please reassign or cancel the affected interview(s).</p>
                   </div>
@@ -677,7 +677,7 @@ export default function InterviewersPage() {
                                   ? "bg-orange-100 text-orange-700 border-orange-200"
                                   : "bg-emerald-50 text-emerald-700 border-emerald-200"
                             }`}>
-                            {s.flagged && "⚑ "}{s.time} · {s.flagged ? "Conflict" : s.isBooked ? "Booked" : "Free"}
+                            {s.flagged && "⚑ "}{formatTimeLabel(s.time)} · {s.flagged ? "Conflict" : s.isBooked ? "Booked" : "Free"}
                           </span>
                         ))}
                       </div>

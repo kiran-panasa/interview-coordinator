@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { formatDate } from "./dates";
+import { formatDate, formatTimeLabel } from "./dates";
 import { withIntegrityDomain } from "./templateEngine";
 import { getQuestionsByIds } from "../api/questions";
 
@@ -289,7 +289,7 @@ export async function exportFeedbackToExcel(interviews, templates, programs, can
       programName,
       iv.round || "",
       iv.scheduledDate ? formatDate(iv.scheduledDate) : "",
-      iv.scheduledTime || "",
+      iv.scheduledTime ? formatTimeLabel(iv.scheduledTime) : "",
       iv.status || "",
       isCancelled ? "" : (iv.partialCompletionReason || ""),
       integrityText,

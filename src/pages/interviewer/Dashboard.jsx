@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { formatDate } from "../../utils/dates";
+import { formatDate, formatTimeLabel } from "../../utils/dates";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -119,7 +119,7 @@ export default function InterviewerDashboard() {
                           Join Meet
                         </span>
                       )}
-                      <p className="text-sm font-medium text-gray-700">{i.scheduledTime}</p>
+                      <p className="text-sm font-medium text-gray-700">{formatTimeLabel(i.scheduledTime)}</p>
                     </div>
                   </Link>
                 </motion.div>
@@ -156,7 +156,7 @@ export default function InterviewerDashboard() {
                     className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50/70 transition-colors">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{i.candidateName}</p>
-                      <p className="text-xs text-gray-500 truncate">{i.round} · {formatDate(i.scheduledDate)} at {i.scheduledTime}</p>
+                      <p className="text-xs text-gray-500 truncate">{i.round} · {formatDate(i.scheduledDate)} at {formatTimeLabel(i.scheduledTime)}</p>
                     </div>
                     <Badge value={i.status} />
                   </Link>

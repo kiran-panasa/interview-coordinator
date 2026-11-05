@@ -19,7 +19,7 @@ import {
   getInterview, markInterviewCancelled, updateInterview, freeSlotsForInterview,
   getScheduleInvite, getUserByEmail,
 } from "../api/firestore";
-import { formatDate } from "../utils/dates";
+import { formatDate, formatTimeLabel } from "../utils/dates";
 import { callAppsScript } from "../lib/appsScript";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -50,7 +50,7 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
         await freeSlotsForInterview(oldIv.interviewerId, oldIv.scheduledDate, oldIv.scheduledTime, oldIv.duration).catch(() => {});
       }
       await markInterviewCancelled(replacingInterviewId, {
-        reason: `Rescheduled by candidate — picked a new slot on ${formatDate(bookedDate)} at ${bookedTime}.`
+        reason: `Rescheduled by candidate — picked a new slot on ${formatDate(bookedDate)} at ${formatTimeLabel(bookedTime)}.`
           + (rescheduleReason ? ` Reason: ${rescheduleReason}` : ""),
         cancelledBy: "candidate",
       });
@@ -70,7 +70,7 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
           recipientEmail: oldIv.interviewerEmail,
           interviewId:    replacingInterviewId,
           candidateName:  oldIv.candidateName,
-          message:        `Your interview with ${oldIv.candidateName || "a candidate"} on ${formatDate(oldIv.scheduledDate)} at ${oldIv.scheduledTime} was cancelled — the candidate rescheduled to a new slot.`,
+          message:        `Your interview with ${oldIv.candidateName || "a candidate"} on ${formatDate(oldIv.scheduledDate)} at ${formatTimeLabel(oldIv.scheduledTime)} was cancelled — the candidate rescheduled to a new slot.`,
           status:         "unread",
         }).catch(() => {});
       }
@@ -81,7 +81,7 @@ async function cancelReplacedInterview(replacingInterviewId, newInterviewId, boo
           body:
             "Hi {{name}},\n\nThe following interview has been cancelled — the candidate rescheduled to a new slot:\n\n" +
             `Candidate: ${oldIv.candidateName || "—"}\nRound: ${oldIv.round || oldIv.templateName || "Interview"}\n` +
-            `Date: ${formatDate(oldIv.scheduledDate)}\nTime: ${oldIv.scheduledTime}\n\n` +
+            `Date: ${formatDate(oldIv.scheduledDate)}\nTime: ${formatTimeLabel(oldIv.scheduledTime)}\n\n` +
             "They'll be interviewed at the new time instead — you may be assigned again depending on availability.\n\n— NxtWave Team",
           recipients: [{ email: oldIv.interviewerEmail, name: oldIv.interviewerName || "Panelist" }],
         }).catch(() => {});
@@ -123,7 +123,7 @@ export async function cancelInterviewByCandidate(interviewId, reason) {
       recipientEmail: iv.interviewerEmail,
       interviewId,
       candidateName:  iv.candidateName,
-      message:        `Your interview with ${iv.candidateName || "a candidate"} on ${formatDate(iv.scheduledDate)} at ${iv.scheduledTime} was cancelled by the candidate. Reason: ${reason}`,
+      message:        `Your interview with ${iv.candidateName || "a candidate"} on ${formatDate(iv.scheduledDate)} at ${formatTimeLabel(iv.scheduledTime)} was cancelled by the candidate. Reason: ${reason}`,
       status:         "unread",
     }).catch(() => {});
   }
@@ -134,7 +134,7 @@ export async function cancelInterviewByCandidate(interviewId, reason) {
       body:
         "Hi {{name}},\n\nThe following interview has been cancelled by the candidate:\n\n" +
         `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
-        `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+        `Date: ${formatDate(iv.scheduledDate)}\nTime: ${formatTimeLabel(iv.scheduledTime)}\n` +
         `Reason: ${reason}\n\n— NxtWave Team`,
       recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || "Panelist" }],
     }).catch(() => {});
@@ -210,7 +210,7 @@ export async function confirmSelfBooking(inviteId) {
       recipientEmail: ivr.email,
       interviewId,
       candidateName:  invite.candidateName,
-      message:        `You have a new interview with ${invite.candidateName} on ${formatDate(invite.bookedDate)} at ${invite.bookedTime}.`,
+      message:        `You have a new interview with ${invite.candidateName} on ${formatDate(invite.bookedDate)} at ${formatTimeLabel(invite.bookedTime)}.`,
       status:         "unread",
     }).catch(() => {});
   }
@@ -221,7 +221,7 @@ export async function confirmSelfBooking(inviteId) {
       body:
         `Hi ${ivr.displayName || ivr.email},\n\nYou have a new interview scheduled:\n\n` +
         `Candidate: ${invite.candidateName || "—"}\nRound: ${roundLabel}\n` +
-        `Date: ${formatDate(invite.bookedDate)}\nTime: ${invite.bookedTime}\nDuration: ${durationMinutes} minutes\n` +
+        `Date: ${formatDate(invite.bookedDate)}\nTime: ${formatTimeLabel(invite.bookedTime)}\nDuration: ${durationMinutes} minutes\n` +
         (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
         "\nThank you.",
       recipients: [{ email: ivr.email, name: ivr.displayName || ivr.email }],
@@ -253,7 +253,7 @@ export async function confirmSelfBooking(inviteId) {
       subject: `Interview Confirmed — ${roundLabel}`,
       body:
         `Hi ${invite.candidateName},\n\nYour interview has been confirmed:\n\n` +
-        `Round: ${roundLabel}\nDate: ${formatDate(invite.bookedDate)}\nTime: ${invite.bookedTime}\n` +
+        `Round: ${roundLabel}\nDate: ${formatDate(invite.bookedDate)}\nTime: ${formatTimeLabel(invite.bookedTime)}\n` +
         `Your interview has been scheduled for ${durationMinutes} minutes.\n` +
         (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
         instructionsBlock + referenceBlock +

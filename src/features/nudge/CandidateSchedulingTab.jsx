@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import {
   CalendarRange, Users, Send, Download, Check, X, Copy, CheckCheck, Search, History,
 } from "lucide-react";
-import { formatDate, formatDateTime } from "../../utils/dates";
+import { formatDate, formatDateTime, formatTimeLabel } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
 import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
@@ -478,7 +478,7 @@ export default function CandidateSchedulingTab({
                   await freeSlotsForInterview(oldIv.interviewerId, oldIv.scheduledDate, oldIv.scheduledTime, oldIv.duration).catch(() => {});
                 }
                 await markInterviewCancelled(inv.replacingInterviewId, {
-                  reason: `Rescheduled by candidate — picked a new slot on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`
+                  reason: `Rescheduled by candidate — picked a new slot on ${formatDate(inv.bookedDate)} at ${formatTimeLabel(inv.bookedTime)}.`
                     + (inv.rescheduleReason ? ` Reason: ${inv.rescheduleReason}` : ""),
                   cancelledBy: "admin",
                 });
@@ -489,7 +489,7 @@ export default function CandidateSchedulingTab({
                     body:
                       `Hi {{name}},\n\nThe following interview has been cancelled — the candidate rescheduled to a new slot:\n\n` +
                       `Candidate: ${oldIv.candidateName || "—"}\nRound: ${oldIv.round || oldIv.templateName || "Interview"}\n` +
-                      `Date: ${formatDate(oldIv.scheduledDate)}\nTime: ${oldIv.scheduledTime}\n\n` +
+                      `Date: ${formatDate(oldIv.scheduledDate)}\nTime: ${formatTimeLabel(oldIv.scheduledTime)}\n\n` +
                       `They'll be interviewed at the new time instead — you may be assigned again depending on availability.\n\n— NxtWave Team`,
                     recipients: [{ email: oldIv.interviewerEmail, name: oldIv.interviewerName || "Panelist" }],
                   }).catch(() => {});
@@ -531,7 +531,7 @@ export default function CandidateSchedulingTab({
           recipientEmail: ivr.email,
           interviewId:    id,
           candidateName:  inv.candidateName,
-          message:        `You have a new interview with ${inv.candidateName} on ${formatDate(inv.bookedDate)} at ${inv.bookedTime}.`,
+          message:        `You have a new interview with ${inv.candidateName} on ${formatDate(inv.bookedDate)} at ${formatTimeLabel(inv.bookedTime)}.`,
           status:         "unread",
         }).catch(() => {});
       }
@@ -542,7 +542,7 @@ export default function CandidateSchedulingTab({
           body:
             `Hi ${ivr.displayName || ivr.email},\n\nYou have a new interview scheduled:\n\n` +
             `Candidate: ${inv.candidateName || "—"}\nRound: ${roundLabel}\n` +
-            `Date: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\nDuration: ${durationMinutes} minutes\n` +
+            `Date: ${formatDate(inv.bookedDate)}\nTime: ${formatTimeLabel(inv.bookedTime)}\nDuration: ${durationMinutes} minutes\n` +
             (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
             `\nThank you.`,
           recipients: [{ email: ivr.email, name: ivr.displayName || ivr.email }],
@@ -578,7 +578,7 @@ export default function CandidateSchedulingTab({
           subject: `Interview Confirmed — ${roundLabel}`,
           body:
             `Hi ${inv.candidateName},\n\nYour interview has been confirmed:\n\n` +
-            `Round: ${roundLabel}\nDate: ${formatDate(inv.bookedDate)}\nTime: ${inv.bookedTime}\n` +
+            `Round: ${roundLabel}\nDate: ${formatDate(inv.bookedDate)}\nTime: ${formatTimeLabel(inv.bookedTime)}\n` +
             `Your interview has been scheduled for ${durationMinutes} minutes.\n` +
             (result?.meetLink ? `Meeting Link: ${result.meetLink}\n` : "") +
             instructionsBlock + referenceBlock +
@@ -1352,7 +1352,7 @@ export default function CandidateSchedulingTab({
                   <p className="text-xs text-gray-400">{inv.candidateEmail}</p>
                   <div className="flex gap-4 mt-1.5">
                     <span className="text-xs font-semibold text-brand-700">{inv.templateName}</span>
-                    <span className="text-xs text-gray-600">{formatDate(inv.bookedDate)} · {inv.bookedTime}</span>
+                    <span className="text-xs text-gray-600">{formatDate(inv.bookedDate)} · {formatTimeLabel(inv.bookedTime)}</span>
                     <span className="text-xs text-gray-400">{users.find(u => u.id === inv.bookedInterviewerId)?.displayName || "Interviewer"}</span>
                   </div>
                   {/* This booking replaces an existing interview (see
@@ -1495,7 +1495,7 @@ export default function CandidateSchedulingTab({
             <div className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
               <p className="text-sm font-bold text-gray-900">{rejectModal.candidateName}</p>
               <p className="text-xs text-gray-500">
-                {rejectModal.round || rejectModal.templateName} · {formatDate(rejectModal.bookedDate)} at {rejectModal.bookedTime}
+                {rejectModal.round || rejectModal.templateName} · {formatDate(rejectModal.bookedDate)} at {formatTimeLabel(rejectModal.bookedTime)}
               </p>
             </div>
             <div>

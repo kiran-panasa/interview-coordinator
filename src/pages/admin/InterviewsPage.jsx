@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   Plus, Upload, X, Video, Archive, ArchiveRestore, Inbox, Link2, Search, FileSpreadsheet, Loader2, Sparkles, CalendarPlus,
 } from "lucide-react";
-import { formatDate, parseInterviewStart, compareTimeLabels } from "../../utils/dates";
+import { formatDate, parseInterviewStart, compareTimeLabels, formatTimeLabel } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
 import { DURATIONS } from "../../constants/durations";
 import { collapseSlotsByDuration } from "../../utils/slotAvailability";
@@ -86,7 +86,7 @@ function buildInterviewChanges(before, after) {
   push("candidateId",   "Candidate",           before.candidateName,   after.candidateName);
   push("interviewerId", "Interviewer",         before.interviewerName, after.interviewerName);
   push("scheduledDate", "Date",                before.scheduledDate,   after.scheduledDate);
-  push("scheduledTime", "Time",                before.scheduledTime,   after.scheduledTime);
+  push("scheduledTime", "Time",                formatTimeLabel(before.scheduledTime), formatTimeLabel(after.scheduledTime));
   push("duration",      "Duration (minutes)",  before.duration,        after.duration);
   push("round",         "Round",               before.round,          after.round);
   push("templateId",    "Evaluation Template", before.templateName,   after.templateName);
@@ -521,7 +521,7 @@ export default function InterviewsPage() {
                 recipientEmail: editTarget.interviewerEmail,
                 interviewId:    editTarget.id,
                 candidateName:  editTarget.candidateName,
-                message:        `Your interview with ${editTarget.candidateName || "a candidate"} on ${formatDate(editTarget.scheduledDate)} at ${editTarget.scheduledTime} was cancelled. Reason: ${interviewerChangeReason}`,
+                message:        `Your interview with ${editTarget.candidateName || "a candidate"} on ${formatDate(editTarget.scheduledDate)} at ${formatTimeLabel(editTarget.scheduledTime)} was cancelled. Reason: ${interviewerChangeReason}`,
                 status:         "unread",
               }).catch(() => {});
             }
@@ -564,7 +564,7 @@ export default function InterviewsPage() {
                   recipientEmail: data.interviewerEmail,
                   interviewId:    newId,
                   candidateName:  data.candidateName,
-                  message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime}.`,
+                  message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${formatTimeLabel(form.scheduledTime)}.`,
                   status:         "unread",
                 }).catch(() => {});
               }
@@ -575,7 +575,7 @@ export default function InterviewsPage() {
                 recipientEmail: data.interviewerEmail,
                 interviewId:    newId,
                 candidateName:  data.candidateName,
-                message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`,
+                message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${formatTimeLabel(form.scheduledTime)} — please Accept or Decline.`,
                 status:         "unread",
               }).catch(() => {});
               if (APPS_SCRIPT_URL && data.interviewerEmail) {
@@ -585,7 +585,7 @@ export default function InterviewsPage() {
                   body:
                     `Hi ${data.interviewerName || "there"},\n\nYou have a new interview scheduled:\n\n` +
                     `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
-                    `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n` +
+                    `Date: ${formatDate(form.scheduledDate)}\nTime: ${formatTimeLabel(form.scheduledTime)}\n\n` +
                     `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${newId}\n\n` +
                     `Thank you.`,
                   recipients: [{ email: data.interviewerEmail, name: data.interviewerName || data.interviewerEmail }],
@@ -602,7 +602,7 @@ export default function InterviewsPage() {
                 subject: `Interview Updated: ${form.round || "Interview"}`,
                 body:
                   `Hi ${data.candidateName},\n\nThis interview has been updated:\n\n` +
-                  `Round: ${form.round}\nDate: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n\n— NxtWave Team`,
+                  `Round: ${form.round}\nDate: ${formatDate(form.scheduledDate)}\nTime: ${formatTimeLabel(form.scheduledTime)}\n\n— NxtWave Team`,
                 recipients: [{ email: data.candidateEmail, name: data.candidateName }],
               }).catch(() => {});
             }
@@ -762,7 +762,7 @@ export default function InterviewsPage() {
                   `If you have any questions, please reach out to the interview coordination team.\n\n— NxtWave Team`
                 : `Hi ${r.name},\n\nThis interview has been updated:\n\n` +
                   `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
-                  `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n` +
+                  `Date: ${formatDate(form.scheduledDate)}\nTime: ${formatTimeLabel(form.scheduledTime)}\n` +
                   (data.meetLink ? `Meeting Link: ${data.meetLink}\n` : "") +
                   (r.kind === "assigned"
                     ? (resultingStatus === "pending_acceptance"
@@ -787,8 +787,8 @@ export default function InterviewsPage() {
             interviewId:    editTarget.id,
             candidateName:  data.candidateName,
             message:        resultingStatus === "pending_acceptance"
-              ? `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`
-              : `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — already confirmed, no action needed.`,
+              ? `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${formatTimeLabel(form.scheduledTime)} — please Accept or Decline.`
+              : `You've been assigned to an interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${formatTimeLabel(form.scheduledTime)} — already confirmed, no action needed.`,
             status:         "unread",
           }).catch(() => {});
         }
@@ -863,7 +863,7 @@ export default function InterviewsPage() {
             recipientEmail: data.interviewerEmail,
             interviewId:    id,
             candidateName:  data.candidateName,
-            message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${form.scheduledTime} — please Accept or Decline.`,
+            message:        `You have a new interview with ${data.candidateName || "a candidate"} on ${formatDate(form.scheduledDate)} at ${formatTimeLabel(form.scheduledTime)} — please Accept or Decline.`,
             status:         "unread",
           }).catch(() => {});
           if (APPS_SCRIPT_URL && data.interviewerEmail) {
@@ -873,7 +873,7 @@ export default function InterviewsPage() {
               body:
                 `Hi ${data.interviewerName || "there"},\n\nYou have a new interview scheduled:\n\n` +
                 `Candidate: ${data.candidateName || "—"}\nRound: ${form.round}\n` +
-                `Date: ${formatDate(form.scheduledDate)}\nTime: ${form.scheduledTime}\n` +
+                `Date: ${formatDate(form.scheduledDate)}\nTime: ${formatTimeLabel(form.scheduledTime)}\n` +
                 (data.meetLink ? `Meeting Link: ${data.meetLink}\n` : "") +
                 `\nPlease log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${id}\n\n` +
                 `Thank you.`,
@@ -1262,7 +1262,7 @@ export default function InterviewsPage() {
           body:
             `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
             `Round: ${iv.round || iv.templateName || "Interview"}\n` +
-            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${formatTimeLabel(iv.scheduledTime)}\n` +
             `Reason: ${reason.trim()}\n\n` +
             `Please log into your dashboard and pick a new slot at your convenience — you'll find it under the Notifications tab.\n\n— NxtWave Team`,
           recipients: [{ email: iv.candidateEmail, name: iv.candidateName || "Candidate" }],
@@ -1275,7 +1275,7 @@ export default function InterviewsPage() {
           body:
             `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
             `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
-            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n\n` +
+            `Date: ${formatDate(iv.scheduledDate)}\nTime: ${formatTimeLabel(iv.scheduledTime)}\n\n` +
             `If you have any questions, please reach out to the interview coordination team.\n\n— NxtWave Team`,
           recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || "Panelist" }],
         }).catch(() => {});
@@ -1294,7 +1294,7 @@ export default function InterviewsPage() {
           recipientEmail: iv.interviewerEmail,
           interviewId:    iv.id,
           candidateName:  iv.candidateName,
-          message:        `Your interview with ${iv.candidateName || "a candidate"} on ${formatDate(iv.scheduledDate)} at ${iv.scheduledTime} was cancelled. Reason: ${reason.trim()}`,
+          message:        `Your interview with ${iv.candidateName || "a candidate"} on ${formatDate(iv.scheduledDate)} at ${formatTimeLabel(iv.scheduledTime)} was cancelled. Reason: ${reason.trim()}`,
           status:         "unread",
         }).catch(() => {});
       }
@@ -1632,7 +1632,7 @@ export default function InterviewsPage() {
           recipientEmail: interviewer.email,
           interviewId:    id,
           candidateName:  candidate.name,
-          message:        `You have a new interview with ${candidate.name || "a candidate"} on ${formatDate(scheduledDate)} at ${scheduledTime} — please Accept or Decline.`,
+          message:        `You have a new interview with ${candidate.name || "a candidate"} on ${formatDate(scheduledDate)} at ${formatTimeLabel(scheduledTime)} — please Accept or Decline.`,
           status:         "unread",
         }).catch(() => {});
         if (APPS_SCRIPT_URL) {
@@ -1642,7 +1642,7 @@ export default function InterviewsPage() {
             body:
               `Hi ${interviewer.displayName || "there"},\n\nYou have a new interview scheduled:\n\n` +
               `Candidate: ${candidate.name || "—"}\nRound: ${row.raw.round}\n` +
-              `Date: ${formatDate(scheduledDate)}\nTime: ${scheduledTime}\n\n` +
+              `Date: ${formatDate(scheduledDate)}\nTime: ${formatTimeLabel(scheduledTime)}\n\n` +
               `Please log in to accept or decline:\n${window.location.origin}/interviewer/interviews/${id}\n\nThank you.`,
             recipients: [{ email: interviewer.email, name: interviewer.displayName || interviewer.email }],
           }).catch(() => {});
@@ -2270,7 +2270,7 @@ export default function InterviewsPage() {
                 <td className="px-4 py-3 text-gray-600">{iv.round}</td>
                 <td className="px-4 py-3 whitespace-nowrap">
                   <p className="text-gray-700">{formatDate(iv.scheduledDate)}</p>
-                  <p className="text-xs text-gray-400">{iv.scheduledTime} · {iv.duration || 60}m</p>
+                  <p className="text-xs text-gray-400">{formatTimeLabel(iv.scheduledTime)} · {iv.duration || 60}m</p>
                 </td>
                 <td className="px-4 py-3">
                   {iv.meetLink ? (
@@ -2302,7 +2302,7 @@ export default function InterviewsPage() {
                           S{i + 1}:
                           {s.meetLink && (
                             <a href={s.meetLink} target="_blank" rel="noreferrer"
-                              title={`Session ${i + 1} Meet — ${s.scheduledDate || ""} ${s.scheduledTime || ""}`}
+                              title={`Session ${i + 1} Meet — ${s.scheduledDate || ""} ${formatTimeLabel(s.scheduledTime)}`}
                               className="text-emerald-600 hover:underline">Meet</a>
                           )}
                           {s.meetingRecordingUrl && (

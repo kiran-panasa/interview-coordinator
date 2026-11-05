@@ -5,7 +5,7 @@ import {
   ArrowRight, CalendarClock, UserPlus,
 } from "lucide-react";
 import { useAllInterviews, usePendingUsers } from "../../hooks/queries";
-import { timeToMinutes } from "../../utils/dates";
+import { timeToMinutes, formatTimeLabel } from "../../utils/dates";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
 import { SkeletonStatCards, SkeletonRows } from "../../components/Skeleton";
@@ -109,7 +109,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-right flex-shrink-0 w-24">
                     <p className="text-xs font-medium text-gray-700">{i.scheduledDate}</p>
-                    <p className="text-xs text-gray-400">{i.scheduledTime}</p>
+                    <p className="text-xs text-gray-400">{formatTimeLabel(i.scheduledTime)}</p>
                   </div>
                   <Badge value={i.status} />
                 </motion.div>

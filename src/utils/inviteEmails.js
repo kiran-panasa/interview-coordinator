@@ -1,5 +1,5 @@
 import { callAppsScript } from "../lib/appsScript";
-import { formatDate } from "./dates";
+import { formatDate, formatTimeLabel } from "./dates";
 import { getPreInterviewResources } from "../api/firestore";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -22,7 +22,7 @@ export async function sendInviteConfirmationEmails(iv, meetLink) {
       body:
         `Hi ${iv.interviewerName || "there"},\n\nYour interview meeting link is ready:\n\n` +
         `Candidate: ${iv.candidateName || "—"}\nRound: ${iv.round || iv.templateName || "Interview"}\n` +
-        `Date: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+        `Date: ${formatDate(iv.scheduledDate)}\nTime: ${formatTimeLabel(iv.scheduledTime)}\n` +
         `Meeting Link: ${meetLink}\n\n` +
         `Thank you.`,
       recipients: [{ email: iv.interviewerEmail, name: iv.interviewerName || iv.interviewerEmail }],
@@ -56,7 +56,7 @@ export async function sendInviteConfirmationEmails(iv, meetLink) {
       subject: `Interview Confirmed — ${iv.round || iv.templateName || "Interview"}`,
       body:
         `Hi ${iv.candidateName || "there"},\n\nYour interview has been confirmed:\n\n` +
-        `Round: ${iv.round || iv.templateName || "Interview"}\nDate: ${formatDate(iv.scheduledDate)}\nTime: ${iv.scheduledTime}\n` +
+        `Round: ${iv.round || iv.templateName || "Interview"}\nDate: ${formatDate(iv.scheduledDate)}\nTime: ${formatTimeLabel(iv.scheduledTime)}\n` +
         `Meeting Link: ${meetLink}\n` +
         instructionsBlock + referenceBlock +
         `\nNxtWave Interview Team`,

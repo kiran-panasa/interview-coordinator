@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, Fragment } from "react";
-import { formatDateLong, formatDate } from "../../utils/dates";
+import { formatDateLong, formatDate, formatTimeLabel } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../../AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -472,7 +472,7 @@ export default function AvailabilityPage() {
       return (
         <span key={s.id}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">
-          {s.time}
+          {formatTimeLabel(s.time)}
           <span className="opacity-60 mx-0.5">· Booked</span>
           {s.flagged ? (
             <span className="flex items-center gap-1">
@@ -503,7 +503,7 @@ export default function AvailabilityPage() {
     return (
       <span key={s.id}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700">
-        {s.time}
+        {formatTimeLabel(s.time)}
         {isConfirming ? (
           <InlineConfirm
             message="Remove?"
@@ -1202,7 +1202,7 @@ export default function AvailabilityPage() {
                                 className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:cursor-not-allowed disabled:opacity-30" />
                             </td>
                             <td className="px-4 py-3 text-gray-400 text-xs pl-9" />
-                            <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">{s.time}</td>
+                            <td className="px-4 py-3 text-gray-700 font-mono text-xs whitespace-nowrap">{formatTimeLabel(s.time)}</td>
                             <td className="px-4 py-3">
                               <span className={`text-[11px] font-semibold border px-2 py-0.5 rounded-full ${STATUS_BADGE_CLS[status]}`}>
                                 {STATUS_LABEL[status]}

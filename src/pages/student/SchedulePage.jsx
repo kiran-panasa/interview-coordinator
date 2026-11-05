@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { formatDate, formatDateLong, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel } from "../../utils/dates";
+import { formatDate, formatDateLong, parseInterviewStart, timeToMinutes, hhmmToMinutes, addMinutesToTimeLabel, formatTimeLabel } from "../../utils/dates";
 import { useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "../../firebase";
@@ -248,7 +248,7 @@ export default function SchedulePage() {
         `• Round:       ${round}\n` +
         `• Interviewer: ${selected.interviewerName || "-"}\n` +
         `• Date:        ${formatDate(selected.date)}\n` +
-        `• Time:        ${selected.time}\n\n` +
+        `• Time:        ${formatTimeLabel(selected.time)}\n\n` +
         `Please review and confirm it from the Nudge → Candidates tab:\n${window.location.origin}/admin/nudge\n\n` +
         "— NxtWave Interview Coordinator";
       await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
@@ -365,7 +365,7 @@ export default function SchedulePage() {
             <h2 className="text-lg font-bold text-gray-900 mb-2">Already Scheduled</h2>
             <p className="text-sm text-gray-500">Your interview has been confirmed. Check your email for the calendar invite.</p>
             {invite?.bookedDate && (
-              <p className="mt-3 text-sm font-semibold text-brand-700">{formatDateLong(invite.bookedDate)} · {invite.bookedTime}</p>
+              <p className="mt-3 text-sm font-semibold text-brand-700">{formatDateLong(invite.bookedDate)} · {formatTimeLabel(invite.bookedTime)}</p>
             )}
           </div>
         </Card>
@@ -384,7 +384,7 @@ export default function SchedulePage() {
             <h2 className="text-lg font-bold text-gray-900 mb-2">Slot Reserved!</h2>
             {bookedInfo && (
               <p className="text-base font-semibold text-brand-700 mb-3">
-                {formatDateLong(bookedInfo.date)} · {bookedInfo.time}
+                {formatDateLong(bookedInfo.date)} · {formatTimeLabel(bookedInfo.time)}
               </p>
             )}
             <p className="text-sm text-gray-500 leading-relaxed">
@@ -523,7 +523,7 @@ export default function SchedulePage() {
                                   ? "bg-brand-600 text-white border-brand-600"
                                   : "bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:bg-brand-50"
                             }`}>
-                            {s.time} – {slotEnd}
+                            {formatTimeLabel(s.time)} – {formatTimeLabel(slotEnd)}
                           </button>
                         );
                       })}
@@ -535,7 +535,7 @@ export default function SchedulePage() {
 
             {selected && (
               <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3 text-sm text-brand-800 font-medium">
-                Selected: {formatDateLong(selected.date)} · {selected.time}
+                Selected: {formatDateLong(selected.date)} · {formatTimeLabel(selected.time)}
               </div>
             )}
 

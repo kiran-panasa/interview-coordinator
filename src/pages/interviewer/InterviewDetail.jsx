@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { formatDate, formatDateShort, parseInterviewStart, addMinutesToTimeLabel } from "../../utils/dates";
+import { formatDate, formatDateShort, parseInterviewStart, addMinutesToTimeLabel, formatTimeLabel } from "../../utils/dates";
 import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -207,7 +207,7 @@ export default function InterviewDetail() {
         `• Candidate:   ${iv.candidateName}\n` +
         `• Round:       ${round}\n` +
         `• Date:        ${formatDate(iv.scheduledDate)}\n` +
-        `• Time:        ${iv.scheduledTime}\n\n` +
+        `• Time:        ${formatTimeLabel(iv.scheduledTime)}\n\n` +
         actionLine +
         "— NxtWave Interview Coordinator";
       await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
@@ -236,7 +236,7 @@ export default function InterviewDetail() {
         `• Candidate:   ${iv.candidateName}\n` +
         `• Round:       ${round}\n` +
         `• Date:        ${formatDate(iv.scheduledDate)}\n` +
-        `• Time:        ${iv.scheduledTime}\n` +
+        `• Time:        ${formatTimeLabel(iv.scheduledTime)}\n` +
         `• Reason:      ${reason}\n\n` +
         `Reassign a different interviewer for this candidate from the Interviews page (kebab menu → "Reassign Interviewer"):\n${window.location.origin}/admin/interviews\n\n` +
         "— NxtWave Interview Coordinator";
@@ -340,7 +340,7 @@ export default function InterviewDetail() {
         `• Candidate:   ${iv.candidateName}\n` +
         `• Round:       ${round}\n` +
         `• Date:        ${formatDate(iv.scheduledDate)}\n` +
-        `• Time:        ${iv.scheduledTime}\n` +
+        `• Time:        ${formatTimeLabel(iv.scheduledTime)}\n` +
         `• Reason:      ${reason}\n\n` +
         `The candidate has been notified. Reassign a different interviewer from the Interviews page if this round still needs to happen:\n${window.location.origin}/admin/interviews\n\n` +
         "— NxtWave Interview Coordinator";
@@ -386,7 +386,7 @@ export default function InterviewDetail() {
           body:
             `Hi {{name}},\n\nThe following interview has been cancelled:\n\n` +
             `Round: ${interview.round || interview.templateName || "Interview"}\n` +
-            `Date: ${formatDate(interview.scheduledDate)}\nTime: ${interview.scheduledTime}\n\n` +
+            `Date: ${formatDate(interview.scheduledDate)}\nTime: ${formatTimeLabel(interview.scheduledTime)}\n\n` +
             `Our team will connect with you again shortly.\n\n— NxtWave Team`,
           recipients: [{ email: interview.candidateEmail, name: interview.candidateName || "Candidate" }],
         }).catch(() => {});
@@ -656,8 +656,8 @@ export default function InterviewDetail() {
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Time</p>
             <p className="text-sm font-semibold text-gray-800">
-              {interview.scheduledTime}
-              {interview.scheduledTime && ` – ${addMinutesToTimeLabel(interview.scheduledTime, interview.duration || 60)}`}
+              {formatTimeLabel(interview.scheduledTime)}
+              {interview.scheduledTime && ` – ${formatTimeLabel(addMinutesToTimeLabel(interview.scheduledTime, interview.duration || 60))}`}
             </p>
           </div>
           <div>
@@ -721,7 +721,7 @@ export default function InterviewDetail() {
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mb-1.5">
                   <span className="font-semibold text-gray-700">Session {i + 1}</span>
                   <span>{s.interviewerName || s.interviewerEmail || "Unknown panelist"}</span>
-                  {s.scheduledDate && <span>{formatDate(s.scheduledDate)}{s.scheduledTime ? ` · ${s.scheduledTime}` : ""}</span>}
+                  {s.scheduledDate && <span>{formatDate(s.scheduledDate)}{s.scheduledTime ? ` · ${formatTimeLabel(s.scheduledTime)}` : ""}</span>}
                 </div>
                 {s.partialCompletionReason && (
                   <p className="text-xs text-amber-600 mb-1.5">Stopped: {s.partialCompletionReason}</p>
@@ -761,7 +761,7 @@ export default function InterviewDetail() {
           className="bg-amber-50 border border-amber-200 rounded-[1.75rem] p-5 mb-5">
           <p className="text-sm font-semibold text-amber-800 mb-1">Awaiting your response</p>
           <p className="text-xs text-amber-600 mb-4">
-            {formatDate(interview.scheduledDate)} at {interview.scheduledTime} · {interview.round}
+            {formatDate(interview.scheduledDate)} at {formatTimeLabel(interview.scheduledTime)} · {interview.round}
           </p>
           <div className="flex gap-3">
             <button onClick={handleAccept} disabled={saving}
@@ -794,7 +794,7 @@ export default function InterviewDetail() {
           className="bg-amber-50 border border-amber-200 rounded-[1.75rem] p-5 mb-5">
           <p className="text-sm font-bold text-amber-800 mb-1">Did the candidate join?</p>
           <p className="text-xs text-amber-600 mb-4">
-            Scheduled for {interview.scheduledTime} · {formatDate(interview.scheduledDate)}
+            Scheduled for {formatTimeLabel(interview.scheduledTime)} · {formatDate(interview.scheduledDate)}
           </p>
           <div className="flex gap-3">
             <button onClick={handleCandidateJoined} disabled={saving}
@@ -1020,7 +1020,7 @@ export default function InterviewDetail() {
                   <p className="text-sm font-semibold text-gray-700">Mark as Completed</p>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {!hasFeedback && "Submit the evaluation above first."}
-                    {hasFeedback && !pastTime && `Available after interview start time (${interview.scheduledTime}).`}
+                    {hasFeedback && !pastTime && `Available after interview start time (${formatTimeLabel(interview.scheduledTime)}).`}
                     {canComplete && "Ready — interview time has passed and evaluation is submitted."}
                   </p>
                 </div>

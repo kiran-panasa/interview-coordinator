@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from "react";
-import { formatDate, parseInterviewStart } from "../../utils/dates";
+import { formatDate, parseInterviewStart, formatTimeLabel } from "../../utils/dates";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
@@ -161,7 +161,7 @@ export default function MyInterviewsPage() {
                     <td className="px-4 py-3 text-gray-600">{i.roleAppliedFor || "—"}</td>
                     <td className="px-4 py-3 text-gray-600">{i.round || "—"}</td>
                     <td className="px-4 py-3 text-gray-700 whitespace-nowrap">{formatDate(i.scheduledDate)}</td>
-                    <td className="px-4 py-3 text-gray-600">{i.scheduledTime || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatTimeLabel(i.scheduledTime)}</td>
                     <td className="px-4 py-3 text-gray-600">{i.duration || 60} min</td>
                     <td className="px-4 py-3">
                       <Badge value={i.status} />
