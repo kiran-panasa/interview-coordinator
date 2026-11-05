@@ -9,7 +9,7 @@ import {
   createScheduleInvite, updateScheduleInvite, deleteScheduleInvite,
   markSlotFree, freeSlotsHeldByInvite, freeSlotsForInterview, createInterview, getTemplate, createNotification,
   logInviteHistory, getPreInterviewResources, updateCandidate,
-  ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory,
+  ensureRoundExists, getScheduleInvitesByEmail, getInviteHistory, getScheduleInvite,
 } from "../../api/firestore";
 import { scheduleInterviewMeet, getInterview, markInterviewCancelled, updateInterview, getInterviewsForCandidateTemplate } from "../../api/interviews";
 import { callAppsScript } from "../../lib/appsScript";
@@ -400,6 +400,20 @@ export default function CandidateSchedulingTab({
     confirmingIdsRef.current.add(inv.id);
     setConfirmingId(inv.id);
     try {
+      // Re-fetch fresh before trusting anything on `inv` — it's a snapshot
+      // from this list's last render, and the whole point of the
+      // idempotency check just below is to detect "an earlier attempt
+      // already wrote interviewId here." Trusting the stale prop instead
+      // of the real current doc defeats that check the moment this list
+      // hasn't re-rendered yet (or the admin retries much later, in a
+      // fresh render that still happened to pass a stale object) — exactly
+      // what let a retry create a second, fully duplicate interview +
+      // Calendar event for the same booking (confirmed on a real booking:
+      // two interview rows, same candidate/interviewer/date/time, only one
+      // with a Meet link).
+      const freshInvite = await getScheduleInvite(inv.id);
+      if (freshInvite) inv = { ...inv, ...freshInvite };
+
       const tmpl = inv.templateId ? await getTemplate(inv.templateId) : null;
       const ivr  = users.find(u => u.id === inv.bookedInterviewerId);
       const roundLabel = inv.round || tmpl?.name || "Interview";
