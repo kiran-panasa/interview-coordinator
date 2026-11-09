@@ -33,8 +33,15 @@ export default function SsoCallbackPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const authToken = searchParams.get("auth_token");
-    if (!authToken) { setError("missing_token"); return; }
+    // Always call the backend, even with no token at all — it already
+    // returns the same "missing_token" error either way (exchangeTokenFor
+    // Session treats an empty token as missing_token too), but routing
+    // through accountsCallback is what gets this logged to
+    // ssoTokenRequestLog with the referer/user-agent that would actually
+    // explain WHERE a broken link with no auth_token came from. Handling
+    // it client-side only (the old short-circuit here) meant this exact
+    // case — confirmed happening — left zero trace anywhere.
+    const authToken = searchParams.get("auth_token") || "";
     (async () => {
       try {
         const res = await fetch(`/api/sso/accounts/callback?auth_token=${encodeURIComponent(authToken)}`, {
