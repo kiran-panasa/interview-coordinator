@@ -178,18 +178,28 @@ async function accountsToken(req, res) {
     return res.status(400).json({ error: "invalid_parameter", message: "user_id is required." });
   }
 
+  // Duplicate candidate records for the SAME student (added twice, e.g. by
+  // two separate bulk uploads) used to make every step below fail — each
+  // one demanded exactly ONE match, so 2 matches was treated as "not
+  // registered" and Forms redirected back with no token (sso_error=
+  // missing_token). Mirrors the mobile-OTP fix (447532b): when more than
+  // one record matches, prefer one that actually has templates assigned.
+  const pickOne = (docs) => docs.length === 0 ? null
+    : docs.length === 1 ? docs[0]
+    : docs.find(d => (d.data().templateIds || []).length > 0) || docs[0];
+
   const snap = await db.collection("candidates").where("uid", "==", userId).get();
-  let candidate = snap.size === 1 ? snap.docs[0] : null;
+  let candidate = pickOne(snap.docs);
   let fallbackUsed = false;
   // Firestore's "==" is exact — a UID saved with invisible leading/trailing
   // whitespace, or differing only in case, looks identical to an admin on
   // screen but silently never matches here. Only runs on the already-slow
   // not-found path (never the common case), and only trusts the fallback
   // when it resolves to exactly one candidate, same as the exact match.
-  if (!candidate && snap.size === 0) {
+  if (!candidate) {
     const allSnap = await db.collection("candidates").get();
     const loose = allSnap.docs.filter(d => (d.data().uid || "").trim().toLowerCase() === userId.toLowerCase());
-    if (loose.length === 1) { candidate = loose[0]; fallbackUsed = true; }
+    if (loose.length > 0) { candidate = pickOne(loose); fallbackUsed = true; }
   }
   // Some candidates' stored uid is simply the WRONG value, not a
   // formatting slip — confirmed by cases where editing a candidate's uid
@@ -208,8 +218,8 @@ async function accountsToken(req, res) {
     if (digits.length === 10) {
       const allSnap = await db.collection("candidates").get();
       const phoneMatches = allSnap.docs.filter(d => (d.data().phone || "").replace(/\D/g, "").slice(-10) === digits);
-      if (phoneMatches.length === 1) {
-        candidate = phoneMatches[0];
+      if (phoneMatches.length > 0) {
+        candidate = pickOne(phoneMatches);
         fallbackUsed = true;
         await candidate.ref.update({ uid: userId }).catch(() => {});
         healedUid = true;
