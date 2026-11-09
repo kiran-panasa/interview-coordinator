@@ -645,8 +645,14 @@ async function otpRequest(req, res) {
   const whatsapp = await sendWhatsAppOtp(phone, otp);
   if (whatsapp.sent) return res.status(200).json({ success: true, channel: "whatsapp" });
 
+  // Never return the OTP itself in the response — anyone who knows a
+  // candidate's phone number (not just the candidate) could otherwise
+  // request a code and read it straight back without ever touching that
+  // phone, bypassing the entire point of an OTP. Server-side log only
+  // (Vercel function logs), reachable by someone with actual project
+  // access, not by any caller of this endpoint.
   console.warn(`OTP for ${phone} (SMS not configured: ${sms.reason}; WhatsApp not configured: ${whatsapp.reason}):`, otp);
-  return res.status(200).json({ success: true, channel: "dev_fallback", devOtp: otp, reason: sms.reason });
+  return res.status(200).json({ success: true, channel: "dev_fallback" });
 }
 
 // ── POST /api/sso/otp/verify ──────────────────────────────────────────────────

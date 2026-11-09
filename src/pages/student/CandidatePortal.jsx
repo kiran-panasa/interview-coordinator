@@ -104,7 +104,7 @@ export default function CandidatePortal() {
   const [phoneError,     setPhoneError]     = useState("");
   const [mobileOtp,      setMobileOtp]      = useState("");
   const [mobileOtpError, setMobileOtpError] = useState("");
-  const [devOtpHint,     setDevOtpHint]     = useState("");
+  const [smsNotConfigured, setSmsNotConfigured] = useState(false);
 
   const handleRequestMobileOtp = async () => {
     setPhoneError("");
@@ -127,9 +127,12 @@ export default function CandidatePortal() {
         setBusy(false);
         return;
       }
-      // Only ever set when WhatsApp delivery isn't configured yet — see
-      // api/sso/otp/request.js. Disappears automatically once it is.
-      setDevOtpHint(data.channel === "dev_fallback" ? data.devOtp : "");
+      // The actual code is never sent back here — only whether delivery
+      // worked, so a caller who merely knows this phone number (not the
+      // candidate holding it) can't read the OTP straight out of this
+      // response. If delivery isn't configured yet, say so honestly
+      // instead of silently claiming a text was sent.
+      setSmsNotConfigured(data.channel === "dev_fallback");
       setStep("mobile-otp");
     } catch {
       setPhoneError("Failed to send code. Please try again.");
@@ -289,9 +292,9 @@ export default function CandidatePortal() {
                   We sent a 6-digit code to <span className="font-semibold">{phone}</span>
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">Code expires in 10 minutes</p>
-                {devOtpHint && (
+                {smsNotConfigured && (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                    SMS isn't configured yet — for testing, your code is <span className="font-bold">{devOtpHint}</span>
+                    SMS delivery isn't set up yet, so this code may not have reached your phone — please check with your team if it doesn't arrive.
                   </p>
                 )}
               </div>
