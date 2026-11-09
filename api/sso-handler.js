@@ -276,7 +276,17 @@ async function accountsCallback(req, res) {
       // the request came from.
       authToken,
       authTokenLength: authToken.length,
+      // req.headers.referer is useless here — it's always this SAME page's
+      // own URL (same-origin fetch), confirmed on every entry logged so
+      // far. browserReferrer (document.referrer, sent by the client) is
+      // the browser's actual navigation history and can show the real
+      // external page. fullSearch is the complete query string the page
+      // actually received — if Forms is sending the token under a
+      // different param name than auth_token, this is what would reveal
+      // it instead of looking identical to a token that's simply absent.
       referer: req.headers.referer || req.headers.referrer || null,
+      browserReferrer: String(req.query?.browser_referrer || ""),
+      fullSearch: String(req.query?.full_search || ""),
       userAgent: req.headers["user-agent"] || null,
     });
     return res.status(401).json({ error: result.error });

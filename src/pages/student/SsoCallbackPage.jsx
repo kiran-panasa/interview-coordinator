@@ -47,12 +47,28 @@ export default function SsoCallbackPage() {
     // it client-side only (the old short-circuit here) meant this exact
     // case — confirmed happening — left zero trace anywhere.
     const authToken = searchParams.get("auth_token") || "";
+    // The HTTP Referer header on this fetch is always THIS page's own URL
+    // (same-origin request), never whatever external site actually
+    // navigated the browser here — confirmed: every missing_token log
+    // entry so far shows referer "https://.../sso/callback" itself,
+    // telling us nothing. document.referrer is the browser's real
+    // navigation history and DOES carry the external page. Sending the
+    // full query string too, in case Forms is attaching the token under
+    // a different param name entirely rather than not sending one at all
+    // — that would otherwise look identical to a genuinely missing token.
+    const browserReferrer = document.referrer || "";
+    const fullSearch = window.location.search || "";
     (async () => {
       try {
-        const res = await fetch(`/api/sso/accounts/callback?auth_token=${encodeURIComponent(authToken)}`, {
-          method: "POST",
-          credentials: "include", // so the Set-Cookie session is actually stored
-        });
+        const res = await fetch(
+          `/api/sso/accounts/callback?auth_token=${encodeURIComponent(authToken)}` +
+          `&browser_referrer=${encodeURIComponent(browserReferrer)}` +
+          `&full_search=${encodeURIComponent(fullSearch)}`,
+          {
+            method: "POST",
+            credentials: "include", // so the Set-Cookie session is actually stored
+          }
+        );
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {
           setError(data.error || "sign_in_failed");
