@@ -14,11 +14,8 @@ import Button from "../../components/Button";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
-// Hardcoded — see the matching note in SsoCallbackPage.jsx. The
-// VITE_FORMS_SSO_URL/VITE_FORMS_SSO_LINK_ID env vars are set to a domain
-// (forms-gamma.earlywave.in) that doesn't serve a working page at all;
-// this is the actual link students are given.
-const FORMS_SIGN_IN_URL = "https://forms.ccbp.in/mid/interview-coordinator";
+const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
+const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
 
 async function callAppsScript(payload) {
   if (!APPS_SCRIPT_URL) return;
@@ -78,11 +75,9 @@ const stepMotion = {
 // sign-in link expired or got reused (e.g. a link-preview bot pre-fetching
 // it) just landed back on the plain sign-in page with zero explanation.
 const SSO_ERROR_COPY = {
-  token_expired: "That sign-in link expired before you finished — tap \"Sign In via Student Account\" again to get a fresh one.",
-  token_already_used: "That sign-in link was already used — tap \"Sign In via Student Account\" again to get a fresh one.",
-  invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Student Account\" again.",
-  missing_token: "That sign-in link didn't come through correctly — try \"Sign In via Student Account\" again, or sign in with your mobile number below instead.",
-  network_error: "We couldn't reach the sign-in service — please check your connection and try again.",
+  token_expired: "That sign-in link expired before you finished — tap \"Sign In via Academy Account\" again to get a fresh one.",
+  token_already_used: "That sign-in link was already used — tap \"Sign In via Academy Account\" again to get a fresh one.",
+  invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Academy Account\" again.",
   student_not_found: "We couldn't find your account. Please check with your team.",
 };
 
@@ -106,7 +101,7 @@ export default function CandidatePortal() {
   const [phoneError,     setPhoneError]     = useState("");
   const [mobileOtp,      setMobileOtp]      = useState("");
   const [mobileOtpError, setMobileOtpError] = useState("");
-  const [smsNotConfigured, setSmsNotConfigured] = useState(false);
+  const [devOtpHint,     setDevOtpHint]     = useState("");
 
   const handleRequestMobileOtp = async () => {
     setPhoneError("");
@@ -129,12 +124,9 @@ export default function CandidatePortal() {
         setBusy(false);
         return;
       }
-      // The actual code is never sent back here — only whether delivery
-      // worked, so a caller who merely knows this phone number (not the
-      // candidate holding it) can't read the OTP straight out of this
-      // response. If delivery isn't configured yet, say so honestly
-      // instead of silently claiming a text was sent.
-      setSmsNotConfigured(data.channel === "dev_fallback");
+      // Only ever set when WhatsApp delivery isn't configured yet — see
+      // api/sso/otp/request.js. Disappears automatically once it is.
+      setDevOtpHint(data.channel === "dev_fallback" ? data.devOtp : "");
       setStep("mobile-otp");
     } catch {
       setPhoneError("Failed to send code. Please try again.");
@@ -246,14 +238,18 @@ export default function CandidatePortal() {
                 <p className="text-sm text-gray-500 mt-1">Enter your registered mobile number</p>
               </div>
               <div className="space-y-4">
-                <a
-                  href={FORMS_SIGN_IN_URL}
-                  className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
-                  <LogIn className="w-4 h-4" /> Sign In via Student Account
-                </a>
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
-                </div>
+                {FORMS_SSO_LINK_ID && (
+                  <>
+                    <a
+                      href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
+                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
+                      <LogIn className="w-4 h-4" /> Sign In via Academy Account
+                    </a>
+                    <div className="flex items-center gap-3 text-xs text-gray-400">
+                      <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
+                    </div>
+                  </>
+                )}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
                     Mobile Number
@@ -294,9 +290,9 @@ export default function CandidatePortal() {
                   We sent a 6-digit code to <span className="font-semibold">{phone}</span>
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">Code expires in 10 minutes</p>
-                {smsNotConfigured && (
+                {devOtpHint && (
                   <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                    SMS delivery isn't set up yet, so this code may not have reached your phone — please check with your team if it doesn't arrive.
+                    SMS isn't configured yet — for testing, your code is <span className="font-bold">{devOtpHint}</span>
                   </p>
                 )}
               </div>

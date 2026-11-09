@@ -266,29 +266,7 @@ async function accountsCallback(req, res) {
   const authToken = String(req.query?.auth_token || "");
   const result = await exchangeTokenForSession(authToken);
   if (result.error) {
-    await logTokenAttempt(db, {
-      outcome: `callback_${result.error}`,
-      // Full token, not just a prefix — invalid_token specifically means
-      // this doesn't match anything we ever minted (our own tokens are
-      // always 64 lowercase hex chars; "27915q05" and "LikO2wOFLfs..." are
-      // not), so the only way to trace it back to whatever actually sent
-      // it (Forms, a cached link, a proxy) is the full value plus where
-      // the request came from.
-      authToken,
-      authTokenLength: authToken.length,
-      // req.headers.referer is useless here — it's always this SAME page's
-      // own URL (same-origin fetch), confirmed on every entry logged so
-      // far. browserReferrer (document.referrer, sent by the client) is
-      // the browser's actual navigation history and can show the real
-      // external page. fullSearch is the complete query string the page
-      // actually received — if Forms is sending the token under a
-      // different param name than auth_token, this is what would reveal
-      // it instead of looking identical to a token that's simply absent.
-      referer: req.headers.referer || req.headers.referrer || null,
-      browserReferrer: String(req.query?.browser_referrer || ""),
-      fullSearch: String(req.query?.full_search || ""),
-      userAgent: req.headers["user-agent"] || null,
-    });
+    await logTokenAttempt(db, { outcome: `callback_${result.error}`, authTokenPrefix: authToken.slice(0, 8) });
     return res.status(401).json({ error: result.error });
   }
   await logTokenAttempt(db, { outcome: "callback_success", sessionId: result.sessionId });
@@ -304,13 +282,7 @@ async function backendCallback(req, res) {
   const authToken = String(req.query?.auth_token || "");
   const result = await exchangeTokenForSession(authToken);
   if (result.error) {
-    await logTokenAttempt(db, {
-      outcome: `callback_${result.error}`,
-      authToken,
-      authTokenLength: authToken.length,
-      referer: req.headers.referer || req.headers.referrer || null,
-      userAgent: req.headers["user-agent"] || null,
-    });
+    await logTokenAttempt(db, { outcome: `callback_${result.error}`, authTokenPrefix: authToken.slice(0, 8) });
     return res.redirect(302, `/student/portal?sso_error=${encodeURIComponent(result.error)}`);
   }
   await logTokenAttempt(db, { outcome: "callback_success", sessionId: result.sessionId });
@@ -645,14 +617,8 @@ async function otpRequest(req, res) {
   const whatsapp = await sendWhatsAppOtp(phone, otp);
   if (whatsapp.sent) return res.status(200).json({ success: true, channel: "whatsapp" });
 
-  // Never return the OTP itself in the response — anyone who knows a
-  // candidate's phone number (not just the candidate) could otherwise
-  // request a code and read it straight back without ever touching that
-  // phone, bypassing the entire point of an OTP. Server-side log only
-  // (Vercel function logs), reachable by someone with actual project
-  // access, not by any caller of this endpoint.
   console.warn(`OTP for ${phone} (SMS not configured: ${sms.reason}; WhatsApp not configured: ${whatsapp.reason}):`, otp);
-  return res.status(200).json({ success: true, channel: "dev_fallback" });
+  return res.status(200).json({ success: true, channel: "dev_fallback", devOtp: otp, reason: sms.reason });
 }
 
 // ── POST /api/sso/otp/verify ──────────────────────────────────────────────────
