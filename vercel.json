@@ -21,7 +21,8 @@
   ],
   "functions": {
     "api/cron/generate-ai-reports.js": { "maxDuration": 60 },
-    "api/generate-ai-reports-bulk.js": { "maxDuration": 60 }
+    "api/generate-ai-reports-bulk.js": { "maxDuration": 60 },
+    "api/sync/edge-candidates.js": { "maxDuration": 60 }
   },
   "headers": [
     {
