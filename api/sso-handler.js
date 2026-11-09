@@ -140,6 +140,9 @@ function underTokenRateLimit(ip) {
 // own server logs, which aren't available to us. Safe to remove once the
 // integration is confirmed working end to end.
 async function logTokenAttempt(db, fields) {
+  // Mirror to Vercel runtime logs (`vercel logs`) so the outcome is readable
+  // without Firestore console access. Never includes the API key itself.
+  console.log("[sso-token]", JSON.stringify({ outcome: fields.outcome, userId: fields.userId, candidateId: fields.candidateId, rawBody: fields.rawBody }));
   try {
     await db.collection("ssoTokenRequestLog").add({ at: new Date().toISOString(), ...fields });
   } catch { /* never let logging break the real response */ }
