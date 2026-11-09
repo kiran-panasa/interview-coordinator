@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { Loader2, AlertTriangle, Smartphone } from "lucide-react";
 import StudentLayout from "../../components/StudentLayout";
 
 // Hardcoded, not read from VITE_FORMS_SSO_URL/VITE_FORMS_SSO_LINK_ID — those
@@ -148,9 +148,19 @@ export default function SsoCallbackPage() {
             {!ERROR_MESSAGES[error] && (
               <p className="text-xs text-gray-400 mt-1">Error code: {error}</p>
             )}
+            {/* Retrying the same Academy link lands back on this exact
+               screen for a student whose failure isn't transient — that's
+               not a real second option, just a loop. Mobile number is a
+               genuinely different sign-in path (phone + OTP), independent
+               of whatever's failing on the Academy redirect, so it leads
+               with that instead. */}
+            <Link to="/student/portal"
+              className="flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
+              <Smartphone className="w-4 h-4" /> Sign In With Mobile Number Instead
+            </Link>
             <a href={FORMS_SIGN_IN_URL}
-              className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
-              Try Signing In Again
+              className="inline-flex items-center justify-center gap-1.5 text-gray-500 font-medium text-xs mt-3 hover:text-gray-700 transition-colors underline underline-offset-2">
+              or try the original sign-in link again
             </a>
           </>
         ) : (
