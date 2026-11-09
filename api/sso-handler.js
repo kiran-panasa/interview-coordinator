@@ -266,7 +266,19 @@ async function accountsCallback(req, res) {
   const authToken = String(req.query?.auth_token || "");
   const result = await exchangeTokenForSession(authToken);
   if (result.error) {
-    await logTokenAttempt(db, { outcome: `callback_${result.error}`, authTokenPrefix: authToken.slice(0, 8) });
+    await logTokenAttempt(db, {
+      outcome: `callback_${result.error}`,
+      // Full token, not just a prefix — invalid_token specifically means
+      // this doesn't match anything we ever minted (our own tokens are
+      // always 64 lowercase hex chars; "27915q05" and "LikO2wOFLfs..." are
+      // not), so the only way to trace it back to whatever actually sent
+      // it (Forms, a cached link, a proxy) is the full value plus where
+      // the request came from.
+      authToken,
+      authTokenLength: authToken.length,
+      referer: req.headers.referer || req.headers.referrer || null,
+      userAgent: req.headers["user-agent"] || null,
+    });
     return res.status(401).json({ error: result.error });
   }
   await logTokenAttempt(db, { outcome: "callback_success", sessionId: result.sessionId });
@@ -282,7 +294,13 @@ async function backendCallback(req, res) {
   const authToken = String(req.query?.auth_token || "");
   const result = await exchangeTokenForSession(authToken);
   if (result.error) {
-    await logTokenAttempt(db, { outcome: `callback_${result.error}`, authTokenPrefix: authToken.slice(0, 8) });
+    await logTokenAttempt(db, {
+      outcome: `callback_${result.error}`,
+      authToken,
+      authTokenLength: authToken.length,
+      referer: req.headers.referer || req.headers.referrer || null,
+      userAgent: req.headers["user-agent"] || null,
+    });
     return res.redirect(302, `/student/portal?sso_error=${encodeURIComponent(result.error)}`);
   }
   await logTokenAttempt(db, { outcome: "callback_success", sessionId: result.sessionId });

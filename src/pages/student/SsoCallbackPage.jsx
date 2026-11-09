@@ -67,12 +67,16 @@ export default function SsoCallbackPage() {
             {!ERROR_MESSAGES[error] && (
               <p className="text-xs text-gray-400 mt-1">Error code: {error}</p>
             )}
-            {FORMS_SSO_LINK_ID && (
-              <a href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
-                className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
-                Try Signing In Again
-              </a>
-            )}
+            {/* Always show a way forward — previously this was hidden
+               entirely whenever FORMS_SSO_LINK_ID wasn't configured,
+               leaving a student on this screen with no path except
+               closing the tab. The specific "mid" link is nicer when
+               available, but the bare Forms URL still gets them
+               somewhere they can navigate from. */}
+            <a href={FORMS_SSO_LINK_ID ? `${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}` : FORMS_SSO_URL}
+              className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
+              Try Signing In Again
+            </a>
           </>
         ) : (
           <>
