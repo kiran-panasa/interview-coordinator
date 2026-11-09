@@ -71,6 +71,19 @@ export default function SsoCallbackPage() {
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.success) {
+          // This handshake failing doesn't necessarily mean the student
+          // isn't signed in — "Book an Interview" re-triggers a whole new
+          // SSO round-trip through Forms even when they're already on the
+          // dashboard with a perfectly valid session, and that's exactly
+          // the leg that's been arriving broken (confirmed: Forms
+          // sometimes redirects here with no auth_token at all). If their
+          // ORIGINAL session cookie is still valid, there's no reason to
+          // throw that away and show an error — just continue on.
+          const meRes = await fetch("/api/sso/me", { credentials: "include" }).catch(() => null);
+          if (meRes?.ok) {
+            navigate("/student/dashboard", { replace: true });
+            return;
+          }
           setError(data.error || "sign_in_failed");
           return;
         }
