@@ -200,6 +200,25 @@ async function accountsToken(req, res) {
     const allSnap = await db.collection("candidates").get();
     const loose = allSnap.docs.filter(d => (d.data().uid || "").trim().toLowerCase() === userId.toLowerCase());
     if (loose.length > 0) { candidate = pickOne(loose); fallbackUsed = true; }
+
+    // Name/UID swapped on save (e.g. a CSV whose columns were mis-mapped):
+    // the student's real Forms user_id sits in `name` and their name in
+    // `uid`. The admin Candidates page silently displays these swapped back
+    // (see isSwapped in CandidatesPage.jsx), so an admin sees the right UID
+    // on screen while this lookup — which reads the real `uid` field —
+    // never matches. Match on `name` too, and repair the record the same
+    // way the admin "Fix: Swap Name ↔ UID" action does, so every later
+    // login takes the fast exact-uid path.
+    if (!candidate) {
+      const swapped = allSnap.docs.filter(d => (d.data().name || "").trim().toLowerCase() === userId.toLowerCase());
+      if (swapped.length > 0) {
+        candidate = pickOne(swapped);
+        fallbackUsed = true;
+        const old = candidate.data();
+        await candidate.ref.update({ uid: userId, name: old.uid || old.name }).catch(() => {});
+        await logTokenAttempt(db, { outcome: "success_via_swapped_name_uid_healed", userId, candidateId: candidate.id });
+      }
+    }
   }
   // Some candidates' stored uid is simply the WRONG value, not a
   // formatting slip — confirmed by cases where editing a candidate's uid
