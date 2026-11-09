@@ -226,6 +226,23 @@ async function accountsToken(req, res) {
       }
     }
   }
+  // Same idea by email, for when Forms sends an email but no phone —
+  // the admin's Access Requests page already scrapes email out of the
+  // logged body (src/utils/accessRequests.js), so Forms is known to send
+  // it at least sometimes.
+  if (!candidate) {
+    const bodyEmail = String(req.body?.email || req.body?.student_email || "").trim().toLowerCase();
+    if (bodyEmail.includes("@")) {
+      const allSnap = await db.collection("candidates").get();
+      const emailMatches = allSnap.docs.filter(d => (d.data().email || "").trim().toLowerCase() === bodyEmail);
+      if (emailMatches.length > 0) {
+        candidate = pickOne(emailMatches);
+        fallbackUsed = true;
+        await candidate.ref.update({ uid: userId }).catch(() => {});
+        healedUid = true;
+      }
+    }
+  }
   if (!candidate) {
     await logTokenAttempt(db, {
       outcome: "student_not_found", userId, matchCount: snap.size,
