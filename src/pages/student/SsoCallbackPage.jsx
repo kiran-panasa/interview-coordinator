@@ -25,7 +25,7 @@ const ERROR_MESSAGES = {
   token_already_used:  "This sign-in link was already used.",
   student_not_found:  "We couldn't find your account — please check with your team.",
   invalid_token:       "This sign-in link isn't valid — it may be incomplete or already reset. Please try signing in again.",
-  missing_token:       "This sign-in link is missing some required information. Please try signing in again from your Academy dashboard.",
+  missing_token:       "This sign-in link is missing some required information. Please try signing in again from your student dashboard.",
   network_error:       "We couldn't reach the sign-in service — please check your connection and try again.",
 };
 

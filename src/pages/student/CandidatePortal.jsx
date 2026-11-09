@@ -78,9 +78,9 @@ const stepMotion = {
 // sign-in link expired or got reused (e.g. a link-preview bot pre-fetching
 // it) just landed back on the plain sign-in page with zero explanation.
 const SSO_ERROR_COPY = {
-  token_expired: "That sign-in link expired before you finished — tap \"Sign In via Academy Account\" again to get a fresh one.",
-  token_already_used: "That sign-in link was already used — tap \"Sign In via Academy Account\" again to get a fresh one.",
-  invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Academy Account\" again.",
+  token_expired: "That sign-in link expired before you finished — tap \"Sign In via Student Account\" again to get a fresh one.",
+  token_already_used: "That sign-in link was already used — tap \"Sign In via Student Account\" again to get a fresh one.",
+  invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Student Account\" again.",
   student_not_found: "We couldn't find your account. Please check with your team.",
 };
 
@@ -244,7 +244,7 @@ export default function CandidatePortal() {
                 <a
                   href={FORMS_SIGN_IN_URL}
                   className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
-                  <LogIn className="w-4 h-4" /> Sign In via Academy Account
+                  <LogIn className="w-4 h-4" /> Sign In via Student Account
                 </a>
                 <div className="flex items-center gap-3 text-xs text-gray-400">
                   <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
