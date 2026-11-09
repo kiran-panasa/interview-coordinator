@@ -20,6 +20,30 @@ const FORMS_SIGN_IN_URL = "https://forms.ccbp.in/mid/interview-coordinator";
 // longer usable) — distinct enough from "try again" that it's worth its
 // own line, since it usually means the link itself was malformed rather
 // than just stale.
+// Forms sometimes redirects here with the auth_token missing or
+// malformed — confirmed intermittent (a burst of failures across many
+// different students/devices within one ~25-minute window, not
+// constant), so a fresh attempt through Forms has a real chance of
+// succeeding. Capped at 2 automatic attempts, tracked per tab via
+// sessionStorage, so a student whose failure genuinely isn't transient
+// doesn't get bounced back and forth forever — they fall through to the
+// manual "Try Signing In Again" button instead. Only these two error
+// codes are eligible: token_already_used/student_not_found/
+// token_expired aren't going to be fixed by retrying the same way.
+const AUTO_RETRY_KEY = "ic_sso_auto_retry_count";
+const MAX_AUTO_RETRIES = 2;
+const AUTO_RETRY_ELIGIBLE = new Set(["missing_token", "invalid_token"]);
+
+function getAutoRetryCount() {
+  try { return Number(sessionStorage.getItem(AUTO_RETRY_KEY) || "0"); } catch { return 0; }
+}
+function setAutoRetryCount(n) {
+  try { sessionStorage.setItem(AUTO_RETRY_KEY, String(n)); } catch { /* ignore */ }
+}
+function clearAutoRetryCount() {
+  try { sessionStorage.removeItem(AUTO_RETRY_KEY); } catch { /* ignore */ }
+}
+
 const ERROR_MESSAGES = {
   token_expired:      "This sign-in link has expired.",
   token_already_used:  "This sign-in link was already used.",
@@ -81,12 +105,28 @@ export default function SsoCallbackPage() {
           // throw that away and show an error — just continue on.
           const meRes = await fetch("/api/sso/me", { credentials: "include" }).catch(() => null);
           if (meRes?.ok) {
+            clearAutoRetryCount();
             navigate("/student/dashboard", { replace: true });
             return;
           }
-          setError(data.error || "sign_in_failed");
+          // No existing session either (first-time sign-in, or it's
+          // genuinely expired) — for the two error codes a fresh attempt
+          // can actually fix, silently bounce back through the real sign-
+          // in link up to MAX_AUTO_RETRIES times before giving up and
+          // showing the error screen.
+          const errorCode = data.error || "sign_in_failed";
+          if (AUTO_RETRY_ELIGIBLE.has(errorCode)) {
+            const retryCount = getAutoRetryCount();
+            if (retryCount < MAX_AUTO_RETRIES) {
+              setAutoRetryCount(retryCount + 1);
+              window.location.href = FORMS_SIGN_IN_URL;
+              return;
+            }
+          }
+          setError(errorCode);
           return;
         }
+        clearAutoRetryCount();
         navigate("/student/dashboard", { replace: true });
       } catch {
         setError("network_error");
