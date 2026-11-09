@@ -123,7 +123,16 @@ export default function SsoCallbackPage() {
               return;
             }
           }
-          setError(errorCode);
+          // Retries exhausted (or this error code was never eligible —
+          // token_already_used/student_not_found aren't fixed by trying
+          // again the same way). Land straight on the student portal
+          // instead of a dead-end error screen here — it already knows
+          // how to show this same error (sso_error query param, shared
+          // with the backendCallback redirect path) AND offers the
+          // mobile-number sign-in right there, one less step than making
+          // the student click through from here.
+          clearAutoRetryCount();
+          navigate(`/student/portal?sso_error=${encodeURIComponent(errorCode)}`, { replace: true });
           return;
         }
         clearAutoRetryCount();

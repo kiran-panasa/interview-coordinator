@@ -81,6 +81,8 @@ const SSO_ERROR_COPY = {
   token_expired: "That sign-in link expired before you finished — tap \"Sign In via Student Account\" again to get a fresh one.",
   token_already_used: "That sign-in link was already used — tap \"Sign In via Student Account\" again to get a fresh one.",
   invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Student Account\" again.",
+  missing_token: "That sign-in link didn't come through correctly — try \"Sign In via Student Account\" again, or sign in with your mobile number below instead.",
+  network_error: "We couldn't reach the sign-in service — please check your connection and try again.",
   student_not_found: "We couldn't find your account. Please check with your team.",
 };
 
