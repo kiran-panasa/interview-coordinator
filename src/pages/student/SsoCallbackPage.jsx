@@ -3,8 +3,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, AlertTriangle } from "lucide-react";
 import StudentLayout from "../../components/StudentLayout";
 
-const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
-const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
+// Hardcoded, not read from VITE_FORMS_SSO_URL/VITE_FORMS_SSO_LINK_ID — those
+// env vars are set in Vercel to forms-gamma.earlywave.in, which doesn't
+// serve a working page at all (confirmed: 404 at its root). The actual
+// link students are given and use to reach this app is
+// forms.ccbp.in/mid/interview-coordinator — hardcoding it here means the
+// retry button works regardless of what those env vars are set to.
+const FORMS_SIGN_IN_URL = "https://forms.ccbp.in/mid/interview-coordinator";
 
 // Every distinct failure exchangeTokenForSession (api/_lib/ssoExchange.js)
 // can return, plus the ones this page detects on its own (missing_token,
@@ -74,13 +79,7 @@ export default function SsoCallbackPage() {
             {!ERROR_MESSAGES[error] && (
               <p className="text-xs text-gray-400 mt-1">Error code: {error}</p>
             )}
-            {/* Always show a way forward — previously this was hidden
-               entirely whenever FORMS_SSO_LINK_ID wasn't configured,
-               leaving a student on this screen with no path except
-               closing the tab. The specific "mid" link is nicer when
-               available, but the bare Forms URL still gets them
-               somewhere they can navigate from. */}
-            <a href={FORMS_SSO_LINK_ID ? `${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}` : FORMS_SSO_URL}
+            <a href={FORMS_SIGN_IN_URL}
               className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
               Try Signing In Again
             </a>

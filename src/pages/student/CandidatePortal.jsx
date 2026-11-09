@@ -14,8 +14,11 @@ import Button from "../../components/Button";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
-const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
-const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
+// Hardcoded — see the matching note in SsoCallbackPage.jsx. The
+// VITE_FORMS_SSO_URL/VITE_FORMS_SSO_LINK_ID env vars are set to a domain
+// (forms-gamma.earlywave.in) that doesn't serve a working page at all;
+// this is the actual link students are given.
+const FORMS_SIGN_IN_URL = "https://forms.ccbp.in/mid/interview-coordinator";
 
 async function callAppsScript(payload) {
   if (!APPS_SCRIPT_URL) return;
@@ -238,18 +241,14 @@ export default function CandidatePortal() {
                 <p className="text-sm text-gray-500 mt-1">Enter your registered mobile number</p>
               </div>
               <div className="space-y-4">
-                {FORMS_SSO_LINK_ID && (
-                  <>
-                    <a
-                      href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
-                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
-                      <LogIn className="w-4 h-4" /> Sign In via Academy Account
-                    </a>
-                    <div className="flex items-center gap-3 text-xs text-gray-400">
-                      <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
-                    </div>
-                  </>
-                )}
+                <a
+                  href={FORMS_SIGN_IN_URL}
+                  className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
+                  <LogIn className="w-4 h-4" /> Sign In via Academy Account
+                </a>
+                <div className="flex items-center gap-3 text-xs text-gray-400">
+                  <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
                     Mobile Number
