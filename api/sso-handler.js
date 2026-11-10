@@ -130,7 +130,13 @@ function underTokenRateLimit(ip) {
   const entry = tokenRateLimitState.get(ip);
   if (!entry || now - entry.windowStart > 60_000) { tokenRateLimitState.set(ip, { count: 1, windowStart: now }); return true; }
   entry.count++;
-  return entry.count <= 30;
+  // This is a server-to-server call from Forms, already gated by the API
+  // key check above — the cap here is just a backstop against a runaway
+  // bug, not abuse prevention. 30/min serialized every student sign-in
+  // through one shared limit (Forms calls this from one backend IP), so a
+  // mass-login wave of 2,000+ students would 429 almost everyone. Raised
+  // to give real headroom while still catching a genuine runaway loop.
+  return entry.count <= 600;
 }
 // TEMPORARY — logs every real call Forms makes to accountsToken, AND every
 // callback exchange attempt (accountsCallback/backendCallback) whether it
@@ -238,13 +244,28 @@ async function accountsToken(req, res) {
     const bodyPhone = String(req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.mobile_number || "").trim();
     const digits = bodyPhone.replace(/\D/g, "").slice(-10);
     if (digits.length === 10) {
-      const allSnap = await db.collection("candidates").get();
-      const phoneMatches = allSnap.docs.filter(d => (d.data().phone || "").replace(/\D/g, "").slice(-10) === digits);
-      if (phoneMatches.length > 0) {
-        candidate = pickOne(phoneMatches);
-        fallbackUsed = true;
-        await candidate.ref.update({ uid: userId }).catch(() => {});
-        healedUid = true;
+      // Fast path: most stored phone numbers are already in the exact
+      // format sent here, so an indexed query resolves it without reading
+      // every candidate document. Only falls through to the full scan
+      // below (for formatting differences) when this finds nothing.
+      if (bodyPhone) {
+        const exactPhone = await db.collection("candidates").where("phone", "==", bodyPhone).get();
+        if (exactPhone.docs.length > 0) {
+          candidate = pickOne(exactPhone.docs);
+          fallbackUsed = true;
+          await candidate.ref.update({ uid: userId }).catch(() => {});
+          healedUid = true;
+        }
+      }
+      if (!candidate) {
+        const allSnap = await db.collection("candidates").get();
+        const phoneMatches = allSnap.docs.filter(d => (d.data().phone || "").replace(/\D/g, "").slice(-10) === digits);
+        if (phoneMatches.length > 0) {
+          candidate = pickOne(phoneMatches);
+          fallbackUsed = true;
+          await candidate.ref.update({ uid: userId }).catch(() => {});
+          healedUid = true;
+        }
       }
     }
   }
@@ -255,13 +276,26 @@ async function accountsToken(req, res) {
   if (!candidate) {
     const bodyEmail = String(req.body?.email || req.body?.student_email || "").trim().toLowerCase();
     if (bodyEmail.includes("@")) {
-      const allSnap = await db.collection("candidates").get();
-      const emailMatches = allSnap.docs.filter(d => (d.data().email || "").trim().toLowerCase() === bodyEmail);
-      if (emailMatches.length > 0) {
-        candidate = pickOne(emailMatches);
+      // Fast path: an indexed exact match catches the common case where
+      // the stored email is already lowercase/trimmed, without a full
+      // scan. Falls through to the full scan only for genuine case or
+      // whitespace mismatches.
+      const exactEmail = await db.collection("candidates").where("email", "==", bodyEmail).get();
+      if (exactEmail.docs.length > 0) {
+        candidate = pickOne(exactEmail.docs);
         fallbackUsed = true;
         await candidate.ref.update({ uid: userId }).catch(() => {});
         healedUid = true;
+      }
+      if (!candidate) {
+        const allSnap = await db.collection("candidates").get();
+        const emailMatches = allSnap.docs.filter(d => (d.data().email || "").trim().toLowerCase() === bodyEmail);
+        if (emailMatches.length > 0) {
+          candidate = pickOne(emailMatches);
+          fallbackUsed = true;
+          await candidate.ref.update({ uid: userId }).catch(() => {});
+          healedUid = true;
+        }
       }
     }
   }
