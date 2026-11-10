@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "../../firebase";
 import { useAuth } from "../../AuthContext";
 import {
-  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Download, RefreshCw,
+  LayoutGrid, Users, CalendarRange, LogOut, Loader2, Building2, Search, Trophy, Download, RefreshCw, Menu, X,
 } from "lucide-react";
 import { formatDate, formatDateLong, formatTimeLabel } from "../../utils/dates";
 import { getVendor, getVendorInterviewers } from "../../api/vendors";
@@ -91,6 +91,10 @@ function allTimeRange() {
 export default function VendorDashboardPage() {
   const { currentUser, userProfile } = useAuth();
   const [tab, setTab] = useState("panelists");
+  // Sidebar is a fixed 240px column, fine on desktop but it was permanently
+  // eating most of a phone screen's width — below md it's now an off-canvas
+  // drawer, toggled by the hamburger in the mobile top bar below.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [vendor, setVendor] = useState(null);
   const [interviewers, setInterviewers] = useState([]);
@@ -338,15 +342,38 @@ export default function VendorDashboardPage() {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-60 bg-white border-r border-gray-100 flex flex-col fixed inset-y-0">
-        <div className="flex items-center gap-2 px-5 py-5">
-          <div className="w-7 h-7 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Building2 className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />
+      {/* Mobile-only top bar — the only way to open the sidebar below md. */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-gray-100 flex items-center gap-3 px-4">
+        <button onClick={() => setMobileNavOpen(true)} className="p-1.5 -ml-1.5 text-gray-500 hover:text-gray-700">
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="w-6 h-6 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
+          <Building2 className="w-3 h-3 text-white" strokeWidth={2.2} />
+        </div>
+        <p className="text-sm font-bold text-gray-900 tracking-tight truncate">{vendor?.name || "Vendor"}</p>
+      </div>
+
+      {/* Backdrop for the mobile drawer — tap to dismiss. */}
+      {mobileNavOpen && (
+        <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={() => setMobileNavOpen(false)} />
+      )}
+
+      <aside className={`w-60 bg-white border-r border-gray-100 flex flex-col fixed inset-y-0 left-0 top-0 z-50
+        transition-transform duration-200 ease-out md:translate-x-0
+        ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="flex items-center justify-between gap-2 px-5 py-5">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Building2 className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-gray-900 tracking-tight leading-tight truncate">{vendor?.name || "Vendor"}</p>
+              <p className="text-xs text-orange-600 font-semibold leading-tight">Vendor Dashboard</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold text-gray-900 tracking-tight leading-tight">{vendor?.name || "Vendor"}</p>
-            <p className="text-xs text-orange-600 font-semibold leading-tight">Vendor Dashboard</p>
-          </div>
+          <button onClick={() => setMobileNavOpen(false)} className="md:hidden p-1 text-gray-400 hover:text-gray-600 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
         </div>
         <div className="px-5 pb-3">
           {/* Nothing here is live-updating (see loadData's comment) — this
@@ -364,7 +391,7 @@ export default function VendorDashboardPage() {
             const Icon = item.icon;
             const isActive = tab === item.id;
             return (
-              <button key={item.id} onClick={() => setTab(item.id)}
+              <button key={item.id} onClick={() => { setTab(item.id); setMobileNavOpen(false); }}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-full text-sm transition-all duration-150 ${
                   isActive ? "bg-orange-500 text-white font-semibold shadow-card" : "text-gray-600 font-medium hover:bg-gray-50 hover:text-gray-900"
                 }`}>
@@ -391,8 +418,8 @@ export default function VendorDashboardPage() {
         </div>
       </aside>
 
-      <div className="flex-1 min-w-0 ml-60">
-        <div className="px-8 py-8">
+      <div className="flex-1 min-w-0 md:ml-60 pt-14 md:pt-0">
+        <div className="px-4 sm:px-6 md:px-8 py-6 md:py-8">
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />

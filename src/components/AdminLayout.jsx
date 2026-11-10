@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../AuthContext";
-import { useMemo, useEffect, useRef } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import {
   useUnreadUserNotifications, useAdhocQuestions, usePendingScheduleInvites, usePendingInboundRequests,
 } from "../hooks/subscriptions";
@@ -12,7 +12,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
   LayoutDashboard, Users, UserCog, FileText, Bell, Inbox,
-  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2,
+  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2, Menu, X,
 } from "lucide-react";
 
 const ALL_NAV = [
@@ -32,6 +32,10 @@ const ALL_NAV = [
 export default function AdminLayout() {
   const { currentUser, userProfile } = useAuth();
   const navigate = useNavigate();
+  // Sidebar is a fixed 240px column, fine on desktop but it was permanently
+  // eating most of a phone screen's width — below md it's now an off-canvas
+  // drawer, toggled by the hamburger in the mobile top bar below.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const role = userProfile?.role || "admin";
   // Additive, not role-gated like the rest of ALL_NAV — appended whenever
   // this admin is ALSO a vendor's contact (see setVendorContact in
@@ -86,16 +90,39 @@ export default function AdminLayout() {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <aside className="w-60 bg-white border-r border-gray-100 flex flex-col fixed inset-y-0">
+      {/* Mobile-only top bar — the only way to open the sidebar below md. */}
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-gray-100 flex items-center gap-3 px-4">
+        <button onClick={() => setMobileNavOpen(true)} className="p-1.5 -ml-1.5 text-gray-500 hover:text-gray-700">
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="w-6 h-6 bg-gradient-to-br from-brand-600 to-brand-700 rounded-lg flex items-center justify-center flex-shrink-0">
+          <CalendarCheck2 className="w-3 h-3 text-white" strokeWidth={2.2} />
+        </div>
+        <p className="text-sm font-bold text-gray-900 tracking-tight">Interview Coordinator</p>
+      </div>
+
+      {/* Backdrop for the mobile drawer — tap to dismiss. */}
+      {mobileNavOpen && (
+        <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={() => setMobileNavOpen(false)} />
+      )}
+
+      <aside className={`w-60 bg-white border-r border-gray-100 flex flex-col fixed inset-y-0 left-0 top-0 z-50
+        transition-transform duration-200 ease-out md:translate-x-0
+        ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
         <div className="px-5 py-5 border-b border-gray-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-soft">
-              <CalendarCheck2 className="w-4 h-4 text-white" strokeWidth={2.2} />
+          <div className="flex items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 bg-gradient-to-br from-brand-600 to-brand-700 rounded-xl flex items-center justify-center flex-shrink-0 shadow-soft">
+                <CalendarCheck2 className="w-4 h-4 text-white" strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-gray-900 leading-tight tracking-tight">Interview</p>
+                <p className="text-xs text-brand-600 font-semibold leading-tight">Coordinator</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900 leading-tight tracking-tight">Interview</p>
-              <p className="text-xs text-brand-600 font-semibold leading-tight">Coordinator</p>
-            </div>
+            <button onClick={() => setMobileNavOpen(false)} className="md:hidden p-1 text-gray-400 hover:text-gray-600 flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -105,7 +132,7 @@ export default function AdminLayout() {
             const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0);
             const Icon = item.icon;
             return (
-              <NavLink key={item.to} to={item.to}
+              <NavLink key={item.to} to={item.to} onClick={() => setMobileNavOpen(false)}
                 className={({ isActive }) =>
                   `group flex items-center gap-2.5 px-3 py-2 rounded-full text-sm transition-all duration-150 ${
                     isActive
@@ -154,7 +181,7 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main className="ml-60 flex-1 min-h-screen min-w-0">
+      <main className="md:ml-60 pt-14 md:pt-0 flex-1 min-h-screen min-w-0">
         <ErrorBoundary>
           <Outlet context={{ adhocQs }} />
         </ErrorBoundary>
