@@ -95,16 +95,16 @@ export default function MyInterviewsPage() {
   }, [highlightId, loaded, filtered, pageSize, page, setPage]);
 
   return (
-    <div className="p-8">
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">My Interviews</h1>
+    <div className="p-4 sm:p-6 md:p-8">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="mb-6 md:mb-8">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">My Interviews</h1>
         <p className="text-sm text-gray-500 mt-1">{interviews.length} total</p>
       </motion.div>
 
-      <div className="flex gap-1 mb-5 border-b border-gray-200">
+      <div className="flex gap-1 mb-5 border-b border-gray-200 overflow-x-auto scrollbar-thin">
         {TABS.map(t => (
           <button key={t} onClick={() => { setTab(t); setFilterStatus("All"); }}
-            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
               tab === t
                 ? "border-emerald-600 text-emerald-600"
                 : "border-transparent text-gray-500 hover:text-gray-700"
@@ -130,9 +130,67 @@ export default function MyInterviewsPage() {
       >
         {!loaded ? (
           <div className="p-4"><SkeletonRows count={6} /></div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center text-gray-400 py-14">
+            <div className="flex flex-col items-center gap-2">
+              <CalendarClock className="w-6 h-6 text-gray-300" />
+              No interviews found
+            </div>
+          </div>
         ) : (
           <>
-            <table className="w-full text-sm">
+            {/* Mobile: one card per interview, no sideways scrolling to read
+               a cramped table on a phone — same list, just stacked. */}
+            <div className="md:hidden divide-y divide-gray-50">
+              {paged.map((i, idx) => (
+                <motion.div
+                  key={i.id}
+                  id={`myiv-row-${i.id}`}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
+                  className={`p-4 ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : ""}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold text-gray-900 min-w-0 truncate">{i.candidateName}</p>
+                    <Badge value={i.status} />
+                  </div>
+                  <p className="text-sm text-gray-600 mt-0.5">{i.round || i.roleAppliedFor || "—"}</p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mt-2">
+                    <span>{formatDate(i.scheduledDate)}</span>
+                    <span>{formatTimeLabel(i.scheduledTime)}</span>
+                    <span>{i.duration || 60} min</span>
+                  </div>
+                  {i.status === "scheduled" && isPastStart(i.scheduledDate, i.scheduledTime) && i.candidateJoined == null && (
+                    <span className="inline-block mt-2 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                      Mark attendance
+                    </span>
+                  )}
+                  <div className="mt-2.5 flex items-center gap-3">
+                    {i.meetLink && i.status === "scheduled" && (
+                      <a href={i.meetLink} target="_blank" rel="noreferrer"
+                        className="text-xs text-emerald-700 font-semibold hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        Join Meet
+                      </a>
+                    )}
+                    {i.status === "cancelled" ? (
+                      <p className="text-xs text-gray-500" title={i.cancelReason || ""}>
+                        {cancelledByLabel(i.cancelledBy)}
+                        {i.cancelReason ? `: ${i.cancelReason}` : " (no reason given)"}
+                      </p>
+                    ) : i.status === "declined" ? (
+                      <p className="text-xs text-gray-500" title={i.declineReason || ""}>
+                        {i.declineReason ? `Reason: ${i.declineReason}` : "No reason given"}
+                      </p>
+                    ) : (
+                      <Link to={`/interviewer/interviews/${i.id}`}
+                        className="text-xs text-emerald-600 font-semibold hover:text-emerald-700 whitespace-nowrap">View</Link>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Desktop: unchanged table. */}
+            <table className="hidden md:table w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
                   {["Candidate", "Role", "Round", "Date", "Time", "Duration", "Status", ""].map(h => (
@@ -141,19 +199,9 @@ export default function MyInterviewsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="text-center text-gray-400 py-14">
-                      <div className="flex flex-col items-center gap-2">
-                        <CalendarClock className="w-6 h-6 text-gray-300" />
-                        No interviews found
-                      </div>
-                    </td>
-                  </tr>
-                ) : paged.map((i, idx) => (
+                {paged.map((i, idx) => (
                   <motion.tr
                     key={i.id}
-                    id={`myiv-row-${i.id}`}
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
                     className={`hover:bg-gray-50/70 transition-colors ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : ""}`}
                   >
