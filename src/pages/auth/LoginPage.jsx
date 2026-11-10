@@ -10,8 +10,11 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail,
+  signOut,
 } from "firebase/auth";
 import Button from "../../components/Button";
+import { getInviteByEmail } from "../../api/firestore";
+import { BOOTSTRAP_EMAIL } from "../../constants/roles";
 
 const FIREBASE_ERRORS = {
   "auth/user-not-found":              "No account with this email.",
@@ -73,7 +76,25 @@ export default function LoginPage() {
     setError(""); setLoading(true);
     try {
       if (mode === "signup") {
-        await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const trimmedEmail = email.trim();
+        // Public signup form, open to anyone who finds this page — students
+        // kept landing here and signing up, piling up as noise in Settings
+        // -> User Management's pending-approval list. Only someone an admin
+        // already invited (Settings -> Invite) is allowed to actually create
+        // an account; everyone else gets the account deleted immediately so
+        // it never reaches the pending list at all.
+        const isBootstrap = trimmedEmail.toLowerCase() === BOOTSTRAP_EMAIL.toLowerCase();
+        const cred = await createUserWithEmailAndPassword(auth, trimmedEmail, password);
+        if (!isBootstrap) {
+          const invite = await getInviteByEmail(cred.user.email).catch(() => null);
+          if (!invite) {
+            await cred.user.delete().catch(() => {});
+            await signOut(auth).catch(() => {});
+            setError("This email hasn't been invited. Please check with the team for access.");
+            setLoading(false);
+            return;
+          }
+        }
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
