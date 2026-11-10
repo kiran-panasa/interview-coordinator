@@ -5,16 +5,14 @@ import { useAuth } from "../AuthContext";
 import { useMemo, useEffect, useRef } from "react";
 import {
   useUnreadUserNotifications, useAdhocQuestions, usePendingScheduleInvites, usePendingInboundRequests,
-  useFailedAccessRequests, useAccessRequestResolutions,
 } from "../hooks/subscriptions";
-import { groupAccessRequests } from "../utils/accessRequests";
 import { useActiveAdmins } from "../hooks/queries";
 import { createNotification, markInboundRequestNotified } from "../api/firestore";
 import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
   LayoutDashboard, Users, UserCog, FileText, Bell, Inbox,
-  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2, ShieldAlert,
+  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2,
 } from "lucide-react";
 
 const ALL_NAV = [
@@ -23,7 +21,6 @@ const ALL_NAV = [
   { to: "/admin/interviewers", label: "Interviewers",        roles: ["admin"],                                        icon: UserCog },
   { to: "/admin/templates",    label: "Interview Templates", roles: ["admin", "content_team", "interviewer_content"], icon: FileText },
   { to: "/admin/inbound",      label: "Inbound",             roles: ["admin"],                                        icon: Inbox },
-  { to: "/admin/access-requests", label: "Access Requests",  roles: ["admin"],                                        icon: ShieldAlert },
   { to: "/admin/nudge",        label: "Nudge",               roles: ["admin"],                                        icon: Bell },
   { to: "/admin/interviews",   label: "Interviews",          roles: ["admin"],                                        icon: CalendarClock },
   { to: "/admin/questions",    label: "Question Bank",       roles: ["admin", "content_team", "interviewer_content"], icon: HelpCircle },
@@ -49,12 +46,6 @@ export default function AdminLayout() {
   const adhocQs           = useAdhocQuestions();
   const pendingInvites    = usePendingScheduleInvites();
   const inboundRequests   = usePendingInboundRequests();
-  const failedAccessLogs       = useFailedAccessRequests();
-  const accessResolutions      = useAccessRequestResolutions();
-  const pendingAccessRequests  = useMemo(
-    () => groupAccessRequests(failedAccessLogs, accessResolutions).filter(g => !g.resolved).length,
-    [failedAccessLogs, accessResolutions]
-  );
   // Targeted equality-only fetch — avoids reading the entire users
   // collection just to find who to notify below.
   const { data: activeAdmins = [] } = useActiveAdmins();
@@ -111,8 +102,7 @@ export default function AdminLayout() {
         <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto scrollbar-thin">
           <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest px-2 mb-2">{ROLE_LABELS[role] || role}</p>
           {nav.map(item => {
-            const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0)
-              || (item.to === "/admin/access-requests" && pendingAccessRequests > 0);
+            const needsAttention = (item.to === "/admin/nudge" && nudgeBadge > 0) || (item.to === "/admin/inbound" && pendingInbound > 0);
             const Icon = item.icon;
             return (
               <NavLink key={item.to} to={item.to}
@@ -140,11 +130,6 @@ export default function AdminLayout() {
                 {item.to === "/admin/questions" && pendingAdhoc > 0 && (
                   <span className="text-[10px] font-bold bg-amber-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
                     {pendingAdhoc}
-                  </span>
-                )}
-                {item.to === "/admin/access-requests" && pendingAccessRequests > 0 && (
-                  <span className="text-[10px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {pendingAccessRequests}
                   </span>
                 )}
               </NavLink>
