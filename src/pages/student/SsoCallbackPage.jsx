@@ -15,8 +15,14 @@ export default function SsoCallbackPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const authToken = searchParams.get("auth_token");
-    if (!authToken) { setError("missing_token"); return; }
+    // Always call the backend, even with no token at all — it already
+    // returns "missing_token" either way (exchangeTokenForSession treats
+    // an empty token the same), but routing through accountsCallback is
+    // what gets this logged to ssoTokenRequestLog (that logging call is
+    // pre-existing, not new) — handling it client-side only, as before,
+    // meant this exact failure left zero trace anywhere. Diagnostic only:
+    // doesn't change what the student sees on either path.
+    const authToken = searchParams.get("auth_token") || "";
     (async () => {
       try {
         const res = await fetch(`/api/sso/accounts/callback?auth_token=${encodeURIComponent(authToken)}`, {
