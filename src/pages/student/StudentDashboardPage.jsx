@@ -7,7 +7,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle,
+  CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle, Menu, X,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime, formatTimeLabel } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -236,6 +236,10 @@ export default function StudentDashboardPage() {
   const [error,   setError]   = useState("");
   const [data,    setData]    = useState(null);
   const [tab,     setTab]     = useState("overview");
+  // The sidebar is a fixed-width column meant for desktop — below md it's
+  // repositioned into an off-canvas drawer (see the render below) that this
+  // toggles, instead of permanently eating ~2/3 of a phone screen's width.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [resumeLink,   setResumeLink]   = useState("");
   const [resumeSaving, setResumeSaving] = useState(false);
   const [resumeSaved,  setResumeSaved]  = useState(false);
@@ -711,7 +715,7 @@ export default function StudentDashboardPage() {
       : 0;
     const hasNew = item.id === "slots" && newInviteIds.size > 0;
     return (
-      <button onClick={() => setTab(item.id)}
+      <button onClick={() => { setTab(item.id); setMobileNavOpen(false); }}
         className={`relative flex items-center gap-2.5 w-full px-3 py-2.5 rounded-full text-sm font-semibold transition-all ${
           active ? "bg-brand-600 text-white shadow-card" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
         }`}>
@@ -734,16 +738,41 @@ export default function StudentDashboardPage() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-indigo-50/40 flex">
-        {/* Left sidebar — sticky to the viewport (not min-h-screen, which
-           only sets a floor and still scrolls away with the page once the
-           main content grows taller than one screen) so nav/profile/sign-out
-           stay in place while only the content on the right scrolls. */}
-        <div className="w-60 bg-white border-r border-gray-100 flex flex-col flex-shrink-0 sticky top-0 h-screen overflow-y-auto scrollbar-thin">
-          <div className="flex items-center gap-2 px-5 py-5">
-            <div className="w-7 h-7 bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <CalendarCheck2 className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />
+        {/* Mobile-only top bar — the sidebar below is repositioned off-canvas
+           under md, so this is the only way to open it on a phone. */}
+        <div className="md:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-gray-100 flex items-center gap-3 px-4">
+          <button onClick={() => setMobileNavOpen(true)} className="p-1.5 -ml-1.5 text-gray-500 hover:text-gray-700">
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="w-6 h-6 bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
+            <CalendarCheck2 className="w-3 h-3 text-white" strokeWidth={2.2} />
+          </div>
+          <p className="text-sm font-bold text-gray-900 tracking-tight">Interview Coordinator</p>
+        </div>
+
+        {/* Backdrop for the mobile drawer — tap to dismiss. */}
+        {mobileNavOpen && (
+          <div className="md:hidden fixed inset-0 bg-black/30 z-40" onClick={() => setMobileNavOpen(false)} />
+        )}
+
+        {/* Left sidebar — a normal sticky column on desktop (md:), same as
+           before; below md it's an off-canvas drawer, slid in/out with
+           translate-x and toggled by the mobile top bar above, instead of
+           permanently occupying most of a phone screen's width. */}
+        <div className={`w-60 bg-white border-r border-gray-100 flex flex-col flex-shrink-0 h-screen overflow-y-auto scrollbar-thin
+          fixed inset-y-0 left-0 top-0 z-50 transition-transform duration-200 ease-out
+          md:sticky md:translate-x-0
+          ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          <div className="flex items-center justify-between gap-2 px-5 py-5">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-7 h-7 bg-gradient-to-br from-brand-600 via-indigo-600 to-violet-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                <CalendarCheck2 className="w-3.5 h-3.5 text-white" strokeWidth={2.2} />
+              </div>
+              <p className="text-sm font-bold text-gray-900 tracking-tight truncate">Interview Coordinator</p>
             </div>
-            <p className="text-sm font-bold text-gray-900 tracking-tight">Interview Coordinator</p>
+            <button onClick={() => setMobileNavOpen(false)} className="md:hidden p-1 text-gray-400 hover:text-gray-600 flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
           </div>
           <div className="px-3 space-y-1 flex-1">
             {NAV.map((item, i) => (
@@ -772,9 +801,10 @@ export default function StudentDashboardPage() {
         {/* Main content — fills the rest of the page next to the fixed-width
            sidebar instead of capping out at max-w-3xl and leaving most of a
            wide screen empty; applies to every tab since they all render
-           inside this one wrapper. */}
-        <div className="flex-1 min-w-0">
-          <div className="px-8 py-8">
+           inside this one wrapper. pt-14 clears the mobile top bar, which is
+           fixed and only present below md. */}
+        <div className="flex-1 min-w-0 pt-14 md:pt-0">
+          <div className="px-4 sm:px-6 md:px-8 py-6 md:py-8">
 
             {tab === "overview" && (
               <motion.div key="overview" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
