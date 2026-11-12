@@ -9,6 +9,16 @@ export function isNotApplicable(raw) {
   return typeof raw === "string" && /^n\/?a$/i.test(raw.trim());
 }
 
+// The template's overall-remarks section. The built-in one is id/type
+// "overall_feedback", but custom templates name it freely (e.g. DSA's
+// "overall_remarks"), so fall back to any section whose id or label says
+// "overall".
+export function isOverallSection(domain) {
+  if (!domain) return false;
+  if (domain.type === "overall_feedback" || domain.id === "overall_feedback") return true;
+  return /overall/i.test(domain.id || "") || /overall/i.test(domain.label || "");
+}
+
 // Returns { feedback, partialCompletionReason }. A sheet row with a
 // verdict-weighted section left entirely blank is imported the same way the
 // app saves "Save as Partially Completed": the section stays unscored (so
@@ -18,13 +28,25 @@ export function isNotApplicable(raw) {
 // NA, or with no column in the sheet at all, is not missing — it's left
 // unrated and simply drops out of the Final Score.
 export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes) {
-  const hasDomainData = Object.values(domainData).some(Boolean);
+  // One column for the overall remarks: the overall section's own column
+  // (e.g. overall_remarks_notes) fills that section's remarks box AND
+  // feedback.comments (what the Academy push sends as `remarks`). The generic
+  // `notes` column is used only for templates without an overall section
+  // (or if that column is blank).
+  const overallDomain = template?.domains?.find(d => d.enabled !== false && isOverallSection(d)) || null;
+  const overallKey = overallDomain ? `${overallDomain.id}_notes` : null;
+  const overallText = (overallKey && domainData[overallKey]) || overallNotes || "";
+
+  // A row with only a verdict + overall remarks (no section ratings/notes)
+  // stays a verdict-only import, same as before — it must not be treated as
+  // section feedback with every section blank (that would mark it partial).
+  const hasDomainData = Object.entries(domainData).some(([k, v]) => v && k !== overallKey);
 
   if (!template?.domains || !hasDomainData) {
     return {
       feedback: {
         overallRecommendation: verdict,
-        comments: overallNotes,
+        comments: overallText,
         importedFromSheet: true,
         submittedAt: new Date().toISOString(),
       },
@@ -38,7 +60,7 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
   const feedbackDomains = {};
 
   for (const domain of template.domains.filter(d => d.enabled !== false)) {
-    const notes    = domainData[`${domain.id}_notes`] || "";
+    const notes    = domain === overallDomain ? overallText : (domainData[`${domain.id}_notes`] || "");
     const hasCards = (domain.cardFields || []).length > 0;
     const domainState = { cards: [] };
     const countsInVerdict = (domain.weightInVerdict ?? 0) > 0;
@@ -85,7 +107,7 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
       const columnPresent = inSheet(`${domain.id}_rating`);
       for (const f of domain.domainFields || []) {
         if (f.type === "scored_dropdown") domainState[f.id] = readScore(raw, columnPresent);
-        else if (f.type === "text") domainState[f.id] = domain.id === "overall_feedback" ? (overallNotes || notes) : notes;
+        else if (f.type === "text") domainState[f.id] = notes;
         else domainState[f.id] = null;
       }
     }
@@ -104,7 +126,7 @@ export function buildFeedbackFromCSV(template, domainData, verdict, overallNotes
       ...materialized,
       ...(missing.length ? { finalVerdict: null, scoreIncomplete: true, missingSections } : {}),
       overallRecommendation: verdict,
-      ...(overallNotes ? { comments: overallNotes } : {}),
+      ...(overallText ? { comments: overallText } : {}),
       importedFromSheet: true,
       submittedAt: new Date().toISOString(),
     },

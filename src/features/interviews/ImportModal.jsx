@@ -19,9 +19,12 @@ function downloadInvalidRows(parsedRows) {
   const invalid = parsedRows.filter(r => r.errors.length > 0);
   if (!invalid.length) return;
 
+  // `notes` only when one of these rows used it — templates with an overall
+  // section take their overall remarks from that section's own column.
+  const withNotes = invalid.some(r => r.raw.notes);
   const baseHeaders = [
     "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time",
-    "round", "verdict", "notes", "meetingLink", "meetingRecordingLink",
+    "round", "verdict", ...(withNotes ? ["notes"] : []), "meetingLink", "meetingRecordingLink",
   ];
   const domainHeaders = [...new Set(invalid.flatMap(r => Object.keys(r.resolved.domainData || {})))];
   const headers = [...baseHeaders, ...domainHeaders, "errors (remove this column before re-uploading)"];
@@ -30,7 +33,7 @@ function downloadInvalidRows(parsedRows) {
   invalid.forEach(r => {
     const row = [
       r.raw.candidateEmail, r.raw.candidateUid, r.raw.interviewerEmail, r.raw.templateName,
-      r.raw.date, r.raw.time, r.raw.round, r.raw.verdict, r.raw.notes, r.raw.meetingLink, r.raw.meetingRecordingLink,
+      r.raw.date, r.raw.time, r.raw.round, r.raw.verdict, ...(withNotes ? [r.raw.notes] : []), r.raw.meetingLink, r.raw.meetingRecordingLink,
       ...domainHeaders.map(h => r.resolved.domainData?.[h] || ""),
       r.errors.join(" | "),
     ];
@@ -83,12 +86,12 @@ export default function ImportModal({
                   ["time",             "Yes", "10:00 AM or 14:30"],
                   ["round",            "No",  "Round 1 (default)"],
                   ["verdict",          "No",  "Proceed / Hold / Reject — omit to create as scheduled (pending)"],
-                  ["notes",            "No",  "Overall feedback notes"],
+                  ["notes",            "No",  "Overall remarks — only for templates with no Overall Remarks/Feedback section"],
                   ["meetingLink",          "No", "https://meet.google.com/abc-defg-hij"],
                   ["meetingRecordingLink", "No", "Link to the recorded meeting"],
                   ["{domainId}_{fieldId}_rating","No",  "e.g. coding_ps_rating → score for that specific card field (0–5)"],
                   ["{domainId}_rating",          "No",  "e.g. resume_rating → for domains with no card fields"],
-                  ["{domainId}_notes",            "No",  "e.g. coding_notes → overall remarks for that domain"],
+                  ["{domainId}_notes",            "No",  "e.g. coding_notes → remarks for that domain. The overall section's column (e.g. overall_remarks_notes) is the panelist's overall remarks — shown in the app and sent to other apps"],
                 ].map(([col, req, ex]) => (
                   <tr key={col}>
                     <td className="py-1.5 pr-4 font-mono text-[11px] text-brand-700">{col}</td>

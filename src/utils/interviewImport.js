@@ -1,6 +1,6 @@
 import { splitCSVLines, parseLine } from "./csv";
 import { slugify } from "./strings";
-import { isNotApplicable } from "../services/import.service";
+import { isNotApplicable, isOverallSection } from "../services/import.service";
 export { buildFeedbackFromCSV } from "../services/import.service";
 
 export const VERDICT_MAP = { proceed: "Proceed", hold: "Hold", reject: "Reject" };
@@ -286,30 +286,41 @@ export function downloadLinksTemplate() {
 }
 
 export function downloadImportTemplate(template) {
+  const enabledDomains = (template?.domains || []).filter(d => d.enabled !== false);
+  // Exactly one overall-remarks column: the template's own overall section
+  // column (e.g. overall_remarks_notes) when it has one — buildFeedbackFromCSV
+  // shows it in that section AND sends it to other apps as the overall
+  // comments. Only a template with no overall section gets the generic
+  // `notes` column instead.
+  const hasOverallSection = enabledDomains.some(isOverallSection);
+
   const baseHeaders = [
-    "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict", "notes",
+    "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict",
+    ...(hasOverallSection ? [] : ["notes"]),
     "meetingLink", "meetingRecordingLink",
   ];
   const baseExample = [
     "john.doe@example.com", "",
     "interviewer@nxtwave.tech",
     template?.name || "Product Mastery - Novice",
-    "15/06/2026", "10:00 AM", "Round 1", "Proceed", "Overall interview notes",
+    "15/06/2026", "10:00 AM", "Round 1", "Proceed",
+    ...(hasOverallSection ? [] : ["Overall remarks by the panelist"]),
     "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
   ];
 
   const domainHeaders = [];
   const domainExample = [];
 
-  if (template?.domains) {
-    const sorted = [...template.domains]
-      .filter(d => d.enabled !== false)
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  if (enabledDomains.length) {
+    const sorted = [...enabledDomains].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
     for (const d of sorted) {
-      if (d.id === "overall_feedback") {
+      const overall = isOverallSection(d);
+      const hasRating = (d.cardFields || []).length > 0
+        || (d.domainFields || []).some(f => f.type === "scored_dropdown");
+      if (overall && !hasRating) {
         domainHeaders.push(`${d.id}_notes`);
-        domainExample.push("");
+        domainExample.push("Overall remarks by the panelist");
         continue;
       }
 
@@ -339,7 +350,7 @@ export function downloadImportTemplate(template) {
       }
 
       domainHeaders.push(`${d.id}_notes`);
-      domainExample.push(`Remarks for ${d.label}`);
+      domainExample.push(overall ? "Overall remarks by the panelist" : `Remarks for ${d.label}`);
     }
   }
 
