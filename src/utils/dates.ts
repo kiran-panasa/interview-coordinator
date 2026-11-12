@@ -65,6 +65,20 @@ export function compareTimeLabels(a: string, b: string): number {
   return timeToMinutes(a) - timeToMinutes(b);
 }
 
+// Orders a candidate's interviews for attempt numbering ("2nd Attempt",
+// latest status): by when the interview takes place, not when its record
+// was created — so an interview re-imported or recreated later (e.g. after
+// an accidental delete) still lands in its real place in the sequence.
+// Same date and time falls back to creation order.
+export function compareByInterviewDate(
+  a: { scheduledDate?: string; scheduledTime?: string; createdAt?: string },
+  b: { scheduledDate?: string; scheduledTime?: string; createdAt?: string }
+): number {
+  return (a.scheduledDate || "").localeCompare(b.scheduledDate || "")
+    || timeToMinutes(a.scheduledTime) - timeToMinutes(b.scheduledTime)
+    || (a.createdAt || "").localeCompare(b.createdAt || "");
+}
+
 // Normalizes either a 24-hour "HH:MM" (native <input type="time">, used by
 // the admin's TimePicker) or an already-12-hour "h:mm AM/PM" label (used by
 // the self-book/availability slot system) into one consistent "h:mm AM/PM"
