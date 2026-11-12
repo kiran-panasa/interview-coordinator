@@ -1499,11 +1499,12 @@ export default function InterviewsPage() {
       try {
         const {
           candidate, interviewer, template, scheduledDate, scheduledTime, verdict, domainData, hasDomainFeedback,
-          existingInterview, meetingLink, meetingRecordingLink,
+          existingInterview, meetingLink, meetingRecordingLink, transcriptLink,
         } = row.resolved;
         const linkFields = {
           ...(meetingLink          ? { meetLink: meetingLink }                     : {}),
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+          ...(transcriptLink       ? { transcriptUrl: transcriptLink }             : {}),
         };
 
         // Row matches an interview that already exists (completed or still
@@ -1542,6 +1543,7 @@ export default function InterviewsPage() {
           round:    row.raw.round,
           meetLink: meetingLink || "",
           ...(meetingRecordingLink ? { meetingRecordingUrl: meetingRecordingLink } : {}),
+          ...(transcriptLink       ? { transcriptUrl: transcriptLink }             : {}),
         };
         if (verdict || hasDomainFeedback) {
           const { feedback, partialCompletionReason } = buildFeedbackFromCSV(template, domainData, verdict, row.raw.notes);

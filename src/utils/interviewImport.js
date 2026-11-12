@@ -77,6 +77,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
         notes:                g("notes"),
         meetingLink:          g("meetingLink"),
         meetingRecordingLink: g("meetingRecordingLink"),
+        transcriptLink:       g("transcriptLink"),
       };
 
       const errors = [], warnings = [];
@@ -110,7 +111,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
 
       const BASE_COLS = new Set([
         "candidateemail","candidateuid","intervieweremail","templatename","date","time","round","verdict","notes",
-        "meetinglink","meetingrecordinglink",
+        "meetinglink","meetingrecordinglink","transcriptlink",
       ]);
       const domainData = {};
       headers.forEach((h, j) => {
@@ -163,6 +164,7 @@ export function parseImportCSV(text, candidates, interviewers, templates, existi
           existingInterview,
           meetingLink:          raw.meetingLink,
           meetingRecordingLink: raw.meetingRecordingLink,
+          transcriptLink:       raw.transcriptLink,
         },
         errors, warnings,
       };
@@ -297,7 +299,7 @@ export function downloadImportTemplate(template) {
   const baseHeaders = [
     "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time", "round", "verdict",
     ...(hasOverallSection ? [] : ["notes"]),
-    "meetingLink", "meetingRecordingLink",
+    "meetingLink", "meetingRecordingLink", "transcriptLink",
   ];
   const baseExample = [
     "john.doe@example.com", "",
@@ -306,6 +308,7 @@ export function downloadImportTemplate(template) {
     "15/06/2026", "10:00 AM", "Round 1", "Proceed",
     ...(hasOverallSection ? [] : ["Overall remarks by the panelist"]),
     "https://meet.google.com/abc-defg-hij", "https://drive.google.com/file/d/xxxx/view",
+    "https://docs.google.com/document/d/xxxx/edit",
   ];
 
   const domainHeaders = [];

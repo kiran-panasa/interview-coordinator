@@ -24,7 +24,7 @@ function downloadInvalidRows(parsedRows) {
   const withNotes = invalid.some(r => r.raw.notes);
   const baseHeaders = [
     "candidateEmail", "candidateUid", "interviewerEmail", "templateName", "date", "time",
-    "round", "verdict", ...(withNotes ? ["notes"] : []), "meetingLink", "meetingRecordingLink",
+    "round", "verdict", ...(withNotes ? ["notes"] : []), "meetingLink", "meetingRecordingLink", "transcriptLink",
   ];
   const domainHeaders = [...new Set(invalid.flatMap(r => Object.keys(r.resolved.domainData || {})))];
   const headers = [...baseHeaders, ...domainHeaders, "errors (remove this column before re-uploading)"];
@@ -33,7 +33,7 @@ function downloadInvalidRows(parsedRows) {
   invalid.forEach(r => {
     const row = [
       r.raw.candidateEmail, r.raw.candidateUid, r.raw.interviewerEmail, r.raw.templateName,
-      r.raw.date, r.raw.time, r.raw.round, r.raw.verdict, ...(withNotes ? [r.raw.notes] : []), r.raw.meetingLink, r.raw.meetingRecordingLink,
+      r.raw.date, r.raw.time, r.raw.round, r.raw.verdict, ...(withNotes ? [r.raw.notes] : []), r.raw.meetingLink, r.raw.meetingRecordingLink, r.raw.transcriptLink,
       ...domainHeaders.map(h => r.resolved.domainData?.[h] || ""),
       r.errors.join(" | "),
     ];
@@ -89,6 +89,7 @@ export default function ImportModal({
                   ["notes",            "No",  "Overall remarks — only for templates with no Overall Remarks/Feedback section"],
                   ["meetingLink",          "No", "https://meet.google.com/abc-defg-hij"],
                   ["meetingRecordingLink", "No", "Link to the recorded meeting"],
+                  ["transcriptLink",       "No", "Link to the meeting transcript (e.g. Google Doc)"],
                   ["{domainId}_{fieldId}_rating","No",  "e.g. coding_ps_rating → score for that specific card field (0–5)"],
                   ["{domainId}_rating",          "No",  "e.g. resume_rating → for domains with no card fields"],
                   ["{domainId}_notes",            "No",  "e.g. coding_notes → remarks for that domain. The overall section's column (e.g. overall_remarks_notes) is the panelist's overall remarks — shown in the app and sent to other apps"],
