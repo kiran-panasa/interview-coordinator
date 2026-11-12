@@ -1743,40 +1743,47 @@ export default function InterviewsPage() {
     return true;
   }), [workingSet, activeProgram, templateProgram]);
 
+  const ivrKey = (i) => i.interviewerId || i.interviewerEmail || "";
+  // Every filter except the active Program tab — shared by `filtered` below
+  // and by each Program tab's own count (see the tab bar further down), so
+  // a Status/Date/Interviewer/Vendor/etc. filter narrows what each tab's
+  // badge shows the same way it narrows the table, instead of the badges
+  // staying frozen at the program's unfiltered total.
+  const matchesOtherFilters = useCallback((i) => {
+    if (filterStatus !== "All" && i.status !== filterStatus) return false;
+    if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
+    if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
+    if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
+    // Matches the interview's OWN snapshotted vendorId (see withVendorId,
+    // api/interviews.ts) — the same field the Vendor Dashboard and
+    // Firestore's own security rules go by, not a live lookup of the
+    // interviewer's CURRENT vendor assignment. A live lookup silently
+    // diverges from the Vendor Dashboard's own counts the moment an
+    // interviewer is reassigned to a different vendor (or removed), which
+    // is what made this page's Vendor-filtered count disagree with
+    // Interviewer Statistics for the same filters — same root cause
+    // already fixed there, see InterviewerStatsPage.jsx's
+    // interviewBelongsToVendor.
+    if (filterVendor   !== "All" && i.vendorId !== filterVendor) return false;
+    if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
+    if (filterSource   !== "All" && i.bookingSource !== filterSource) return false;
+    if (candSearch) {
+      const q = candSearch.trim().toLowerCase();
+      const hay = [i.candidateName, i.candidateEmail, i.candidateUid].filter(Boolean).join(" ").toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }, [filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, filterSource, candSearch]);
+
   // A search query bypasses the active Program tab (searches workingSet,
   // not the tab-scoped programWorkingSet) — otherwise a candidate on a
   // different tab than the one you happen to be viewing silently returns
   // zero results, which reads as "search is broken" rather than "search
   // worked, but you're on the wrong tab."
-  const ivrKey = (i) => i.interviewerId || i.interviewerEmail || "";
   const filtered = useMemo(() => {
     const base = candSearch.trim() ? workingSet : programWorkingSet;
-    return base.filter(i => {
-      if (filterStatus !== "All" && i.status !== filterStatus) return false;
-      if (filterDateFrom && i.scheduledDate < filterDateFrom) return false;
-      if (filterDateTo   && i.scheduledDate > filterDateTo)   return false;
-      if (filterIvr      !== "All" && ivrKey(i) !== filterIvr) return false;
-      // Matches the interview's OWN snapshotted vendorId (see withVendorId,
-      // api/interviews.ts) — the same field the Vendor Dashboard and
-      // Firestore's own security rules go by, not a live lookup of the
-      // interviewer's CURRENT vendor assignment. A live lookup silently
-      // diverges from the Vendor Dashboard's own counts the moment an
-      // interviewer is reassigned to a different vendor (or removed), which
-      // is what made this page's Vendor-filtered count disagree with
-      // Interviewer Statistics for the same filters — same root cause
-      // already fixed there, see InterviewerStatsPage.jsx's
-      // interviewBelongsToVendor.
-      if (filterVendor   !== "All" && i.vendorId !== filterVendor) return false;
-      if (filterTemplates.length && !filterTemplates.includes(i.templateName)) return false;
-      if (filterSource   !== "All" && i.bookingSource !== filterSource) return false;
-      if (candSearch) {
-        const q = candSearch.trim().toLowerCase();
-        const hay = [i.candidateName, i.candidateEmail, i.candidateUid].filter(Boolean).join(" ").toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-  }, [workingSet, programWorkingSet, filterStatus, filterDateFrom, filterDateTo, filterIvr, filterVendor, filterTemplates, filterSource, candSearch]);
+    return base.filter(matchesOtherFilters);
+  }, [workingSet, programWorkingSet, candSearch, matchesOtherFilters]);
 
   const { paged: pagedInterviews, page: ivrPage, setPage: setIvrPage, totalPages: ivrTotalPages, total: ivrTotal, pageSize: ivrPageSize } = usePagination(filtered, 10);
 
@@ -2102,11 +2109,11 @@ export default function InterviewsPage() {
       {programs.length > 0 && (
         <div className="flex border-b border-gray-200 mb-5">
           {[
-            { id: "all",        label: "All",        count: workingSet.length },
-            ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(i => templateProgram(i.templateId) === p.id).length })),
-            { id: "unassigned", label: "Unassigned", count: workingSet.filter(i => !templateProgram(i.templateId)).length },
+            { id: "all",        label: "All",        count: workingSet.filter(matchesOtherFilters).length },
+            ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(i => templateProgram(i.templateId) === p.id && matchesOtherFilters(i)).length })),
+            { id: "unassigned", label: "Unassigned", count: workingSet.filter(i => !templateProgram(i.templateId) && matchesOtherFilters(i)).length },
           ].map(tab => (
-            <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setFilterTemplate("All"); setIvrPage(1); }}
+            <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setFilterTemplates([]); setIvrPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
                 activeProgram === tab.id
                   ? "border-brand-600 text-brand-600"
