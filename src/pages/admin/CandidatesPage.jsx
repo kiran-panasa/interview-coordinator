@@ -13,6 +13,7 @@ import {
 } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
 import { ordinalLabel } from "../../utils/strings";
+import { compareByInterviewDate } from "../../utils/dates";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
@@ -179,9 +180,7 @@ function downloadSampleExcel(templates = [], programs = []) {
 async function getLatestTemplateStatus(candidateId, templateId) {
   const list = await getInterviewsForCandidateTemplate(candidateId, templateId).catch(() => []);
   if (!list.length) return { status: "not_started", attemptNumber: 1 };
-  const sorted = [...list].sort((a, b) =>
-    (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`)
-  );
+  const sorted = [...list].sort(compareByInterviewDate);
   let n = 1, attemptNumber = 1, status = sorted[0].status;
   for (const iv of sorted) {
     attemptNumber = n;
@@ -229,9 +228,7 @@ function computeLatestStatusByPair(interviews) {
   });
   const result = new Map();
   byPair.forEach((list, key) => {
-    const sorted = [...list].sort((a, b) =>
-      (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`)
-    );
+    const sorted = [...list].sort(compareByInterviewDate);
     let n = 1, attemptNumber = 1, status = sorted[0].status;
     for (const iv of sorted) {
       attemptNumber = n;

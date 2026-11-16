@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
   CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle, Menu, X,
 } from "lucide-react";
-import { formatDate, parseInterviewStart, formatDateTime, formatTimeLabel } from "../../utils/dates";
+import { formatDate, parseInterviewStart, formatDateTime, formatTimeLabel, compareByInterviewDate } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
 import { getPreInterviewResources } from "../../api/firestore";
 import { cancelInterviewByCandidate } from "../../services/booking.service";
@@ -553,7 +553,7 @@ export default function StudentDashboardPage() {
       let n = 1;
       list
         .slice()
-        .sort((a, b) => (a.createdAt || `${a.scheduledDate}T${a.scheduledTime || ""}`).localeCompare(b.createdAt || `${b.scheduledDate}T${b.scheduledTime || ""}`))
+        .sort(compareByInterviewDate)
         .forEach(iv => {
           if (n > 1) map.set(iv.id, ordinalLabel(n));
           if (iv.status === "completed") n++;
