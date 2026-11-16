@@ -910,19 +910,19 @@ export default function StudentDashboardPage() {
                     </div>
                     <p className="text-sm font-bold text-gray-900">Profile</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                    <div className="min-w-0">
                       <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Name</p>
-                      <p className="text-gray-800 font-medium mt-0.5">{candidate.name}</p>
+                      <p className="text-gray-800 font-medium mt-0.5 break-words">{candidate.name}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Email</p>
-                      <p className="text-gray-800 font-medium mt-0.5">{candidate.email}</p>
+                      <p className="text-gray-800 font-medium mt-0.5 break-all">{candidate.email}</p>
                     </div>
                     {candidate.program && (
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Program</p>
-                        <p className="text-gray-800 font-medium mt-0.5">{candidate.program}</p>
+                        <p className="text-gray-800 font-medium mt-0.5 break-words">{candidate.program}</p>
                       </div>
                     )}
                   </div>

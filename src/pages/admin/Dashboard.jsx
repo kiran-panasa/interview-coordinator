@@ -48,7 +48,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="p-8 max-w-7xl">
+    <div className="p-4 sm:p-6 md:p-8 max-w-7xl">
       <motion.div initial="hidden" animate="visible" variants={fadeUp} className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">Overview of all interview activity</p>
@@ -101,17 +101,19 @@ export default function AdminDashboard() {
                 <motion.div
                   key={i.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 + idx * 0.03 }}
-                  className="flex items-center justify-between gap-4 px-5 py-3.5 hover:bg-gray-50/70 transition-colors"
+                  className="px-5 py-3.5 hover:bg-gray-50/70 transition-colors"
                 >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{i.candidateName}</p>
-                    <p className="text-xs text-gray-500 truncate">{i.round} · {i.interviewerName}</p>
+                  {/* Two lines instead of 3 side-by-side columns — a fixed
+                     date column plus a badge left almost no room for the
+                     name/round text on a phone-width screen. */}
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-gray-900 truncate min-w-0">{i.candidateName}</p>
+                    <Badge value={i.status} />
                   </div>
-                  <div className="text-right flex-shrink-0 w-24">
-                    <p className="text-xs font-medium text-gray-700">{i.scheduledDate}</p>
-                    <p className="text-xs text-gray-400">{formatTimeLabel(i.scheduledTime)}</p>
+                  <div className="flex items-center justify-between gap-3 mt-0.5">
+                    <p className="text-xs text-gray-500 truncate min-w-0">{i.round} · {i.interviewerName}</p>
+                    <p className="text-xs text-gray-400 flex-shrink-0 whitespace-nowrap">{i.scheduledDate} · {formatTimeLabel(i.scheduledTime)}</p>
                   </div>
-                  <Badge value={i.status} />
                 </motion.div>
               ))}
             </div>

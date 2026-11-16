@@ -453,6 +453,7 @@ export default function VendorDashboardPage() {
                     </Card>
                   ) : (
                     <Card className="overflow-hidden">
+                      <div className="overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-gray-100">
@@ -492,6 +493,7 @@ export default function VendorDashboardPage() {
                           })}
                         </tbody>
                       </table>
+                      </div>
                     </Card>
                   )}
                 </div>

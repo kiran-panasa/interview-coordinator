@@ -79,18 +79,18 @@ export default function NudgePage() {
   const badgeFor = (id) => id === "interviewers" ? unreadResponses : id === "candidates" ? pendingBookings : id === "pending" ? pendingNudgeCount : 0;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
         className="mb-6"
       >
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Nudge</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Nudge</h1>
         <p className="text-sm text-gray-500 mt-1">Collect interviewer slots, then invite candidates to schedule</p>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-        className="flex gap-1 bg-gray-100 p-1.5 rounded-full w-fit mb-8"
+        className="flex gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full mb-8 overflow-x-auto scrollbar-thin"
       >
         {TABS.map(({ id, label, icon: Icon }) => {
           const isActive = activeTab === id;
@@ -99,7 +99,7 @@ export default function NudgePage() {
             <button
               key={id}
               onClick={() => setActiveTab(id)}
-              className={`relative px-5 py-2.5 text-sm font-semibold rounded-full transition-colors flex items-center gap-2 ${
+              className={`relative px-5 py-2.5 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors flex items-center gap-2 ${
                 isActive
                   ? "text-brand-700"
                   : badge > 0

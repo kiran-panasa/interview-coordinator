@@ -811,7 +811,7 @@ export default function CandidateSchedulingTab({
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
           <CalendarRange className="w-3.5 h-3.5 text-gray-400" /> Scheduling Campaign
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Start Date</label>
             <DatePicker value={dateStart} onChange={e => setDateStart(e.target.value)} min={today()} blockedDates={blockedDates}
@@ -1182,7 +1182,7 @@ export default function CandidateSchedulingTab({
         </div>
         {invites.length > 0 && (
           <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft px-4 py-3 mb-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-1">Status</label>
                 <select value={inviteStatusFilter} onChange={e => setInviteStatusFilter(e.target.value)}

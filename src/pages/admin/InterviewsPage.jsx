@@ -2074,13 +2074,13 @@ export default function InterviewsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-        className="flex items-center justify-between mb-6"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6"
       >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviews</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Interviews</h1>
           <p className="text-sm text-gray-500 mt-1">
             {interviews.length - archivedCount} active{archivedCount > 0 && ` · ${archivedCount} archived`}
             {" "}<span className="text-gray-400">({formatDate(filterDateFrom)} – {formatDate(filterDateTo)})</span>
@@ -2107,14 +2107,14 @@ export default function InterviewsPage() {
 
       {/* ── Program Tabs ── */}
       {programs.length > 0 && (
-        <div className="flex border-b border-gray-200 mb-5">
+        <div className="flex border-b border-gray-200 mb-5 overflow-x-auto scrollbar-thin">
           {[
             { id: "all",        label: "All",        count: workingSet.filter(matchesOtherFilters).length },
             ...programs.map(p => ({ id: p.id, label: p.name, count: workingSet.filter(i => templateProgram(i.templateId) === p.id && matchesOtherFilters(i)).length })),
             { id: "unassigned", label: "Unassigned", count: workingSet.filter(i => !templateProgram(i.templateId) && matchesOtherFilters(i)).length },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setFilterTemplates([]); setIvrPage(1); }}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap flex-shrink-0 transition-colors ${
                 activeProgram === tab.id
                   ? "border-brand-600 text-brand-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -2229,6 +2229,10 @@ export default function InterviewsPage() {
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.1 }}
         className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden"
       >
+        {/* overflow-hidden above is just for the rounded corners — this
+           inner wrapper is what actually lets the table scroll sideways on
+           a phone instead of being clipped with no way to see the rest. */}
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/60">
@@ -2542,6 +2546,7 @@ export default function InterviewsPage() {
             ))}
           </tbody>
         </table>
+        </div>
         <Pagination page={ivrPage} totalPages={ivrTotalPages} total={ivrTotal} pageSize={ivrPageSize} onPageChange={setIvrPage} />
       </motion.div>
 

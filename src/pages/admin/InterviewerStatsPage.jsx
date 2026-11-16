@@ -350,11 +350,11 @@ export default function InterviewerStatsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
         className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interviewer Statistics</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Interviewer Statistics</h1>
           {view === "stats" && (
             <p className="text-sm text-gray-500 mt-1">
               Interviewer-wise interview counts by status ({dateFrom} – {dateTo}) — widen the date range below for a longer report
@@ -503,6 +503,7 @@ export default function InterviewerStatsPage() {
             <p className="text-sm text-gray-400">No interviews match the current filters.</p>
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -541,6 +542,7 @@ export default function InterviewerStatsPage() {
               </tr>
             </tfoot>
           </table>
+          </div>
         )}
       </motion.div>
       </>

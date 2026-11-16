@@ -106,6 +106,11 @@ export default function QuestionBankTab({
           </div>
         ) : (
           <>
+            {/* overflow-hidden above is just for the rounded corners — this
+               inner wrapper is what actually lets the table scroll sideways
+               on a phone instead of being clipped with no way to see the
+               rest. */}
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100">
@@ -214,6 +219,7 @@ export default function QuestionBankTab({
                 })}
               </tbody>
             </table>
+            </div>
             {scopedMode ? (
               !pageDone && (
                 <div className="flex justify-center py-4 border-t border-gray-50">

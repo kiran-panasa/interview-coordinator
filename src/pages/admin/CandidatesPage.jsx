@@ -867,15 +867,15 @@ export default function CandidatesPage() {
   );
 
   return (
-    <div className="p-8">
-      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="flex items-center justify-between mb-6">
+    <div className="p-4 sm:p-6 md:p-8">
+      <motion.div initial="hidden" animate="visible" variants={fadeUp} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Candidates</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Candidates</h1>
           <p className="text-sm text-gray-500 mt-1">
             {counts ? `${counts.total - counts.archived} active` : "…"}{archivedCount > 0 && ` · ${archivedCount} archived`}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {selected.size > 0 && (
             <Button variant="secondary" icon={Users} onClick={() => { setBulkProgram(""); setBulkTemplates([]); setShowBulk(true); }}>
               Edit Selected ({selected.size})
@@ -892,14 +892,14 @@ export default function CandidatesPage() {
 
       {/* ── Program Tabs ── */}
       {programs.length > 0 && (
-        <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="flex border-b border-gray-200 mb-5">
+        <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={1} className="flex border-b border-gray-200 mb-5 overflow-x-auto scrollbar-thin">
           {[
             { id: "all",        label: "All",        count: tabCounts ? tabCounts.all : "…" },
             ...programs.map(p => ({ id: p.id, label: p.name, count: tabCounts ? tabCounts.byProgram[p.id] : "…" })),
             { id: "unassigned", label: "Unassigned", count: tabCounts ? tabCounts.unassigned : "…" },
           ].map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap flex-shrink-0 transition-colors ${
                 activeProgram === tab.id
                   ? "border-brand-600 text-brand-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -1006,8 +1006,66 @@ export default function CandidatesPage() {
       <motion.div initial="hidden" animate="visible" variants={fadeUp} custom={3} className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
         {(needsFullList ? isLoading : pageLoading) ? (
           <div className="p-4"><SkeletonRows count={6} /></div>
+        ) : rows.length === 0 ? (
+          <p className="text-center text-gray-400 py-12">No candidates found</p>
         ) : (
-          <table className="w-full text-sm">
+          <>
+            {/* Mobile: one card per candidate instead of a table clipped to
+               just the first two columns on a phone screen. */}
+            <div className="md:hidden divide-y divide-gray-50">
+              {rows.map(c => (
+                <div key={c.id} className={`p-4 ${selected.has(c.id) ? "bg-brand-50" : ""}`}>
+                  <div className="flex items-start gap-3">
+                    <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
+                      className="accent-brand-600 w-4 h-4 cursor-pointer mt-1 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-semibold text-gray-900 truncate">{isSwapped(c) ? c.uid : c.name}</p>
+                        <KebabMenu actions={[
+                          { label: "Edit",   onClick: () => openEdit(c), show: !showArchived },
+                          { label: "Manage Attempts, No-Shows & Cancellations", onClick: () => setAttemptsTarget(c), show: (c.templateIds || []).length > 0 },
+                          ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
+                          { label: "Archive",   onClick: () => handleArchive(c),   show: c.archived !== true },
+                          { label: "Unarchive", onClick: () => handleUnarchive(c), show: c.archived === true },
+                          { label: "Delete", onClick: () => handleDelete(c), danger: true },
+                        ]} />
+                      </div>
+                      <p className="font-mono text-[11px] text-gray-500 mt-1 truncate">{isSwapped(c) ? c.name : (c.uid || "—")}</p>
+                      <p className="text-xs text-gray-600 truncate mt-0.5">{c.email || "—"}</p>
+                      {c.phone && <p className="text-xs text-gray-400 mt-0.5">{c.phone}</p>}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                        {c.program && (
+                          <span className="text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full">{programName(c.program)}</span>
+                        )}
+                        {(c.templateIds || []).map(tid => {
+                          const t = templates.find(x => x.id === tid);
+                          return t ? (
+                            <span key={tid} className="text-[10px] font-semibold bg-brand-50 text-brand-700 border border-brand-200 px-1.5 py-0.5 rounded-full">{t.name}</span>
+                          ) : null;
+                        })}
+                      </div>
+                      {statusByCandidateId.has(c.id) && (
+                        <div className="flex flex-col gap-1 mt-2">
+                          {statusByCandidateId.get(c.id).map(s => (
+                            <span key={s.templateId}
+                              className={`inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border bg-white w-fit max-w-full ${STATUS_OUTLINE_STYLES[s.status] || "border-gray-300 text-gray-500"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[s.status] || "bg-gray-400"}`} />
+                              <span className="truncate opacity-70 font-medium">{s.templateName}:</span>
+                              <span className="font-bold whitespace-nowrap">
+                                {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: unchanged table. */}
+            <table className="hidden md:table w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="px-4 py-3 w-8">
@@ -1022,9 +1080,7 @@ export default function CandidatesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {rows.length === 0 ? (
-                <tr><td colSpan={8} className="text-center text-gray-400 py-12">No candidates found</td></tr>
-              ) : rows.map((c, idx) => (
+              {rows.map((c, idx) => (
                 <motion.tr
                   key={c.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(idx, 10) * 0.02, duration: 0.2 }}
@@ -1107,6 +1163,7 @@ export default function CandidatesPage() {
               ))}
             </tbody>
           </table>
+          </>
         )}
         {needsFullList ? (
           <Pagination page={candPage} totalPages={candTotalPages} total={candTotal} pageSize={candPageSize} onPageChange={setCandPage} />

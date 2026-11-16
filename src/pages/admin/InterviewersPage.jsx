@@ -325,7 +325,7 @@ export default function InterviewersPage() {
   const rows = needsFullList ? paged : pageItems;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
         className="flex items-center justify-between mb-6 flex-wrap gap-4"
@@ -462,7 +462,69 @@ export default function InterviewersPage() {
           </div>
         ) : (
           <>
-          <table className="w-full text-sm">
+          {/* Mobile: one card per interviewer instead of a table clipped to
+             just the Interviewer/Company columns on a phone screen. */}
+          <div className="md:hidden divide-y divide-gray-50">
+            {rows.map(u => (
+              <div key={u.id} className={`p-4 ${selectedIds.has(u.id) ? "bg-brand-50/40" : ""}`}>
+                <div className="flex items-start gap-3">
+                  <input type="checkbox" checked={selectedIds.has(u.id)} onChange={() => toggleSelect(u.id)}
+                    className="w-4 h-4 accent-brand-600 cursor-pointer mt-1 flex-shrink-0" />
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 ${avatarColor(u.id)}`}>
+                    {initials(u.displayName, u.email)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-semibold text-gray-900 leading-tight truncate">{u.displayName || "—"}</p>
+                      <KebabMenu actions={[
+                        ...(!showArchived ? [
+                          { label: "View Availability", onClick: () => viewAvailability(u) },
+                          { label: "Edit",              onClick: () => openEdit(u) },
+                          ...(canDelete ? [{ label: "Archive", onClick: () => handleDelete(u), danger: true }] : []),
+                        ] : [
+                          ...(canDelete ? [{ label: "Restore", onClick: () => handleRestore(u) }] : []),
+                        ]),
+                      ]} />
+                    </div>
+                    {u.role === "interviewer_content" ? (
+                      <span className="inline-flex items-center text-[10px] font-semibold text-teal-700 bg-teal-50 ring-1 ring-inset ring-teal-200 px-1.5 py-0.5 rounded-full mt-1">
+                        Interviewer + Content
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center text-[10px] font-semibold text-teal-700 bg-teal-50 ring-1 ring-inset ring-teal-200 px-1.5 py-0.5 rounded-full mt-1">
+                        Interviewer
+                      </span>
+                    )}
+                    {showArchived && u.archivedAt && (
+                      <p className="text-[10px] text-amber-600 mt-1">
+                        Archived {new Date(u.archivedAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-600 font-mono mt-1.5 truncate">{u.email}</p>
+                    {u.phone && <p className="text-xs text-gray-400 mt-0.5">{u.phone}</p>}
+                    {(u.company || u.companyRole) && (
+                      <p className="text-xs text-gray-500 mt-0.5">{u.companyRole}{u.companyRole && u.company ? " at " : ""}{u.company}</p>
+                    )}
+                    {(u.skills || []).length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {(u.skills || []).map(sid => {
+                          const sk = skills.find(s => s.id === sid);
+                          return sk ? (
+                            <span key={sid} className="text-[10px] font-semibold bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200 px-1.5 py-0.5 rounded-full">
+                              {sk.name}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop: unchanged table. */}
+          <table className="hidden md:table w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="px-4 py-3 w-10">

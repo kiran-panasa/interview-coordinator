@@ -433,13 +433,13 @@ export default function TemplatesPage() {
   ];
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
-        className="flex items-center justify-between mb-6"
+        className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6"
       >
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Interview Templates</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight">Interview Templates</h1>
           <p className="text-sm text-gray-500 mt-1">Define domains, evaluation fields, and question banks</p>
         </div>
         {pageView === "templates" && (
@@ -464,11 +464,11 @@ export default function TemplatesPage() {
       {/* ── Page view toggle: template list vs. the shared Integrity checklist ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.03 }}
-        className="flex gap-1 bg-gray-100 p-1.5 rounded-full w-fit mb-6"
+        className="flex gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full mb-6 overflow-x-auto scrollbar-thin"
       >
         {[["templates", "Templates", LayoutGrid], ["integrity", "Interview Integrity", ShieldCheck], ["lifecycle", "Lifecycle", GitBranch]].map(([id, label, Icon]) => (
           <button key={id} onClick={() => setPageView(id)}
-            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full transition-colors ${
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
               pageView === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
             }`}>
             <Icon className="w-4 h-4" />

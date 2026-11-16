@@ -557,7 +557,7 @@ export default function InterviewDetail() {
   );
 
   if (loading) return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 sm:p-6 md:p-8 max-w-3xl">
       <Skeleton className="h-4 w-40 mb-6" />
       <div className="flex items-start justify-between mb-6">
         <div className="space-y-2.5">
@@ -580,7 +580,7 @@ export default function InterviewDetail() {
     </div>
   );
   if (!interview) return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 sm:p-6 md:p-8 max-w-3xl">
       <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-10 text-center">
         <AlertTriangle className="w-8 h-8 text-gray-300 mx-auto mb-3" />
         <p className="text-sm text-gray-400">Interview not found.</p>
@@ -621,7 +621,7 @@ export default function InterviewDetail() {
   const labelCls = "block text-sm font-semibold text-gray-700 mb-2";
 
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 sm:p-6 md:p-8 max-w-3xl">
       <Link to="/interviewer/interviews"
         className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-emerald-600 transition-colors mb-6">
         <ArrowLeft className="w-3.5 h-3.5" /> Back to My Interviews
@@ -854,7 +854,7 @@ export default function InterviewDetail() {
           template applies immediately here too. ── */}
       {template?.guidelinesDocUrl && (
         <motion.div initial="hidden" animate="visible" custom={2.5} variants={fadeUp}
-          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
               <FileText className="w-4 h-4 text-gray-400" /> Interview Guidelines / Format
@@ -865,7 +865,7 @@ export default function InterviewDetail() {
             href={template.guidelinesDocUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-full shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-full shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
           >
             View Document
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -876,7 +876,7 @@ export default function InterviewDetail() {
       {/* ── Questions Asked — opens in a separate tab so the evaluation form isn't lost ── */}
       {showEvaluation && totalQuestions > 0 && (
         <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp}
-          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5 flex items-center justify-between gap-3">
+          className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
               <HelpCircle className="w-4 h-4 text-gray-400" /> Questions Asked
@@ -887,7 +887,7 @@ export default function InterviewDetail() {
             to={`/interviewer/interviews/${id}/questions`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-full shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-full shadow-soft hover:bg-emerald-700 transition-colors whitespace-nowrap"
           >
             View/Select Questions to be Asked
             <ArrowUpRight className="w-3.5 h-3.5" />
