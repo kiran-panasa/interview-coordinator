@@ -9,6 +9,8 @@ import { useAuth } from "../../AuthContext";
 import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import Badge from "../../components/Badge";
 import StatCard from "../../components/ui/StatCard";
+import JoinFromLaptopModal from "../../components/JoinFromLaptopModal";
+import { isMobileDevice } from "../../utils/device";
 import { SkeletonStatCards, SkeletonRows } from "../../components/Skeleton";
 
 function PhoneNudge({ userProfile }) {
@@ -44,6 +46,15 @@ export default function InterviewerDashboard() {
   useEffect(() => {
     if (interviews !== initialInterviewsRef.current) setLoaded(true);
   }, [interviews]);
+
+  // Interviews should be conducted from a laptop — on a phone/tablet
+  // browser, this blocks the in-app Join Meet button and shows a polite
+  // nudge instead of opening the link.
+  const [showLaptopGate, setShowLaptopGate] = useState(false);
+  const handleJoinMeet = (link) => {
+    if (isMobileDevice()) { setShowLaptopGate(true); return; }
+    window.open(link, "_blank", "noopener");
+  };
 
   const today = new Date().toISOString().slice(0, 10);
   const upcoming  = interviews.filter(i => i.scheduledDate >= today && (i.status === "scheduled" || i.status === "pending_acceptance"));
@@ -115,7 +126,7 @@ export default function InterviewerDashboard() {
                       <p className="text-sm font-medium text-gray-700 whitespace-nowrap">{formatTimeLabel(i.scheduledTime)}</p>
                       {i.meetLink && i.status === "scheduled" && (
                         <span role="link"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.open(i.meetLink, "_blank", "noopener"); }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleJoinMeet(i.meetLink); }}
                           className="text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full cursor-pointer hover:bg-emerald-100 whitespace-nowrap">
                           Join Meet
                         </span>
@@ -166,6 +177,8 @@ export default function InterviewerDashboard() {
           )}
         </motion.div>
       </div>
+
+      <JoinFromLaptopModal open={showLaptopGate} onClose={() => setShowLaptopGate(false)} />
     </div>
   );
 }

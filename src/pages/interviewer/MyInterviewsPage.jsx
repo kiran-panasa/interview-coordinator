@@ -7,6 +7,8 @@ import { useAuth } from "../../AuthContext";
 import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import Badge from "../../components/Badge";
 import Pagination from "../../components/Pagination";
+import JoinFromLaptopModal from "../../components/JoinFromLaptopModal";
+import { isMobileDevice } from "../../utils/device";
 import { usePagination } from "../../hooks/usePagination";
 import { SkeletonRows } from "../../components/Skeleton";
 
@@ -38,6 +40,14 @@ export default function MyInterviewsPage() {
   const [tab, setTab] = useState(highlightId ? "All" : "Upcoming");
   const [filterStatus, setFilterStatus] = useState("All");
   const [highlightedRow, setHighlightedRow] = useState(highlightId || null);
+
+  // Interviews should be conducted from a laptop — on a phone/tablet
+  // browser, this blocks the Join Meet link and shows a polite nudge
+  // instead of opening the meeting.
+  const [showLaptopGate, setShowLaptopGate] = useState(false);
+  const handleJoinMeet = (e, link) => {
+    if (isMobileDevice()) { e.preventDefault(); setShowLaptopGate(true); }
+  };
 
   // interviews starts out as the hook's initial [] and is replaced with a new
   // array reference the moment the first Firestore snapshot arrives — compare
@@ -166,7 +176,7 @@ export default function MyInterviewsPage() {
                   )}
                   <div className="mt-2.5 flex items-center gap-3">
                     {i.meetLink && i.status === "scheduled" && (
-                      <a href={i.meetLink} target="_blank" rel="noreferrer"
+                      <a href={i.meetLink} target="_blank" rel="noreferrer" onClick={(e) => handleJoinMeet(e, i.meetLink)}
                         className="text-xs text-emerald-700 font-semibold hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full whitespace-nowrap">
                         Join Meet
                       </a>
@@ -221,7 +231,7 @@ export default function MyInterviewsPage() {
                     </td>
                     <td className="px-4 py-3 max-w-[18rem]">
                       {i.meetLink && i.status === "scheduled" && (
-                        <a href={i.meetLink} target="_blank" rel="noreferrer"
+                        <a href={i.meetLink} target="_blank" rel="noreferrer" onClick={(e) => handleJoinMeet(e, i.meetLink)}
                           className="text-xs text-emerald-700 font-semibold hover:text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full mr-3 whitespace-nowrap">
                           Join Meet
                         </a>
@@ -251,6 +261,8 @@ export default function MyInterviewsPage() {
           </>
         )}
       </motion.div>
+
+      <JoinFromLaptopModal open={showLaptopGate} onClose={() => setShowLaptopGate(false)} />
     </div>
   );
 }

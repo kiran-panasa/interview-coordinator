@@ -24,6 +24,8 @@ import Badge from "../../components/Badge";
 import CopyButton from "../../components/CopyButton";
 import Toast from "../../components/Toast";
 import Modal from "../../components/Modal";
+import JoinFromLaptopModal from "../../components/JoinFromLaptopModal";
+import { isMobileDevice } from "../../utils/device";
 import AutosaveIndicator from "../../components/AutosaveIndicator";
 import { Skeleton } from "../../components/Skeleton";
 import { useAutosaveDraft } from "../../hooks/useAutosaveDraft";
@@ -75,6 +77,13 @@ export default function InterviewDetail() {
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
   const [toast,     setToast]     = useState(null);
+  // Interviews should be conducted from a laptop — on a phone/tablet
+  // browser, this blocks the Join Meet link and shows a polite nudge
+  // instead of opening the meeting.
+  const [showLaptopGate, setShowLaptopGate] = useState(false);
+  const handleJoinMeet = (e) => {
+    if (isMobileDevice()) { e.preventDefault(); setShowLaptopGate(true); }
+  };
   const [answers,        setAnswers]        = useState({});
   const [comments,       setComments]       = useState("");
   const [now,            setNow]            = useState(new Date());
@@ -676,7 +685,7 @@ export default function InterviewDetail() {
             <div className="col-span-2">
               <p className="text-xs text-gray-400 mb-0.5">Meet Link</p>
               <div className="inline-flex items-center gap-1">
-                <a href={interview.meetLink} target="_blank" rel="noreferrer"
+                <a href={interview.meetLink} target="_blank" rel="noreferrer" onClick={handleJoinMeet}
                   className="inline-flex items-center gap-1.5 text-sm text-emerald-600 font-medium hover:underline break-all">
                   <Video className="w-3.5 h-3.5 flex-shrink-0" /> {interview.meetLink} <ArrowUpRight className="w-3 h-3 flex-shrink-0" />
                 </a>
@@ -1213,6 +1222,7 @@ export default function InterviewDetail() {
       </Modal>
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}
+      <JoinFromLaptopModal open={showLaptopGate} onClose={() => setShowLaptopGate(false)} />
     </div>
   );
 }
