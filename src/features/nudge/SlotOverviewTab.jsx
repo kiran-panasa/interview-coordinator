@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Search } from "lucide-react";
 import Pagination from "../../components/Pagination";
 import DatePicker from "../../components/DatePicker";
 import SkillsSelect from "../../components/SkillsSelect";
@@ -20,6 +21,7 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedSkillIds,   setSelectedSkillIds]   = useState([]);
   const [selectedVendorIds,  setSelectedVendorIds]  = useState([]);
+  const [ivrSearch,          setIvrSearch]          = useState("");
   const [fromDate, setFromDate] = useState(today());
   const [toDate,   setToDate]   = useState(inDays(7));
 
@@ -50,8 +52,12 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
     if (selectedVendorIds.length) {
       base = base.filter(u => u.vendorId && selectedVendorIds.includes(u.vendorId));
     }
+    if (ivrSearch.trim()) {
+      const q = ivrSearch.trim().toLowerCase();
+      base = base.filter(u => (u.displayName || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q));
+    }
     return base;
-  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillIds, selectedVendorIds]);
+  }, [activeInterviewers, selectedTemplateId, selectedProgramId, programTemplates, selectedSkillIds, selectedVendorIds, ivrSearch]);
 
   const datesSelected = !!(fromDate && toDate);
 
@@ -116,13 +122,19 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
 
   const datePagination = usePagination(collapsedByDate);
   // Reset to page 1 when filters change
-  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillIds, selectedVendorIds, fromDate, toDate]); // eslint-disable-line
+  useEffect(() => { datePagination.setPage(1); }, [selectedProgramId, selectedTemplateId, selectedSkillIds, selectedVendorIds, ivrSearch, fromDate, toDate]); // eslint-disable-line
 
   return (
     <div className="space-y-6">
       {/* Filters + summary */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5">
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Slot Overview</p>
+        <div className="relative mb-4 max-w-sm">
+          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input type="text" value={ivrSearch} onChange={e => setIvrSearch(e.target.value)}
+            placeholder="Search interviewer by name or email…"
+            className="w-full border border-gray-300 rounded-full pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
@@ -212,6 +224,11 @@ export default function SlotOverviewTab({ programs, templates, skills = [], acti
           {!datesSelected ? (
             <>
               <p className="text-sm text-gray-400">Select a date range to view available slots.</p>
+            </>
+          ) : ivrSearch.trim() && templateInterviewers.length === 0 ? (
+            <>
+              <p className="text-sm text-gray-400">No interviewer matches "{ivrSearch.trim()}".</p>
+              <p className="text-xs text-gray-300">Check the spelling, or clear the search to see everyone.</p>
             </>
           ) : (
             <>
