@@ -102,13 +102,24 @@ export function AuthProvider({ children }) {
   // Firebase ID tokens expire hourly and normally auto-refresh on a timer —
   // but browsers throttle timers in backgrounded tabs, so a tab left idle
   // for a while can come back with a stale token. Every Firestore call then
-  // silently fails until the token refreshes on its own. Force a refresh
-  // the moment the tab becomes visible again, before that has a chance to
-  // bite.
+  // silently fails until the token refreshes on its own, so this checks on
+  // every tab-focus — but only actually FORCES a refresh (getIdToken(true),
+  // a real round-trip to Google's auth servers) when the cached token is
+  // genuinely close to expiring. Doing that unconditionally on every single
+  // tab switch — not just after a long idle stretch — meant a transient
+  // failure on any one of those frequent calls (a network blip, a laptop
+  // still reconnecting WiFi after waking up) could read to the Firebase SDK
+  // as an invalid session and sign the user out for real, which is a much
+  // worse outcome than the stale-token problem this was meant to prevent.
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === "visible" && auth.currentUser) {
-        auth.currentUser.getIdToken(true).catch(e => logError(e, { label: "forceTokenRefresh" }));
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible" || !auth.currentUser) return;
+      try {
+        const { expirationTime } = await auth.currentUser.getIdTokenResult();
+        const msUntilExpiry = new Date(expirationTime).getTime() - Date.now();
+        if (msUntilExpiry < 5 * 60 * 1000) await auth.currentUser.getIdToken(true);
+      } catch (e) {
+        logError(e, { label: "forceTokenRefresh" });
       }
     };
     document.addEventListener("visibilitychange", onVisible);
