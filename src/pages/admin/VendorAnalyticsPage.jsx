@@ -358,45 +358,10 @@ export default function VendorAnalyticsPage() {
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <PieChart className="w-5 h-5 text-brand-500" /> Analytics
         </h1>
-        <p className="text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-1.5">
-          Compare every vendor's interview performance from one screen —
-          <span className="inline-flex items-center gap-1 font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
-            {dateFilterFrom ? "Date Filter" : PERIOD_LABEL[period]} · {range.from === range.to ? formatRangeDate(range.from) : `${formatRangeDate(range.from)} – ${formatRangeDate(range.to)}`}
-          </span>
+        <p className="text-sm text-gray-500 mt-1">
+          Compare every vendor's interview performance from one screen.
         </p>
       </motion.div>
-
-      {/* ── Period toggle ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-        <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full overflow-x-auto scrollbar-thin">
-          {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
-            <button key={id} onClick={() => setPeriod(id)}
-              disabled={!!dateFilterFrom}
-              className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
-                dateFilterFrom ? "text-gray-300 cursor-not-allowed"
-                  : period === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── KPI cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        {KPI_CARDS.map((c, i) => (
-          <motion.div key={c.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">{c.label}</p>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${c.iconBg}`}>
-                <c.icon className={`w-4 h-4 ${c.color}`} strokeWidth={2} />
-              </div>
-            </div>
-            <p className={`text-2xl font-bold mt-1.5 ${c.color}`}>{c.value}</p>
-          </motion.div>
-        ))}
-      </div>
 
       {/* ── Filters ── */}
       <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 mb-5">
@@ -417,7 +382,7 @@ export default function VendorAnalyticsPage() {
           </div>
           <div className="w-full sm:w-auto">
             <label className="block text-xs font-semibold text-gray-500 mb-1">
-              Date {dateFilterFrom && <span className="text-violet-500 normal-case font-normal">— overrides period above</span>}
+              Date {dateFilterFrom && <span className="text-violet-500 normal-case font-normal">— overrides period below</span>}
             </label>
             <div className="flex items-center gap-1.5">
               <DatePicker value={dateFilterFrom} max={todayIso()} onChange={e => setDateFilterFrom(e.target.value)}
@@ -438,6 +403,52 @@ export default function VendorAnalyticsPage() {
             <Download className="w-3.5 h-3.5" /> Export
           </button>
         </div>
+      </div>
+
+      {/* ── Period toggle ── */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full overflow-x-auto scrollbar-thin">
+          {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
+            <button key={id} onClick={() => setPeriod(id)}
+              disabled={!!dateFilterFrom}
+              className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
+                dateFilterFrom ? "text-gray-300 cursor-not-allowed"
+                  : period === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Active date range — kept clearly visible right under the period
+          toggle (rather than buried in the header) since it's what the KPI
+          cards and table below are actually scoped to. */}
+      <div className="flex items-center gap-2 mb-6 px-4 py-2.5 bg-brand-50 border border-brand-100 rounded-xl w-fit max-w-full">
+        <CalendarClock className="w-4 h-4 text-brand-500 flex-shrink-0" />
+        <span className="text-sm font-semibold text-brand-700">
+          {dateFilterFrom ? "Date Filter" : PERIOD_LABEL[period]}
+        </span>
+        <span className="text-brand-300">·</span>
+        <span className="text-sm font-semibold text-gray-700">
+          {range.from === range.to ? formatRangeDate(range.from) : `${formatRangeDate(range.from)} – ${formatRangeDate(range.to)}`}
+        </span>
+      </div>
+
+      {/* ── KPI cards ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+        {KPI_CARDS.map((c, i) => (
+          <motion.div key={c.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+            className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">{c.label}</p>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${c.iconBg}`}>
+                <c.icon className={`w-4 h-4 ${c.color}`} strokeWidth={2} />
+              </div>
+            </div>
+            <p className={`text-2xl font-bold mt-1.5 ${c.color}`}>{c.value}</p>
+          </motion.div>
+        ))}
       </div>
 
       {/* ── Compare-by toggle + search + sort ── */}
