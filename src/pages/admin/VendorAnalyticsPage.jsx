@@ -17,7 +17,16 @@ import Pagination from "../../components/Pagination";
 // ── Date-range helpers — same shape as InterviewerStatsPage's own, kept
 // local rather than shared since each page's "previous period" math differs
 // (this page needs one, that page doesn't). ──────────────────────────────
-function iso(d) { return d.toISOString().slice(0, 10); }
+// Local calendar date, not toISOString() — that converts to UTC first,
+// which silently shifts the date backward by a day for any positive UTC
+// offset (e.g. IST, UTC+5:30: local midnight Nov 1 is 18:30 UTC on Oct 31).
+// scheduledDate strings elsewhere in this app are plain local calendar
+// dates, not UTC timestamps, so this has to match that or every period
+// boundary (and the header's own date range) comes out one day early.
+function iso(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 function todayIso() { return iso(new Date()); }
 function thisWeekRange() {
   const now = new Date();
@@ -34,6 +43,15 @@ function thisMonthRange() {
   return { from: iso(first), to: iso(last) };
 }
 function allTimeRange() { return { from: "2000-01-01", to: "2099-12-31" }; }
+// "16 Nov 2026" — a compact, readable form for the header's date range,
+// parsed as a local date (not `new Date(isoStr)`, which some browsers
+// read as UTC midnight and can again print one day early/late depending
+// on the viewer's own timezone).
+function formatRangeDate(isoStr) {
+  const [y, m, d] = isoStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time", custom: "Custom Range" };
 // The immediately-preceding period of the SAME length — e.g. this week's
 // comparison is last week, this month's is last month, a custom 10-day
 // range's is the 10 days right before it. "Overall" has no meaningful
@@ -327,8 +345,11 @@ export default function VendorAnalyticsPage() {
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
           <PieChart className="w-5 h-5 text-brand-500" /> Vendor Analytics
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Compare every vendor's interview performance from one screen — {period === "custom" ? `${range.from} to ${range.to}` : `${range.from} – ${range.to}`}
+        <p className="text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-1.5">
+          Compare every vendor's interview performance from one screen —
+          <span className="inline-flex items-center gap-1 font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
+            {PERIOD_LABEL[period]} · {range.from === range.to ? formatRangeDate(range.from) : `${formatRangeDate(range.from)} – ${formatRangeDate(range.to)}`}
+          </span>
         </p>
       </motion.div>
 
