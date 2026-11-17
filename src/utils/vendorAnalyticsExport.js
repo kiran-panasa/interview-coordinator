@@ -9,7 +9,7 @@ export function exportVendorAnalytics(headers, rows, filenamePrefix = "vendor_an
   ws["!cols"] = headers.map((h) => ({ wch: Math.max(12, Math.min(28, h.length + 6)) }));
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Vendor Analytics");
+  XLSX.utils.book_append_sheet(wb, ws, "Analytics");
 
   const today = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb, `${filenamePrefix}_${today}.xlsx`);

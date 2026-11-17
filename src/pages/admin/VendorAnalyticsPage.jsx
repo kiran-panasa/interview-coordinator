@@ -57,6 +57,45 @@ const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Tim
 const UNASSIGNED_PROGRAM_ID = "__unassigned__";
 const NO_VENDOR_ID = "__no_vendor__";
 
+// One color per column category, reused for that column's header border +
+// label AND its body cells further down — Completed is emerald everywhere
+// on this page, Cancelled is amber everywhere, etc., same idea as Linear's
+// issue tables or Notion's database columns color-coding by category
+// instead of leaving every header the same uniform gray.
+const ACCENT = {
+  identity:   { border: "border-brand-300",   text: "text-brand-700" },
+  panelists:  { border: "border-indigo-300",  text: "text-indigo-700" },
+  scheduled:  { border: "border-slate-300",   text: "text-slate-600" },
+  completed:  { border: "border-emerald-300", text: "text-emerald-700" },
+  partial:    { border: "border-sky-300",     text: "text-sky-700" },
+  rescheduled:{ border: "border-violet-300",  text: "text-violet-700" },
+  cancelled:  { border: "border-amber-300",   text: "text-amber-700" },
+  noShow:     { border: "border-red-300",     text: "text-red-700" },
+  declined:   { border: "border-rose-300",    text: "text-rose-700" },
+};
+
+// A colored initial avatar per vendor/panelist row — same deterministic
+// hash-based pattern already used for interviewer avatars in
+// InterviewersPage.jsx, so every vendor gets its own consistent color at a
+// glance (what the user meant by "colorful companywise") instead of every
+// row looking identical.
+const AVATAR_COLORS = [
+  "bg-brand-100 text-brand-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-violet-100 text-violet-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-cyan-100 text-cyan-700",
+];
+function avatarColor(key) {
+  let n = 0;
+  for (const ch of (key || "")) n += ch.charCodeAt(0);
+  return AVATAR_COLORS[n % AVATAR_COLORS.length];
+}
+function initials(name) {
+  return (name || "?").split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
+}
+
 const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
   { id: "completed",        name: "Completed" },
@@ -290,7 +329,7 @@ export default function VendorAnalyticsPage() {
       <div className="p-4 sm:p-6 md:p-8 flex flex-col items-center justify-center min-h-[60vh] text-center">
         <Lock className="w-8 h-8 text-gray-300 mb-3" />
         <p className="text-sm font-semibold text-gray-600">Admins only</p>
-        <p className="text-xs text-gray-400 mt-1">Vendor Analytics isn't available for your role.</p>
+        <p className="text-xs text-gray-400 mt-1">Analytics isn't available for your role.</p>
       </div>
     );
   }
@@ -314,7 +353,7 @@ export default function VendorAnalyticsPage() {
     <div className="p-4 sm:p-6 md:p-8">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 tracking-tight flex items-center gap-2">
-          <PieChart className="w-5 h-5 text-brand-500" /> Vendor Analytics
+          <PieChart className="w-5 h-5 text-brand-500" /> Analytics
         </h1>
         <p className="text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-1.5">
           Compare every vendor's interview performance from one screen —
@@ -438,29 +477,37 @@ export default function VendorAnalyticsPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="sticky left-0 bg-white text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 z-10">
+                {/* Colored bottom border + tinted label per column, each
+                   matching that metric's color everywhere else on this page
+                   (same emerald for Completed here as the KPI card and the
+                   body cells below) — the same "color-code the category,
+                   not just the active state" pattern dashboards like
+                   Linear's issue tables or Notion's databases use on their
+                   own column headers, so the row reads at a glance instead
+                   of as a wall of uniform gray text. */}
+                <tr className="border-b-2 border-gray-100">
+                  <th className={`sticky left-0 bg-white text-left text-xs font-bold uppercase tracking-wide px-4 py-3 z-10 border-b-2 ${ACCENT.identity.border} ${ACCENT.identity.text}`}>
                     {compareBy === "vendor" ? "Vendor" : "Panelist"}
                   </th>
                   {compareBy === "vendor" ? (
                     <>
-                      <SortableHeader field="panelists" label="Total Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                      <SortableHeader field="panelistsScheduled" label="Panelists Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort}
+                      <SortableHeader field="panelists" label="Total Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists} />
+                      <SortableHeader field="panelistsScheduled" label="Panelists Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
                         title="How many of this vendor's panelists actually had at least one interview in this period — out of the total Panelists column." />
                     </>
                   ) : (
-                    <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">Vendor</th>
+                    <th className={`text-left text-xs font-bold uppercase tracking-wide px-4 py-3 border-b-2 ${ACCENT.panelists.border} ${ACCENT.panelists.text}`}>Vendor</th>
                   )}
-                  <SortableHeader field="scheduled" label="Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                  <SortableHeader field="completed" label="Completed" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
-                  <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Partial</th>
-                  <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Rescheduled</th>
-                  <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Cancelled (A/S/I)</th>
-                  <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">No-Show</th>
-                  <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap">Declined</th>
-                  <SortableHeader field="completionRate" label="Completion" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" />
-                  <SortableHeader field="cancellationRate" label="Cancel Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" />
-                  <SortableHeader field="noShowRate" label="No-Show Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" />
+                  <SortableHeader field="scheduled" label="Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.scheduled} />
+                  <SortableHeader field="completed" label="Completed" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.completed} />
+                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.partial.border} ${ACCENT.partial.text}`}>Partial</th>
+                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.rescheduled.border} ${ACCENT.rescheduled.text}`}>Rescheduled</th>
+                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.cancelled.border} ${ACCENT.cancelled.text}`}>Cancelled (A/S/I)</th>
+                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.noShow.border} ${ACCENT.noShow.text}`}>No-Show</th>
+                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.declined.border} ${ACCENT.declined.text}`}>Declined</th>
+                  <SortableHeader field="completionRate" label="Completion" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.completed} />
+                  <SortableHeader field="cancellationRate" label="Cancel Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.cancelled} />
+                  <SortableHeader field="noShowRate" label="No-Show Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.noShow} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -469,7 +516,12 @@ export default function VendorAnalyticsPage() {
                     <tr key={r.key}
                       className={`transition-colors ${idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"} hover:bg-gray-100/60`}>
                       <td className="sticky left-0 bg-inherit px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
-                        {r.name}
+                        <div className="flex items-center gap-2">
+                          <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${avatarColor(r.key)}`}>
+                            {initials(r.name)}
+                          </span>
+                          {r.name}
+                        </div>
                       </td>
                       {compareBy === "vendor" ? (
                         <>
@@ -525,13 +577,13 @@ export default function VendorAnalyticsPage() {
   );
 }
 
-function SortableHeader({ field, label, sortBy, sortDir, onSort, align = "right", title }) {
+function SortableHeader({ field, label, sortBy, sortDir, onSort, align = "right", title, accent = ACCENT.scheduled }) {
   const active = sortBy === field;
   return (
-    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"}`} title={title}>
+    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"} border-b-2 ${accent.border}`} title={title}>
       <button onClick={() => onSort(field)}
-        className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide whitespace-nowrap transition-colors ${
-          align === "right" ? "ml-auto" : ""} ${active ? "text-brand-600" : "text-gray-400 hover:text-gray-600"}`}>
+        className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide whitespace-nowrap transition-colors ${
+          align === "right" ? "ml-auto" : ""} ${active ? "text-brand-600" : `${accent.text} hover:opacity-70`}`}>
         {label}
         <ArrowUpDown className="w-3 h-3" />
         {active && <span className="text-[10px]">{sortDir === "desc" ? "↓" : "↑"}</span>}
