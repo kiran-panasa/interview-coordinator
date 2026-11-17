@@ -60,6 +60,7 @@ const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
   { id: "completed",        name: "Completed" },
   { id: "panelists",        name: "Panelists" },
+  { id: "panelistsScheduled", name: "Panelists Scheduled" },
   { id: "completionRate",   name: "Completion Rate" },
   { id: "cancellationRate", name: "Cancellation Rate" },
   { id: "noShowRate",       name: "No-Show Rate" },
@@ -193,15 +194,28 @@ export default function VendorAnalyticsPage() {
     return withRates(acc);
   };
   const totals = useMemo(() => aggregateTotals(filtered), [filtered]);
+  // Distinct interviewers who actually had at least one interview in range
+  // — "capacity" (Total Panelists, from the users collection) vs. "who
+  // actually got used this period." Company-wide, for the Total row.
+  const totalPanelistsScheduled = useMemo(
+    () => new Set(filtered.map(iv => iv.interviewerEmail).filter(Boolean)).size,
+    [filtered]
+  );
 
   const groupRows = (list, keyOf, nameOf, extra) => {
     const map = new Map();
+    const ivrSets = new Map(); // key -> Set of interviewerEmail, for panelistsScheduled below
     list.forEach(iv => {
       const key = keyOf(iv);
-      if (!map.has(key)) map.set(key, { key, name: nameOf(iv, key), ...emptyCounts() });
+      if (!map.has(key)) { map.set(key, { key, name: nameOf(iv, key), ...emptyCounts() }); ivrSets.set(key, new Set()); }
       bumpCounts(map.get(key), iv);
+      if (iv.interviewerEmail) ivrSets.get(key).add(iv.interviewerEmail);
     });
-    return [...map.values()].map(r => ({ ...withRates(r), ...(extra ? extra(r) : {}) }));
+    return [...map.values()].map(r => ({
+      ...withRates(r),
+      panelistsScheduled: ivrSets.get(r.key).size,
+      ...(extra ? extra(r) : {}),
+    }));
   };
 
   const vendorRows = useMemo(() => groupRows(
@@ -419,7 +433,11 @@ export default function VendorAnalyticsPage() {
                     {compareBy === "vendor" ? "Vendor" : "Panelist"}
                   </th>
                   {compareBy === "vendor" ? (
-                    <SortableHeader field="panelists" label="Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                    <>
+                      <SortableHeader field="panelists" label="Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                      <SortableHeader field="panelistsScheduled" label="Panelists Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort}
+                        title="How many of this vendor's panelists actually had at least one interview in this period — out of the total Panelists column." />
+                    </>
                   ) : (
                     <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">Vendor</th>
                   )}
@@ -444,7 +462,10 @@ export default function VendorAnalyticsPage() {
                         {r.name}
                       </td>
                       {compareBy === "vendor" ? (
-                        <td className="px-4 py-3 text-right text-gray-700">{r.panelists}</td>
+                        <>
+                          <td className="px-4 py-3 text-right text-gray-700">{r.panelists}</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{r.panelistsScheduled}</td>
+                        </>
                       ) : (
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{r.vendorName}</td>
                       )}
@@ -465,7 +486,14 @@ export default function VendorAnalyticsPage() {
               <tfoot>
                 <tr className="border-t-2 border-gray-200 bg-gray-50/80 font-bold">
                   <td className="sticky left-0 bg-gray-50 px-4 py-3 text-gray-900">Total</td>
-                  <td className="px-4 py-3 text-right text-gray-700">{compareBy === "vendor" ? totalPanelists : "—"}</td>
+                  {compareBy === "vendor" ? (
+                    <>
+                      <td className="px-4 py-3 text-right text-gray-700">{totalPanelists}</td>
+                      <td className="px-4 py-3 text-right text-gray-700">{totalPanelistsScheduled}</td>
+                    </>
+                  ) : (
+                    <td className="px-4 py-3 text-right text-gray-400">—</td>
+                  )}
                   <td className="px-4 py-3 text-right text-gray-900">{totals.scheduled}</td>
                   <td className="px-4 py-3 text-right text-emerald-600">{totals.completed}</td>
                   <td className="px-4 py-3 text-right text-sky-600">{totals.partiallyCompleted}</td>
@@ -487,10 +515,10 @@ export default function VendorAnalyticsPage() {
   );
 }
 
-function SortableHeader({ field, label, sortBy, sortDir, onSort, align = "right" }) {
+function SortableHeader({ field, label, sortBy, sortDir, onSort, align = "right", title }) {
   const active = sortBy === field;
   return (
-    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"}`}>
+    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"}`} title={title}>
       <button onClick={() => onSort(field)}
         className={`flex items-center gap-1 text-xs font-semibold uppercase tracking-wide whitespace-nowrap transition-colors ${
           align === "right" ? "ml-auto" : ""} ${active ? "text-brand-600" : "text-gray-400 hover:text-gray-600"}`}>
