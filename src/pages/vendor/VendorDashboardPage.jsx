@@ -522,12 +522,12 @@ export default function VendorDashboardPage() {
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Date Range</label>
                       <DateFilterBar from={statsDateFrom} to={statsDateTo} setFrom={setStatsDateFrom} setTo={setStatsDateTo} />
                     </div>
-                    <div className="w-52">
+                    <div className="w-full sm:w-52">
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Program</label>
                       <SkillsSelect skills={programOptions} value={statsProgramIds} onChange={setStatsProgramIds}
                         placeholder="All Programs" searchPlaceholder="Search programs…" />
                     </div>
-                    <div className="w-44">
+                    <div className="w-full sm:w-44">
                       <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
                       <SkillsSelect skills={statsDurationOptions} value={statsDurations} onChange={setStatsDurations}
                         placeholder="All Durations" searchPlaceholder="Search durations…" />

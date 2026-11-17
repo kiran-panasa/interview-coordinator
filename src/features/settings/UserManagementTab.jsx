@@ -124,6 +124,7 @@ export default function UserManagementTab({
             <p className="text-center text-gray-400 py-14 text-sm">No users match this filter.</p>
           ) : (
             <>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
@@ -161,7 +162,7 @@ export default function UserManagementTab({
                       </td>
                     </tr>
                   ) : (
-                    <tr key={u.id} className="hover:bg-gray-50/70 transition-colors">
+                    <tr key={u.id} className="odd:bg-white even:bg-gray-50/40 hover:bg-gray-50/70 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-gray-900">{u.displayName || "—"}</span>
@@ -207,6 +208,7 @@ export default function UserManagementTab({
                   ))}
                 </tbody>
               </table>
+              </div>
               <Pagination
                 page={usersPagination.page}
                 totalPages={usersPagination.totalPages}
@@ -261,6 +263,7 @@ export default function UserManagementTab({
                 <p className="text-center text-gray-400 py-14 text-sm">No invites match this filter.</p>
               ) : (
                 <>
+                  <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
@@ -271,7 +274,7 @@ export default function UserManagementTab({
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {invitesPagination.paged.map(inv => (
-                        <tr key={inv.id} className="hover:bg-gray-50/70 transition-colors">
+                        <tr key={inv.id} className="odd:bg-white even:bg-gray-50/40 hover:bg-gray-50/70 transition-colors">
                           <td className="px-4 py-3 font-semibold text-gray-900">{inv.name || "—"}</td>
                           <td className="px-4 py-3 text-gray-500 font-mono text-xs">{inv.email}</td>
                           <td className="px-4 py-3">{roleBadge(inv.role)}</td>
@@ -299,6 +302,7 @@ export default function UserManagementTab({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                   <Pagination
                     page={invitesPagination.page}
                     totalPages={invitesPagination.totalPages}

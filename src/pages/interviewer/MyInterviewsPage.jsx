@@ -157,7 +157,7 @@ export default function MyInterviewsPage() {
                   key={i.id}
                   id={`myiv-row-${i.id}`}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
-                  className={`p-4 ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : ""}`}
+                  className={`p-4 ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : idx % 2 === 1 ? "bg-gray-50/40" : ""}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-semibold text-gray-900 min-w-0 truncate">{i.candidateName}</p>
@@ -213,7 +213,7 @@ export default function MyInterviewsPage() {
                   <motion.tr
                     key={i.id}
                     initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.03 }}
-                    className={`hover:bg-gray-50/70 transition-colors ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : ""}`}
+                    className={`transition-colors ${highlightedRow === i.id ? "bg-emerald-50 ring-2 ring-emerald-400" : idx % 2 === 1 ? "bg-gray-50/40 hover:bg-gray-50/70" : "bg-white hover:bg-gray-50/70"}`}
                   >
                     <td className="px-4 py-3 font-semibold text-gray-900">{i.candidateName}</td>
                     <td className="px-4 py-3 text-gray-600">{i.roleAppliedFor || "—"}</td>

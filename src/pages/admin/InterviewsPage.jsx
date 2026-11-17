@@ -2255,7 +2255,7 @@ export default function InterviewsPage() {
               <motion.tr
                 key={iv.id}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2, delay: idx * 0.02 }}
-                className="hover:bg-gray-50/70 transition-colors"
+                className="odd:bg-white even:bg-gray-50/40 hover:bg-gray-50/70 transition-colors"
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">

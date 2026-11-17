@@ -298,7 +298,7 @@ export default function InterviewerNudgeTab({
         <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-1.5">
           <Megaphone className="w-3.5 h-3.5 text-gray-400" /> Slot Request Campaign
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-5">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1">Program</label>
             <select value={nudgeProgram} onChange={e => setNudgeProgram(e.target.value)}
@@ -376,7 +376,7 @@ export default function InterviewerNudgeTab({
       {/* Interviewers table */}
       <motion.div initial="hidden" animate="visible" custom={1} variants={fadeUp}>
         <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+          <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
               <Users className="w-3.5 h-3.5 text-gray-400" />
               Matched Interviewers ({matchedInterviewers.length})
@@ -384,7 +384,7 @@ export default function InterviewerNudgeTab({
                 <span className="ml-1 font-normal text-brand-500 normal-case">+{manualInterviewers.length} manual</span>
               )}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
@@ -430,6 +430,7 @@ export default function InterviewerNudgeTab({
             </div>
           )}
 
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -457,7 +458,7 @@ export default function InterviewerNudgeTab({
                 const overlap  = skillOverlap(nudgeTemplate?.skills || [], u.skills || []);
                 const isManual = manuallyAdded.has(u.id);
                 return (
-                  <tr key={u.id} className={`hover:bg-gray-50/70 transition-colors ${selectedIvrs.has(u.id) ? "bg-brand-50/40" : ""}`}>
+                  <tr key={u.id} className={`transition-colors ${selectedIvrs.has(u.id) ? "bg-brand-50/40" : "odd:bg-white even:bg-gray-50/40 hover:bg-gray-50/70"}`}>
                     <td className="pl-4 pr-2 py-3 w-8">
                       <input type="checkbox" checked={selectedIvrs.has(u.id)} onChange={() => toggleIvr(u.id)}
                         className="rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
@@ -520,6 +521,7 @@ export default function InterviewerNudgeTab({
               })}
             </tbody>
           </table>
+          </div>
           <Pagination page={ivrPagination.page} totalPages={ivrPagination.totalPages} total={ivrPagination.total} pageSize={ivrPagination.pageSize} onPageChange={ivrPagination.setPage} />
         </div>
 

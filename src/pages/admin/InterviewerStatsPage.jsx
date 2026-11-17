@@ -406,11 +406,11 @@ export default function InterviewerStatsPage() {
             </div>
 
             <div className="flex items-center justify-center gap-3 flex-wrap">
-              <div className="w-52">
+              <div className="w-full sm:w-52">
                 <SkillsSelect skills={vendorOptions} value={leaderboardVendorIds} onChange={setLeaderboardVendorIds}
                   placeholder="All Vendors" searchPlaceholder="Search vendors…" />
               </div>
-              <div className="w-52">
+              <div className="w-full sm:w-52">
                 <SkillsSelect skills={programOptions} value={leaderboardProgramIds} onChange={setLeaderboardProgramIds}
                   placeholder="All Programs" searchPlaceholder="Search programs…" />
               </div>
@@ -461,27 +461,27 @@ export default function InterviewerStatsPage() {
             <label className="block text-xs font-semibold text-gray-500 mb-1">End Date</label>
             <input type="date" value={dateTo} min={dateFrom || undefined} onChange={e => setDateTo(e.target.value || todayIso())} className={inputCls} />
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Program</label>
             <SkillsSelect skills={programOptions} value={programIds} onChange={setProgramIds} placeholder="All Programs" searchPlaceholder="Search programs…" />
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Template</label>
             <SkillsSelect skills={templateOptions} value={templateIds} onChange={setTemplateIds} placeholder="All Templates" searchPlaceholder="Search templates…" />
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer</label>
             <SkillsSelect skills={interviewerOptions} value={interviewerEmails} onChange={setInterviewerEmails} placeholder="All Interviewers" searchPlaceholder="Search interviewers…" />
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Vendor</label>
             <SkillsSelect skills={vendorOptions} value={vendorIds} onChange={setVendorIds} placeholder="All Vendors" searchPlaceholder="Search vendors…" />
           </div>
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Interviewer Status</label>
             <SkillsSelect skills={STATUS_OPTIONS} value={statuses} onChange={setStatuses} placeholder="All (Completed, Partially Completed, Cancelled, No-show)" searchPlaceholder="Search statuses…" />
           </div>
-          <div className="w-44">
+          <div className="w-full sm:w-44">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
             <SkillsSelect skills={durationOptions} value={durations} onChange={setDurations} placeholder="All Durations" searchPlaceholder="Search durations…" />
           </div>
@@ -516,7 +516,7 @@ export default function InterviewerStatsPage() {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {interviewerStats.map(r => (
-                <tr key={r.email} className="hover:bg-gray-50/70 transition-colors">
+                <tr key={r.email} className="odd:bg-white even:bg-gray-50/40 hover:bg-gray-50/70 transition-colors">
                   <td className="px-4 py-3">
                     <p className="font-semibold text-gray-900">{r.name}</p>
                     <p className="text-xs text-gray-400">{r.email}</p>

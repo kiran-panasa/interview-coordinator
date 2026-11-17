@@ -128,10 +128,10 @@ export default function QuestionBankTab({
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {paged.map(q => {
+                {paged.map((q, qi) => {
                   const qTemplates = qToTemplatesMap.get(q.id) || [];
                   return (
-                    <tr key={q.id} className={`hover:bg-gray-50/70 transition-colors ${selected.has(q.id) ? "bg-brand-50/60" : ""} ${q.status === "archived" ? "opacity-50" : ""}`}>
+                    <tr key={q.id} className={`transition-colors ${selected.has(q.id) ? "bg-brand-50/60" : qi % 2 === 1 ? "bg-gray-50/40 hover:bg-gray-50/70" : "bg-white hover:bg-gray-50/70"} ${q.status === "archived" ? "opacity-50" : ""}`}>
                       <td className="pl-4 pr-2 py-3 w-8">
                         <input type="checkbox" checked={selected.has(q.id)} onChange={() => toggleSelect(q.id)}
                           className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"

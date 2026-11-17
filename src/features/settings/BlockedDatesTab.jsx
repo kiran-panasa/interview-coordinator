@@ -8,7 +8,7 @@ export default function BlockedDatesTab({ blockedDates, onAdd, onEdit, onDelete 
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
             <CalendarOff className="w-4 h-4 text-gray-400" />
@@ -18,7 +18,7 @@ export default function BlockedDatesTab({ blockedDates, onAdd, onEdit, onDelete 
             Interviewers can't add slots and candidates can't book on these dates — e.g. holidays or internal events.
           </p>
         </div>
-        <Button variant="primary" icon={Plus} onClick={onAdd}>
+        <Button variant="primary" icon={Plus} onClick={onAdd} className="flex-shrink-0">
           Block Dates
         </Button>
       </div>
@@ -27,6 +27,7 @@ export default function BlockedDatesTab({ blockedDates, onAdd, onEdit, onDelete 
         {sorted.length === 0 ? (
           <p className="text-center text-gray-400 py-14 text-sm">No blocked dates yet.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -37,7 +38,7 @@ export default function BlockedDatesTab({ blockedDates, onAdd, onEdit, onDelete 
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sorted.map(b => (
-                <tr key={b.id} className="hover:bg-gray-50/70 transition-colors">
+                <tr key={b.id} className="odd:bg-white even:bg-gray-50/40 hover:bg-gray-50/70 transition-colors">
                   <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
                     {b.startDate === b.endDate ? formatDate(b.startDate) : `${formatDate(b.startDate)} – ${formatDate(b.endDate)}`}
                   </td>
@@ -56,6 +57,7 @@ export default function BlockedDatesTab({ blockedDates, onAdd, onEdit, onDelete 
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </motion.div>

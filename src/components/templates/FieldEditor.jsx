@@ -99,7 +99,7 @@ function PlainOptionList({ options, onChange }) {
   );
 }
 
-function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWeight, weightMode = "percent" }) {
+function FieldItem({ field, index = 0, isFirst, isLast, onUpdate, onDelete, onMove, showWeight, weightMode = "percent" }) {
   const [showOptions, setShowOptions] = useState(false);
   const hasOptions = field.type === "scored_dropdown" || field.type === "dropdown" || field.type === "multi_dropdown";
 
@@ -120,62 +120,70 @@ function FieldItem({ field, isFirst, isLast, onUpdate, onDelete, onMove, showWei
   };
 
   return (
-    <div className="border border-gray-200 rounded-xl bg-white overflow-hidden hover:border-gray-300 transition-colors">
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <div className="flex flex-col gap-0 flex-shrink-0">
-          <button type="button" disabled={isFirst} onClick={() => onMove("up")}
-            className="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none rounded hover:bg-gray-100 transition-colors">
-            <ChevronUp className="w-3.5 h-3.5" />
-          </button>
-          <button type="button" disabled={isLast} onClick={() => onMove("down")}
-            className="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none rounded hover:bg-gray-100 transition-colors">
-            <ChevronDown className="w-3.5 h-3.5" />
-          </button>
+    <div className={`border border-gray-200 rounded-xl overflow-hidden hover:border-gray-300 transition-colors ${index % 2 === 1 ? "bg-gray-50/60" : "bg-white"}`}>
+      {/* Label gets its own row on mobile — on one line, 5 sibling controls
+         (weight, type select, Options, delete, move arrows) left the
+         flex-1 label input squeezed to near-zero width, making the field
+         name invisible on a phone. */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-2.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-col gap-0 flex-shrink-0">
+            <button type="button" disabled={isFirst} onClick={() => onMove("up")}
+              className="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none rounded hover:bg-gray-100 transition-colors">
+              <ChevronUp className="w-3.5 h-3.5" />
+            </button>
+            <button type="button" disabled={isLast} onClick={() => onMove("down")}
+              className="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none rounded hover:bg-gray-100 transition-colors">
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <input
+            type="text"
+            value={field.label}
+            onChange={e => onUpdate({ label: e.target.value })}
+            placeholder="Field label…"
+            className="flex-1 text-xs font-medium border-b border-transparent hover:border-gray-200 focus:border-brand-400 focus:outline-none py-0.5 bg-transparent min-w-0"
+          />
         </div>
 
-        <input
-          type="text"
-          value={field.label}
-          onChange={e => onUpdate({ label: e.target.value })}
-          placeholder="Field label…"
-          className="flex-1 text-xs font-medium border-b border-transparent hover:border-gray-200 focus:border-brand-400 focus:outline-none py-0.5 bg-transparent min-w-0"
-        />
+        <div className="flex items-center gap-2 flex-wrap pl-6 sm:pl-0 flex-shrink-0">
+          {showWeight && field.type === "scored_dropdown" && (
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <input
+                type="number" min={0} max={weightMode === "points" ? 20 : 100}
+                value={field.weight ?? ""}
+                onChange={e => onUpdate({ weight: parseFloat(e.target.value) || 0 })}
+                placeholder="0"
+                className="w-12 px-1.5 py-1 border border-gray-200 rounded-md text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-400"
+              />
+              {weightMode === "percent" && <span className="text-xs text-gray-400">%</span>}
+            </div>
+          )}
 
-        {showWeight && field.type === "scored_dropdown" && (
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <input
-              type="number" min={0} max={weightMode === "points" ? 20 : 100}
-              value={field.weight ?? ""}
-              onChange={e => onUpdate({ weight: parseFloat(e.target.value) || 0 })}
-              placeholder="0"
-              className="w-12 px-1.5 py-1 border border-gray-200 rounded-md text-xs text-center focus:outline-none focus:ring-1 focus:ring-brand-400"
-            />
-            {weightMode === "percent" && <span className="text-xs text-gray-400">%</span>}
-          </div>
-        )}
+          <select
+            value={field.type}
+            onChange={e => handleTypeChange(e.target.value)}
+            className="text-xs border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 flex-shrink-0"
+          >
+            <option value="text">Text</option>
+            <option value="scored_dropdown">Scored Dropdown</option>
+            <option value="dropdown">Plain Dropdown</option>
+            <option value="multi_dropdown">Multi-select Dropdown</option>
+          </select>
 
-        <select
-          value={field.type}
-          onChange={e => handleTypeChange(e.target.value)}
-          className="text-xs border border-gray-200 rounded-md px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-brand-400 bg-white text-gray-700 flex-shrink-0"
-        >
-          <option value="text">Text</option>
-          <option value="scored_dropdown">Scored Dropdown</option>
-          <option value="dropdown">Plain Dropdown</option>
-          <option value="multi_dropdown">Multi-select Dropdown</option>
-        </select>
+          {hasOptions && (
+            <button type="button" onClick={() => setShowOptions(s => !s)}
+              className={`flex items-center gap-1 text-xs font-semibold flex-shrink-0 px-2 py-1 rounded-md transition-colors ${showOptions ? "bg-brand-100 text-brand-700" : "text-brand-500 hover:text-brand-700 hover:bg-brand-50"}`}>
+              Options {showOptions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </button>
+          )}
 
-        {hasOptions && (
-          <button type="button" onClick={() => setShowOptions(s => !s)}
-            className={`flex items-center gap-1 text-xs font-semibold flex-shrink-0 px-2 py-1 rounded-md transition-colors ${showOptions ? "bg-brand-100 text-brand-700" : "text-brand-500 hover:text-brand-700 hover:bg-brand-50"}`}>
-            Options {showOptions ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          <button type="button" onClick={onDelete}
+            className="p-1 text-gray-300 hover:text-red-500 rounded hover:bg-red-50 transition-colors flex-shrink-0">
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
-        )}
-
-        <button type="button" onClick={onDelete}
-          className="p-1 text-gray-300 hover:text-red-500 rounded hover:bg-red-50 transition-colors flex-shrink-0">
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        </div>
       </div>
 
       <AnimatePresence initial={false}>
@@ -249,6 +257,7 @@ export function FieldListEditor({ fields, onChange, addLabel, showWeight, weight
         <FieldItem
           key={f.id || i}
           field={f}
+          index={i}
           isFirst={i === 0}
           isLast={i === fields.length - 1}
           onUpdate={changes => update(i, changes)}

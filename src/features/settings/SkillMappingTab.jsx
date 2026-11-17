@@ -143,6 +143,7 @@ export default function SkillMappingTab() {
         ) : filtered.length === 0 ? (
           <p className="text-center text-gray-400 py-14 text-sm">No templates match this filter.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
@@ -152,10 +153,10 @@ export default function SkillMappingTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(t => {
+              {filtered.map((t, ti) => {
                 const bothOn = skillsOn(t) && interviewersOn(t);
                 return (
-                <tr key={t.id} className="hover:bg-gray-50/70 transition-colors">
+                <tr key={t.id} className={`transition-colors ${ti % 2 === 1 ? "bg-gray-50/40 hover:bg-gray-50/70" : "bg-white hover:bg-gray-50/70"}`}>
                   <td className="px-4 py-3 font-semibold text-gray-900 align-top whitespace-nowrap">{t.name}</td>
                   <td className="px-4 py-3 align-top whitespace-nowrap">
                     {t.program
@@ -220,6 +221,7 @@ export default function SkillMappingTab() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

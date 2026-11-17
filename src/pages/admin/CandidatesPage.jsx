@@ -1010,8 +1010,8 @@ export default function CandidatesPage() {
             {/* Mobile: one card per candidate instead of a table clipped to
                just the first two columns on a phone screen. */}
             <div className="md:hidden divide-y divide-gray-50">
-              {rows.map(c => (
-                <div key={c.id} className={`p-4 ${selected.has(c.id) ? "bg-brand-50" : ""}`}>
+              {rows.map((c, idx) => (
+                <div key={c.id} className={`p-4 ${selected.has(c.id) ? "bg-brand-50" : idx % 2 === 1 ? "bg-gray-50/40" : ""}`}>
                   <div className="flex items-start gap-3">
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}
                       className="accent-brand-600 w-4 h-4 cursor-pointer mt-1 flex-shrink-0" />
@@ -1081,7 +1081,7 @@ export default function CandidatesPage() {
                 <motion.tr
                   key={c.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(idx, 10) * 0.02, duration: 0.2 }}
-                  className={`hover:bg-gray-50/70 transition-colors ${selected.has(c.id) ? "bg-brand-50" : ""}`}
+                  className={`transition-colors ${selected.has(c.id) ? "bg-brand-50" : idx % 2 === 1 ? "bg-gray-50/40 hover:bg-gray-50/70" : "bg-white hover:bg-gray-50/70"}`}
                 >
                   <td className="px-4 py-3 w-8">
                     <input type="checkbox" checked={selected.has(c.id)} onChange={() => toggleSelect(c.id)}

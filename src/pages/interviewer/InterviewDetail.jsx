@@ -577,7 +577,7 @@ export default function InterviewDetail() {
       </div>
       <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5 space-y-4">
         <Skeleton className="h-3 w-32" />
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="space-y-1.5">
               <Skeleton className="h-3 w-16" />
@@ -657,7 +657,7 @@ export default function InterviewDetail() {
         <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2 mb-4">
           <Calendar className="w-4 h-4 text-gray-400" /> Interview Details
         </h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Date</p>
             <p className="text-sm font-semibold text-gray-800">{formatDate(interview.scheduledDate)}</p>
@@ -679,7 +679,7 @@ export default function InterviewDetail() {
           </div>
           <div>
             <p className="text-xs text-gray-400 mb-0.5">Candidate Email</p>
-            <p className="text-sm font-semibold text-gray-800">{interview.candidateEmail || "—"}</p>
+            <p className="text-sm font-semibold text-gray-800 break-all">{interview.candidateEmail || "—"}</p>
           </div>
           {interview.meetLink && (
             <div className="col-span-2">

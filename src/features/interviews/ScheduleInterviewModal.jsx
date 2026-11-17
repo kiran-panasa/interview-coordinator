@@ -57,7 +57,7 @@ export default function ScheduleInterviewModal({
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className={labelCls}>Date *</label>
             <DatePicker min={todayStr} value={form.scheduledDate} onChange={e => setField("scheduledDate", e.target.value)}

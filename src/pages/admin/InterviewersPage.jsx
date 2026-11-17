@@ -465,8 +465,8 @@ export default function InterviewersPage() {
           {/* Mobile: one card per interviewer instead of a table clipped to
              just the Interviewer/Company columns on a phone screen. */}
           <div className="md:hidden divide-y divide-gray-50">
-            {rows.map(u => (
-              <div key={u.id} className={`p-4 ${selectedIds.has(u.id) ? "bg-brand-50/40" : ""}`}>
+            {rows.map((u, idx) => (
+              <div key={u.id} className={`p-4 ${selectedIds.has(u.id) ? "bg-brand-50/40" : idx % 2 === 1 ? "bg-gray-50/40" : ""}`}>
                 <div className="flex items-start gap-3">
                   <input type="checkbox" checked={selectedIds.has(u.id)} onChange={() => toggleSelect(u.id)}
                     className="w-4 h-4 accent-brand-600 cursor-pointer mt-1 flex-shrink-0" />
@@ -546,7 +546,7 @@ export default function InterviewersPage() {
                 <motion.tr
                   key={u.id}
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: idx * 0.02, duration: 0.2 }}
-                  className={`hover:bg-gray-50/70 transition-colors ${selectedIds.has(u.id) ? "bg-brand-50/40" : ""}`}
+                  className={`transition-colors ${selectedIds.has(u.id) ? "bg-brand-50/40" : idx % 2 === 1 ? "bg-gray-50/40 hover:bg-gray-50/70" : "bg-white hover:bg-gray-50/70"}`}
                 >
 
                   {/* Checkbox */}

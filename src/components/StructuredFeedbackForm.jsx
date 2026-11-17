@@ -350,7 +350,7 @@ export function StructuredFeedbackForm({ interview, template, onSubmit, saving, 
               placeholder="What project did the candidate explain?"
               value={fb.project.explanation} onChange={e => setProject("explanation", e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Project Type</label>
               <select value={fb.project.type} onChange={e => setProject("type", e.target.value)} className={inputCls}>
