@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   PieChart, Users, CalendarClock, CheckCircle2, Hourglass, RefreshCw,
-  XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock,
+  XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock, CalendarDays,
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
@@ -10,6 +10,8 @@ import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/que
 import { usePagination } from "../../hooks/usePagination";
 import { isSupersededPartial } from "../../utils/interviewCompletionStats";
 import { exportVendorAnalytics } from "../../utils/vendorAnalyticsExport";
+import { subscribeToSlotsForInterviewers, getBusyWindowsForInterviewers } from "../../api/firestore";
+import { isSlotEffectivelyBooked } from "../../utils/slotAvailability";
 import SkillsSelect from "../../components/SkillsSelect";
 import DatePicker from "../../components/DatePicker";
 import Pagination from "../../components/Pagination";
@@ -64,6 +66,7 @@ const NO_VENDOR_ID = "__no_vendor__";
 const ACCENT = {
   identity:   { border: "border-brand-300",   text: "text-brand-700" },
   panelists:  { border: "border-indigo-300",  text: "text-indigo-700" },
+  slots:      { border: "border-cyan-300",    text: "text-cyan-700" },
   scheduled:  { border: "border-blue-300",    text: "text-blue-700" },
   completed:  { border: "border-emerald-300", text: "text-emerald-700" },
   partial:    { border: "border-sky-300",     text: "text-sky-700" },
@@ -97,8 +100,10 @@ function initials(name) {
 const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
   { id: "completed",        name: "Completed" },
-  { id: "panelists",        name: "Active Interviewers" },
-  { id: "panelistsScheduled", name: "Interviewers Scheduled" },
+  { id: "panelists",        name: "Total Interviewers" },
+  { id: "panelistsScheduled", name: "Active Interviewers" },
+  { id: "slotsReceived",    name: "Slots Received" },
+  { id: "unutilizedSlots",  name: "Unutilized Slots" },
   { id: "completionRate",   name: "Completion Rate" },
   { id: "cancellationRate", name: "Cancellation Rate" },
   { id: "noShowRate",       name: "No-Show Rate" },
@@ -228,6 +233,59 @@ export default function VendorAnalyticsPage() {
     [activeInterviewers, vendorIds]
   );
 
+  // ── Slot Overview — how many availability slots this vendor's
+  // interviewers actually submitted ("received") vs. how many of those
+  // never got booked into an interview ("unutilized"), for the active date
+  // range. Scoped to the vendor filter above (fewer live listeners when a
+  // vendor is picked) and recomputed whenever the range or vendor filter
+  // changes, same live-subscription pattern NudgePage's Slot Overview tab
+  // already uses.
+  const slotInterviewers = useMemo(
+    () => vendorIds.length
+      ? activeInterviewers.filter(u => u.vendorId && vendorIds.includes(u.vendorId))
+      : activeInterviewers,
+    [activeInterviewers, vendorIds]
+  );
+  const [ivrSlots, setIvrSlots] = useState({});
+  const [busyWindowsByInterviewer, setBusyWindowsByInterviewer] = useState({});
+  const slotIvrIdsKey = slotInterviewers.map(u => u.id).sort().join(",");
+  useEffect(() => {
+    if (!slotIvrIdsKey) { setIvrSlots({}); return; }
+    return subscribeToSlotsForInterviewers(slotIvrIdsKey.split(","), setIvrSlots);
+  }, [slotIvrIdsKey]);
+  useEffect(() => {
+    if (!slotIvrIdsKey) { setBusyWindowsByInterviewer({}); return; }
+    let cancelled = false;
+    getBusyWindowsForInterviewers(slotIvrIdsKey.split(","), range.from, range.to)
+      .then(map => { if (!cancelled) setBusyWindowsByInterviewer(Object.fromEntries(map)); })
+      .catch(() => { if (!cancelled) setBusyWindowsByInterviewer({}); });
+    return () => { cancelled = true; };
+  }, [slotIvrIdsKey, range.from, range.to]);
+
+  const slotCountsByVendor = useMemo(() => {
+    const m = new Map();
+    slotInterviewers.forEach(u => {
+      const key = u.vendorId || NO_VENDOR_ID;
+      if (!m.has(key)) m.set(key, { received: 0, unutilized: 0 });
+      const bucket = m.get(key);
+      (ivrSlots[u.id] || [])
+        .filter(s => s.date >= range.from && s.date <= range.to)
+        .forEach(s => {
+          bucket.received++;
+          if (!isSlotEffectivelyBooked({ ...s, interviewerId: u.id }, busyWindowsByInterviewer)) bucket.unutilized++;
+        });
+    });
+    return m;
+  }, [slotInterviewers, ivrSlots, busyWindowsByInterviewer, range.from, range.to]);
+  const totalSlotsReceived = useMemo(
+    () => [...slotCountsByVendor.values()].reduce((a, b) => a + b.received, 0),
+    [slotCountsByVendor]
+  );
+  const totalUnutilizedSlots = useMemo(
+    () => [...slotCountsByVendor.values()].reduce((a, b) => a + b.unutilized, 0),
+    [slotCountsByVendor]
+  );
+
   // ── Aggregation — one pass builds the overall KPI totals, a second
   // groups the SAME filtered interviews by vendor or by panelist for the
   // comparison table. Both read from `filtered`, so the table's own totals
@@ -266,8 +324,12 @@ export default function VendorAnalyticsPage() {
     filtered,
     iv => iv.vendorId || NO_VENDOR_ID,
     (iv, key) => vendorNameOf(key === NO_VENDOR_ID ? null : key),
-    (r) => ({ panelists: panelistsByVendor.get(r.key) || 0 })
-  ), [filtered, panelistsByVendor, vendorsById]); // eslint-disable-line
+    (r) => ({
+      panelists: panelistsByVendor.get(r.key) || 0,
+      slotsReceived: slotCountsByVendor.get(r.key)?.received || 0,
+      unutilizedSlots: slotCountsByVendor.get(r.key)?.unutilized || 0,
+    })
+  ), [filtered, panelistsByVendor, slotCountsByVendor, vendorsById]); // eslint-disable-line
 
   const panelistRows = useMemo(() => groupRows(
     filtered,
@@ -287,8 +349,8 @@ export default function VendorAnalyticsPage() {
   const sortedRows = useMemo(() => {
     const dir = sortDir === "asc" ? 1 : -1;
     return [...searchedRows].sort((a, b) => {
-      const av = sortBy === "panelists" ? (a.panelists ?? 0) : a[sortBy];
-      const bv = sortBy === "panelists" ? (b.panelists ?? 0) : b[sortBy];
+      const av = a[sortBy] ?? 0;
+      const bv = b[sortBy] ?? 0;
       return (av - bv) * dir;
     });
   }, [searchedRows, sortBy, sortDir]);
@@ -302,15 +364,15 @@ export default function VendorAnalyticsPage() {
 
   const handleExport = () => {
     const base = ["Scheduled", "Completed", "Completion Rate", "Partially Completed", "Rescheduled", "Cancelled by Admin", "Cancelled by Student", "Cancelled by Interviewer (incl. Declined)", "Cancellation Rate", "No-Show", "No-Show Rate"];
-    const headers = compareBy === "vendor" ? ["Vendor", "Active Interviewers", "Interviewers Scheduled", ...base] : ["Panelist", "Vendor", ...base];
+    const headers = compareBy === "vendor" ? ["Vendor", "Total Interviewers", "Active Interviewers", "Slots Received", "Unutilized Slots", ...base] : ["Panelist", "Vendor", ...base];
     const toRow = (r) => [
-      r.name, ...(compareBy === "vendor" ? [r.panelists, r.panelistsScheduled] : [r.vendorName]),
+      r.name, ...(compareBy === "vendor" ? [r.panelists, r.panelistsScheduled, r.slotsReceived, r.unutilizedSlots] : [r.vendorName]),
       r.scheduled, r.completed, `${r.completionRate.toFixed(1)}%`, r.partiallyCompleted, r.rescheduled,
       r.cancelledAdmin, r.cancelledStudent, r.cancelledInterviewer + r.declined, `${r.cancellationRate.toFixed(1)}%`,
       r.noShow, `${r.noShowRate.toFixed(1)}%`,
     ];
     const rows = sortedRows.map(toRow);
-    rows.push(["Total", ...(compareBy === "vendor" ? [totalPanelists, totalPanelistsScheduled] : ["—"]),
+    rows.push(["Total", ...(compareBy === "vendor" ? [totalPanelists, totalPanelistsScheduled, totalSlotsReceived, totalUnutilizedSlots] : ["—"]),
       totals.scheduled, totals.completed, `${totals.completionRate.toFixed(1)}%`, totals.partiallyCompleted, totals.rescheduled,
       totals.cancelledAdmin, totals.cancelledStudent, totals.cancelledInterviewer + totals.declined, `${totals.cancellationRate.toFixed(1)}%`,
       totals.noShow, `${totals.noShowRate.toFixed(1)}%`]);
@@ -347,6 +409,8 @@ export default function VendorAnalyticsPage() {
     // the table/export below still break them out as separate columns.
     { key: "cancelledInterviewer", label: "Cancelled / Declined by Panelist", icon: UserX, color: "text-amber-600", iconBg: "bg-amber-50", value: totals.cancelledInterviewer + totals.declined },
     { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
+    { key: "slotsReceived",        label: "Slots Received",       icon: CalendarDays,  color: "text-cyan-600",    iconBg: "bg-cyan-50",     value: totalSlotsReceived },
+    { key: "unutilizedSlots",      label: "Unutilized Slots",     icon: CalendarDays,  color: "text-cyan-600",    iconBg: "bg-cyan-50",     value: totalUnutilizedSlots },
   ];
 
   const sortLabel = SORT_OPTIONS.find(s => s.id === sortBy)?.name || sortBy;
@@ -506,10 +570,14 @@ export default function VendorAnalyticsPage() {
                   </th>
                   {compareBy === "vendor" ? (
                     <>
-                      <SortableHeader field="panelists" label="Active Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
-                        title="This vendor's current roster of active interviewers." />
-                      <SortableHeader field="panelistsScheduled" label="Interviewers Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
-                        title="How many of this vendor's active interviewers actually had at least one interview in this period." />
+                      <SortableHeader field="panelists" label="Total Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
+                        title="This vendor's current roster of interviewers." />
+                      <SortableHeader field="panelistsScheduled" label="Active Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
+                        title="How many of this vendor's interviewers actually had at least one interview in this period." />
+                      <SortableHeader field="slotsReceived" label="Slots Received" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.slots}
+                        title="Availability slots this vendor's interviewers submitted in this period." />
+                      <SortableHeader field="unutilizedSlots" label="Unutilized Slots" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.slots}
+                        title="Of those, how many never got booked into an interview." />
                     </>
                   ) : (
                     <th className={`text-left text-xs font-bold uppercase tracking-wide px-4 py-3 border-b-2 ${ACCENT.panelists.border} ${ACCENT.panelists.text}`}>Vendor</th>
@@ -543,6 +611,8 @@ export default function VendorAnalyticsPage() {
                         <>
                           <td className="px-4 py-3 text-right text-gray-700">{r.panelists}</td>
                           <td className="px-4 py-3 text-right text-gray-700">{r.panelistsScheduled}</td>
+                          <td className="px-4 py-3 text-right text-cyan-700">{r.slotsReceived}</td>
+                          <td className="px-4 py-3 text-right text-cyan-700">{r.unutilizedSlots}</td>
                         </>
                       ) : (
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{r.vendorName}</td>
@@ -567,6 +637,8 @@ export default function VendorAnalyticsPage() {
                     <>
                       <td className="px-4 py-3 text-right text-gray-700">{totalPanelists}</td>
                       <td className="px-4 py-3 text-right text-gray-700">{totalPanelistsScheduled}</td>
+                      <td className="px-4 py-3 text-right text-cyan-700">{totalSlotsReceived}</td>
+                      <td className="px-4 py-3 text-right text-cyan-700">{totalUnutilizedSlots}</td>
                     </>
                   ) : (
                     <td className="px-4 py-3 text-right text-gray-400">—</td>
