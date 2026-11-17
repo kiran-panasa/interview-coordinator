@@ -64,13 +64,12 @@ const NO_VENDOR_ID = "__no_vendor__";
 const ACCENT = {
   identity:   { border: "border-brand-300",   text: "text-brand-700" },
   panelists:  { border: "border-indigo-300",  text: "text-indigo-700" },
-  scheduled:  { border: "border-slate-300",   text: "text-slate-600" },
+  scheduled:  { border: "border-blue-300",    text: "text-blue-700" },
   completed:  { border: "border-emerald-300", text: "text-emerald-700" },
   partial:    { border: "border-sky-300",     text: "text-sky-700" },
   rescheduled:{ border: "border-violet-300",  text: "text-violet-700" },
   cancelled:  { border: "border-amber-300",   text: "text-amber-700" },
   noShow:     { border: "border-red-300",     text: "text-red-700" },
-  declined:   { border: "border-rose-300",    text: "text-rose-700" },
 };
 
 // A colored initial avatar per vendor/panelist row — same deterministic
@@ -98,8 +97,8 @@ function initials(name) {
 const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
   { id: "completed",        name: "Completed" },
-  { id: "panelists",        name: "Total Panelists" },
-  { id: "panelistsScheduled", name: "Panelists Scheduled" },
+  { id: "panelists",        name: "Active Interviewers" },
+  { id: "panelistsScheduled", name: "Interviewers Scheduled" },
   { id: "completionRate",   name: "Completion Rate" },
   { id: "cancellationRate", name: "Cancellation Rate" },
   { id: "noShowRate",       name: "No-Show Rate" },
@@ -302,19 +301,19 @@ export default function VendorAnalyticsPage() {
   };
 
   const handleExport = () => {
-    const base = ["Scheduled", "Completed", "Partially Completed", "Rescheduled", "Cancelled by Admin", "Cancelled by Student", "Cancelled by Interviewer", "No-Show", "Declined", "Completion Rate", "Cancellation Rate", "No-Show Rate"];
-    const headers = compareBy === "vendor" ? ["Vendor", "Panelists", ...base] : ["Panelist", "Vendor", ...base];
+    const base = ["Scheduled", "Completed", "Completion Rate", "Partially Completed", "Rescheduled", "Cancelled by Admin", "Cancelled by Student", "Cancelled by Interviewer (incl. Declined)", "Cancellation Rate", "No-Show", "No-Show Rate"];
+    const headers = compareBy === "vendor" ? ["Vendor", "Active Interviewers", "Interviewers Scheduled", ...base] : ["Panelist", "Vendor", ...base];
     const toRow = (r) => [
-      r.name, ...(compareBy === "vendor" ? [r.panelists] : [r.vendorName]),
-      r.scheduled, r.completed, r.partiallyCompleted, r.rescheduled,
-      r.cancelledAdmin, r.cancelledStudent, r.cancelledInterviewer, r.noShow, r.declined,
-      `${r.completionRate.toFixed(1)}%`, `${r.cancellationRate.toFixed(1)}%`, `${r.noShowRate.toFixed(1)}%`,
+      r.name, ...(compareBy === "vendor" ? [r.panelists, r.panelistsScheduled] : [r.vendorName]),
+      r.scheduled, r.completed, `${r.completionRate.toFixed(1)}%`, r.partiallyCompleted, r.rescheduled,
+      r.cancelledAdmin, r.cancelledStudent, r.cancelledInterviewer + r.declined, `${r.cancellationRate.toFixed(1)}%`,
+      r.noShow, `${r.noShowRate.toFixed(1)}%`,
     ];
     const rows = sortedRows.map(toRow);
-    rows.push(["Total", compareBy === "vendor" ? totalPanelists : "—",
-      totals.scheduled, totals.completed, totals.partiallyCompleted, totals.rescheduled,
-      totals.cancelledAdmin, totals.cancelledStudent, totals.cancelledInterviewer, totals.noShow, totals.declined,
-      `${totals.completionRate.toFixed(1)}%`, `${totals.cancellationRate.toFixed(1)}%`, `${totals.noShowRate.toFixed(1)}%`]);
+    rows.push(["Total", ...(compareBy === "vendor" ? [totalPanelists, totalPanelistsScheduled] : ["—"]),
+      totals.scheduled, totals.completed, `${totals.completionRate.toFixed(1)}%`, totals.partiallyCompleted, totals.rescheduled,
+      totals.cancelledAdmin, totals.cancelledStudent, totals.cancelledInterviewer + totals.declined, `${totals.cancellationRate.toFixed(1)}%`,
+      totals.noShow, `${totals.noShowRate.toFixed(1)}%`]);
     exportVendorAnalytics(headers, rows, `vendor_analytics_${compareBy}`);
   };
 
@@ -507,22 +506,23 @@ export default function VendorAnalyticsPage() {
                   </th>
                   {compareBy === "vendor" ? (
                     <>
-                      <SortableHeader field="panelists" label="Total Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists} />
-                      <SortableHeader field="panelistsScheduled" label="Panelists Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
-                        title="How many of this vendor's panelists actually had at least one interview in this period — out of the total Panelists column." />
+                      <SortableHeader field="panelists" label="Active Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
+                        title="This vendor's current roster of active interviewers." />
+                      <SortableHeader field="panelistsScheduled" label="Interviewers Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
+                        title="How many of this vendor's active interviewers actually had at least one interview in this period." />
                     </>
                   ) : (
                     <th className={`text-left text-xs font-bold uppercase tracking-wide px-4 py-3 border-b-2 ${ACCENT.panelists.border} ${ACCENT.panelists.text}`}>Vendor</th>
                   )}
                   <SortableHeader field="scheduled" label="Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.scheduled} />
                   <SortableHeader field="completed" label="Completed" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.completed} />
+                  <SortableHeader field="completionRate" label="Completion" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.completed} />
                   <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.partial.border} ${ACCENT.partial.text}`}>Partial</th>
                   <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.rescheduled.border} ${ACCENT.rescheduled.text}`}>Rescheduled</th>
-                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.cancelled.border} ${ACCENT.cancelled.text}`}>Cancelled (A/S/I)</th>
-                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.noShow.border} ${ACCENT.noShow.text}`}>No-Show</th>
-                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.declined.border} ${ACCENT.declined.text}`}>Declined</th>
-                  <SortableHeader field="completionRate" label="Completion" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.completed} />
+                  <th className={`text-right text-xs font-bold uppercase tracking-wide px-4 py-3 whitespace-nowrap border-b-2 ${ACCENT.cancelled.border} ${ACCENT.cancelled.text}`}
+                    title="Admin / Student / Interviewer — the Interviewer count also includes declined invites.">Cancelled (A/S/I)</th>
                   <SortableHeader field="cancellationRate" label="Cancel Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.cancelled} />
+                  <SortableHeader field="noShow" label="No-Show" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.noShow} />
                   <SortableHeader field="noShowRate" label="No-Show Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.noShow} />
                 </tr>
               </thead>
@@ -547,15 +547,14 @@ export default function VendorAnalyticsPage() {
                       ) : (
                         <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{r.vendorName}</td>
                       )}
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{r.scheduled}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-blue-700">{r.scheduled}</td>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-600">{r.completed}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{pct(r.completionRate)}</td>
                       <td className="px-4 py-3 text-right text-sky-600">{r.partiallyCompleted}</td>
                       <td className="px-4 py-3 text-right text-violet-600">{r.rescheduled}</td>
-                      <td className="px-4 py-3 text-right text-amber-600 whitespace-nowrap">{r.cancelledAdmin}/{r.cancelledStudent}/{r.cancelledInterviewer}</td>
-                      <td className="px-4 py-3 text-right text-red-500">{r.noShow}</td>
-                      <td className="px-4 py-3 text-right text-red-500">{r.declined}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{pct(r.completionRate)}</td>
+                      <td className="px-4 py-3 text-right text-amber-600 whitespace-nowrap">{r.cancelledAdmin}/{r.cancelledStudent}/{r.cancelledInterviewer + r.declined}</td>
                       <td className="px-4 py-3 text-right text-amber-700">{pct(r.cancellationRate)}</td>
+                      <td className="px-4 py-3 text-right text-red-500">{r.noShow}</td>
                       <td className="px-4 py-3 text-right text-red-600">{pct(r.noShowRate)}</td>
                     </tr>
                   );
@@ -572,15 +571,14 @@ export default function VendorAnalyticsPage() {
                   ) : (
                     <td className="px-4 py-3 text-right text-gray-400">—</td>
                   )}
-                  <td className="px-4 py-3 text-right text-gray-900">{totals.scheduled}</td>
+                  <td className="px-4 py-3 text-right text-blue-700">{totals.scheduled}</td>
                   <td className="px-4 py-3 text-right text-emerald-600">{totals.completed}</td>
+                  <td className="px-4 py-3 text-right text-gray-900">{pct(totals.completionRate)}</td>
                   <td className="px-4 py-3 text-right text-sky-600">{totals.partiallyCompleted}</td>
                   <td className="px-4 py-3 text-right text-violet-600">{totals.rescheduled}</td>
-                  <td className="px-4 py-3 text-right text-amber-600 whitespace-nowrap">{totals.cancelledAdmin}/{totals.cancelledStudent}/{totals.cancelledInterviewer}</td>
-                  <td className="px-4 py-3 text-right text-red-500">{totals.noShow}</td>
-                  <td className="px-4 py-3 text-right text-red-500">{totals.declined}</td>
-                  <td className="px-4 py-3 text-right text-gray-900">{pct(totals.completionRate)}</td>
+                  <td className="px-4 py-3 text-right text-amber-600 whitespace-nowrap">{totals.cancelledAdmin}/{totals.cancelledStudent}/{totals.cancelledInterviewer + totals.declined}</td>
                   <td className="px-4 py-3 text-right text-amber-700">{pct(totals.cancellationRate)}</td>
+                  <td className="px-4 py-3 text-right text-red-500">{totals.noShow}</td>
                   <td className="px-4 py-3 text-right text-red-600">{pct(totals.noShowRate)}</td>
                 </tr>
               </tfoot>
