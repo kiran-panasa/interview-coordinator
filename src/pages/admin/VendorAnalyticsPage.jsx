@@ -52,35 +52,9 @@ function formatRangeDate(isoStr) {
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time", custom: "Custom Range" };
-// The immediately-preceding period of the SAME length — e.g. this week's
-// comparison is last week, this month's is last month, a custom 10-day
-// range's is the 10 days right before it. "Overall" has no meaningful
-// predecessor, so callers skip this entirely for that period.
-function previousEquivalentRange(from, to) {
-  const f = new Date(from), t = new Date(to);
-  const lengthMs = t - f;
-  const prevTo = new Date(f); prevTo.setDate(prevTo.getDate() - 1);
-  const prevFrom = new Date(prevTo.getTime() - lengthMs);
-  return { from: iso(prevFrom), to: iso(prevTo) };
-}
 
 const UNASSIGNED_PROGRAM_ID = "__unassigned__";
 const NO_VENDOR_ID = "__no_vendor__";
-
-// Every status this page's totals/rates are built from — "scheduled" and
-// "pending_acceptance" ARE included (unlike the per-interviewer stats
-// page) because "Total Scheduled" here means every interview booked in
-// the period regardless of what's happened to it since, which is the
-// denominator every rate below divides into.
-const STATUS_OPTIONS = [
-  { id: "scheduled",           name: "Scheduled (upcoming)" },
-  { id: "pending_acceptance",  name: "Pending Acceptance" },
-  { id: "completed",           name: "Completed" },
-  { id: "partially_completed", name: "Partially Completed" },
-  { id: "cancelled",           name: "Cancelled" },
-  { id: "no_show",             name: "No-show" },
-  { id: "declined",            name: "Declined" },
-];
 
 const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
@@ -130,12 +104,6 @@ function withRates(row) {
 }
 
 const pct = (n) => `${n.toFixed(0)}%`;
-const delta = (cur, prev) => {
-  if (!prev) return null;
-  const diff = cur - prev;
-  if (Math.abs(diff) < 0.5) return { label: "No change", positive: null };
-  return { label: `${diff > 0 ? "+" : ""}${diff} vs previous period`, positive: diff > 0 };
-};
 
 export default function VendorAnalyticsPage() {
   const { userProfile } = useAuth();
@@ -148,21 +116,16 @@ export default function VendorAnalyticsPage() {
   const [vendorIds,   setVendorIds]   = useState([]);
   const [programIds,  setProgramIds]  = useState([]);
   const [templateIds, setTemplateIds] = useState([]);
-  const [statuses,    setStatuses]    = useState([]);
-  const [durations,   setDurations]   = useState([]);
   const [search,      setSearch]      = useState("");
-  const [sortBy,      setSortBy]      = useState("scheduled");
+  const [sortBy,      setSortBy]      = useState("completed");
   const [sortDir,     setSortDir]     = useState("desc");
 
   const range = period === "week" ? thisWeekRange()
     : period === "month" ? thisMonthRange()
     : period === "overall" ? allTimeRange()
     : { from: customFrom, to: customTo };
-  const hasPrevPeriod = period !== "overall";
-  const prevRange = hasPrevPeriod ? previousEquivalentRange(range.from, range.to) : null;
 
-  const interviews     = useInterviewsInDateRange(range.from, range.to);
-  const prevInterviews = useInterviewsInDateRange(prevRange?.from || "2099-01-01", prevRange?.to || "2099-01-02");
+  const interviews = useInterviewsInDateRange(range.from, range.to);
 
   const { data: templates = [] } = useTemplates();
   const { data: programs  = [] } = usePrograms();
@@ -186,24 +149,15 @@ export default function VendorAnalyticsPage() {
       .map(t => ({ id: t.id, name: t.name })),
     [templates, programIds]
   );
-  const durationOptions = useMemo(() => {
-    const set = new Set(interviews.map(iv => iv.duration || 60));
-    return [...set].sort((a, b) => a - b).map(d => ({ id: String(d), name: `${d} mins` }));
-  }, [interviews]);
-
   const passesCommonFilters = (iv) => {
     if (programIds.length && !programIds.includes(effectiveProgramOf(iv.templateId))) return false;
     if (templateIds.length && !templateIds.includes(iv.templateId)) return false;
-    if (durations.length && !durations.includes(String(iv.duration || 60))) return false;
     if (vendorIds.length && !vendorIds.includes(iv.vendorId)) return false;
-    if (statuses.length && !statuses.includes(iv.status)) return false;
     return true;
   };
 
-  const filtered     = useMemo(() => interviews.filter(passesCommonFilters),
-    [interviews, programIds, templateIds, durations, vendorIds, statuses, templateProgramById]); // eslint-disable-line
-  const filteredPrev = useMemo(() => prevInterviews.filter(passesCommonFilters),
-    [prevInterviews, programIds, templateIds, durations, vendorIds, statuses, templateProgramById]); // eslint-disable-line
+  const filtered = useMemo(() => interviews.filter(passesCommonFilters),
+    [interviews, programIds, templateIds, vendorIds, templateProgramById]); // eslint-disable-line
 
   // Active interviewers, optionally narrowed to the selected vendors — the
   // denominator for "Total Panelists" and each vendor row's own count.
@@ -238,8 +192,7 @@ export default function VendorAnalyticsPage() {
     list.forEach(iv => bumpCounts(acc, iv));
     return withRates(acc);
   };
-  const totals     = useMemo(() => aggregateTotals(filtered),     [filtered]);
-  const prevTotals = useMemo(() => aggregateTotals(filteredPrev), [filteredPrev]);
+  const totals = useMemo(() => aggregateTotals(filtered), [filtered]);
 
   const groupRows = (list, keyOf, nameOf, extra) => {
     const map = new Map();
@@ -306,8 +259,8 @@ export default function VendorAnalyticsPage() {
     exportVendorAnalytics(headers, rows, `vendor_analytics_${compareBy}`);
   };
 
-  const hasFilters = vendorIds.length || programIds.length || templateIds.length || statuses.length || durations.length || search;
-  const clearFilters = () => { setVendorIds([]); setProgramIds([]); setTemplateIds([]); setStatuses([]); setDurations([]); setSearch(""); };
+  const hasFilters = vendorIds.length || programIds.length || templateIds.length || search;
+  const clearFilters = () => { setVendorIds([]); setProgramIds([]); setTemplateIds([]); setSearch(""); };
 
   // Only "admin" — not content_team/interviewer_content, who DO get the
   // rest of the admin area via ADMIN_ROLES — sees this consolidated
@@ -325,16 +278,16 @@ export default function VendorAnalyticsPage() {
   }
 
   const KPI_CARDS = [
-    { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled,            prev: prevTotals.scheduled },
-    { key: "panelists",            label: "Total Panelists",      icon: Users,         color: "text-brand-600",   iconBg: "bg-brand-50",    value: totalPanelists,              prev: null },
-    { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed,            prev: prevTotals.completed },
-    { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted,   prev: prevTotals.partiallyCompleted },
-    { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled,           prev: prevTotals.rescheduled },
-    { key: "cancelledAdmin",       label: "Cancelled by Admin",   icon: XCircle,       color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledAdmin,        prev: prevTotals.cancelledAdmin },
-    { key: "cancelledStudent",     label: "Cancelled by Student", icon: UserMinus,     color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledStudent,      prev: prevTotals.cancelledStudent },
-    { key: "cancelledInterviewer", label: "Cancelled by Panelist",icon: UserX,         color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledInterviewer,  prev: prevTotals.cancelledInterviewer },
-    { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow,                prev: prevTotals.noShow },
-    { key: "declined",             label: "Declined",             icon: X,             color: "text-red-600",     iconBg: "bg-red-50",      value: totals.declined,              prev: prevTotals.declined },
+    { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled },
+    { key: "panelists",            label: "Total Panelists",      icon: Users,         color: "text-brand-600",   iconBg: "bg-brand-50",    value: totalPanelists },
+    { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed },
+    { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted },
+    { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
+    { key: "cancelledAdmin",       label: "Cancelled by Admin",   icon: XCircle,       color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledAdmin },
+    { key: "cancelledStudent",     label: "Cancelled by Student", icon: UserMinus,     color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledStudent },
+    { key: "cancelledInterviewer", label: "Cancelled by Panelist",icon: UserX,         color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledInterviewer },
+    { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
+    { key: "declined",             label: "Declined",             icon: X,             color: "text-red-600",     iconBg: "bg-red-50",      value: totals.declined },
   ];
 
   const sortLabel = SORT_OPTIONS.find(s => s.id === sortBy)?.name || sortBy;
@@ -376,33 +329,27 @@ export default function VendorAnalyticsPage() {
 
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-        {KPI_CARDS.map((c, i) => {
-          const d = hasPrevPeriod ? delta(c.value, c.prev) : null;
-          return (
-            <motion.div key={c.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
-              className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">{c.label}</p>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${c.iconBg}`}>
-                  <c.icon className={`w-4 h-4 ${c.color}`} strokeWidth={2} />
-                </div>
+        {KPI_CARDS.map((c, i) => (
+          <motion.div key={c.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}
+            className="bg-white rounded-2xl border border-gray-100 shadow-soft p-4">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide leading-tight">{c.label}</p>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${c.iconBg}`}>
+                <c.icon className={`w-4 h-4 ${c.color}`} strokeWidth={2} />
               </div>
-              <p className={`text-2xl font-bold mt-1.5 ${c.color}`}>{c.value}</p>
-              {d && (
-                <p className={`text-[11px] mt-0.5 font-medium ${d.positive === null ? "text-gray-400" : d.positive ? "text-emerald-600" : "text-red-500"}`}>
-                  {d.label}
-                </p>
-              )}
-            </motion.div>
-          );
-        })}
+            </div>
+            <p className={`text-2xl font-bold mt-1.5 ${c.color}`}>{c.value}</p>
+          </motion.div>
+        ))}
       </div>
 
       {/* ── Filters ── */}
       <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-4 mb-5">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-full sm:w-52">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Vendor</label>
+            <label className="block text-xs font-semibold text-gray-500 mb-1">
+              Vendor {compareBy === "panelist" && <span className="text-brand-500 normal-case font-normal">— narrows panelists below to this vendor</span>}
+            </label>
             <SkillsSelect skills={vendorOptions} value={vendorIds} onChange={setVendorIds} placeholder="All Vendors" searchPlaceholder="Search vendors…" />
           </div>
           <div className="w-full sm:w-48">
@@ -412,14 +359,6 @@ export default function VendorAnalyticsPage() {
           <div className="w-full sm:w-48">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Template</label>
             <SkillsSelect skills={templateOptions} value={templateIds} onChange={setTemplateIds} placeholder="All Templates" searchPlaceholder="Search templates…" />
-          </div>
-          <div className="w-full sm:w-48">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Interview Status</label>
-            <SkillsSelect skills={STATUS_OPTIONS} value={statuses} onChange={setStatuses} placeholder="All Statuses" searchPlaceholder="Search statuses…" />
-          </div>
-          <div className="w-full sm:w-36">
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
-            <SkillsSelect skills={durationOptions} value={durations} onChange={setDurations} placeholder="All Durations" searchPlaceholder="Search durations…" />
           </div>
           {hasFilters && (
             <button onClick={clearFilters} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 py-2 transition-colors">
@@ -448,15 +387,18 @@ export default function VendorAnalyticsPage() {
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder={compareBy === "vendor" ? "Search vendor…" : "Search panelist…"}
           className="border border-gray-200 rounded-full px-3.5 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 w-full sm:w-52" />
-        <div className="w-full sm:w-44 sm:ml-auto">
-          <SkillsSelect skills={SORT_OPTIONS} value={sortBy ? [sortBy] : []}
-            onChange={(ids) => setSortBy(ids[ids.length - 1] || "scheduled")}
-            placeholder={`Sort: ${sortLabel}`} />
+        <div className="flex items-center gap-2 sm:ml-auto">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">Sort by</span>
+          <div className="w-40">
+            <SkillsSelect skills={SORT_OPTIONS} value={sortBy ? [sortBy] : []}
+              onChange={(ids) => setSortBy(ids[ids.length - 1] || "completed")}
+              placeholder={sortLabel} />
+          </div>
+          <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")}
+            className="flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0 whitespace-nowrap">
+            <ArrowUpDown className="w-3.5 h-3.5" /> {sortDir === "desc" ? "High → Low" : "Low → High"}
+          </button>
         </div>
-        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")}
-          className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors flex-shrink-0">
-          <ArrowUpDown className="w-3.5 h-3.5" /> {sortDir === "desc" ? "High → Low" : "Low → High"}
-        </button>
       </div>
 
       {/* ── Comparison table ── */}
@@ -495,17 +437,11 @@ export default function VendorAnalyticsPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {rowsPagination.paged.map((r, idx) => {
-                  // Simple, explainable thresholds — not a scored ranking,
-                  // just a quick visual flag for "look at this one."
-                  const strong = r.scheduled >= 5 && r.completionRate >= 80;
-                  const weak   = r.scheduled >= 5 && (r.cancellationRate >= 20 || r.noShowRate >= 15);
                   return (
                     <tr key={r.key}
-                      className={`transition-colors ${strong ? "bg-emerald-50/40" : weak ? "bg-red-50/40" : idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"} hover:bg-gray-100/60`}>
+                      className={`transition-colors ${idx % 2 === 1 ? "bg-gray-50/40" : "bg-white"} hover:bg-gray-100/60`}>
                       <td className="sticky left-0 bg-inherit px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">
                         {r.name}
-                        {strong && <span className="ml-1.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full align-middle">Strong</span>}
-                        {weak && <span className="ml-1.5 text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded-full align-middle">Needs attention</span>}
                       </td>
                       {compareBy === "vendor" ? (
                         <td className="px-4 py-3 text-right text-gray-700">{r.panelists}</td>
