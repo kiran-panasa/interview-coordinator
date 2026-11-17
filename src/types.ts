@@ -101,7 +101,14 @@ export interface Candidate {
   email: string;
   phone?: string;
   uid?: string;
+  // Legacy single-value field — kept for backward compat with existing
+  // documents, not written by new code. See programs below and
+  // utils/candidatePrograms.ts.
   program?: string;
+  // A candidate can belong to more than one Program at once (e.g. "Edge
+  // 2.0" and "Academy"). Read via getCandidateProgramIds(), which falls
+  // back to the legacy `program` string for documents that predate this.
+  programs?: string[];
   templateIds?: string[];
   resumeLink?: string;
   notes?: string;

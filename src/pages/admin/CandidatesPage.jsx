@@ -27,13 +27,14 @@ import DatePicker from "../../components/DatePicker";
 import { LABELS as STATUS_LABELS } from "../../components/Badge";
 import { usePagination } from "../../hooks/usePagination";
 import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
+import { getCandidateProgramIds, candidateHasProgram } from "../../utils/candidatePrograms";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
   visible: (i = 0) => ({ opacity: 1, y: 0, transition: { delay: i * 0.05, duration: 0.3, ease: "easeOut" } }),
 };
 
-const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", program: "", templateIds: [] };
+const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", programs: [], templateIds: [] };
 
 import { isUUID } from "../../utils/strings";
 import { splitCSVRow } from "../../utils/csv";
@@ -107,7 +108,11 @@ function parseCandidatesCSV(text) {
       phone:         phoneIdx     >= 0 ? c[phoneIdx]?.trim()     || "" : "",
       resumeLink:    resumeIdx    >= 0 ? c[resumeIdx]?.trim()    || "" : "",
       notes:         notesIdx     >= 0 ? c[notesIdx]?.trim()     || "" : "",
-      programName:   programIdx   >= 0 ? c[programIdx]?.trim()   || "" : "",
+      // Same "|" convention as templateNames below — lets one row enroll a
+      // candidate in more than one Program at once (e.g. "Edge 2.0|Academy").
+      programNames:  programIdx   >= 0
+        ? (c[programIdx] || "").split("|").map(p => p.trim()).filter(Boolean)
+        : [],
       templateNames: templatesIdx >= 0
         ? (c[templatesIdx] || "").split("|").map(t => t.trim()).filter(Boolean)
         : [],
@@ -312,7 +317,8 @@ export default function CandidatesPage() {
   // navigation (see useCursorPagination) instead of an ever-growing
   // "Load more" list — honors the same index-building fallback the old
   // effect did (full fetch, filtered client-side, page 1 only) when the
-  // (program + createdAt) composite index isn't ready yet.
+  // (programs array-contains + createdAt) composite index isn't ready yet
+  // (see firestore.indexes.json).
   const fetchCandidatesPage = useCallback(async (cursor) => {
     if (needsFullList) return { items: [], cursor: null, done: true };
     const programId = activeProgram === "all" ? null : activeProgram;
@@ -322,7 +328,7 @@ export default function CandidatesPage() {
       const isIndexError = /index/i.test(err?.message || "");
       if (isIndexError && programId && !cursor) {
         const all = await getCandidates();
-        const activeForProgram = all.filter(c => c.program === programId && c.archived !== true);
+        const activeForProgram = all.filter(c => candidateHasProgram(c, programId) && c.archived !== true);
         return { items: activeForProgram.slice(0, 10), cursor: null, done: true };
       }
       throw err;
@@ -350,18 +356,25 @@ export default function CandidatesPage() {
   };
   const invalidateCounts = () => queryClient.invalidateQueries({ queryKey: QK.candidateCounts });
 
-  // Add/Edit Candidate modal — only templates belonging to the selected
-  // Program are selectable, so a candidate can't end up assigned a template
-  // from an unrelated program.
+  // Add/Edit Candidate modal — only templates belonging to one of the
+  // selected Program(s) are selectable, so a candidate can't end up
+  // assigned a template from a program they're not enrolled in. A
+  // candidate in both Edge 2.0 and Academy sees the union of both
+  // programs' templates here, not just one.
   const programTemplates = useMemo(
-    () => templates.filter(t => t.program === form.program),
-    [templates, form.program]
+    () => templates.filter(t => (form.programs || []).includes(t.program)),
+    [templates, form.programs]
   );
 
   // Bulk edit
   const [selected,      setSelected]      = useState(new Set());
   const [showBulk,      setShowBulk]      = useState(false);
-  const [bulkProgram,   setBulkProgram]   = useState("");
+  // Always additive — adds these program(s) to whatever each selected
+  // candidate already has, never replaces their existing list. A separate
+  // "replace" mode would risk silently dropping a program someone's
+  // already enrolled in across a batch of candidates who don't all share
+  // the same starting set.
+  const [bulkPrograms,  setBulkPrograms]  = useState([]);
   const [bulkTemplates, setBulkTemplates] = useState([]);
   const [bulkSaving,    setBulkSaving]    = useState(false);
 
@@ -379,7 +392,7 @@ export default function CandidatesPage() {
     setForm({
       name: c.name, uid: c.uid || "", email: c.email || "",
       phone: c.phone || "", resumeLink: c.resumeLink || "", notes: c.notes || "",
-      program: c.program || "", templateIds: c.templateIds || [],
+      programs: getCandidateProgramIds(c), templateIds: c.templateIds || [],
     });
     setShowModal(true);
   };
@@ -390,7 +403,11 @@ export default function CandidatesPage() {
     // Firestore match (candidates.uid === the Forms/Accounts user_id) that
     // the SSO login flow depends on — a pasted UID with a trailing space
     // looks identical on screen yet silently never logs the student in.
-    const cleanForm = { ...form, uid: form.uid.trim(), name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim() };
+    // Legacy single `program` field written alongside the new array, set to
+    // the first of the selected programs — see candidatePrograms.ts for why
+    // (Nudge/Settings/Inbound/the SSO backend haven't been migrated off it
+    // yet and would otherwise see this candidate as having no program).
+    const cleanForm = { ...form, uid: form.uid.trim(), name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim(), program: form.programs[0] || "" };
     setSaving(true);
     try {
       if (editTarget) {
@@ -412,7 +429,11 @@ export default function CandidatesPage() {
         const existing = await findCandidateByUidOrEmail(cleanForm.uid, cleanForm.email);
         if (existing) {
           const mergedTemplateIds = [...new Set([...(existing.templateIds || []), ...(cleanForm.templateIds || [])])];
-          const fieldUpdates = { ...cleanForm, templateIds: mergedTemplateIds };
+          // Same merge as templateIds — adding a candidate who turns out to
+          // already exist under a different program shouldn't silently
+          // drop that program, it should add this new one alongside it.
+          const mergedPrograms = [...new Set([...getCandidateProgramIds(existing), ...(cleanForm.programs || [])])];
+          const fieldUpdates = { ...cleanForm, templateIds: mergedTemplateIds, programs: mergedPrograms, program: mergedPrograms[0] || "" };
           await updateCandidate(existing.id, fieldUpdates);
           patchFullList(prev => prev.map(c => c.id === existing.id ? { ...c, ...fieldUpdates } : c));
           if (!needsFullList) candPager.reload();
@@ -429,7 +450,7 @@ export default function CandidatesPage() {
           // there; it won't retroactively appear on a later page already
           // being viewed, same inherent cursor-pagination limitation
           // documented in useCursorPagination).
-          if (!needsFullList && (activeProgram === "all" || activeProgram === form.program)) {
+          if (!needsFullList && (activeProgram === "all" || (form.programs || []).includes(activeProgram))) {
             candPager.reload();
           }
           setToast({ message: "Candidate added." });
@@ -474,22 +495,37 @@ export default function CandidatesPage() {
   };
 
   const handleBulkSave = async () => {
-    if (!bulkProgram && bulkTemplates.length === 0) {
+    if (!bulkPrograms.length && bulkTemplates.length === 0) {
       setToast({ message: "Set at least a program or template.", type: "error" }); return;
     }
     setBulkSaving(true);
     try {
-      const updates = {};
-      if (bulkProgram)           updates.program     = bulkProgram;
-      if (bulkTemplates.length)  updates.templateIds = bulkTemplates;
-      await Promise.all([...selected].map(id => updateCandidate(id, updates)));
-      patchFullList(prev => prev.map(c => selected.has(c.id) ? { ...c, ...updates } : c));
+      // Programs are added to each candidate's own existing set — unlike
+      // templateIds just below (which stays the pre-existing REPLACE
+      // behavior for this bulk action), a shared "same updates object for
+      // everyone" approach would silently wipe out whatever program(s) a
+      // selected candidate already had that aren't in bulkPrograms. Looked
+      // up from `rows` (the currently-rendered list selection checkboxes
+      // come from), not re-fetched.
+      const updatesById = new Map([...selected].map(id => {
+        const existing = rows.find(c => c.id === id);
+        const updates = {};
+        if (bulkPrograms.length) {
+          const merged = [...new Set([...getCandidateProgramIds(existing), ...bulkPrograms])];
+          updates.programs = merged;
+          updates.program = merged[0] || "";
+        }
+        if (bulkTemplates.length) updates.templateIds = bulkTemplates;
+        return [id, updates];
+      }));
+      await Promise.all([...updatesById.entries()].map(([id, updates]) => updateCandidate(id, updates)));
+      patchFullList(prev => prev.map(c => updatesById.has(c.id) ? { ...c, ...updatesById.get(c.id) } : c));
       if (!needsFullList) candPager.reload();
       invalidateCounts();
       setToast({ message: `Updated ${selected.size} candidate${selected.size !== 1 ? "s" : ""}.` });
       setShowBulk(false);
       setSelected(new Set());
-      setBulkProgram(""); setBulkTemplates([]);
+      setBulkPrograms([]); setBulkTemplates([]);
     } catch (e) { setToast({ message: e.message, type: "error" }); }
     setBulkSaving(false);
   };
@@ -552,14 +588,18 @@ export default function CandidatesPage() {
     const order = [];
     csvPreview.forEach((row, i) => {
       const key = (row.uid && row.uid.toLowerCase()) || (row.email && row.email.toLowerCase()) || `__row_${i}`;
-      if (!groups.has(key)) { groups.set(key, { ...row, templateNames: [] }); order.push(key); }
+      if (!groups.has(key)) { groups.set(key, { ...row, templateNames: [], programNames: [] }); order.push(key); }
       const g = groups.get(key);
       (row.templateNames || []).forEach(name => { if (!g.templateNames.includes(name)) g.templateNames.push(name); });
+      // Programs merge the same way templates do — a later row for the same
+      // candidate naming a different program ADDS it, never replaces the
+      // one an earlier row already named.
+      (row.programNames || []).forEach(name => { if (!g.programNames.includes(name)) g.programNames.push(name); });
       // First non-blank value for every other field wins — a later row for
       // the same candidate in a templates-only follow-up CSV typically
       // leaves name/phone/etc. blank, which must never blank out a value
       // an earlier row for that same person already supplied.
-      for (const f of ["name", "uid", "email", "phone", "resumeLink", "notes", "programName"]) {
+      for (const f of ["name", "uid", "email", "phone", "resumeLink", "notes"]) {
         if (!g[f] && row[f]) g[f] = row[f];
       }
     });
@@ -567,30 +607,39 @@ export default function CandidatesPage() {
     const results = await Promise.all(order.map(async (key) => {
       const row = groups.get(key);
       try {
-        const { programName, templateNames, ...rest } = row;
-        const resolvedProgram = programName ? (programMap.get(programName.toLowerCase()) || "") : "";
+        const { programNames, templateNames, ...rest } = row;
+        const resolvedPrograms = [...new Set(
+          programNames.map(name => programMap.get(name.toLowerCase())).filter(Boolean)
+        )];
         const newTemplateIds = [...new Set(
           templateNames.map(name => templateMap.get(name.toLowerCase())).filter(Boolean)
         )];
         const existing = findExisting(row);
         if (existing) {
           if (mode !== "replace") return { type: "skipped" };
-          // Templates always MERGE onto whatever the candidate already has
-          // — this is explicitly an "assign more templates to existing
-          // students" pass, never a wipe of templates a prior import (or
-          // the admin, by hand) already assigned. Every other field only
-          // overwrites when the CSV actually supplied a value, so a
+          // Templates and Programs both always MERGE onto whatever the
+          // candidate already has — this is explicitly an "assign more to
+          // existing students" pass, never a wipe of what a prior import
+          // (or the admin, by hand) already assigned. Every other field
+          // only overwrites when the CSV actually supplied a value, so a
           // templates-only follow-up CSV (blank name/phone/program columns)
           // can't blank out real data on the existing record.
           const mergedTemplateIds = [...new Set([...(existing.templateIds || []), ...newTemplateIds])];
+          const mergedPrograms = [...new Set([...getCandidateProgramIds(existing), ...resolvedPrograms])];
           const fieldUpdates = {};
           for (const [k, v] of Object.entries(rest)) if (v) fieldUpdates[k] = v;
-          if (resolvedProgram) fieldUpdates.program = resolvedProgram;
+          // Also keep the legacy single `program` field pointed at the
+          // first of the set — Nudge's filters, Settings' delete-program
+          // cleanup, Inbound, and the SSO backend still read it directly
+          // and haven't been migrated to `programs` yet, so this keeps
+          // them working (seeing one of this candidate's programs) rather
+          // than silently going blank for anyone touched by this import.
+          if (mergedPrograms.length) { fieldUpdates.programs = mergedPrograms; fieldUpdates.program = mergedPrograms[0]; }
           fieldUpdates.templateIds = mergedTemplateIds;
           await updateCandidate(existing.id, fieldUpdates);
           return { type: "updated", row: { id: existing.id, ...existing, ...fieldUpdates } };
         } else {
-          const payload = { ...rest, program: resolvedProgram, templateIds: newTemplateIds };
+          const payload = { ...rest, programs: resolvedPrograms, program: resolvedPrograms[0] || "", templateIds: newTemplateIds };
           const createdAt = new Date().toISOString();
           const id = await createCandidate({ ...payload, createdBy: currentUser.uid });
           return { type: "created", row: { id, ...payload, createdAt, createdBy: currentUser.uid } };
@@ -638,10 +687,20 @@ export default function CandidatesPage() {
   const archivedCount = counts?.archived ?? 0;
   const tabCounts = useMemo(() => {
     if (!counts) return null;
+    // "Unassigned" is derived by subtraction (total minus every program's
+    // own count) rather than its own query, as a cheap approximation —
+    // this badge NUMBER can now undercount slightly once candidates with
+    // MULTIPLE programs exist (they're counted once per program they're
+    // in, inflating sumTotal), but the actual Unassigned tab's candidate
+    // LIST is always exactly correct, since that's filtered client-side
+    // from real data (see the `filtered` useMemo above), not from this
+    // subtraction. Tightening this further would need its own dedicated
+    // "programs is empty" count query — not done here, low priority since
+    // it only affects one sidebar number, not any real data.
     const sumTotal    = programs.reduce((s, p) => s + (counts.byProgram[p.id]?.total    || 0), 0);
     const sumArchived = programs.reduce((s, p) => s + (counts.byProgram[p.id]?.archived || 0), 0);
-    const unassignedTotal    = counts.total    - sumTotal;
-    const unassignedArchived = counts.archived - sumArchived;
+    const unassignedTotal    = Math.max(0, counts.total    - sumTotal);
+    const unassignedArchived = Math.max(0, counts.archived - sumArchived);
     const pick = (total, archived) => showArchived ? archived : total - archived;
     return {
       all: pick(counts.total, counts.archived),
@@ -679,8 +738,11 @@ export default function CandidatesPage() {
           c.email?.toLowerCase().includes(q)
         );
       }
-      if (activeProgram === "unassigned" && c.program) return false;
-      if (activeProgram !== "all" && activeProgram !== "unassigned" && c.program !== activeProgram) return false;
+      if (activeProgram === "unassigned" && getCandidateProgramIds(c).length) return false;
+      // A multi-program candidate correctly shows up under EVERY one of
+      // their program tabs now, not just one — the tab counts no longer
+      // have to sum to the "All" total for that reason (see tabCounts).
+      if (activeProgram !== "all" && activeProgram !== "unassigned" && !candidateHasProgram(c, activeProgram)) return false;
       return true;
     });
   }, [workingSet, activeProgram, search, filterTemplateIds, filterDateFrom, filterDateTo]);
@@ -808,7 +870,7 @@ export default function CandidatesPage() {
     if (!needsFullList) {
       try {
         const all = await getCandidates();
-        target = all.filter(c => c.archived !== true && (activeProgram === "all" || c.program === activeProgram));
+        target = all.filter(c => c.archived !== true && (activeProgram === "all" || candidateHasProgram(c, activeProgram)));
       } catch (e) {
         setToast({ message: `Couldn't load candidates to export: ${e.message}`, type: "error" });
         setDownloading(false);
@@ -842,7 +904,7 @@ export default function CandidatesPage() {
       UID: isSwapped(c) ? c.name : (c.uid || ""),
       Name: isSwapped(c) ? c.uid : (c.name || ""),
       Email: c.email || "",
-      Program: c.program ? programName(c.program) : "",
+      Program: getCandidateProgramIds(c).map(programName).join(" | "),
       Templates: (c.templateIds || []).map(tid => templatesById.get(tid)?.name).filter(Boolean).join(" | "),
       Status: statusText(c),
       Phone: c.phone || "",
@@ -874,7 +936,7 @@ export default function CandidatesPage() {
         </div>
         <div className="flex gap-2 flex-wrap">
           {selected.size > 0 && (
-            <Button variant="secondary" icon={Users} onClick={() => { setBulkProgram(""); setBulkTemplates([]); setShowBulk(true); }}>
+            <Button variant="secondary" icon={Users} onClick={() => { setBulkPrograms([]); setBulkTemplates([]); setShowBulk(true); }}>
               Edit Selected ({selected.size})
             </Button>
           )}
@@ -1031,9 +1093,9 @@ export default function CandidatesPage() {
                       <p className="text-xs text-gray-600 truncate mt-0.5">{c.email || "—"}</p>
                       {c.phone && <p className="text-xs text-gray-400 mt-0.5">{c.phone}</p>}
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {c.program && (
-                          <span className="text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full">{programName(c.program)}</span>
-                        )}
+                        {getCandidateProgramIds(c).map(pid => (
+                          <span key={pid} className="text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full">{programName(pid)}</span>
+                        ))}
                         {(c.templateIds || []).map(tid => {
                           const t = templates.find(x => x.id === tid);
                           return t ? (
@@ -1098,8 +1160,14 @@ export default function CandidatesPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-600">{c.email || "—"}</td>
                   <td className="px-4 py-3">
-                    {c.program
-                      ? <span className="text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full whitespace-nowrap">{programName(c.program)}</span>
+                    {getCandidateProgramIds(c).length
+                      ? (
+                        <div className="flex flex-wrap gap-1">
+                          {getCandidateProgramIds(c).map(pid => (
+                            <span key={pid} className="text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-full whitespace-nowrap">{programName(pid)}</span>
+                          ))}
+                        </div>
+                      )
                       : <span className="text-xs text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-3">
@@ -1225,24 +1293,33 @@ export default function CandidatesPage() {
             <textarea rows={2} value={form.notes} onChange={e => setField("notes", e.target.value)} placeholder="Any notes…" className={`${inputCls} resize-none`} />
           </div>
 
-          {/* Program + Templates */}
-          <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-3">
+          {/* Program(s) + Templates */}
+          <div className="border-t border-gray-100 pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className={labelCls}>Program</label>
-              <select
-                value={form.program}
-                onChange={e => setForm(f => ({ ...f, program: e.target.value, templateIds: [] }))}
-                className={inputCls}
-              >
-                <option value="">— None —</option>
-                {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+              <label className={labelCls}>Program(s)</label>
+              <SkillsSelect
+                skills={programs.map(p => ({ id: p.id, name: p.name }))}
+                value={form.programs}
+                onChange={(ids) => setForm(f => ({
+                  ...f,
+                  programs: ids,
+                  // Only drop template selections that no longer belong to
+                  // any of the (possibly still multiple) selected programs
+                  // — adding a second program shouldn't wipe out valid
+                  // picks already made for the first one.
+                  templateIds: f.templateIds.filter(tid => {
+                    const t = templates.find(x => x.id === tid);
+                    return t && ids.includes(t.program);
+                  }),
+                }))}
+                placeholder="— None —"
+              />
             </div>
             <div>
               <label className={labelCls}>Templates ({form.templateIds.length} selected)</label>
               <div className="border border-gray-200 rounded-lg overflow-hidden max-h-32 overflow-y-auto">
-                {!form.program ? (
-                  <p className="text-xs text-gray-400 text-center py-3">Select a program first</p>
+                {!form.programs.length ? (
+                  <p className="text-xs text-gray-400 text-center py-3">Select at least one program first</p>
                 ) : programTemplates.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-3">No templates for this program</p>
                 ) : programTemplates.map(t => (
@@ -1269,11 +1346,14 @@ export default function CandidatesPage() {
         <div className="space-y-5">
           <p className="text-sm text-gray-500">Only filled fields will be updated. Leave blank to keep existing values.</p>
           <div>
-            <label className={labelCls}>Assign Program</label>
-            <select value={bulkProgram} onChange={e => setBulkProgram(e.target.value)} className={inputCls}>
-              <option value="">— Keep existing —</option>
-              {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <label className={labelCls}>Add Program(s)</label>
+            <p className="text-xs text-gray-400 mb-1.5">Added to each candidate's existing program(s) — never removes one they already have.</p>
+            <SkillsSelect
+              skills={programs.map(p => ({ id: p.id, name: p.name }))}
+              value={bulkPrograms}
+              onChange={setBulkPrograms}
+              placeholder="— Keep existing —"
+            />
           </div>
           <div>
             <label className={labelCls}>Assign Templates ({bulkTemplates.length} selected)</label>
@@ -1312,7 +1392,7 @@ export default function CandidatesPage() {
             <p className="text-sm font-semibold text-gray-700 mb-0.5">Template format</p>
             <p className="text-xs text-gray-400 mb-3">
               Columns: <span className="font-mono">uid, name, phone, email, program, templates, resumeLink, notes</span>
-              <br />Use <span className="font-mono">|</span> to separate multiple templates on one row (e.g. <span className="font-mono">Template A|Template B</span>) — or repeat the same uid/email across several rows, one template per row; either way, matching rows for the same candidate are combined. Program and template values must match exact names in the system.
+              <br />Use <span className="font-mono">|</span> to separate multiple templates — or multiple programs — on one row (e.g. <span className="font-mono">Template A|Template B</span>, <span className="font-mono">Edge 2.0|Academy</span>) — or repeat the same uid/email across several rows, one per row; either way, matching rows for the same candidate are combined. Program and template values must match exact names in the system.
               <br />Re-uploading with just <span className="font-mono">uid</span>/<span className="font-mono">email</span> + <span className="font-mono">templates</span> filled in (other columns blank) adds those templates to the matching existing candidate without touching anything else — choose "Update existing + add new" below.
             </p>
             <div className="flex gap-2">
@@ -1406,7 +1486,7 @@ export default function CandidatesPage() {
                         <td className="px-3 py-2 font-semibold text-gray-800">{r.name}</td>
                         <td className="px-3 py-2 font-mono text-gray-600">{r.uid || "—"}</td>
                         <td className="px-3 py-2 text-gray-600">{r.email || "—"}</td>
-                        <td className="px-3 py-2 text-gray-600">{r.programName || "—"}</td>
+                        <td className="px-3 py-2 text-gray-600">{r.programNames?.length ? r.programNames.join(", ") : "—"}</td>
                         <td className="px-3 py-2 text-gray-600">
                           {r.templateNames?.length
                             ? r.templateNames.map((t, j) => (

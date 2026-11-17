@@ -30,7 +30,13 @@ export async function getCandidatesPage(
   take = 10
 ): Promise<CandidatesPageResult> {
   const constraints = [] as import("firebase/firestore").QueryConstraint[];
-  if (programId) constraints.push(where("program", "==", programId));
+  // array-contains, not equality — a candidate can now belong to more than
+  // one Program (see Candidate.programs in types.ts). Needs its own
+  // composite index (programs CONTAINS + createdAt DESC), added alongside
+  // the old program== one in firestore.indexes.json rather than replacing
+  // it, since other equality reads of the legacy `program` field still
+  // exist elsewhere until they're migrated too.
+  if (programId) constraints.push(where("programs", "array-contains", programId));
   constraints.push(orderBy("createdAt", "desc"));
   if (cursor) constraints.push(startAfter(cursor));
   constraints.push(limit(take));
@@ -55,16 +61,17 @@ export interface CandidateCounts {
 // Cheap (aggregation, ~1 read regardless of collection size) counts for the
 // header/tab badges — lets the default Candidates view stay scoped to a
 // handful of documents without losing accurate "N active" / per-program
-// counts. Equality-only filters (program==, archived==) never need a
-// composite index, so this works with zero index setup.
+// counts. array-contains/equality filters with no orderBy (programs
+// CONTAINS, archived==) never need a composite index, so this still works
+// with zero index setup even after the programs array migration.
 export async function getCandidateCounts(programIds: string[]): Promise<CandidateCounts> {
   const col = collection(db, "candidates");
   const [totalSnap, archivedSnap, ...programSnaps] = await Promise.all([
     getCountFromServer(query(col)),
     getCountFromServer(query(col, where("archived", "==", true))),
     ...programIds.flatMap(id => [
-      getCountFromServer(query(col, where("program", "==", id))),
-      getCountFromServer(query(col, where("program", "==", id), where("archived", "==", true))),
+      getCountFromServer(query(col, where("programs", "array-contains", id))),
+      getCountFromServer(query(col, where("programs", "array-contains", id), where("archived", "==", true))),
     ]),
   ]);
   const byProgram: Record<string, { total: number; archived: number }> = {};

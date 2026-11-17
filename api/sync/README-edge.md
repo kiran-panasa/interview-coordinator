@@ -86,10 +86,13 @@ A `200` means the request was processed: every student **not** in
 | `template_inactive`  | Template exists but is draft/archived (students can't see it) | Ask IC admin to activate it, or use another template |
 | `no_templates`       | `templates` missing or empty | Add at least one template |
 | `invalid_program`    | `program` isn't `"Edge 2.0"` | Send `"Edge 2.0"` |
-| `program_conflict`   | Student already exists in IC under a different program | Check with IC admin — not auto-moved |
 | `missing_field`      | `name` missing, or both `uid` and `email` missing | Fill in the field |
 
 A student can have several errors at once; all are listed.
+
+A student already in Interview Coordinator under a different program (e.g.
+Academy) is no longer rejected — Edge 2.0 is simply added alongside
+whatever program(s) they already have.
 
 ## Request-level errors
 

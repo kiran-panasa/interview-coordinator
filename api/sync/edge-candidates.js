@@ -9,12 +9,18 @@ import { getDb } from "../_lib/firebaseAdmin.js";
 // (case-insensitive), overwrite only the fields that were actually sent,
 // and only ever ADD templates — never remove one.
 //
-// Stricter than the CSV import, on purpose (an automated sync has no admin
-// eyeballing a preview): a student is REJECTED as a whole — nothing written
-// for them — if any template name doesn't match an active Edge 2.0
-// template, or if they already exist under a different program. Rejected
-// students are returned to the Edge portal so the data can be fixed there
-// and re-synced. See api/sync/README-edge.md.
+// A student can be enrolled in more than one Program (e.g. already in
+// Academy, now also added to Edge 2.0) — Edge's own program is ADDED to
+// whatever the candidate already has (Candidate.programs, see
+// src/utils/candidatePrograms.ts), never rejected as a conflict. That used
+// to be a hard rejection (`program_conflict`) before multi-program support
+// existed; it isn't anymore, so that error code no longer appears.
+//
+// Stricter than the CSV import otherwise, on purpose (an automated sync has
+// no admin eyeballing a preview): a student is REJECTED as a whole —
+// nothing written for them — if any template name doesn't match an active
+// Edge 2.0 template. Rejected students are returned to the Edge portal so
+// the data can be fixed there and re-synced. See api/sync/README-edge.md.
 //
 // Auth is deliberately self-contained here (its own EDGE_SYNC_API_TOKEN)
 // rather than going through api/_lib/auth.js, so the Academy sync's token
@@ -177,10 +183,6 @@ export default async function handler(req, res) {
       }
 
       const existing = (g.uid || g.email) ? findExisting(g) : null;
-      if (existing && existing.program && existing.program !== edgeProgramId) {
-        const otherProgram = programsSnap.docs.find(d => d.id === existing.program)?.data().name || existing.program;
-        errors.push({ code: "program_conflict", message: `Already exists in Interview Coordinator under program "${otherProgram}"` });
-      }
 
       if (errors.length) {
         rejected.push({ uid: g.uid || null, email: g.email || null, name: g.name || null, errors });
@@ -198,7 +200,22 @@ export default async function handler(req, res) {
         for (const f of ["uid", "email"]) {
           if (g[f] && lower(g[f]) !== lower(existing[f])) fieldUpdates[f] = g[f];
         }
-        if (!existing.program) fieldUpdates.program = edgeProgramId;
+        // Add Edge's program to whatever the candidate already has, rather
+        // than only setting it when they had none at all — a candidate
+        // already in e.g. Academy keeps that AND gains Edge 2.0, instead of
+        // the old behavior (reject the whole sync row as a conflict).
+        const existingPrograms = Array.isArray(existing.programs) && existing.programs.length
+          ? existing.programs
+          : (existing.program ? [existing.program] : []);
+        if (!existingPrograms.includes(edgeProgramId)) {
+          fieldUpdates.programs = [...existingPrograms, edgeProgramId];
+          // Legacy single-value field, kept pointed at the first program —
+          // read directly (not through getCandidateProgramIds) by a few
+          // not-yet-migrated call sites: Nudge's campaign filters,
+          // Settings' delete-program cleanup, Inbound, and the SSO
+          // backend's profile resolution.
+          fieldUpdates.program = fieldUpdates.programs[0];
+        }
         const currentIds = existing.templateIds || [];
         const mergedIds = [...new Set([...currentIds, ...templateIds])];
         if (mergedIds.length !== currentIds.length) fieldUpdates.templateIds = mergedIds;
@@ -215,6 +232,7 @@ export default async function handler(req, res) {
         const payload = {
           name: g.name, uid: g.uid, email: g.email, phone: g.phone,
           resumeLink: "", notes: "",
+          programs: [edgeProgramId],
           program: edgeProgramId,
           templateIds,
           source: SOURCE,
