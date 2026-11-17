@@ -293,7 +293,7 @@ export default function VendorAnalyticsPage() {
 
   const KPI_CARDS = [
     { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled },
-    { key: "panelists",            label: "Total Panelists",      icon: Users,         color: "text-brand-600",   iconBg: "bg-brand-50",    value: totalPanelists },
+    { key: "panelistsScheduled",   label: "Panelists Scheduled",  icon: Users,         color: "text-brand-600",   iconBg: "bg-brand-50",    value: totalPanelistsScheduled },
     { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed },
     { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted },
     { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
