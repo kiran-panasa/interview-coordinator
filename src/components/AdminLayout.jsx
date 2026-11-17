@@ -12,7 +12,7 @@ import ErrorBoundary from "./ErrorBoundary";
 import { ROLE_LABELS } from "../constants/roles";
 import {
   LayoutDashboard, Users, UserCog, FileText, Bell, Inbox,
-  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2, Menu, X,
+  CalendarClock, HelpCircle, Settings, Info, LogOut, CalendarCheck2, BarChart3, Building2, Menu, X, PieChart,
 } from "lucide-react";
 
 const ALL_NAV = [
@@ -25,6 +25,7 @@ const ALL_NAV = [
   { to: "/admin/interviews",   label: "Interviews",          roles: ["admin"],                                        icon: CalendarClock },
   { to: "/admin/questions",    label: "Question Bank",       roles: ["admin", "content_team", "interviewer_content"], icon: HelpCircle },
   { to: "/admin/interviewer-stats", label: "Interviewer Statistics", roles: ["admin"],                                 icon: BarChart3 },
+  { to: "/admin/vendor-analytics",  label: "Vendor Analytics",       roles: ["admin"],                                 icon: PieChart },
   { to: "/admin/settings",     label: "Settings",            roles: ["admin"],                                        icon: Settings },
   { to: "/admin/about",        label: "About",               roles: ["admin", "content_team", "interviewer_content"], icon: Info },
 ];

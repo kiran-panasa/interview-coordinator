@@ -30,6 +30,7 @@ const NudgePage          = lazy(() => import("./pages/admin/NudgePage"));
 const AdminAboutPage     = lazy(() => import("./pages/admin/AboutPage"));
 const QuestionsPage      = lazy(() => import("./pages/admin/QuestionsPage"));
 const InterviewerStatsPage = lazy(() => import("./pages/admin/InterviewerStatsPage"));
+const VendorAnalyticsPage  = lazy(() => import("./pages/admin/VendorAnalyticsPage"));
 
 const InterviewerLayout    = lazy(() => import("./components/InterviewerLayout"));
 const InterviewerDashboard = lazy(() => import("./pages/interviewer/Dashboard"));
@@ -154,6 +155,7 @@ function AppRoutes() {
           <Route path="nudge"       element={<NudgePage />} />
           <Route path="questions"   element={<QuestionsPage />} />
           <Route path="interviewer-stats" element={<InterviewerStatsPage />} />
+          <Route path="vendor-analytics" element={<VendorAnalyticsPage />} />
           <Route path="about"       element={<AdminAboutPage />} />
         </Route>
 
