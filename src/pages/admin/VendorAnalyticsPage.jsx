@@ -28,6 +28,7 @@ function iso(d) {
   return `${y}-${m}-${day}`;
 }
 function todayIso() { return iso(new Date()); }
+function yesterdayIso() { const d = new Date(); d.setDate(d.getDate() - 1); return iso(d); }
 function thisWeekRange() {
   const now = new Date();
   const day = now.getDay();
@@ -51,7 +52,7 @@ function formatRangeDate(isoStr) {
   const [y, m, d] = isoStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
-const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time", custom: "Custom Range" };
+const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time", day: "Day" };
 
 const UNASSIGNED_PROGRAM_ID = "__unassigned__";
 const NO_VENDOR_ID = "__no_vendor__";
@@ -109,9 +110,12 @@ const pct = (n) => `${n.toFixed(0)}%`;
 export default function VendorAnalyticsPage() {
   const { userProfile } = useAuth();
 
-  const [period,     setPeriod]     = useState("week"); // week | month | overall | custom
-  const [customFrom, setCustomFrom] = useState(todayIso());
-  const [customTo,   setCustomTo]   = useState(todayIso());
+  const [period,     setPeriod]     = useState("week"); // week | month | overall | day
+  // Single-day view, defaulting to yesterday rather than today — opened
+  // today, "today" is still in progress and its numbers are necessarily
+  // incomplete, so yesterday is the most recently FINISHED day. Editable
+  // via the date picker that appears once Day is selected.
+  const [dayDate,    setDayDate]    = useState(yesterdayIso());
   const [compareBy,  setCompareBy]  = useState("vendor"); // vendor | panelist
 
   const [vendorIds,   setVendorIds]   = useState([]);
@@ -124,7 +128,7 @@ export default function VendorAnalyticsPage() {
   const range = period === "week" ? thisWeekRange()
     : period === "month" ? thisMonthRange()
     : period === "overall" ? allTimeRange()
-    : { from: customFrom, to: customTo };
+    : { from: dayDate, to: dayDate };
 
   const interviews = useInterviewsInDateRange(range.from, range.to);
 
@@ -321,22 +325,28 @@ export default function VendorAnalyticsPage() {
       </motion.div>
 
       {/* ── Period toggle ── */}
-      <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full mb-4 w-fit max-w-full overflow-x-auto scrollbar-thin">
-        {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"], ["custom", "Custom"]].map(([id, label]) => (
-          <button key={id} onClick={() => setPeriod(id)}
-            className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
-              period === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
-            }`}>
-            {label}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full overflow-x-auto scrollbar-thin">
+          {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
+            <button key={id} onClick={() => setPeriod(id)}
+              className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
+                period === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setPeriod("day")}
+          className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 border transition-colors ${
+            period === "day" ? "bg-brand-600 text-white border-brand-600 shadow-card" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+          }`}>
+          Day Stats
+        </button>
       </div>
-      {period === "custom" && (
+      {period === "day" && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
-          <DatePicker value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          <span className="text-gray-400 text-sm">–</span>
-          <DatePicker value={customTo} min={customFrom} onChange={e => setCustomTo(e.target.value)}
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Date</span>
+          <DatePicker value={dayDate} max={todayIso()} onChange={e => setDayDate(e.target.value)}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
         </div>
       )}
