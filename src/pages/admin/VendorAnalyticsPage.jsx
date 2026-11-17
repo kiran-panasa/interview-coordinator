@@ -11,7 +11,7 @@ import { usePagination } from "../../hooks/usePagination";
 import { isSupersededPartial } from "../../utils/interviewCompletionStats";
 import { exportVendorAnalytics } from "../../utils/vendorAnalyticsExport";
 import { subscribeToSlotsForInterviewers, getBusyWindowsForInterviewers } from "../../api/firestore";
-import { isSlotEffectivelyBooked } from "../../utils/slotAvailability";
+import { collapseSlotsByDurationGrouped } from "../../utils/slotAvailability";
 import SkillsSelect from "../../components/SkillsSelect";
 import DatePicker from "../../components/DatePicker";
 import Pagination from "../../components/Pagination";
@@ -233,13 +233,21 @@ export default function VendorAnalyticsPage() {
     [activeInterviewers, vendorIds]
   );
 
-  // ── Slot Overview — how many availability slots this vendor's
-  // interviewers actually submitted ("received") vs. how many of those
-  // never got booked into an interview ("unutilized"), for the active date
-  // range. Scoped to the vendor filter above (fewer live listeners when a
-  // vendor is picked) and recomputed whenever the range or vendor filter
-  // changes, same live-subscription pattern NudgePage's Slot Overview tab
-  // already uses.
+  // ── Slot Overview — how many bookable interview slots this vendor's
+  // interviewers actually offered ("received") vs. how many of those never
+  // got booked ("unutilized"), for the active date range. Collapsed by
+  // duration first (collapseSlotsByDurationGrouped) — the SAME step
+  // Nudge's own Slot Overview tab applies before counting Free/Booked —
+  // since raw availability docs are usually submitted in 30-min increments
+  // and two of those back-to-back are only ONE bookable 60-min interview
+  // slot, not two; counting the raw docs directly would roughly double
+  // these numbers against what Slot Overview shows for the same range.
+  // Duration comes from the selected Template filter when exactly one is
+  // picked, else the same 60-minute default Slot Overview itself falls
+  // back to with no template chosen.
+  const effectiveSlotDuration = templateIds.length === 1
+    ? (templates.find(t => t.id === templateIds[0])?.durationMinutes || 60)
+    : 60;
   const slotInterviewers = useMemo(
     () => vendorIds.length
       ? activeInterviewers.filter(u => u.vendorId && vendorIds.includes(u.vendorId))
@@ -263,20 +271,24 @@ export default function VendorAnalyticsPage() {
   }, [slotIvrIdsKey, range.from, range.to]);
 
   const slotCountsByVendor = useMemo(() => {
-    const m = new Map();
-    slotInterviewers.forEach(u => {
-      const key = u.vendorId || NO_VENDOR_ID;
-      if (!m.has(key)) m.set(key, { received: 0, unutilized: 0 });
-      const bucket = m.get(key);
+    const vendorOfInterviewer = new Map(slotInterviewers.map(u => [u.id, u.vendorId || NO_VENDOR_ID]));
+    const rawInRange = slotInterviewers.flatMap(u =>
       (ivrSlots[u.id] || [])
         .filter(s => s.date >= range.from && s.date <= range.to)
-        .forEach(s => {
-          bucket.received++;
-          if (!isSlotEffectivelyBooked({ ...s, interviewerId: u.id }, busyWindowsByInterviewer)) bucket.unutilized++;
-        });
+        .map(s => ({ ...s, interviewerId: u.id }))
+    );
+    const collapsed = collapseSlotsByDurationGrouped(rawInRange, effectiveSlotDuration, busyWindowsByInterviewer);
+
+    const m = new Map();
+    collapsed.forEach(s => {
+      const key = vendorOfInterviewer.get(s.interviewerId) || NO_VENDOR_ID;
+      if (!m.has(key)) m.set(key, { received: 0, unutilized: 0 });
+      const bucket = m.get(key);
+      bucket.received++;
+      if (!s.isBooked) bucket.unutilized++;
     });
     return m;
-  }, [slotInterviewers, ivrSlots, busyWindowsByInterviewer, range.from, range.to]);
+  }, [slotInterviewers, ivrSlots, busyWindowsByInterviewer, range.from, range.to, effectiveSlotDuration]);
   const totalSlotsReceived = useMemo(
     () => [...slotCountsByVendor.values()].reduce((a, b) => a + b.received, 0),
     [slotCountsByVendor]
@@ -409,8 +421,8 @@ export default function VendorAnalyticsPage() {
     // the table/export below still break them out as separate columns.
     { key: "cancelledInterviewer", label: "Cancelled / Declined by Panelist", icon: UserX, color: "text-amber-600", iconBg: "bg-amber-50", value: totals.cancelledInterviewer + totals.declined },
     { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
-    { key: "slotsReceived",        label: "Slots Received",       icon: CalendarDays,  color: "text-cyan-600",    iconBg: "bg-cyan-50",     value: totalSlotsReceived },
-    { key: "unutilizedSlots",      label: "Unutilized Slots",     icon: CalendarDays,  color: "text-cyan-600",    iconBg: "bg-cyan-50",     value: totalUnutilizedSlots },
+    { key: "slotsReceived",        label: `Slots Received (${effectiveSlotDuration}-min)`,   icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: totalSlotsReceived },
+    { key: "unutilizedSlots",      label: `Unutilized Slots (${effectiveSlotDuration}-min)`, icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: totalUnutilizedSlots },
   ];
 
   const sortLabel = SORT_OPTIONS.find(s => s.id === sortBy)?.name || sortBy;
@@ -575,7 +587,7 @@ export default function VendorAnalyticsPage() {
                       <SortableHeader field="panelistsScheduled" label="Active Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
                         title="How many of this vendor's interviewers actually had at least one interview in this period." />
                       <SortableHeader field="slotsReceived" label="Slots Received" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.slots}
-                        title="Availability slots this vendor's interviewers submitted in this period." />
+                        title={`Bookable ${effectiveSlotDuration}-min interview slots this vendor's interviewers offered in this period.`} />
                       <SortableHeader field="unutilizedSlots" label="Unutilized Slots" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.slots}
                         title="Of those, how many never got booked into an interview." />
                     </>
