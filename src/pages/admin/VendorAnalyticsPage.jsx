@@ -337,16 +337,17 @@ export default function VendorAnalyticsPage() {
   }
 
   const KPI_CARDS = [
-    { key: "panelistsScheduled",   label: "Panelists Scheduled",  icon: Users,         color: "text-brand-600",   iconBg: "bg-brand-50",    value: totalPanelistsScheduled },
     { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled },
     { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed },
     { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted },
     { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
     { key: "cancelledAdmin",       label: "Cancelled by Admin",   icon: XCircle,       color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledAdmin },
     { key: "cancelledStudent",     label: "Cancelled by Student", icon: UserMinus,     color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledStudent },
-    { key: "cancelledInterviewer", label: "Cancelled by Panelist",icon: UserX,         color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledInterviewer },
+    // Declining an invite and cancelling as the assigned interviewer are
+    // both panelist-side actions, so they're folded into one card here —
+    // the table/export below still break them out as separate columns.
+    { key: "cancelledInterviewer", label: "Cancelled / Declined by Panelist", icon: UserX, color: "text-amber-600", iconBg: "bg-amber-50", value: totals.cancelledInterviewer + totals.declined },
     { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
-    { key: "declined",             label: "Declined",             icon: X,             color: "text-red-600",     iconBg: "bg-red-50",      value: totals.declined },
   ];
 
   const sortLabel = SORT_OPTIONS.find(s => s.id === sortBy)?.name || sortBy;
