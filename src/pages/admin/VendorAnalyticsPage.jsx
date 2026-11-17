@@ -59,7 +59,7 @@ const NO_VENDOR_ID = "__no_vendor__";
 const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
   { id: "completed",        name: "Completed" },
-  { id: "panelists",        name: "Panelists" },
+  { id: "panelists",        name: "Total Panelists" },
   { id: "panelistsScheduled", name: "Panelists Scheduled" },
   { id: "completionRate",   name: "Completion Rate" },
   { id: "cancellationRate", name: "Cancellation Rate" },
@@ -292,8 +292,8 @@ export default function VendorAnalyticsPage() {
   }
 
   const KPI_CARDS = [
-    { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled },
     { key: "panelistsScheduled",   label: "Panelists Scheduled",  icon: Users,         color: "text-brand-600",   iconBg: "bg-brand-50",    value: totalPanelistsScheduled },
+    { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled },
     { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed },
     { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted },
     { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
@@ -434,7 +434,7 @@ export default function VendorAnalyticsPage() {
                   </th>
                   {compareBy === "vendor" ? (
                     <>
-                      <SortableHeader field="panelists" label="Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+                      <SortableHeader field="panelists" label="Total Panelists" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
                       <SortableHeader field="panelistsScheduled" label="Panelists Scheduled" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort}
                         title="How many of this vendor's panelists actually had at least one interview in this period — out of the total Panelists column." />
                     </>
