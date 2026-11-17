@@ -28,7 +28,6 @@ function iso(d) {
   return `${y}-${m}-${day}`;
 }
 function todayIso() { return iso(new Date()); }
-function yesterdayIso() { const d = new Date(); d.setDate(d.getDate() - 1); return iso(d); }
 function thisWeekRange() {
   const now = new Date();
   const day = now.getDay();
@@ -52,7 +51,7 @@ function formatRangeDate(isoStr) {
   const [y, m, d] = isoStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
-const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time", day: "Day" };
+const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time" };
 
 const UNASSIGNED_PROGRAM_ID = "__unassigned__";
 const NO_VENDOR_ID = "__no_vendor__";
@@ -149,26 +148,28 @@ const pct = (n) => `${n.toFixed(0)}%`;
 export default function VendorAnalyticsPage() {
   const { userProfile } = useAuth();
 
-  const [period,     setPeriod]     = useState("week"); // week | month | overall | day
-  // Single-day view, defaulting to yesterday rather than today — opened
-  // today, "today" is still in progress and its numbers are necessarily
-  // incomplete, so yesterday is the most recently FINISHED day. Editable
-  // via the date picker that appears once Day is selected.
-  const [dayFrom, setDayFrom] = useState(yesterdayIso());
-  const [dayTo,   setDayTo]   = useState(yesterdayIso());
+  const [period,     setPeriod]     = useState("week"); // week | month | overall
   const [compareBy,  setCompareBy]  = useState("vendor"); // vendor | panelist
 
   const [vendorIds,   setVendorIds]   = useState([]);
   const [programIds,  setProgramIds]  = useState([]);
   const [templateIds, setTemplateIds] = useState([]);
+  // A specific date (or range) filter, separate from the Weekly/Monthly/
+  // Overall period toggle above — set either one and it overrides the
+  // period entirely, same as the Vendor/Program/Template filters next to
+  // it; empty (the default) just falls back to whatever period is active.
+  const [dateFilterFrom, setDateFilterFrom] = useState("");
+  const [dateFilterTo,   setDateFilterTo]   = useState("");
   const [search,      setSearch]      = useState("");
   const [sortBy,      setSortBy]      = useState("completed");
   const [sortDir,     setSortDir]     = useState("desc");
 
-  const range = period === "week" ? thisWeekRange()
+  const periodRange = period === "week" ? thisWeekRange()
     : period === "month" ? thisMonthRange()
-    : period === "overall" ? allTimeRange()
-    : { from: dayFrom, to: dayTo };
+    : allTimeRange();
+  const range = dateFilterFrom
+    ? { from: dateFilterFrom, to: dateFilterTo || dateFilterFrom }
+    : periodRange;
 
   const interviews = useInterviewsInDateRange(range.from, range.to);
 
@@ -317,8 +318,8 @@ export default function VendorAnalyticsPage() {
     exportVendorAnalytics(headers, rows, `vendor_analytics_${compareBy}`);
   };
 
-  const hasFilters = vendorIds.length || programIds.length || templateIds.length || search;
-  const clearFilters = () => { setVendorIds([]); setProgramIds([]); setTemplateIds([]); setSearch(""); };
+  const hasFilters = vendorIds.length || programIds.length || templateIds.length || search || dateFilterFrom;
+  const clearFilters = () => { setVendorIds([]); setProgramIds([]); setTemplateIds([]); setSearch(""); setDateFilterFrom(""); setDateFilterTo(""); };
 
   // Only "admin" — not content_team/interviewer_content, who DO get the
   // rest of the admin area via ADMIN_ROLES — sees this consolidated
@@ -359,41 +360,26 @@ export default function VendorAnalyticsPage() {
         <p className="text-sm text-gray-500 mt-1 flex flex-wrap items-center gap-1.5">
           Compare every vendor's interview performance from one screen —
           <span className="inline-flex items-center gap-1 font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full">
-            {PERIOD_LABEL[period]} · {range.from === range.to ? formatRangeDate(range.from) : `${formatRangeDate(range.from)} – ${formatRangeDate(range.to)}`}
+            {dateFilterFrom ? "Date Filter" : PERIOD_LABEL[period]} · {range.from === range.to ? formatRangeDate(range.from) : `${formatRangeDate(range.from)} – ${formatRangeDate(range.to)}`}
           </span>
         </p>
       </motion.div>
 
       {/* ── Period toggle ── */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full overflow-x-auto scrollbar-thin">
           {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
             <button key={id} onClick={() => setPeriod(id)}
+              disabled={!!dateFilterFrom}
               className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
-                period === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
+                dateFilterFrom ? "text-gray-300 cursor-not-allowed"
+                  : period === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
               }`}>
               {label}
             </button>
           ))}
         </div>
-        <button onClick={() => setPeriod("day")}
-          className={`-mt-1.5 px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 border transition-colors ${
-            period === "day" ? "bg-violet-600 text-white border-violet-600 shadow-card" : "bg-white text-violet-700 border-violet-200 hover:bg-violet-50"
-          }`}>
-          Day Stats
-        </button>
       </div>
-      {period === "day" && (
-        <div className="flex flex-wrap items-center gap-2 mb-6">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">From</span>
-          <DatePicker value={dayFrom} max={todayIso()} onChange={e => setDayFrom(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-          <span className="text-gray-400 text-sm">–</span>
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">To</span>
-          <DatePicker value={dayTo} min={dayFrom} max={todayIso()} onChange={e => setDayTo(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-        </div>
-      )}
 
       {/* ── KPI cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
@@ -427,6 +413,19 @@ export default function VendorAnalyticsPage() {
           <div className="w-full sm:w-48">
             <label className="block text-xs font-semibold text-gray-500 mb-1">Template</label>
             <SkillsSelect skills={templateOptions} value={templateIds} onChange={setTemplateIds} placeholder="All Templates" searchPlaceholder="Search templates…" />
+          </div>
+          <div className="w-full sm:w-auto">
+            <label className="block text-xs font-semibold text-gray-500 mb-1">
+              Date {dateFilterFrom && <span className="text-violet-500 normal-case font-normal">— overrides period above</span>}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <DatePicker value={dateFilterFrom} max={todayIso()} onChange={e => setDateFilterFrom(e.target.value)}
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <span className="text-gray-400 text-sm">–</span>
+              <DatePicker value={dateFilterTo} min={dateFilterFrom} max={todayIso()} disabled={!dateFilterFrom}
+                onChange={e => setDateFilterTo(e.target.value)}
+                className="w-full sm:w-auto border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 disabled:bg-gray-50 disabled:text-gray-400" />
+            </div>
           </div>
           {hasFilters && (
             <button onClick={clearFilters} className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 px-2 py-2 transition-colors">
