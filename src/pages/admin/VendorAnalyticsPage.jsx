@@ -154,7 +154,8 @@ export default function VendorAnalyticsPage() {
   // today, "today" is still in progress and its numbers are necessarily
   // incomplete, so yesterday is the most recently FINISHED day. Editable
   // via the date picker that appears once Day is selected.
-  const [dayDate,    setDayDate]    = useState(yesterdayIso());
+  const [dayFrom, setDayFrom] = useState(yesterdayIso());
+  const [dayTo,   setDayTo]   = useState(yesterdayIso());
   const [compareBy,  setCompareBy]  = useState("vendor"); // vendor | panelist
 
   const [vendorIds,   setVendorIds]   = useState([]);
@@ -167,7 +168,7 @@ export default function VendorAnalyticsPage() {
   const range = period === "week" ? thisWeekRange()
     : period === "month" ? thisMonthRange()
     : period === "overall" ? allTimeRange()
-    : { from: dayDate, to: dayDate };
+    : { from: dayFrom, to: dayTo };
 
   const interviews = useInterviewsInDateRange(range.from, range.to);
 
@@ -376,17 +377,21 @@ export default function VendorAnalyticsPage() {
           ))}
         </div>
         <button onClick={() => setPeriod("day")}
-          className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 border transition-colors ${
-            period === "day" ? "bg-brand-600 text-white border-brand-600 shadow-card" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+          className={`-mt-1.5 px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 border transition-colors ${
+            period === "day" ? "bg-violet-600 text-white border-violet-600 shadow-card" : "bg-white text-violet-700 border-violet-200 hover:bg-violet-50"
           }`}>
           Day Stats
         </button>
       </div>
       {period === "day" && (
         <div className="flex flex-wrap items-center gap-2 mb-6">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Date</span>
-          <DatePicker value={dayDate} max={todayIso()} onChange={e => setDayDate(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">From</span>
+          <DatePicker value={dayFrom} max={todayIso()} onChange={e => setDayFrom(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+          <span className="text-gray-400 text-sm">–</span>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">To</span>
+          <DatePicker value={dayTo} min={dayFrom} max={todayIso()} onChange={e => setDayTo(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
         </div>
       )}
 
