@@ -10,7 +10,7 @@ import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/que
 import { usePagination } from "../../hooks/usePagination";
 import { isSupersededPartial } from "../../utils/interviewCompletionStats";
 import { exportVendorAnalytics } from "../../utils/vendorAnalyticsExport";
-import { subscribeToSlotsForInterviewers, getBusyWindowsForInterviewers } from "../../api/firestore";
+import { getSlotsForInterviewers, getBusyWindowsForInterviewers } from "../../api/firestore";
 import { collapseSlotsByDurationGrouped } from "../../utils/slotAvailability";
 import SkillsSelect from "../../components/SkillsSelect";
 import DatePicker from "../../components/DatePicker";
@@ -265,10 +265,26 @@ export default function VendorAnalyticsPage() {
   );
   const [ivrSlots, setIvrSlots] = useState({});
   const [busyWindowsByInterviewer, setBusyWindowsByInterviewer] = useState({});
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const slotIvrIdsKey = slotInterviewers.map(u => u.id).sort().join(",");
+  // One-time reads (getSlotsForInterviewers / getBusyWindowsForInterviewers),
+  // NOT live listeners — this page can be looking at the entire company's
+  // active interviewer roster at once (no vendor filter), and a persistent
+  // onSnapshot PER interviewer at that scale was starving the page's other,
+  // more important live interviews subscription of connection bandwidth,
+  // making Total Scheduled etc. sit at 0 for minutes after changing the
+  // date filter. A report page doesn't need millisecond-fresh slot data —
+  // this refetches whenever the interviewer set or date range changes,
+  // which is fresh enough.
   useEffect(() => {
     if (!slotIvrIdsKey) { setIvrSlots({}); return; }
-    return subscribeToSlotsForInterviewers(slotIvrIdsKey.split(","), setIvrSlots);
+    let cancelled = false;
+    setSlotsLoading(true);
+    getSlotsForInterviewers(slotIvrIdsKey.split(","))
+      .then(slots => { if (!cancelled) setIvrSlots(slots); })
+      .catch(() => { if (!cancelled) setIvrSlots({}); })
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    return () => { cancelled = true; };
   }, [slotIvrIdsKey]);
   useEffect(() => {
     if (!slotIvrIdsKey) { setBusyWindowsByInterviewer({}); return; }
@@ -437,8 +453,8 @@ export default function VendorAnalyticsPage() {
     // the table/export below still break them out as separate columns.
     { key: "cancelledInterviewer", label: "Cancelled / Declined by Panelist", icon: UserX, color: "text-amber-600", iconBg: "bg-amber-50", value: totals.cancelledInterviewer + totals.declined },
     { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
-    { key: "slotsReceived",        label: `Slots Received (${effectiveSlotDuration}-min)`,   icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: totalSlotsReceived },
-    { key: "unutilizedSlots",      label: `Unutilized Slots (${effectiveSlotDuration}-min)`, icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: totalUnutilizedSlots },
+    { key: "slotsReceived",        label: `Slots Received (${effectiveSlotDuration}-min)`,   icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: slotsLoading ? "…" : totalSlotsReceived },
+    { key: "unutilizedSlots",      label: `Unutilized Slots (${effectiveSlotDuration}-min)`, icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: slotsLoading ? "…" : totalUnutilizedSlots },
   ];
 
   const sortLabel = SORT_OPTIONS.find(s => s.id === sortBy)?.name || sortBy;
