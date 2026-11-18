@@ -96,12 +96,20 @@ export function collapseSlotsByDurationGrouped(slots, durationMinutes, busyWindo
 // exactly as if that one interviewer's slot had been picked directly.
 //
 // Which free interviewer that is, when more than one offers the same time,
-// is decided by loadByInterviewer (interviewerId -> total interviews ever
-// assigned, from getAvailableSlots) — lowest load wins the tie, so whoever
-// has been assigned the fewest interviews gets first claim on a shared slot
-// instead of whichever interviewer happened to sort first. This never
-// overrides real availability — it only breaks ties among interviewers who
-// are already free at that exact time.
+// is decided by loadByInterviewer (interviewerId -> total interviews already
+// assigned in the range being booked, from getAvailableSlots) — lowest load
+// wins first claim on a shared slot, so whoever's been assigned the fewest
+// interviews gets it. When MULTIPLE interviewers are tied at that same
+// lowest load (the common case: a new campaign where everyone's still at
+// 0), the winner is picked RANDOMLY among them, not by array order — array
+// order here comes from a Firestore query with no meaningful sort (document
+// ID order for the open student portal, getUsersByIds' batch order for a
+// Nudge campaign's selected panelists), so always picking "whoever's
+// first" silently favored the same one or two people on every tie,
+// compounding into one interviewer getting most of a campaign's bookings
+// while others who submitted just as many slots got almost none. This
+// never overrides real availability — it only breaks ties among
+// interviewers who are already free at that exact time.
 export function mergeSlotsAcrossInterviewers(slots, loadByInterviewer = {}) {
   const byKey = new Map();
   for (const s of slots) {
@@ -113,10 +121,10 @@ export function mergeSlotsAcrossInterviewers(slots, loadByInterviewer = {}) {
     .map(group => {
       const free = group.filter(s => !s.isBooked);
       if (!free.length) return { ...group[0], isBooked: true };
-      const least = free.reduce((best, s) =>
-        (loadByInterviewer[s.interviewerId] ?? 0) < (loadByInterviewer[best.interviewerId] ?? 0) ? s : best
-      );
-      return { ...least };
+      const minLoad = Math.min(...free.map(s => loadByInterviewer[s.interviewerId] ?? 0));
+      const tiedForLeast = free.filter(s => (loadByInterviewer[s.interviewerId] ?? 0) === minLoad);
+      const picked = tiedForLeast[Math.floor(Math.random() * tiedForLeast.length)];
+      return { ...picked };
     })
     .sort((a, b) => compareTimeLabels(a.time, b.time));
 }
