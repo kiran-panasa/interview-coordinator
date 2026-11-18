@@ -445,14 +445,14 @@ export default function VendorAnalyticsPage() {
     { key: "yetToStart",           label: "Yet to Start",         icon: Clock,         color: "text-indigo-600",  iconBg: "bg-indigo-50",   value: totals.yetToStart },
     { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed },
     { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted },
-    { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
+    { key: "rescheduled",          label: "Rescheduled by Student", icon: RefreshCw,   color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
     { key: "cancelledAdmin",       label: "Cancelled by Admin",   icon: XCircle,       color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledAdmin },
     { key: "cancelledStudent",     label: "Cancelled by Student", icon: UserMinus,     color: "text-amber-600",   iconBg: "bg-amber-50",    value: totals.cancelledStudent },
     // Declining an invite and cancelling as the assigned interviewer are
     // both panelist-side actions, so they're folded into one card here —
     // the table/export below still break them out as separate columns.
     { key: "cancelledInterviewer", label: "Cancelled / Declined by Panelist", icon: UserX, color: "text-amber-600", iconBg: "bg-amber-50", value: totals.cancelledInterviewer + totals.declined },
-    { key: "noShow",               label: "No-Shows",             icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
+    { key: "noShow",               label: "No-Show by Students",  icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
     { key: "slotsReceived",        label: `Slots Received (${effectiveSlotDuration}-min)`,   icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: slotsLoading ? "…" : totalSlotsReceived },
     { key: "unutilizedSlots",      label: `Unutilized Slots (${effectiveSlotDuration}-min)`, icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: slotsLoading ? "…" : totalUnutilizedSlots },
   ];
