@@ -101,7 +101,7 @@ const SORT_OPTIONS = [
   { id: "scheduled",        name: "Scheduled" },
   { id: "completed",        name: "Completed" },
   { id: "panelists",        name: "Total Interviewers" },
-  { id: "panelistsScheduled", name: "Active Interviewers" },
+  { id: "panelistsScheduled", name: "Interviewers with Interviews" },
   { id: "slotsReceived",    name: "Slots Received" },
   { id: "unutilizedSlots",  name: "Unutilized Slots" },
   { id: "completionRate",   name: "Completion Rate" },
@@ -401,7 +401,7 @@ export default function VendorAnalyticsPage() {
 
   const handleExport = () => {
     const base = ["Scheduled", "Completed", "Completion Rate", "Partially Completed", "Rescheduled", "Cancelled by Admin", "Cancelled by Student", "Cancelled by Interviewer (incl. Declined)", "Cancellation Rate", "No-Show", "No-Show Rate"];
-    const headers = compareBy === "vendor" ? ["Vendor", "Total Interviewers", "Active Interviewers", "Slots Received", "Unutilized Slots", ...base] : ["Panelist", "Vendor", ...base];
+    const headers = compareBy === "vendor" ? ["Vendor", "Total Interviewers", "Interviewers with Interviews", "Slots Received", "Unutilized Slots", ...base] : ["Panelist", "Vendor", ...base];
     const toRow = (r) => [
       r.name, ...(compareBy === "vendor" ? [r.panelists, r.panelistsScheduled, r.slotsReceived, r.unutilizedSlots] : [r.vendorName]),
       r.scheduled, r.completed, `${r.completionRate.toFixed(1)}%`, r.partiallyCompleted, r.rescheduled,
@@ -616,8 +616,8 @@ export default function VendorAnalyticsPage() {
                     <>
                       <SortableHeader field="panelists" label="Total Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
                         title="This vendor's current roster of interviewers." />
-                      <SortableHeader field="panelistsScheduled" label="Active Interviewers" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists}
-                        title="How many of this vendor's interviewers actually had at least one interview in this period." />
+                      <SortableHeader field="panelistsScheduled" label="Interviewers with Interviews" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.panelists} wrap
+                        title="How many of this vendor's interviewers actually had at least one interview in this period — the rest may have submitted slots that simply weren't used." />
                       <SortableHeader field="slotsReceived" label="Slots Received" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.slots}
                         title={`Bookable ${effectiveSlotDuration}-min interview slots this vendor's interviewers offered in this period.`} />
                       <SortableHeader field="unutilizedSlots" label="Unutilized Slots" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.slots}
@@ -707,15 +707,16 @@ export default function VendorAnalyticsPage() {
   );
 }
 
-function SortableHeader({ field, label, sortBy, sortDir, onSort, align = "right", title, accent = ACCENT.scheduled }) {
+function SortableHeader({ field, label, sortBy, sortDir, onSort, align = "right", title, accent = ACCENT.scheduled, wrap = false }) {
   const active = sortBy === field;
   return (
-    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"} border-b-2 ${accent.border}`} title={title}>
+    <th className={`px-4 py-3 ${align === "right" ? "text-right" : "text-left"} border-b-2 ${accent.border} ${wrap ? "max-w-[110px]" : ""}`} title={title}>
       <button onClick={() => onSort(field)}
-        className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide whitespace-nowrap transition-colors ${
+        className={`flex items-center gap-1 text-xs font-bold uppercase tracking-wide transition-colors ${
+          wrap ? "whitespace-normal leading-tight text-left" : "whitespace-nowrap"} ${
           align === "right" ? "ml-auto" : ""} ${active ? "text-brand-600" : `${accent.text} hover:opacity-70`}`}>
         {label}
-        <ArrowUpDown className="w-3 h-3" />
+        <ArrowUpDown className="w-3 h-3 flex-shrink-0" />
         {active && <span className="text-[10px]">{sortDir === "desc" ? "↓" : "↑"}</span>}
       </button>
     </th>
