@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   PieChart, Users, CalendarClock, CheckCircle2, Hourglass, RefreshCw,
-  XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock, CalendarDays,
+  XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock, CalendarDays, Clock,
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
@@ -138,9 +138,18 @@ function bumpCounts(row, iv) {
 
 function withRates(row) {
   const cancelled = row.cancelledAdmin + row.cancelledStudent + row.cancelledInterviewer;
+  // Every other bucket below is mutually exclusive (rescheduled isn't — a
+  // cancelled-then-rebooked interview is BOTH cancelled and rescheduled at
+  // once, see bumpCounts — so it's deliberately left out here), so this is
+  // simply whatever's left of Scheduled once every other outcome is
+  // subtracted: interviews still awaiting an outcome, whether that's
+  // because their date hasn't happened yet or because no one has recorded
+  // one. Without this, the KPI cards look like they're missing interviews.
+  const yetToStart = row.scheduled - (row.completed + row.partiallyCompleted + row.noShow + row.declined + cancelled);
   return {
     ...row,
     cancelled,
+    yetToStart,
     completionRate:   row.scheduled ? (row.completed / row.scheduled) * 100 : 0,
     cancellationRate: row.scheduled ? (cancelled / row.scheduled) * 100 : 0,
     noShowRate:       row.scheduled ? (row.noShow / row.scheduled) * 100 : 0,
@@ -411,6 +420,13 @@ export default function VendorAnalyticsPage() {
 
   const KPI_CARDS = [
     { key: "scheduled",            label: "Total Scheduled",      icon: CalendarClock, color: "text-gray-900",    iconBg: "bg-gray-100",    value: totals.scheduled },
+    // Everything below Completed/Partial/Rescheduled* is mutually exclusive
+    // and nets out of Total Scheduled exactly — *except Rescheduled, which
+    // overlaps Cancelled by design (see bumpCounts), so it's deliberately
+    // left out of that arithmetic. This card is simply the remainder: not
+    // yet completed, cancelled, no-shown, or declined — either because the
+    // date hasn't happened yet, or because no outcome was ever recorded.
+    { key: "yetToStart",           label: "Yet to Start",         icon: Clock,         color: "text-indigo-600",  iconBg: "bg-indigo-50",   value: totals.yetToStart },
     { key: "completed",            label: "Completed",            icon: CheckCircle2,  color: "text-emerald-600", iconBg: "bg-emerald-50",  value: totals.completed },
     { key: "partiallyCompleted",   label: "Partially Completed",  icon: Hourglass,     color: "text-sky-600",     iconBg: "bg-sky-50",      value: totals.partiallyCompleted },
     { key: "rescheduled",          label: "Rescheduled",          icon: RefreshCw,     color: "text-violet-600",  iconBg: "bg-violet-50",   value: totals.rescheduled },
