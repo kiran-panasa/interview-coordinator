@@ -53,9 +53,11 @@ export function avatarColor(id?: string): string {
   return AVATAR_COLORS[n % AVATAR_COLORS.length];
 }
 
-/** "1st Attempt", "2nd Attempt", "3rd Attempt", "4th Attempt", ... */
-export function ordinalLabel(n: number): string {
+/** "1st Attempt", "2nd Attempt", "3rd Attempt", "4th Attempt", ... — pass a
+ *  different `label` (e.g. "Try") for contexts that count differently than
+ *  the formal attempt-limit number (completed interviews only). */
+export function ordinalLabel(n: number, label = "Attempt"): string {
   const v = n % 100;
   const suffix = (v >= 11 && v <= 13) ? "th" : (["th", "st", "nd", "rd"][n % 10] || "th");
-  return `${n}${suffix} Attempt`;
+  return `${n}${suffix} ${label}`;
 }

@@ -7,7 +7,7 @@ import {
   CalendarClock, Video, LogOut, Inbox, Loader2, CalendarCheck2,
   User, BookOpen, LayoutGrid, CalendarRange, ListChecks, Clock3, FileText,
   ChevronDown, ChevronRight, Sparkles, PlayCircle, FileDown, CalendarPlus,
-  CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle, Menu, X,
+  CheckCircle2, XCircle, HelpCircle, Bell, Award, AlertTriangle, Menu, X, History,
 } from "lucide-react";
 import { formatDate, parseInterviewStart, formatDateTime, formatTimeLabel, compareByInterviewDate } from "../../utils/dates";
 import { ordinalLabel } from "../../utils/strings";
@@ -21,6 +21,7 @@ import ErrorBoundary from "../../components/ErrorBoundary";
 import Button from "../../components/Button";
 import KebabMenu from "../../components/KebabMenu";
 import Modal from "../../components/Modal";
+import CandidateTimeline from "../../components/CandidateTimeline";
 
 const SEEN_INVITES_KEY = "ic_seen_invites";
 function readSeenInviteIds() {
@@ -143,6 +144,7 @@ const ACCENT_CHIP = {
   amber:   "bg-amber-50 text-amber-600",
   rose:    "bg-rose-50 text-rose-600",
   sky:     "bg-sky-50 text-sky-600",
+  slate:   "bg-slate-100 text-slate-600",
 };
 const ACCENT_BORDER = {
   indigo:  "border-l-indigo-500",
@@ -190,6 +192,7 @@ const NAV = [
   { id: "details",  label: "My Details",    icon: User, accent: "violet" },
   { id: "slots",    label: "Book an Interview", icon: CalendarPlus, accent: "emerald" },
   { id: "interviews", label: "My Interviews", icon: ListChecks, accent: "amber" },
+  { id: "history",  label: "History",         icon: History, accent: "slate" },
   { id: "notifications", label: "Notifications", icon: Bell, accent: "sky" },
   { id: "faq",      label: "FAQ",            icon: HelpCircle, accent: "rose" },
 ];
@@ -1544,6 +1547,23 @@ export default function StudentDashboardPage() {
                     })}
                   </>
                 )}
+              </motion.div>
+            )}
+
+            {tab === "history" && (
+              <motion.div key="history" initial="hidden" animate="visible" variants={fadeUp} className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
+                    <History className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">History</h1>
+                    <p className="text-xs text-gray-400 mt-0.5">Every interview you've ever booked, in one timeline — scheduled, completed, cancelled, rescheduled and no-shows.</p>
+                  </div>
+                </div>
+                <Card className="p-5">
+                  <CandidateTimeline interviews={interviews} emptyMessage="Nothing booked yet — your history will show up here once you do." />
+                </Card>
               </motion.div>
             )}
 

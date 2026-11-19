@@ -27,6 +27,7 @@ import DatePicker from "../../components/DatePicker";
 import { LABELS as STATUS_LABELS } from "../../components/Badge";
 import { usePagination } from "../../hooks/usePagination";
 import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
+import CandidateHistoryModal from "../../features/candidates/CandidateHistoryModal";
 import { getCandidateProgramIds, candidateHasProgram } from "../../utils/candidatePrograms";
 
 const fadeUp = {
@@ -278,6 +279,7 @@ export default function CandidatesPage() {
   const [toast,      setToast]      = useState(null);
   const [showCSV,    setShowCSV]    = useState(false);
   const [attemptsTarget, setAttemptsTarget] = useState(null);
+  const [historyTarget,  setHistoryTarget]  = useState(null);
 
   // Template (multi), per-template-status (multi), and Date Added (range)
   // filters — all need the real full candidate list to filter against (not
@@ -1083,6 +1085,7 @@ export default function CandidatesPage() {
                         <KebabMenu actions={[
                           { label: "Edit",   onClick: () => openEdit(c), show: !showArchived },
                           { label: "Manage Attempts, No-Shows & Cancellations", onClick: () => setAttemptsTarget(c), show: (c.templateIds || []).length > 0 },
+                          { label: "History", onClick: () => setHistoryTarget(c) },
                           ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
                           { label: "Archive",   onClick: () => handleArchive(c),   show: c.archived !== true },
                           { label: "Unarchive", onClick: () => handleUnarchive(c), show: c.archived === true },
@@ -1218,6 +1221,7 @@ export default function CandidatesPage() {
                     <KebabMenu actions={[
                       { label: "Edit",   onClick: () => openEdit(c), show: !showArchived },
                       { label: "Manage Attempts, No-Shows & Cancellations", onClick: () => setAttemptsTarget(c), show: (c.templateIds || []).length > 0 },
+                      { label: "History", onClick: () => setHistoryTarget(c) },
                       ...(isSwapped(c) ? [{ label: "Fix: Swap Name ↔ UID", onClick: () => handleSwapNameUID(c), highlight: true }] : []),
                       { label: "Archive",   onClick: () => handleArchive(c),   show: c.archived !== true },
                       { label: "Unarchive", onClick: () => handleUnarchive(c), show: c.archived === true },
@@ -1526,6 +1530,11 @@ export default function CandidatesPage() {
         candidate={attemptsTarget}
         templates={templates}
         onClose={() => setAttemptsTarget(null)}
+      />
+
+      <CandidateHistoryModal
+        candidate={historyTarget}
+        onClose={() => setHistoryTarget(null)}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

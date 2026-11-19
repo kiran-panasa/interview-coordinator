@@ -80,6 +80,14 @@ export async function getInterviewsForCandidateTemplate(
   return snap.docs.map(d => ({ ...(d.data() as Interview), id: d.id }));
 }
 
+// Every interview a candidate has ever had, across ALL templates — used by
+// the admin Candidates page's per-candidate History timeline. One plain
+// equality filter, no composite index needed.
+export async function getInterviewsForCandidate(candidateId: string): Promise<Interview[]> {
+  const snap = await getDocs(query(collection(db, "interviews"), where("candidateId", "==", candidateId)));
+  return snap.docs.map(d => ({ ...(d.data() as Interview), id: d.id }));
+}
+
 // Every interview across ANY of the given templates, in one bulk sweep —
 // used by CandidatesPage.jsx to compute every candidate's latest-attempt
 // status per template (the Status column/filter) without needing one
