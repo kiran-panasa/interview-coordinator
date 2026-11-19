@@ -1043,39 +1043,6 @@ export default function StudentDashboardPage() {
                                   )}
                                 </div>
                                 <p className="text-xs text-gray-400">{t.durationMinutes} minutes</p>
-                                {/* Visible before the limit is actually hit,
-                                   not just once it's blocked — so reaching
-                                   it doesn't come as a surprise after
-                                   someone's already on their last try. */}
-                                {!blocked && t.maxAttempts != null && (
-                                  <p className={`text-[11px] font-semibold mt-0.5 ${
-                                    t.attemptsUsed >= t.maxAttempts - 1 ? "text-amber-600" : "text-gray-400"
-                                  }`}>
-                                    {t.attemptsUsed} of {t.maxAttempts} attempt{t.maxAttempts === 1 ? "" : "s"} used
-                                  </p>
-                                )}
-                                {/* Same "visible before it's hit" treatment as
-                                   attempts above, for the two OTHER ways this
-                                   template can end up blocked — cancelling
-                                   too many times or no-showing too many
-                                   times — so the limit itself is something a
-                                   student can see up front, not just
-                                   something they're told about for the first
-                                   time inside the Cancel/Reschedule modal. */}
-                                {!blocked && t.maxNoShows != null && (
-                                  <p className={`text-[11px] font-semibold mt-0.5 ${
-                                    t.noShowCount >= t.maxNoShows - 1 ? "text-amber-600" : "text-gray-400"
-                                  }`}>
-                                    {t.noShowCount} of {t.maxNoShows} no-show{t.maxNoShows === 1 ? "" : "s"} used
-                                  </p>
-                                )}
-                                {!blocked && t.maxCancellations != null && (
-                                  <p className={`text-[11px] font-semibold mt-0.5 ${
-                                    t.cancelCount >= t.maxCancellations - 1 ? "text-amber-600" : "text-gray-400"
-                                  }`}>
-                                    {t.cancelCount} of {t.maxCancellations} cancellation{t.maxCancellations === 1 ? "" : "s"} used
-                                  </p>
-                                )}
                               </div>
                             </div>
                             {blocked ? (
