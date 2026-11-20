@@ -18,6 +18,24 @@ const STATUS_BADGE = {
   no_show:             { label: "No-Show",                style: "bg-orange-50 text-orange-600 border-orange-200", icon: AlertTriangle,  detailColor: "text-orange-700" },
 };
 
+// Groups the flat (already newest-first) timeline by template — with
+// several templates interleaved chronologically, the old single flat list
+// made it hard to follow any ONE template's own story (its 1st/2nd/3rd
+// attempt scattered between unrelated entries for other templates). Group
+// order follows each group's own most recent entry, which falls out for
+// free from the input already being newest-first: the first time a
+// template name is seen while scanning top to bottom IS its most recent
+// activity.
+function groupByTemplate(timeline) {
+  const groups = new Map();
+  timeline.forEach(iv => {
+    const key = iv.templateName || "Interview";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(iv);
+  });
+  return [...groups.entries()];
+}
+
 export default function CandidateTimeline({ interviews, emptyMessage = "No interview history yet.", audience = "admin" }) {
   const timeline = buildCandidateTimeline(interviews || []);
 
@@ -26,37 +44,48 @@ export default function CandidateTimeline({ interviews, emptyMessage = "No inter
   }
 
   return (
-    <div>
-      {timeline.map((iv, i) => {
-        const badge = STATUS_BADGE[iv.status] || STATUS_BADGE.scheduled;
-        const Icon = badge.icon;
-        const detail = timelineDetail(iv, audience);
-        return (
-          <div key={iv.id} className="relative pl-9 pb-6 last:pb-0">
-            {i !== timeline.length - 1 && (
-              <div className="absolute left-[13px] top-7 bottom-0 w-px bg-gray-200" />
-            )}
-            <div className={`absolute left-0 top-0 w-7 h-7 rounded-full flex items-center justify-center border ${badge.style}`}>
-              <Icon className="w-3.5 h-3.5" />
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <p className="font-semibold text-gray-900 text-sm">{iv.templateName || "Interview"}</p>
-              <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
-                {ordinalLabel(iv.attemptNumber)}
-              </span>
-              <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${badge.style}`}>
-                {badge.label}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {iv.scheduledDate
-                ? `Booked for ${iv.scheduledDate}${iv.scheduledTime ? ` · ${iv.scheduledTime}` : ""}`
-                : "No date set"}
-            </p>
-            {detail && <p className={`text-xs font-medium mt-0.5 ${badge.detailColor}`}>{detail}</p>}
+    <div className="space-y-5">
+      {groupByTemplate(timeline).map(([templateName, entries]) => (
+        <div key={templateName}>
+          <div className="flex items-center gap-2 mb-3">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">{templateName}</p>
+            <span className="text-[10px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+              {entries.length} interview{entries.length === 1 ? "" : "s"}
+            </span>
           </div>
-        );
-      })}
+          <div className="border border-gray-100 rounded-2xl px-4 py-4">
+            {entries.map((iv, i) => {
+              const badge = STATUS_BADGE[iv.status] || STATUS_BADGE.scheduled;
+              const Icon = badge.icon;
+              const detail = timelineDetail(iv, audience);
+              return (
+                <div key={iv.id} className="relative pl-9 pb-6 last:pb-0">
+                  {i !== entries.length - 1 && (
+                    <div className="absolute left-[13px] top-7 bottom-0 w-px bg-gray-200" />
+                  )}
+                  <div className={`absolute left-0 top-0 w-7 h-7 rounded-full flex items-center justify-center border ${badge.style}`}>
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
+                      {ordinalLabel(iv.attemptNumber)}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${badge.style}`}>
+                      {badge.label}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {iv.scheduledDate
+                      ? `Booked for ${iv.scheduledDate}${iv.scheduledTime ? ` · ${iv.scheduledTime}` : ""}`
+                      : "No date set"}
+                  </p>
+                  {detail && <p className={`text-xs font-medium mt-0.5 ${badge.detailColor}`}>{detail}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
