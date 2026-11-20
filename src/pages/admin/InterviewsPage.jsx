@@ -18,7 +18,7 @@ import { scheduleInterviewMeet, refreshMeetLink, correctInterviewStatus, getInte
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, reopenNoShowInterview,
+  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, reopenNoShowInterview, reopenCancelledInterview,
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, clearNoShowInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, getInterviewerBusyWindows, bookSlotsForInterview, freeSlotsForInterview, freeOrphanedBookedSlotsOnce,
@@ -1398,6 +1398,33 @@ export default function InterviewsPage() {
     }
   };
 
+  // Same recovery shape as handleReopenNoShow above, for the OTHER way a
+  // conducted interview can end up with no feedback captured: the
+  // candidate cancelled before the panelist got to submit it (including
+  // cancelling right at/after the interview specifically to avoid a bad
+  // evaluation — see reopenCancelledInterview for the full story).
+  const handleReopenCancelled = async (iv) => {
+    if (!confirm(`Reopen "${iv.candidateName}"'s interview?\n\nThis undoes the cancellation so ${iv.interviewerName || "the panelist"} can confirm attendance and submit feedback. There's no feedback to recover — it was never actually submitted before the cancellation wiped it — this just reopens the record so they can submit it now.`)) return;
+    try {
+      await reopenCancelledInterview(iv.id);
+      const reopenedInterviewerId = resolveInterviewerUserId(iv.interviewerId, iv.interviewerEmail);
+      if (reopenedInterviewerId) {
+        createNotification({
+          type:           "feedback_reminder",
+          recipientId:    reopenedInterviewerId,
+          recipientEmail: iv.interviewerEmail,
+          interviewId:    iv.id,
+          candidateName:  iv.candidateName,
+          message:        `${iv.candidateName}'s interview on ${formatDate(iv.scheduledDate)} was reopened by an admin — the cancellation was undone. Please confirm attendance and submit your feedback.`,
+          status:         "unread",
+        }).catch(() => {});
+      }
+      setToast({ message: "Interview reopened — the panelist can now confirm attendance and submit feedback." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   const handleArchive = async (iv) => {
     try {
       await archiveInterview(iv.id);
@@ -2481,6 +2508,12 @@ export default function InterviewsPage() {
                       label: "Reopen (Candidate Joined Late)",
                       onClick: () => handleReopenNoShow(iv),
                       show: iv.status === "no_show",
+                      highlight: true,
+                    },
+                    {
+                      label: "Reopen (Cancelled Before Feedback)",
+                      onClick: () => handleReopenCancelled(iv),
+                      show: iv.status === "cancelled",
                       highlight: true,
                     },
                     {

@@ -336,6 +336,32 @@ export async function reopenNoShowInterview(interviewId: string): Promise<void> 
   });
 }
 
+// Admin-only recovery for "the candidate cancelled before the panelist
+// could submit feedback" — e.g. a candidate who cancelled right at/after
+// the interview specifically to dodge a bad evaluation. markInterviewCancelled
+// wipes feedback/feedbackDraft outright and the "Add Feedback" action is
+// gated on status !== "cancelled", so there was nothing left for an admin
+// to do about a conducted-but-uncaptured interview before this existed.
+// Reopening can't recover feedback that was never actually submitted —
+// there's nothing to restore — it just resets status back to "scheduled"
+// and the attendance gate (same shape as reopenNoShowInterview above) so
+// the panelist can go through the normal confirm-attendance + feedback
+// flow themselves. Also clears the now-stale cancellation metadata, and
+// rescheduledTo in case this interview had ALSO been superseded by a
+// reschedule — reopening explicitly means "no, this one still stands."
+// See handleReopenCancelled in InterviewsPage.jsx.
+export async function reopenCancelledInterview(interviewId: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", interviewId), {
+    status:             "scheduled",
+    cancelledBy:        deleteField(),
+    cancelReason:       deleteField(),
+    rescheduledTo:      deleteField(),
+    candidateJoined:    null,
+    attendanceMarkedAt: null,
+    updatedAt:          new Date().toISOString(),
+  });
+}
+
 export async function saveFeedbackDraft(id: string, feedback: Record<string, unknown>): Promise<void> {
   await updateDoc(doc(db, "interviews", id), {
     feedback: { ...feedback, submittedAt: new Date().toISOString() },
