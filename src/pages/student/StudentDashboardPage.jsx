@@ -1529,7 +1529,7 @@ export default function StudentDashboardPage() {
                   </div>
                 </div>
                 <Card className="p-5">
-                  <CandidateTimeline interviews={interviews} emptyMessage="Nothing booked yet — your history will show up here once you do." />
+                  <CandidateTimeline interviews={interviews} audience="student" emptyMessage="Nothing booked yet — your history will show up here once you do." />
                 </Card>
               </motion.div>
             )}

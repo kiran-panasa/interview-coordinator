@@ -46,19 +46,31 @@ export function buildCandidateTimeline(interviews) {
     });
 }
 
-const CANCELLED_BY_LABEL = {
-  candidate: "You",
-  admin: "Admin",
-  interviewer: "Interviewer",
-};
+// "candidate" (own self-cancel) is the one blank-cancelledBy ALREADY
+// defaults to elsewhere in this app — see StudentDashboardPage.jsx's
+// `(!iv.cancelledBy || iv.cancelledBy === "candidate")` check — because
+// every cancellation that predates this field being tracked went through
+// the candidate's own self-cancel/reschedule path. Reusing that same
+// fallback here (instead of a vague "Someone") both matches that existing
+// convention and is the historically accurate guess for those older
+// records.
+function cancelledByLabel(iv, audience) {
+  const by = iv.cancelledBy || "candidate";
+  if (by === "admin") return "Admin";
+  if (by === "interviewer") return "Interviewer";
+  return audience === "student" ? "You" : "Candidate";
+}
 
 // One line summarizing how a timeline entry resolved, for the muted
 // secondary text under each row — kept separate from the status badge
 // itself so the badge can stay short (reusing STATUS_LABEL) while this
-// carries the "who/why/what's next" detail.
-export function timelineDetail(iv) {
+// carries the "who/why/what's next" detail. `audience` is "student" (the
+// Student Dashboard's own History tab — "You" cancelled makes sense there)
+// or "admin" (the admin Candidates page's History modal, looking at
+// someone else's timeline — "Candidate" instead of "You").
+export function timelineDetail(iv, audience = "admin") {
   if (iv.status === "cancelled") {
-    const by = CANCELLED_BY_LABEL[iv.cancelledBy] || "Someone";
+    const by = cancelledByLabel(iv, audience);
     const reason = iv.cancelReason ? ` — "${iv.cancelReason}"` : "";
     const resched = iv.rescheduledTo ? " · rescheduled to a new slot" : "";
     return `Cancelled by ${by}${reason}${resched}`;

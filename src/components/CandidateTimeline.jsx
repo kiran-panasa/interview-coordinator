@@ -9,16 +9,16 @@ import { ordinalLabel } from "../utils/strings";
 // a cancelled/no-show/declined interview shares its predecessor's attempt
 // number instead of starting a new one — see candidateTimeline.js.
 const STATUS_BADGE = {
-  pending_acceptance:  { label: "Scheduling In Progress", style: "bg-amber-50 text-amber-700 border-amber-200",     icon: Clock3 },
-  scheduled:           { label: "Scheduled",              style: "bg-blue-50 text-blue-700 border-blue-200",       icon: CalendarClock },
-  completed:           { label: "Completed",              style: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2 },
-  partially_completed: { label: "Partially Completed",    style: "bg-sky-50 text-sky-700 border-sky-200",          icon: CheckCircle2 },
-  cancelled:           { label: "Cancelled",              style: "bg-gray-100 text-gray-500 border-gray-200",      icon: XCircle },
-  declined:            { label: "Declined by Interviewer", style: "bg-violet-50 text-violet-700 border-violet-200", icon: RefreshCw },
-  no_show:             { label: "No-Show",                style: "bg-orange-50 text-orange-600 border-orange-200", icon: AlertTriangle },
+  pending_acceptance:  { label: "Scheduling In Progress", style: "bg-amber-50 text-amber-700 border-amber-200",     icon: Clock3,       detailColor: "text-amber-700" },
+  scheduled:           { label: "Scheduled",              style: "bg-blue-50 text-blue-700 border-blue-200",       icon: CalendarClock, detailColor: "text-blue-700" },
+  completed:           { label: "Completed",              style: "bg-emerald-50 text-emerald-700 border-emerald-200", icon: CheckCircle2, detailColor: "text-emerald-700" },
+  partially_completed: { label: "Partially Completed",    style: "bg-sky-50 text-sky-700 border-sky-200",          icon: CheckCircle2,  detailColor: "text-sky-700" },
+  cancelled:           { label: "Cancelled",              style: "bg-gray-100 text-gray-500 border-gray-200",      icon: XCircle,        detailColor: "text-gray-700" },
+  declined:            { label: "Declined by Interviewer", style: "bg-violet-50 text-violet-700 border-violet-200", icon: RefreshCw,      detailColor: "text-violet-700" },
+  no_show:             { label: "No-Show",                style: "bg-orange-50 text-orange-600 border-orange-200", icon: AlertTriangle,  detailColor: "text-orange-700" },
 };
 
-export default function CandidateTimeline({ interviews, emptyMessage = "No interview history yet." }) {
+export default function CandidateTimeline({ interviews, emptyMessage = "No interview history yet.", audience = "admin" }) {
   const timeline = buildCandidateTimeline(interviews || []);
 
   if (timeline.length === 0) {
@@ -30,7 +30,7 @@ export default function CandidateTimeline({ interviews, emptyMessage = "No inter
       {timeline.map((iv, i) => {
         const badge = STATUS_BADGE[iv.status] || STATUS_BADGE.scheduled;
         const Icon = badge.icon;
-        const detail = timelineDetail(iv);
+        const detail = timelineDetail(iv, audience);
         return (
           <div key={iv.id} className="relative pl-9 pb-6 last:pb-0">
             {i !== timeline.length - 1 && (
@@ -53,7 +53,7 @@ export default function CandidateTimeline({ interviews, emptyMessage = "No inter
                 ? `Booked for ${iv.scheduledDate}${iv.scheduledTime ? ` · ${iv.scheduledTime}` : ""}`
                 : "No date set"}
             </p>
-            {detail && <p className="text-xs text-gray-400 mt-0.5">{detail}</p>}
+            {detail && <p className={`text-xs font-medium mt-0.5 ${badge.detailColor}`}>{detail}</p>}
           </div>
         );
       })}
