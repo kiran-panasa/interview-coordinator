@@ -101,6 +101,17 @@ const ACTIVE_SECTION_KEYS = new Set(["scheduled"]);
 
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 
+// Candidate self-service cancel/reschedule is only offered while the
+// interview genuinely hasn't started yet — otherwise it's not really "I
+// can't make it" anymore, it's a way to dodge a bad evaluation after the
+// interview already happened. Missing date/time (shouldn't happen for a
+// "scheduled" interview, but defensively) falls back to allowing it rather
+// than silently hiding the action with no explanation.
+function canStudentCancelOrReschedule(iv) {
+  const start = parseInterviewStart(iv.scheduledDate, iv.scheduledTime);
+  return !start || start > new Date();
+}
+
 // "3 days left to book" urgency badge for a still-open self-book/nudge
 // window — turns a flat "Book between X–Y" date range into something that
 // actually prompts action as the deadline gets close, instead of reading
@@ -1376,7 +1387,17 @@ export default function StudentDashboardPage() {
                                    equally casual/inviting as just joining
                                    the call. Both open the same reason +
                                    warning modal before doing anything. */}
-                                {iv.status === "scheduled" && (
+                                {/* Only while the interview genuinely hasn't
+                                   started yet — once its scheduled time has
+                                   passed, cancelling/rescheduling stops
+                                   being "I can't make it" and starts being a
+                                   way to dodge a bad evaluation after the
+                                   fact (a panelist reported exactly this:
+                                   conducted the interview, candidate
+                                   cancelled before feedback could be
+                                   submitted). cancelInterviewByCandidate
+                                   enforces the same cutoff server-side. */}
+                                {iv.status === "scheduled" && canStudentCancelOrReschedule(iv) && (
                                   <KebabMenu actions={[
                                     {
                                       label: bookingTemplateId === iv.templateId ? "Submitting…" : "Request Reschedule",

@@ -19,7 +19,7 @@ import {
   getInterview, markInterviewCancelled, updateInterview, freeSlotsForInterview,
   getScheduleInvite, getUserByEmail,
 } from "../api/firestore";
-import { formatDate, formatTimeLabel } from "../utils/dates";
+import { formatDate, formatTimeLabel, parseInterviewStart } from "../utils/dates";
 import { callAppsScript } from "../lib/appsScript";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -104,6 +104,16 @@ export async function cancelInterviewByCandidate(interviewId, reason) {
   const iv = await getInterview(interviewId);
   if (!iv) throw new Error("This interview could not be found.");
   if (iv.status === "cancelled") return; // already cancelled — nothing to do
+  // Mirrors the StudentDashboardPage.jsx UI gate (canStudentCancelOrReschedule)
+  // — enforced here too since that's only a hidden button, not a real
+  // boundary. Once the interview's scheduled time has passed, self-cancel
+  // stops being "I can't make it" and becomes a way to dodge a bad
+  // evaluation after the interview already happened — see the admin-side
+  // reopenCancelledInterview recovery this exists alongside.
+  const start = parseInterviewStart(iv.scheduledDate, iv.scheduledTime);
+  if (start && start <= new Date()) {
+    throw new Error("This interview has already started, so it can no longer be cancelled here — please contact the admin team.");
+  }
 
   if (iv.eventId) {
     await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, { action: "cancel", eventId: iv.eventId }).catch(() => {});
