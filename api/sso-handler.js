@@ -307,7 +307,19 @@ async function accountsToken(req, res) {
       // can be widened if this still isn't enough to resolve someone.
       rawBody: typeof req.body === "object" ? JSON.stringify(req.body) : String(req.body || ""),
     });
-    return res.status(404).json({
+    // 200, not 404 — a student who simply hasn't been added as a
+    // candidate yet is an expected, anticipated outcome of this call, not
+    // a server failure. Forms' own client wrapper (otg_forms.utils.
+    // client_backend_utils) treats ANY non-2xx status as an internal
+    // error and raises it to their Sentry, so a 404 here was firing a
+    // genuine-looking crash alert on their side for something that isn't
+    // actually broken on EITHER side. The body is unchanged — same
+    // `error: "student_not_found"` field and message as before — so
+    // Forms can keep branching on the body to show its own "you're not
+    // registered" screen instead of redirecting with a token; only the
+    // status code changed, specifically so their generic non-200 =
+    // error handling stops misclassifying this as a crash.
+    return res.status(200).json({
       error: "student_not_found",
       message: "No access — you're not registered. Please connect with your team.",
     });
