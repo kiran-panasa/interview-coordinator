@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import Modal from "../../components/Modal";
 import CandidateTimeline from "../../components/CandidateTimeline";
 import { getInterviewsForCandidate } from "../../api/interviews";
@@ -25,7 +26,10 @@ export default function CandidateHistoryModal({ candidate, onClose }) {
   return (
     <Modal open={!!candidate} onClose={onClose} title={`History — ${candidate?.name || ""}`} wide>
       {loading ? (
-        <p className="text-sm text-gray-400 text-center py-8">Loading…</p>
+        <div className="flex flex-col items-center justify-center gap-2 py-12">
+          <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+          <p className="text-sm text-gray-400">Loading history…</p>
+        </div>
       ) : (
         <CandidateTimeline interviews={interviews} emptyMessage="This candidate has no interview history yet." />
       )}
