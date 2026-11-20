@@ -9,13 +9,14 @@
 // scheduledTime, status, cancelledBy, cancelReason, rescheduledTo), which
 // already carry everything needed to reconstruct the story.
 
-// Each interview doc IS one "try" at a template — this numbers them in the
-// order they were actually meant to happen (by scheduled date/time, falling
-// back to when the record was created for ones that never got a date), NOT
-// the formal "Nth attempt" label used for attempt-limit messaging elsewhere
-// (which only counts COMPLETED tries) — a candidate who booked, no-showed,
-// then booked again should see that second one as their "2nd try" here even
-// though it's still their 1st real attempt for limit purposes.
+// Same attempt-number rule InterviewsPage.jsx already uses (see its
+// attemptLabelByInterviewId effect): the number only advances once an
+// attempt actually COMPLETES — a cancelled/no-show/declined booking is just
+// a retry of the SAME attempt, not a new one, so it shares that attempt's
+// number instead of bumping it. Sorted chronologically per template first
+// (by scheduled date/time, falling back to when the record was created for
+// ones that never got a date) so the numbering follows the real order
+// things happened in, then re-sorted newest-first for display below.
 export function buildCandidateTimeline(interviews) {
   const byTemplate = new Map();
   interviews.forEach(iv => {
@@ -24,15 +25,19 @@ export function buildCandidateTimeline(interviews) {
     byTemplate.get(key).push(iv);
   });
 
-  const tryNumberById = new Map();
+  const attemptNumberById = new Map();
   byTemplate.forEach(list => {
     const sortKey = iv => `${iv.scheduledDate || iv.createdAt || ""} ${iv.scheduledTime || ""}`;
+    let n = 1;
     [...list].sort((a, b) => sortKey(a).localeCompare(sortKey(b)))
-      .forEach((iv, i) => tryNumberById.set(iv.id, i + 1));
+      .forEach(iv => {
+        attemptNumberById.set(iv.id, n);
+        if (iv.status === "completed") n++;
+      });
   });
 
   return interviews
-    .map(iv => ({ ...iv, tryNumber: tryNumberById.get(iv.id) || 1 }))
+    .map(iv => ({ ...iv, attemptNumber: attemptNumberById.get(iv.id) || 1 }))
     // Most recent first — same convention as Notifications/My Interviews.
     .sort((a, b) => {
       const ak = `${a.scheduledDate || a.createdAt || ""} ${a.scheduledTime || ""}`;

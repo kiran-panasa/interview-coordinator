@@ -3,9 +3,11 @@ import { buildCandidateTimeline, timelineDetail } from "../utils/candidateTimeli
 import { ordinalLabel } from "../utils/strings";
 
 // Shared by the Student Dashboard's own "History" tab and the admin
-// Candidates page's per-candidate History modal — see candidateTimeline.js
-// for why the "Nth try" number here is deliberately a different count than
-// the formal "Nth Attempt" badge used for attempt-limit messaging elsewhere.
+// Candidates page's per-candidate History modal — the "Nth Attempt" badge
+// here uses the exact same counting rule as everywhere else in the app
+// (InterviewsPage.jsx, the Student Dashboard's own attempt-limit messaging):
+// a cancelled/no-show/declined interview shares its predecessor's attempt
+// number instead of starting a new one — see candidateTimeline.js.
 const STATUS_BADGE = {
   pending_acceptance:  { label: "Scheduling In Progress", style: "bg-amber-50 text-amber-700 border-amber-200",     icon: Clock3 },
   scheduled:           { label: "Scheduled",              style: "bg-blue-50 text-blue-700 border-blue-200",       icon: CalendarClock },
@@ -40,7 +42,7 @@ export default function CandidateTimeline({ interviews, emptyMessage = "No inter
             <div className="flex flex-wrap items-center gap-1.5">
               <p className="font-semibold text-gray-900 text-sm">{iv.templateName || "Interview"}</p>
               <span className="text-[10px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-full">
-                {ordinalLabel(iv.tryNumber, "Try")}
+                {ordinalLabel(iv.attemptNumber)}
               </span>
               <span className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${badge.style}`}>
                 {badge.label}
