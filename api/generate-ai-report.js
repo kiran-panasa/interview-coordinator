@@ -1,7 +1,7 @@
 import { getDb } from "./_lib/firebaseAdmin.js";
 import { getAuth } from "firebase-admin/auth";
-import { generateReportWithClaude } from "./_lib/claudeReport.js";
-import { generatePanelistAuditWithClaude } from "./_lib/panelistAuditReport.js";
+import { generateCandidateReport } from "./_lib/claudeReport.js";
+import { generatePanelistAudit } from "./_lib/panelistAuditReport.js";
 import { resolveRubricText } from "./_lib/panelistAuditRubrics.js";
 
 // POST /api/generate-ai-report
@@ -51,14 +51,14 @@ export default async function handler(req, res) {
     if (req.body?.reportType === "panelist") {
       const { transcriptText, rubricKey, panelistName, panelistEmail, round, templateName, priorFindings } = req.body;
       const { label: rubricLabel, text: rubricText } = await resolveRubricText(db, rubricKey);
-      const panelistAudit = await generatePanelistAuditWithClaude(transcriptText, {
+      const panelistAudit = await generatePanelistAudit(transcriptText, {
         rubricKey, rubricLabel, rubricText, panelistName, panelistEmail, round, templateName, priorFindings,
       });
       return res.status(200).json({ success: true, panelistAudit });
     }
 
     const { transcriptText, candidateName, round, templateName } = req.body || {};
-    const report = await generateReportWithClaude(transcriptText, { candidateName, round, templateName });
+    const report = await generateCandidateReport(transcriptText, { candidateName, round, templateName });
     return res.status(200).json({ success: true, report });
   } catch (err) {
     console.error("generate-ai-report error:", err);

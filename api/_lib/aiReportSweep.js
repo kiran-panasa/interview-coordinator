@@ -1,5 +1,5 @@
-import { generateReportWithClaude } from "./claudeReport.js";
-import { generatePanelistAuditWithClaude } from "./panelistAuditReport.js";
+import { generateCandidateReport } from "./claudeReport.js";
+import { generatePanelistAudit } from "./panelistAuditReport.js";
 import { resolveRubricText } from "./panelistAuditRubrics.js";
 
 // Up to this many of a panelist's own past audits, most recent first, used
@@ -118,7 +118,7 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
       if (textResult?.status !== "ready" || !textResult.text) { noTranscript++; continue; }
 
       if (!iv.aiReport) {
-        const report = await generateReportWithClaude(textResult.text, {
+        const report = await generateCandidateReport(textResult.text, {
           candidateName: iv.candidateName, round: iv.round || iv.templateName || "Interview", templateName: iv.templateName || "",
         });
         update.aiReport = { ...report, generatedAt: new Date().toISOString() };
@@ -133,7 +133,7 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
           const rubricKey = templatesById.get(iv.templateId).auditRubricKey;
           const priorFindings = await getPriorFindingsForPanelist(db, iv.interviewerEmail, iv.id);
           const { label: rubricLabel, text: rubricText } = await resolveRubricText(db, rubricKey);
-          const audit = await generatePanelistAuditWithClaude(textResult.text, {
+          const audit = await generatePanelistAudit(textResult.text, {
             rubricKey, rubricLabel, rubricText, panelistName: iv.interviewerName, panelistEmail: iv.interviewerEmail,
             round: iv.round || iv.templateName || "Interview", templateName: iv.templateName || "", priorFindings,
           });
