@@ -41,6 +41,13 @@ export default function MyInterviewsPage() {
   const [tab, setTab] = useState(highlightId ? "All" : "Upcoming");
   const [filterStatus, setFilterStatus] = useState("All");
   const [highlightedRow, setHighlightedRow] = useState(highlightId || null);
+  // Lets a panelist answer "how many interviews did I take between these
+  // dates" directly, on top of whichever tab/status is already selected —
+  // scheduledDate is already a "YYYY-MM-DD" string everywhere else in this
+  // file (see isPastStart/the Upcoming/Past tab filters above), same format
+  // a native date input produces, so plain string comparison just works.
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   // Interviews should be conducted from a laptop — on a phone/tablet
   // browser, this blocks the Join Meet link and shows a polite nudge
@@ -87,6 +94,8 @@ export default function MyInterviewsPage() {
     );
   }
   if (filterStatus !== "All") filtered = filtered.filter(i => i.status === filterStatus);
+  if (fromDate) filtered = filtered.filter(i => i.scheduledDate >= fromDate);
+  if (toDate) filtered = filtered.filter(i => i.scheduledDate <= toDate);
 
   const uniqueStatuses = [...new Set(interviews.map(i => i.status))].filter(Boolean).sort();
 
@@ -131,7 +140,7 @@ export default function MyInterviewsPage() {
         ))}
       </div>
 
-      <div className="flex gap-3 mb-5">
+      <div className="flex flex-wrap items-center gap-3 mb-2">
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
           <option value="All">All Statuses</option>
@@ -139,7 +148,35 @@ export default function MyInterviewsPage() {
             <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
           ))}
         </select>
+        <div className="flex items-center gap-1.5 text-sm text-gray-500">
+          <span>From</span>
+          <input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        </div>
+        <div className="flex items-center gap-1.5 text-sm text-gray-500">
+          <span>To</span>
+          <input type="date" value={toDate} onChange={e => setToDate(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+        </div>
+        {(fromDate || toDate) && (
+          <button type="button" onClick={() => { setFromDate(""); setToDate(""); }}
+            className="text-xs text-gray-400 hover:text-gray-600 font-medium">
+            Clear dates
+          </button>
+        )}
       </div>
+
+      {/* Visible count of whatever's actually matching right now (tab +
+         status + date range together) — the header above only ever shows
+         the grand total, which isn't what a panelist filtering by date
+         wants to know. */}
+      <p className="text-sm text-gray-500 mb-5">
+        {(fromDate || toDate) ? (
+          <>Showing <span className="font-semibold text-gray-700">{total}</span> interview{total === 1 ? "" : "s"}{fromDate ? ` from ${formatDate(fromDate)}` : ""}{toDate ? ` to ${formatDate(toDate)}` : ""}</>
+        ) : (
+          <>Showing <span className="font-semibold text-gray-700">{total}</span> interview{total === 1 ? "" : "s"}</>
+        )}
+      </p>
 
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.3 }}
