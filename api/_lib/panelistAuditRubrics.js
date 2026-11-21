@@ -48,14 +48,14 @@ Transcripts mis-hear words. Profanity, odd lines, or side talk -> flag "check on
 If the transcript starts late (e.g. 00:02:00), note the setup may have happened before it, don't penalize U1/U2 on that basis alone.
 Run the Universal checklist first, then the track-specific rubric below. Each rubric row becomes one row in the remarks table.
 Never mention the candidate's score, result, or any other panelist's name in the final message.
-The final message always: starts with 2-3 real strengths, then fixes ordered by severity, each fix = an action + one example from this round + the exact line to use instead (max 7 steps), and leaves out anything that still needs a recording check.
+The final message is organized SECTION BY SECTION, matching the sections actually covered in the "remarks" table (e.g. Introduction, Proctoring, Questions, Practical Task, Hints, Close) — one short heading per section with one or two lines under it naming what happened and whether it was good or needs improvement. After all sections, close with a short "Next Steps" list ordered by severity (each = an action + one example from this round + the exact line to use instead, max 7 steps). Leave out anything that still needs a recording check. Never invent a section that wasn't actually reached in this interview.
 `.trim();
 
 // Message tone — resolved server-side from the panelist's own email domain
 // (nxtwave.co.in = internal) rather than asked of Claude, since we already
 // know this with certainty; passed into the prompt as a plain instruction.
-export const TONE_INTERNAL = `This panelist is INTERNAL (nxtwave.co.in email). Use very simple words, short lines, and "What went well / What to change next time" headings in the final message.`;
-export const TONE_EXTERNAL = `This panelist is EXTERNAL (non-nxtwave.co.in email). Use a professional, short tone with "What's working / Next steps" headings in the final message.`;
+export const TONE_INTERNAL = `This panelist is INTERNAL (nxtwave.co.in email). Use very simple words and short lines. Head the closing list "What to do next" instead of "Next Steps".`;
+export const TONE_EXTERNAL = `This panelist is EXTERNAL (non-nxtwave.co.in email). Use a professional, short tone. Head the closing list "Next Steps".`;
 
 export { RUBRIC_OPTIONS, DEFAULT_RUBRICS } from "../../src/constants/panelistAuditRubricDefaults.js";
 
