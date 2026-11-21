@@ -2,12 +2,13 @@ import { useRef, useState, useEffect } from "react";
 import { formatDate, parseInterviewStart, formatTimeLabel } from "../../utils/dates";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, MessageSquare } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useInterviewerInterviews } from "../../hooks/subscriptions";
 import Badge from "../../components/Badge";
 import Pagination from "../../components/Pagination";
 import JoinFromLaptopModal from "../../components/JoinFromLaptopModal";
+import PanelistAuditModal from "../../features/interviews/PanelistAuditModal";
 import { isMobileDevice } from "../../utils/device";
 import { usePagination } from "../../hooks/usePagination";
 import { SkeletonRows } from "../../components/Skeleton";
@@ -48,6 +49,12 @@ export default function MyInterviewsPage() {
   const handleJoinMeet = (e, link) => {
     if (isMobileDevice()) { e.preventDefault(); setShowLaptopGate(true); }
   };
+
+  // Same drafted coaching message InterviewDetail.jsx's "View My Feedback"
+  // shows (PanelistAuditModal's "panelist" audience) — surfaced right here
+  // in the list too, so an interviewer doesn't have to open each interview
+  // just to see whether their own feedback is ready.
+  const [panelistFeedbackTarget, setPanelistFeedbackTarget] = useState(null);
 
   // interviews starts out as the hook's initial [] and is replaced with a new
   // array reference the moment the first Firestore snapshot arrives — compare
@@ -194,6 +201,12 @@ export default function MyInterviewsPage() {
                       <Link to={`/interviewer/interviews/${i.id}`}
                         className="text-xs text-emerald-600 font-semibold hover:text-emerald-700 whitespace-nowrap">View</Link>
                     )}
+                    {i.panelistAudit && (
+                      <button type="button" onClick={() => setPanelistFeedbackTarget(i)}
+                        className="inline-flex items-center gap-1 text-xs text-brand-700 font-semibold hover:text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        <MessageSquare className="w-3 h-3" /> View My Feedback
+                      </button>
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -252,6 +265,12 @@ export default function MyInterviewsPage() {
                         <Link to={`/interviewer/interviews/${i.id}`}
                           className="text-xs text-emerald-600 font-semibold hover:text-emerald-700 whitespace-nowrap">View</Link>
                       )}
+                      {i.panelistAudit && (
+                        <button type="button" onClick={() => setPanelistFeedbackTarget(i)}
+                          className="inline-flex items-center gap-1 ml-3 text-xs text-brand-700 font-semibold hover:text-brand-800 bg-brand-50 border border-brand-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+                          <MessageSquare className="w-3 h-3" /> View My Feedback
+                        </button>
+                      )}
                     </td>
                   </motion.tr>
                 ))}
@@ -263,6 +282,13 @@ export default function MyInterviewsPage() {
       </motion.div>
 
       <JoinFromLaptopModal open={showLaptopGate} onClose={() => setShowLaptopGate(false)} />
+
+      <PanelistAuditModal
+        audience="panelist"
+        interview={panelistFeedbackTarget}
+        loading={false}
+        onClose={() => setPanelistFeedbackTarget(null)}
+      />
     </div>
   );
 }
