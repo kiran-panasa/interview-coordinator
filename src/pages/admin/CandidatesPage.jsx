@@ -65,6 +65,7 @@ const STATUS_OUTLINE_STYLES = {
   cancelled:           "border-gray-300    text-gray-500",
   declined:            "border-red-300     text-red-600",
   no_show:             "border-orange-300  text-orange-600",
+  dropped_off:         "border-rose-300    text-rose-600",
 };
 // Shared by the Status pill's dot and the color legend at the bottom of
 // the page, so the two can never drift apart.
@@ -77,6 +78,7 @@ const STATUS_DOT_COLORS = {
   cancelled:            "bg-gray-400",
   declined:             "bg-red-500",
   no_show:              "bg-orange-500",
+  dropped_off:          "bg-rose-500",
 };
 
 function parseCandidatesCSV(text) {
@@ -993,7 +995,7 @@ export default function CandidatesPage() {
         <div className="w-56">
           <SkillsSelect
             skills={[
-              ...["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].map(k => ({
+              ...["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show", "dropped_off"].map(k => ({
                 id: k, name: `${STATUS_LABELS[k]}${statusCounts ? ` (${statusCounts[k] || 0})` : ""}`,
               })),
               // Its own bucket, not folded into "No Interview Taken Yet" —
@@ -1254,7 +1256,7 @@ export default function CandidatesPage() {
          red isn't self-evident at a glance). Same STATUS_DOT_COLORS map
          the Status pills themselves use, so the two can never drift apart. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-4 px-1">
-        {["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].map(k => (
+        {["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show", "dropped_off"].map(k => (
           <span key={k} className="flex items-center gap-1.5 text-xs text-gray-400">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[k] || "bg-gray-300"}`} />
             {STATUS_LABELS[k] || k}

@@ -67,6 +67,7 @@ const STATUS_LABEL = {
   cancelled:            "Cancelled",
   declined:             "Being Rescheduled",
   no_show:              "Missed",
+  dropped_off:          "Ended Early",
 };
 const STATUS_STYLE = {
   pending_acceptance: "bg-amber-50 text-amber-700 border-amber-200",
@@ -77,6 +78,7 @@ const STATUS_STYLE = {
   cancelled:            "bg-gray-100 text-gray-400 border-gray-200",
   declined:             "bg-violet-50 text-violet-700 border-violet-200",
   no_show:              "bg-orange-50 text-orange-600 border-orange-200",
+  dropped_off:          "bg-rose-50 text-rose-600 border-rose-200",
 };
 // My Interviews is split into one section per status (instead of a single
 // "Past" catch-all) so every outcome is its own clearly labeled, trackable
@@ -92,6 +94,7 @@ const INTERVIEW_SECTIONS = [
   { key: "completed",      label: "Completed",           match: i => i.status === "completed" },
   { key: "partially_completed", label: "Partially Completed", match: i => i.status === "partially_completed" },
   { key: "no_show",        label: "Missed",               match: i => i.status === "no_show" },
+  { key: "dropped_off",    label: "Ended Early",          match: i => i.status === "dropped_off" },
   { key: "cancelled",      label: "Cancelled",           match: i => i.status === "cancelled" },
 ];
 // Sections whose interviews can still be acted on (Join Meet / Request
@@ -185,6 +188,7 @@ const TAB_COLORS = {
   completed:              { text: "text-emerald-600", border: "border-emerald-600", badgeBg: "bg-emerald-100", badgeText: "text-emerald-700" },
   partially_completed:    { text: "text-teal-600",    border: "border-teal-600",    badgeBg: "bg-teal-100",    badgeText: "text-teal-700" },
   no_show:                { text: "text-rose-600",    border: "border-rose-600",    badgeBg: "bg-rose-100",    badgeText: "text-rose-700" },
+  dropped_off:            { text: "text-pink-600",    border: "border-pink-600",    badgeBg: "bg-pink-100",    badgeText: "text-pink-700" },
   cancelled:              { text: "text-gray-500",    border: "border-gray-400",    badgeBg: "bg-gray-200",    badgeText: "text-gray-600" },
 };
 

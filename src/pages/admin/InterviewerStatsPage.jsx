@@ -57,6 +57,7 @@ const STATUS_OPTIONS = [
   { id: "partially_completed", name: "Partially Completed" },
   { id: "cancelled",           name: "Cancelled" },
   { id: "no_show",             name: "Student No-show" },
+  { id: "dropped_off",         name: "Candidate Drop-Off" },
   { id: "declined",            name: "Declined" },
 ];
 const RELEVANT_STATUSES = STATUS_OPTIONS.map(s => s.id);
@@ -214,7 +215,7 @@ export default function InterviewerStatsPage() {
   // Every count column gets its own per-duration breakdown, keyed by
   // minutes (e.g. { 60: 2, 90: 4 }) — Completed and Completed (Resumed)
   // are tracked separately since they're already separate payment buckets.
-  const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "declined"];
+  const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "droppedOff", "declined"];
 
   const getRow = (map, email, name) => {
     if (!map.has(email)) {
@@ -272,6 +273,7 @@ export default function InterviewerStatsPage() {
       else if (iv.status === "partially_completed" && !iv.resumedAsInterviewId) bump(row, "partiallyCompleted", iv.duration);
       else if (iv.status === "cancelled") bump(row, "cancelled", iv.duration);
       else if (iv.status === "no_show") bump(row, "noShow", iv.duration);
+      else if (iv.status === "dropped_off") bump(row, "droppedOff", iv.duration);
       else if (iv.status === "declined") bump(row, "declined", iv.duration);
     });
 
@@ -507,7 +509,7 @@ export default function InterviewerStatsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Interviewer", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Declined"].map((h, i) => (
+                {["Interviewer", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Candidate Drop-Off", "Declined"].map((h, i) => (
                   <th key={i} className={`text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 ${i === 0 ? "text-left" : "text-right"}`}>
                     {h}
                   </th>
@@ -526,6 +528,7 @@ export default function InterviewerStatsPage() {
                   <td className="px-4 py-3 text-right text-amber-700 font-semibold whitespace-nowrap">{r.partiallyCompletedDisplay}</td>
                   <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{r.cancelledDisplay}</td>
                   <td className="px-4 py-3 text-right text-orange-600 whitespace-nowrap">{r.noShowDisplay}</td>
+                  <td className="px-4 py-3 text-right text-rose-600 whitespace-nowrap">{r.droppedOffDisplay}</td>
                   <td className="px-4 py-3 text-right text-red-600 whitespace-nowrap">{r.declinedDisplay}</td>
                 </tr>
               ))}
@@ -538,6 +541,7 @@ export default function InterviewerStatsPage() {
                 <td className="px-4 py-3 text-right font-bold text-amber-700 whitespace-nowrap">{totals.partiallyCompletedDisplay}</td>
                 <td className="px-4 py-3 text-right font-bold text-gray-500 whitespace-nowrap">{totals.cancelledDisplay}</td>
                 <td className="px-4 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{totals.noShowDisplay}</td>
+                <td className="px-4 py-3 text-right font-bold text-rose-600 whitespace-nowrap">{totals.droppedOffDisplay}</td>
                 <td className="px-4 py-3 text-right font-bold text-red-600 whitespace-nowrap">{totals.declinedDisplay}</td>
               </tr>
             </tfoot>

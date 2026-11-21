@@ -25,6 +25,7 @@ const STATUS_DOT = {
   cancelled:           "bg-gray-300",
   declined:            "bg-red-400",
   no_show:             "bg-pink-400",
+  dropped_off:         "bg-fuchsia-500",
 };
 const STATUS_CHIP = {
   pending_acceptance:  "bg-violet-50 text-violet-700 hover:bg-violet-100",
@@ -34,6 +35,7 @@ const STATUS_CHIP = {
   cancelled:           "bg-gray-100 text-gray-400 hover:bg-gray-200 line-through",
   declined:            "bg-red-50 text-red-600 hover:bg-red-100",
   no_show:             "bg-pink-50 text-pink-700 hover:bg-pink-100",
+  dropped_off:         "bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100",
 };
 // A bolder, solid-fill version of the same palette for the day view's time
 // blocks — the month view's soft chips get lost at that smaller size, but a
@@ -47,6 +49,7 @@ const STATUS_BLOCK = {
   cancelled:           "bg-gray-300",
   declined:            "bg-red-400",
   no_show:             "bg-pink-500",
+  dropped_off:         "bg-fuchsia-500",
 };
 // What STATUS_DOT/STATUS_BLOCK's colors actually mean — shown as a legend
 // so the color coding isn't something you have to guess or memorize.
@@ -58,6 +61,7 @@ const LEGEND = [
   { status: "cancelled",           label: "Cancelled" },
   { status: "declined",            label: "Declined" },
   { status: "no_show",             label: "No Show" },
+  { status: "dropped_off",         label: "Candidate Drop-Off" },
 ];
 
 function toIso(y, m, d) {

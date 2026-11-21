@@ -513,6 +513,7 @@ export type InterviewStatus =
   | "completed"
   | "partially_completed"
   | "no_show"
+  | "dropped_off"
   | "cancelled"
   | "declined";
 
@@ -592,6 +593,13 @@ export interface Interview {
   // carried through to admin views and the Download Feedback export for
   // payment reconciliation / audit purposes.
   partialCompletionReason?: string;
+  // Mandatory whenever status is "dropped_off" (see markInterviewDroppedOff
+  // in api/interviews.ts) — distinct from a no-show (the candidate never
+  // joined at all) and from partially_completed (enough happened that the
+  // interviewer can still submit a real evaluation). A drop-off is "they
+  // joined, then left before there was anything meaningful to evaluate" —
+  // no feedback is expected or collected for it.
+  dropOffReason?: string;
   // Set when an admin overrides the status after auditing the recording/
   // transcript — e.g. a panelist marked "Completed" but the call only ran
   // a few minutes before the candidate dropped (see correctInterviewStatus

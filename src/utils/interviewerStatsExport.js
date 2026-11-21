@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 // (or they themselves) started, not a full interview on their own, so
 // payment reconciliation shouldn't treat the two the same. See
 // resumedFromPartial in api/interviews.ts.
-const HEADERS = ["Interviewer", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Declined"];
+const HEADERS = ["Interviewer", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Candidate Drop-Off", "Declined"];
 
 /**
  * Interviewer-wise status counts for the currently applied filters — one
@@ -16,12 +16,12 @@ export function exportInterviewerStats(interviewerStats, totals, filenamePrefix 
   // Every count column uses its *Display field (falls back to the plain
   // number when a panelist only ran one duration) so a multi-duration
   // breakdown like "60m: 2, 90m: 4" matches exactly what's on screen.
-  const toRow = (name, r) => [name, r.completedDisplay ?? r.completed, r.completedResumedDisplay ?? r.completedResumed, r.partiallyCompletedDisplay ?? r.partiallyCompleted, r.cancelledDisplay ?? r.cancelled, r.noShowDisplay ?? r.noShow, r.declinedDisplay ?? r.declined];
+  const toRow = (name, r) => [name, r.completedDisplay ?? r.completed, r.completedResumedDisplay ?? r.completedResumed, r.partiallyCompletedDisplay ?? r.partiallyCompleted, r.cancelledDisplay ?? r.cancelled, r.noShowDisplay ?? r.noShow, r.droppedOffDisplay ?? r.droppedOff, r.declinedDisplay ?? r.declined];
   const rows = interviewerStats.map(r => toRow(r.name, r));
   rows.push(toRow("Total", totals));
 
   const ws = XLSX.utils.aoa_to_sheet([HEADERS, ...rows]);
-  ws["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 12 }];
+  ws["!cols"] = [{ wch: 26 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Interviewer Statistics");

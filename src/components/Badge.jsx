@@ -7,6 +7,11 @@ export const STYLES = {
   cancelled:          "bg-gray-100  text-gray-500  ring-gray-200 [&>span]:bg-gray-400",
   declined:           "bg-red-50   text-red-600   ring-red-200 [&>span]:bg-red-500",
   no_show:            "bg-orange-50 text-orange-600 ring-orange-200 [&>span]:bg-orange-500",
+  // Distinct from no_show (never joined at all) and partially_completed
+  // (enough happened to still evaluate) — the candidate joined, then left
+  // before there was anything meaningful to assess. Rose, not orange/amber,
+  // so it reads as its own thing at a glance rather than a shade of no-show.
+  dropped_off:        "bg-rose-50 text-rose-600 ring-rose-200 [&>span]:bg-rose-500",
   active:             "bg-emerald-50 text-emerald-700 ring-emerald-200 [&>span]:bg-emerald-500",
   pending:            "bg-amber-50 text-amber-700 ring-amber-200 [&>span]:bg-amber-500",
   admin:              "bg-brand-50 text-brand-700 ring-brand-200 [&>span]:bg-brand-500",
@@ -33,6 +38,7 @@ export const LABELS = {
   cancelled:          "Cancelled",
   declined:           "Declined",
   no_show:            "No Show",
+  dropped_off:        "Candidate Drop-Off",
   active:             "Active",
   pending:            "Pending",
   admin:              "Admin",

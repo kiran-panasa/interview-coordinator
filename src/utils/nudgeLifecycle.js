@@ -21,6 +21,7 @@ export const LIFECYCLE_STATUS = {
   INTERVIEW_COMPLETED:  "completed",
   INTERVIEW_CANCELLED:  "cancelled",
   NO_SHOW:              "no_show",
+  DROPPED_OFF:          "dropped_off",
 };
 
 export const LIFECYCLE_LABELS = {
@@ -33,6 +34,7 @@ export const LIFECYCLE_LABELS = {
   [LIFECYCLE_STATUS.INTERVIEW_COMPLETED]: "Interview Completed",
   [LIFECYCLE_STATUS.INTERVIEW_CANCELLED]: "Interview Cancelled",
   [LIFECYCLE_STATUS.NO_SHOW]:             "No Show",
+  [LIFECYCLE_STATUS.DROPPED_OFF]:         "Candidate Drop-Off",
 };
 
 // Statuses that roll up into the "Pending Slot Booking" summary metric —
@@ -53,6 +55,7 @@ const FINAL_OUTCOMES = new Set([
   LIFECYCLE_STATUS.INTERVIEW_COMPLETED,
   LIFECYCLE_STATUS.INTERVIEW_CANCELLED,
   LIFECYCLE_STATUS.NO_SHOW,
+  LIFECYCLE_STATUS.DROPPED_OFF,
   LIFECYCLE_STATUS.NO_RESPONSE,
 ]);
 
@@ -77,6 +80,7 @@ export function deriveLifecycleStatus(invite, interview) {
   if (interview) {
     if (interview.status === "completed") return LIFECYCLE_STATUS.INTERVIEW_COMPLETED;
     if (interview.status === "no_show")   return LIFECYCLE_STATUS.NO_SHOW;
+    if (interview.status === "dropped_off") return LIFECYCLE_STATUS.DROPPED_OFF;
     if (interview.status === "cancelled" || interview.status === "declined") {
       return LIFECYCLE_STATUS.INTERVIEW_CANCELLED;
     }

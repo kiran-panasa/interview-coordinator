@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   PieChart, Users, CalendarClock, CheckCircle2, Hourglass, RefreshCw,
-  XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock, CalendarDays, Clock,
+  XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock, CalendarDays, Clock, LogOut,
 } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
@@ -73,6 +73,7 @@ const ACCENT = {
   rescheduled:{ border: "border-violet-300",  text: "text-violet-700" },
   cancelled:  { border: "border-amber-300",   text: "text-amber-700" },
   noShow:     { border: "border-red-300",     text: "text-red-700" },
+  droppedOff: { border: "border-rose-300",    text: "text-rose-700" },
 };
 
 // A colored initial avatar per vendor/panelist row — same deterministic
@@ -107,13 +108,14 @@ const SORT_OPTIONS = [
   { id: "completionRate",   name: "Completion Rate" },
   { id: "cancellationRate", name: "Cancellation Rate" },
   { id: "noShowRate",       name: "No-Show Rate" },
+  { id: "droppedOff",       name: "Candidate Drop-Off" },
 ];
 
 function emptyCounts() {
   return {
     scheduled: 0, completed: 0, partiallyCompleted: 0, rescheduled: 0,
     cancelledAdmin: 0, cancelledStudent: 0, cancelledInterviewer: 0,
-    noShow: 0, declined: 0,
+    noShow: 0, droppedOff: 0, declined: 0,
   };
 }
 
@@ -122,6 +124,7 @@ function bumpCounts(row, iv) {
   if (iv.status === "completed") row.completed++;
   else if (iv.status === "partially_completed" && !isSupersededPartial(iv)) row.partiallyCompleted++;
   else if (iv.status === "no_show") row.noShow++;
+  else if (iv.status === "dropped_off") row.droppedOff++;
   else if (iv.status === "declined") row.declined++;
   else if (iv.status === "cancelled") {
     // Independent of WHO cancelled it — a cancelled interview that was
@@ -145,7 +148,7 @@ function withRates(row) {
   // subtracted: interviews still awaiting an outcome, whether that's
   // because their date hasn't happened yet or because no one has recorded
   // one. Without this, the KPI cards look like they're missing interviews.
-  const yetToStart = row.scheduled - (row.completed + row.partiallyCompleted + row.noShow + row.declined + cancelled);
+  const yetToStart = row.scheduled - (row.completed + row.partiallyCompleted + row.noShow + row.droppedOff + row.declined + cancelled);
   return {
     ...row,
     cancelled,
@@ -400,19 +403,19 @@ export default function VendorAnalyticsPage() {
   };
 
   const handleExport = () => {
-    const base = ["Scheduled", "Completed", "Completion Rate", "Partially Completed", "Rescheduled", "Cancelled by Admin", "Cancelled by Student", "Cancelled by Interviewer (incl. Declined)", "Cancellation Rate", "No-Show", "No-Show Rate"];
+    const base = ["Scheduled", "Completed", "Completion Rate", "Partially Completed", "Rescheduled", "Cancelled by Admin", "Cancelled by Student", "Cancelled by Interviewer (incl. Declined)", "Cancellation Rate", "No-Show", "No-Show Rate", "Candidate Drop-Off"];
     const headers = compareBy === "vendor" ? ["Vendor", "Total Interviewers", "Interviewers with Interviews", "Slots Received", "Unutilized Slots", ...base] : ["Panelist", "Vendor", ...base];
     const toRow = (r) => [
       r.name, ...(compareBy === "vendor" ? [r.panelists, r.panelistsScheduled, r.slotsReceived, r.unutilizedSlots] : [r.vendorName]),
       r.scheduled, r.completed, `${r.completionRate.toFixed(1)}%`, r.partiallyCompleted, r.rescheduled,
       r.cancelledAdmin, r.cancelledStudent, r.cancelledInterviewer + r.declined, `${r.cancellationRate.toFixed(1)}%`,
-      r.noShow, `${r.noShowRate.toFixed(1)}%`,
+      r.noShow, `${r.noShowRate.toFixed(1)}%`, r.droppedOff,
     ];
     const rows = sortedRows.map(toRow);
     rows.push(["Total", ...(compareBy === "vendor" ? [totalPanelists, totalPanelistsScheduled, totalSlotsReceived, totalUnutilizedSlots] : ["—"]),
       totals.scheduled, totals.completed, `${totals.completionRate.toFixed(1)}%`, totals.partiallyCompleted, totals.rescheduled,
       totals.cancelledAdmin, totals.cancelledStudent, totals.cancelledInterviewer + totals.declined, `${totals.cancellationRate.toFixed(1)}%`,
-      totals.noShow, `${totals.noShowRate.toFixed(1)}%`]);
+      totals.noShow, `${totals.noShowRate.toFixed(1)}%`, totals.droppedOff]);
     exportVendorAnalytics(headers, rows, `vendor_analytics_${compareBy}`);
   };
 
@@ -453,6 +456,10 @@ export default function VendorAnalyticsPage() {
     // the table/export below still break them out as separate columns.
     { key: "cancelledInterviewer", label: "Cancelled / Declined by Panelist", icon: UserX, color: "text-amber-600", iconBg: "bg-amber-50", value: totals.cancelledInterviewer + totals.declined },
     { key: "noShow",               label: "No-Show by Students",  icon: AlertTriangle, color: "text-red-600",     iconBg: "bg-red-50",      value: totals.noShow },
+    // Distinct from No-Show (never joined) and Partially Completed (there's
+    // a real, if incomplete, evaluation) — the candidate joined, then left
+    // before there was anything meaningful to assess.
+    { key: "droppedOff",           label: "Candidate Drop-Off",   icon: LogOut,        color: "text-rose-600",    iconBg: "bg-rose-50",     value: totals.droppedOff },
     { key: "slotsReceived",        label: `Slots Received (${effectiveSlotDuration}-min)`,   icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: slotsLoading ? "…" : totalSlotsReceived },
     { key: "unutilizedSlots",      label: `Unutilized Slots (${effectiveSlotDuration}-min)`, icon: CalendarDays, color: "text-cyan-600", iconBg: "bg-cyan-50", value: slotsLoading ? "…" : totalUnutilizedSlots },
   ];
@@ -636,6 +643,8 @@ export default function VendorAnalyticsPage() {
                   <SortableHeader field="cancellationRate" label="Cancel Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.cancelled} />
                   <SortableHeader field="noShow" label="No-Show" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.noShow} />
                   <SortableHeader field="noShowRate" label="No-Show Rate" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} align="right" accent={ACCENT.noShow} />
+                  <SortableHeader field="droppedOff" label="Drop-Off" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} accent={ACCENT.droppedOff}
+                    title="Candidate joined, then left before there was enough to evaluate." />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -670,6 +679,7 @@ export default function VendorAnalyticsPage() {
                       <td className="px-4 py-3 text-right text-amber-700">{pct(r.cancellationRate)}</td>
                       <td className="px-4 py-3 text-right text-red-500">{r.noShow}</td>
                       <td className="px-4 py-3 text-right text-red-600">{pct(r.noShowRate)}</td>
+                      <td className="px-4 py-3 text-right text-rose-600">{r.droppedOff}</td>
                     </tr>
                   );
                 })}
@@ -696,6 +706,7 @@ export default function VendorAnalyticsPage() {
                   <td className="px-4 py-3 text-right text-amber-700">{pct(totals.cancellationRate)}</td>
                   <td className="px-4 py-3 text-right text-red-500">{totals.noShow}</td>
                   <td className="px-4 py-3 text-right text-red-600">{pct(totals.noShowRate)}</td>
+                  <td className="px-4 py-3 text-right text-rose-600">{totals.droppedOff}</td>
                 </tr>
               </tfoot>
             </table>

@@ -248,7 +248,7 @@ export default function VendorDashboardPage() {
   // session(s) back to whichever interviewer originally ran them if the
   // interview has since been reassigned to someone else — a rare edge
   // case, left for a future pass if it turns out to matter here too.
-  const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "declined"];
+  const COUNT_FIELDS = ["completed", "completedResumed", "partiallyCompleted", "cancelled", "noShow", "droppedOff", "declined"];
   // "60m: 2, 90m: 4" always shows which duration(s) the count is made up of
   // — previously collapsed to a bare number ("1") whenever a panelist's
   // count for this column only spanned one duration, which left it
@@ -307,6 +307,7 @@ export default function VendorDashboardPage() {
     else if (iv.status === "partially_completed" && !iv.resumedAsInterviewId) bump("partiallyCompleted", iv.duration);
     else if (iv.status === "cancelled") bump("cancelled", iv.duration);
     else if (iv.status === "no_show") bump("noShow", iv.duration);
+    else if (iv.status === "dropped_off") bump("droppedOff", iv.duration);
     else if (iv.status === "declined") bump("declined", iv.duration);
   });
   const detailedStats = [...statsRowsMap.values()]
@@ -534,12 +535,13 @@ export default function VendorDashboardPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                     {[
                       { label: "Total",     value: statsDurationFiltered.length,                 style: "text-gray-900" },
                       { label: "Scheduled", value: statsDurationFiltered.filter(iv => iv.status === "scheduled").length, style: "text-blue-600" },
                       { label: "Completed", value: detailedTotals.completed + detailedTotals.completedResumed + detailedTotals.partiallyCompleted, style: "text-emerald-600" },
                       { label: "No Show",   value: detailedTotals.noShow,              style: "text-orange-600" },
+                      { label: "Candidate Drop-Off", value: detailedTotals.droppedOff, style: "text-rose-600" },
                     ].map(s => (
                       <Card key={s.label} className="p-5">
                         <p className={`text-2xl font-bold ${s.style}`}>{s.value}</p>
@@ -560,7 +562,7 @@ export default function VendorDashboardPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b border-gray-100">
-                              {["Panelist", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Declined"].map((h, i) => (
+                              {["Panelist", "Completed", "Completed (Resumed)", "Partially Completed", "Cancelled", "Student No-show", "Candidate Drop-Off", "Declined"].map((h, i) => (
                                 <th key={h} className={`text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3 whitespace-nowrap ${i === 0 ? "text-left" : "text-right"}`}>
                                   {h}
                                 </th>
@@ -576,6 +578,7 @@ export default function VendorDashboardPage() {
                                 <td className="px-4 py-3 text-right text-amber-700 font-semibold whitespace-nowrap">{r.partiallyCompletedDisplay}</td>
                                 <td className="px-4 py-3 text-right text-gray-500 whitespace-nowrap">{r.cancelledDisplay}</td>
                                 <td className="px-4 py-3 text-right text-orange-600 whitespace-nowrap">{r.noShowDisplay}</td>
+                                <td className="px-4 py-3 text-right text-rose-600 whitespace-nowrap">{r.droppedOffDisplay}</td>
                                 <td className="px-4 py-3 text-right text-red-600 whitespace-nowrap">{r.declinedDisplay}</td>
                               </tr>
                             ))}
@@ -588,6 +591,7 @@ export default function VendorDashboardPage() {
                               <td className="px-4 py-3 text-right font-bold text-amber-700 whitespace-nowrap">{detailedTotals.partiallyCompletedDisplay}</td>
                               <td className="px-4 py-3 text-right font-bold text-gray-500 whitespace-nowrap">{detailedTotals.cancelledDisplay}</td>
                               <td className="px-4 py-3 text-right font-bold text-orange-600 whitespace-nowrap">{detailedTotals.noShowDisplay}</td>
+                              <td className="px-4 py-3 text-right font-bold text-rose-600 whitespace-nowrap">{detailedTotals.droppedOffDisplay}</td>
                               <td className="px-4 py-3 text-right font-bold text-red-600 whitespace-nowrap">{detailedTotals.declinedDisplay}</td>
                             </tr>
                           </tfoot>

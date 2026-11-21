@@ -4,10 +4,10 @@ import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Calendar, Video, FileText, CheckCircle2, XCircle,
-  AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2,
+  AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2, LogOut,
 } from "lucide-react";
 import {
-  subscribeToInterview, updateInterview, markInterviewCompleted, markInterviewPartiallyCompleted, saveFeedbackDraft,
+  subscribeToInterview, updateInterview, markInterviewCompleted, markInterviewPartiallyCompleted, markInterviewDroppedOff, saveFeedbackDraft,
   saveFeedbackAutoDraft, clearFeedbackAutoDraft,
   freeSlotsForInterview, markCandidateAttendance,
   DEFAULT_FEEDBACK_QUESTIONS, getTemplate,
@@ -42,11 +42,24 @@ const fadeUp = {
 
 // Common reasons an interviewer can pick from when marking an interview
 // Partially Completed — "Other" always requires typing a free-text reason.
+// "Candidate left early" here means enough still happened first to submit a
+// real (if incomplete) evaluation — the "left before I could evaluate
+// anything" case below is the distinct Candidate Drop-Off status instead.
 const PARTIAL_COMPLETION_REASONS = [
   "Technical/connectivity issues",
   "Candidate left early",
   "Ran out of time",
   "Interview stopped for integrity concerns",
+  "Other",
+];
+
+// Candidate Drop-Off — distinct from Partially Completed above (there's no
+// evaluation to submit here at all) and from No-Show (the candidate DID
+// join). "Other" always requires typing a free-text reason.
+const DROP_OFF_REASONS = [
+  "Left within the first few minutes",
+  "Connection dropped and never rejoined",
+  "Candidate ended the call abruptly",
   "Other",
 ];
 
@@ -96,6 +109,9 @@ export default function InterviewDetail() {
   // strict Submit Evaluation flow that normally lands feedback on
   // interview.feedback first.
   const [pendingPartialFeedback, setPendingPartialFeedback] = useState(null);
+  const [dropOffModalOpen,   setDropOffModalOpen]   = useState(false);
+  const [dropOffReasonPreset, setDropOffReasonPreset] = useState("");
+  const [dropOffReasonText,  setDropOffReasonText]  = useState("");
   const [declineModalOpen,   setDeclineModalOpen]   = useState(false);
   const [declineReasonPreset, setDeclineReasonPreset] = useState("");
   const [declineReasonText,  setDeclineReasonText]  = useState("");
@@ -528,6 +544,36 @@ export default function InterviewDetail() {
     setSaving(false);
   };
 
+  const openDropOffModal = () => {
+    setDropOffReasonPreset("");
+    setDropOffReasonText("");
+    setDropOffModalOpen(true);
+  };
+
+  const dropOffReason = dropOffReasonPreset === "Other" ? dropOffReasonText.trim() : dropOffReasonPreset;
+
+  // Distinct from both No-Show (candidate never joined) and Partially
+  // Completed (there's a real, if incomplete, evaluation) — the candidate
+  // joined, then left before there was anything meaningful to assess, so
+  // unlike markInterviewPartiallyCompleted this never carries feedback.
+  const handleMarkDroppedOff = async () => {
+    if (!dropOffReason) return; // Save button is disabled without one, but guard anyway
+    const hasScoring = !!(interview.feedback || interview.feedbackDraft);
+    if (hasScoring && !confirm(
+      "The evaluation scores you've already entered (or submitted) for this interview will be permanently discarded — a candidate drop-off has no feedback.\n\nContinue?"
+    )) return;
+    setSaving(true);
+    try {
+      await markInterviewDroppedOff(id, dropOffReason);
+      setInterview(iv => ({ ...iv, status: "dropped_off", dropOffReason, feedback: undefined, feedbackDraft: undefined }));
+      setToast({ message: "Interview marked as candidate drop-off." });
+      setDropOffModalOpen(false);
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+    setSaving(false);
+  };
+
   // Saves feedback WITHOUT marking completed — called from all form types while scheduled
   const handleSaveFeedback = async (feedbackData, errorMsg) => {
     if (errorMsg) return setToast({ message: errorMsg, type: "error" });
@@ -858,6 +904,20 @@ export default function InterviewDetail() {
         </motion.div>
       )}
 
+      {/* ── Candidate Drop-Off notice ── */}
+      {interview.status === "dropped_off" && (
+        <motion.div initial="hidden" animate="visible" custom={2} variants={fadeUp}
+          className="bg-rose-50 border border-rose-200 rounded-[1.75rem] p-5 mb-5 flex items-start gap-3">
+          <LogOut className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-rose-700">Marked as Candidate Drop-Off</p>
+            <p className="text-xs text-rose-600 mt-0.5">
+              Reason: {interview.dropOffReason || "—"}
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* ── Interview Guidelines / Format — template-specific, always live (never
           snapshotted onto the interview), so editing/removing it on the
           template applies immediately here too. ── */}
@@ -1048,20 +1108,30 @@ export default function InterviewDetail() {
                   </button>
                 </div>
               </div>
-              {/* Undo — for "Candidate Joined" clicked by mistake, or the
-                 candidate left before the interview actually got going.
+              {/* Undo/correction paths — for "Candidate Joined" clicked by
+                 mistake, or the candidate left before/during the interview.
                  Reachable any time up to Mark as Completed/Partially
                  Completed, even after starting (or fully submitting) the
-                 evaluation — whatever was entered gets discarded. */}
+                 evaluation — whatever was entered gets discarded either way. */}
               {attended === true && (
-                <button
-                  type="button"
-                  onClick={handleUndoToNoShow}
-                  disabled={saving}
-                  className="mt-3 text-xs text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
-                >
-                  Candidate actually didn't show up? Mark as No-show instead
-                </button>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleUndoToNoShow}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-white border border-gray-200 px-3 py-1.5 rounded-full hover:bg-gray-50 hover:text-red-600 hover:border-red-200 disabled:opacity-50 transition-colors"
+                  >
+                    Candidate didn't show up? Mark as No-show
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openDropOffModal}
+                    disabled={saving}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 bg-white border border-gray-200 px-3 py-1.5 rounded-full hover:bg-gray-50 hover:text-rose-600 hover:border-rose-200 disabled:opacity-50 transition-colors"
+                  >
+                    <LogOut className="w-3 h-3" /> Candidate left early? Mark as Drop-Off
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -1114,6 +1184,60 @@ export default function InterviewDetail() {
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {saving ? "Saving…" : "Confirm Partially Completed"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Candidate Drop-Off — reason is mandatory, either a preset pick or
+         free text under "Other". Unlike Partially Completed, no feedback is
+         expected or carried through — a drop-off has nothing to evaluate. */}
+      <Modal open={dropOffModalOpen} onClose={() => setDropOffModalOpen(false)} title="Mark as Candidate Drop-Off">
+        <div className="space-y-4">
+          <p className="text-sm text-gray-500">
+            This interview will be marked <span className="font-semibold text-rose-700">Candidate Drop-Off</span> — the
+            candidate joined, then left before there was anything meaningful to evaluate. A reason is required — it's
+            shown to admins and kept as part of the audit trail.
+          </p>
+          <div>
+            <label className={labelCls}>Reason <span className="text-red-500">*</span></label>
+            <select
+              value={dropOffReasonPreset}
+              onChange={e => setDropOffReasonPreset(e.target.value)}
+              className={inputCls}
+            >
+              <option value="" disabled>Select a reason…</option>
+              {DROP_OFF_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          {dropOffReasonPreset === "Other" && (
+            <div>
+              <label className={labelCls}>Please specify <span className="text-red-500">*</span></label>
+              <textarea
+                value={dropOffReasonText}
+                onChange={e => setDropOffReasonText(e.target.value)}
+                rows={3}
+                placeholder="Describe what happened…"
+                className={inputCls}
+              />
+            </div>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={() => setDropOffModalOpen(false)}
+              className="px-4 py-2 rounded-full text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={handleMarkDroppedOff}
+              disabled={!dropOffReason || saving}
+              className={`inline-flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
+                dropOffReason
+                  ? "bg-rose-600 text-white shadow-soft hover:bg-rose-700"
+                  : "bg-gray-100 text-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              {saving ? "Saving…" : "Confirm Drop-Off"}
             </button>
           </div>
         </div>

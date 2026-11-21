@@ -320,6 +320,26 @@ export async function markInterviewNoShow(interviewId: string): Promise<void> {
   });
 }
 
+// A third outcome alongside no-show and partially-completed — the candidate
+// DID join (unlike no-show), but left before there was enough to actually
+// evaluate (unlike partially_completed, which still carries a real,
+// if incomplete, assessment). No feedback is expected or collected here,
+// same as no-show — `reason` is the interviewer's own account of what
+// happened (mandatory at the call site, enforced in the UI, not here),
+// shown on admin views the same way partialCompletionReason already is.
+export async function markInterviewDroppedOff(interviewId: string, reason: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", interviewId), {
+    status:             "dropped_off",
+    dropOffReason:      reason,
+    candidateJoined:    true,
+    attendanceMarkedAt: new Date().toISOString(),
+    nextNudgeAt:        null,
+    feedback:           deleteField(),
+    feedbackDraft:      deleteField(),
+    updatedAt:          new Date().toISOString(),
+  });
+}
+
 // Admin-only recovery for the "candidate was marked no-show but then
 // actually joined late" edge case. Resets status back to "scheduled" and
 // clears the attendance fields so the interviewer's own "Did the candidate
@@ -356,6 +376,22 @@ export async function reopenCancelledInterview(interviewId: string): Promise<voi
     cancelledBy:        deleteField(),
     cancelReason:       deleteField(),
     rescheduledTo:      deleteField(),
+    candidateJoined:    null,
+    attendanceMarkedAt: null,
+    updatedAt:          new Date().toISOString(),
+  });
+}
+
+// Admin-only recovery for "this wasn't really a drop-off, there's more to
+// evaluate than I first thought" — same shape as reopenNoShowInterview/
+// reopenCancelledInterview above. Resets status back to "scheduled" and the
+// attendance gate so the panelist goes through confirm-attendance + the
+// normal feedback flow themselves, clearing the now-stale dropOffReason.
+// See handleReopenDroppedOff in InterviewsPage.jsx.
+export async function reopenDroppedOffInterview(interviewId: string): Promise<void> {
+  await updateDoc(doc(db, "interviews", interviewId), {
+    status:             "scheduled",
+    dropOffReason:      deleteField(),
     candidateJoined:    null,
     attendanceMarkedAt: null,
     updatedAt:          new Date().toISOString(),
@@ -605,7 +641,7 @@ export async function markInterviewPartiallyCompleted(
 // the interviewer's Accept gate.
 export async function correctInterviewStatus(
   id: string,
-  newStatus: "scheduled" | "partially_completed" | "cancelled" | "no_show",
+  newStatus: "scheduled" | "partially_completed" | "cancelled" | "no_show" | "dropped_off",
   reason: string
 ): Promise<void> {
   const fields: Record<string, unknown> = {
@@ -615,6 +651,7 @@ export async function correctInterviewStatus(
     updatedAt: new Date().toISOString(),
   };
   if (newStatus === "partially_completed") fields.partialCompletionReason = reason;
+  if (newStatus === "dropped_off") fields.dropOffReason = reason;
   await updateDoc(doc(db, "interviews", id), fields);
 }
 

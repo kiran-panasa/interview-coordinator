@@ -7,6 +7,7 @@ const CURRENT_LABEL = {
   completed:           "Completed",
   partially_completed: "Partially Completed",
   no_show:             "No Show",
+  dropped_off:         "Candidate Drop-Off",
   cancelled:            "Cancelled",
 };
 
@@ -15,6 +16,7 @@ const STATUS_OPTIONS = [
   { value: "partially_completed", label: "Partially Completed" },
   { value: "cancelled",           label: "Cancelled" },
   { value: "no_show",             label: "No Show" },
+  { value: "dropped_off",         label: "Candidate Drop-Off" },
 ];
 
 const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";

@@ -76,7 +76,7 @@ export default function MyInterviewsPage() {
     filtered = interviews.filter(i =>
       i.scheduledDate < today ||
       i.status === "completed" || i.status === "cancelled" ||
-      i.status === "declined" || i.status === "no_show"
+      i.status === "declined" || i.status === "no_show" || i.status === "dropped_off"
     );
   }
   if (filterStatus !== "All") filtered = filtered.filter(i => i.status === filterStatus);

@@ -76,6 +76,7 @@ export function timelineDetail(iv, audience = "admin") {
     return `Cancelled by ${by}${reason}${resched}`;
   }
   if (iv.status === "no_show") return "Candidate didn't join — marked No-Show";
+  if (iv.status === "dropped_off") return `Candidate joined, then left before enough could be evaluated${iv.dropOffReason ? ` — "${iv.dropOffReason}"` : ""}`;
   if (iv.status === "declined") return "Interviewer declined — being reassigned/rescheduled";
   if (iv.status === "completed") return "Interview completed";
   if (iv.status === "partially_completed") return "Interview partially completed";

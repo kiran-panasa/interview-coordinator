@@ -18,7 +18,7 @@ import Pagination from "../../components/Pagination";
 import DatePicker from "../../components/DatePicker";
 import { usePagination } from "../../hooks/usePagination";
 
-const INTERVIEW_STATUSES = ["pending_acceptance", "scheduled", "completed", "cancelled", "declined", "no_show"];
+const INTERVIEW_STATUSES = ["pending_acceptance", "scheduled", "completed", "cancelled", "declined", "no_show", "dropped_off"];
 
 const CANDIDATE_STATUS_OPTIONS = Object.values(LIFECYCLE_STATUS);
 

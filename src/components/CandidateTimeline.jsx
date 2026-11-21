@@ -1,4 +1,4 @@
-import { CalendarClock, CheckCircle2, XCircle, AlertTriangle, Clock3, RefreshCw } from "lucide-react";
+import { CalendarClock, CheckCircle2, XCircle, AlertTriangle, Clock3, RefreshCw, LogOut } from "lucide-react";
 import { buildCandidateTimeline, timelineDetail } from "../utils/candidateTimeline";
 import { ordinalLabel } from "../utils/strings";
 
@@ -16,6 +16,7 @@ const STATUS_BADGE = {
   cancelled:           { label: "Cancelled",              style: "bg-gray-100 text-gray-500 border-gray-200",      icon: XCircle,        detailColor: "text-gray-700" },
   declined:            { label: "Declined by Interviewer", style: "bg-violet-50 text-violet-700 border-violet-200", icon: RefreshCw,      detailColor: "text-violet-700" },
   no_show:             { label: "No-Show",                style: "bg-orange-50 text-orange-600 border-orange-200", icon: AlertTriangle,  detailColor: "text-orange-700" },
+  dropped_off:         { label: "Candidate Drop-Off",     style: "bg-rose-50 text-rose-600 border-rose-200",       icon: LogOut,         detailColor: "text-rose-700" },
 };
 
 // Groups the flat (already newest-first) timeline by template — with

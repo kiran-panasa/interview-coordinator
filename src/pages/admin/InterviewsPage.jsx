@@ -18,7 +18,7 @@ import { scheduleInterviewMeet, refreshMeetLink, correctInterviewStatus, getInte
 import { buildFeedbackFromCSV } from "../../services/import.service";
 import { useAuth } from "../../AuthContext";
 import {
-  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, reopenNoShowInterview, reopenCancelledInterview,
+  createInterview, updateInterview, markInterviewCompleted, markInterviewCancelled, markInterviewNoShow, markInterviewDroppedOff, reopenNoShowInterview, reopenCancelledInterview, reopenDroppedOffInterview,
   backfillAiReportPendingOnce, clearCancelledInterviewScoringOnce, clearNoShowInterviewScoringOnce, backfillFeedbackDescriptorsOnce, backfillCandidateUidOnce, backfillProgramInfoOnce, backfillVendorIdOnce, deleteInterview,
   archiveInterview, unarchiveInterview,
   getInterviewerAvailability, getInterviewerBusyWindows, bookSlotsForInterview, freeSlotsForInterview, freeOrphanedBookedSlotsOnce,
@@ -57,15 +57,17 @@ const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function yesterdayIso() { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
 
-const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"];
+const STATUSES  = ["All", "pending_acceptance", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show", "dropped_off"];
 // A partially completed interview is "done" for the same purposes a fully
 // completed one is (viewing/downloading feedback, recording/transcript/AI
 // report actions, archiving) — it just carries a mandatory reason alongside.
+// dropped_off is deliberately NOT included — like no_show, there's no
+// feedback/recording evidence worth surfacing for it.
 const isDoneStatus = (status) => status === "completed" || status === "partially_completed";
 const STATUS_LABEL = {
   pending_acceptance: "Pending Acceptance", scheduled: "Scheduled",
   completed: "Completed", partially_completed: "Partially Completed",
-  cancelled: "Cancelled", no_show: "No Show",
+  cancelled: "Cancelled", no_show: "No Show", dropped_off: "Candidate Drop-Off",
 };
 
 const EMPTY_FORM = {
@@ -1359,6 +1361,29 @@ export default function InterviewsPage() {
     }
   };
 
+  // Admin's direct equivalent of the interviewer's own "Candidate Drop-Off"
+  // button (InterviewDetail.jsx) — for when an admin is correcting the
+  // record after the fact (e.g. the interviewer reported it to admin
+  // directly instead of marking it themselves). Same end state: no
+  // evaluation data, distinct from no-show since the candidate did join.
+  const handleMarkDroppedOff = async (iv) => {
+    const hasScoring = !!(iv.feedback || iv.feedbackDraft);
+    const reason = window.prompt(
+      (hasScoring
+        ? `"${iv.candidateName}" already has evaluation scores entered for this interview. Marking it as a candidate drop-off will permanently discard them.\n\n`
+        : "") + `Mark "${iv.candidateName}" as a candidate drop-off (joined, then left before anything meaningful could be evaluated)?\n\nReason:`
+    );
+    if (reason === null) return;
+    if (!reason.trim()) { setToast({ message: "A reason is required.", type: "error" }); return; }
+    try {
+      await markInterviewDroppedOff(iv.id, reason.trim());
+      notifyAdmins("dropped_off", `${iv.candidateName} was marked as a candidate drop-off for their interview on ${formatDate(iv.scheduledDate)}.`, iv);
+      setToast({ message: "Marked as candidate drop-off." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
   // Recovery for "marked no-show, but the candidate actually joined late" —
   // resets status back to scheduled so the interviewer's own attendance
   // gate reappears and they can proceed through the normal feedback flow.
@@ -1416,6 +1441,31 @@ export default function InterviewsPage() {
           interviewId:    iv.id,
           candidateName:  iv.candidateName,
           message:        `${iv.candidateName}'s interview on ${formatDate(iv.scheduledDate)} was reopened by an admin — the cancellation was undone. Please confirm attendance and submit your feedback.`,
+          status:         "unread",
+        }).catch(() => {});
+      }
+      setToast({ message: "Interview reopened — the panelist can now confirm attendance and submit feedback." });
+    } catch (e) {
+      setToast({ message: e.message, type: "error" });
+    }
+  };
+
+  // Same recovery shape as handleReopenNoShow/handleReopenCancelled above,
+  // for "this wasn't really a drop-off, there's more to evaluate than I
+  // first thought" — see reopenDroppedOffInterview for the full story.
+  const handleReopenDroppedOff = async (iv) => {
+    if (!confirm(`Reopen "${iv.candidateName}"'s interview?\n\nThis undoes the candidate drop-off mark so ${iv.interviewerName || "the panelist"} can confirm attendance and submit feedback.`)) return;
+    try {
+      await reopenDroppedOffInterview(iv.id);
+      const reopenedInterviewerId = resolveInterviewerUserId(iv.interviewerId, iv.interviewerEmail);
+      if (reopenedInterviewerId) {
+        createNotification({
+          type:           "feedback_reminder",
+          recipientId:    reopenedInterviewerId,
+          recipientEmail: iv.interviewerEmail,
+          interviewId:    iv.id,
+          candidateName:  iv.candidateName,
+          message:        `${iv.candidateName}'s interview on ${formatDate(iv.scheduledDate)} was reopened by an admin — the drop-off mark was undone. Please confirm attendance and submit your feedback.`,
           status:         "unread",
         }).catch(() => {});
       }
@@ -2461,12 +2511,14 @@ export default function InterviewsPage() {
                       // Not offered while still awaiting the interviewer's
                       // Accept — accepting is what creates the invite now.
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
+                        && iv.status !== "dropped_off"
                         && iv.status !== "pending_acceptance" && iv.status !== "declined",
                     },
                     {
                       label: "Refresh Meet Link",
                       onClick: () => handleRefreshMeetLink(iv),
                       show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show"
+                        && iv.status !== "dropped_off"
                         && iv.status !== "pending_acceptance" && iv.status !== "declined"
                         && !!iv.eventId && !iv.meetLink,
                       highlight: true,
@@ -2485,7 +2537,7 @@ export default function InterviewsPage() {
                       // which isn't recoverable from the link alone.
                       label: iv.meetLink ? "Edit Meet Link" : "Add Meet Link Manually",
                       onClick: () => handleManualMeetLink(iv),
-                      show: iv.status !== "cancelled" && iv.status !== "no_show"
+                      show: iv.status !== "cancelled" && iv.status !== "no_show" && iv.status !== "dropped_off"
                         && iv.status !== "pending_acceptance" && iv.status !== "declined",
                     },
                     {
@@ -2497,12 +2549,17 @@ export default function InterviewsPage() {
                     {
                       label: "Correct Status (Audit)",
                       onClick: () => openCorrectStatus(iv),
-                      show: isDoneStatus(iv.status) || iv.status === "pending_acceptance",
+                      show: isDoneStatus(iv.status) || iv.status === "pending_acceptance" || iv.status === "dropped_off",
                     },
                     {
                       label: "Mark No-show",
                       onClick: () => handleMarkNoShow(iv),
                       show: iv.status === "scheduled" || iv.status === "pending_acceptance",
+                    },
+                    {
+                      label: "Mark Candidate Drop-Off",
+                      onClick: () => handleMarkDroppedOff(iv),
+                      show: iv.status === "scheduled",
                     },
                     {
                       label: "Reopen (Candidate Joined Late)",
@@ -2514,6 +2571,12 @@ export default function InterviewsPage() {
                       label: "Reopen (Cancelled Before Feedback)",
                       onClick: () => handleReopenCancelled(iv),
                       show: iv.status === "cancelled",
+                      highlight: true,
+                    },
+                    {
+                      label: "Reopen (Candidate Drop-Off)",
+                      onClick: () => handleReopenDroppedOff(iv),
+                      show: iv.status === "dropped_off",
                       highlight: true,
                     },
                     {
@@ -2536,7 +2599,7 @@ export default function InterviewsPage() {
                     {
                       label: iv.feedback?.overallRecommendation ? "Edit Feedback" : "Add Feedback",
                       onClick: () => openFeedbackEdit(iv),
-                      show: iv.status !== "cancelled" && iv.status !== "no_show",
+                      show: iv.status !== "cancelled" && iv.status !== "no_show" && iv.status !== "dropped_off",
                     },
                     {
                       label: recordingLoading[iv.id] ? "Opening Recording…" : "Meet Recording",
@@ -2561,7 +2624,7 @@ export default function InterviewsPage() {
                     {
                       label: "Archive",
                       onClick: () => handleArchive(iv),
-                      show: iv.archived !== true && (isDoneStatus(iv.status) || iv.status === "cancelled" || iv.status === "no_show"),
+                      show: iv.archived !== true && (isDoneStatus(iv.status) || iv.status === "cancelled" || iv.status === "no_show" || iv.status === "dropped_off"),
                     },
                     {
                       label: "Unarchive",
@@ -2571,7 +2634,7 @@ export default function InterviewsPage() {
                     {
                       label: "Cancel",
                       onClick: () => handleCancel(iv),
-                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show",
+                      show: iv.status !== "cancelled" && !isDoneStatus(iv.status) && iv.status !== "no_show" && iv.status !== "dropped_off",
                       danger: true,
                     },
                     { label: "Delete", onClick: () => handleDelete(iv), danger: true },
