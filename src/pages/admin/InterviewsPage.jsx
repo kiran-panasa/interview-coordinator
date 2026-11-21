@@ -26,7 +26,7 @@ import {
   createNotification, subscribeToBlockedDates, getInterviewIntegrity,
   logInterviewHistory, getInterviewHistory,
   getScheduleInviteByInterviewId, updateScheduleInvite,
-  getAllInterviews, getInterview,
+  getAllInterviews, getInterview, getInterviewerInterviews,
   ensureRoundExists, seedDefaultRoundsOnce,
 } from "../../api/firestore";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
@@ -36,6 +36,7 @@ import Toast from "../../components/Toast";
 import KebabMenu from "../../components/KebabMenu";
 import Pagination from "../../components/Pagination";
 import Button from "../../components/Button";
+import PanelistAuditModal from "../../features/interviews/PanelistAuditModal";
 import { usePagination } from "../../hooks/usePagination";
 import ScheduleInterviewModal from "../../features/interviews/ScheduleInterviewModal";
 import FeedbackViewModal from "../../features/interviews/FeedbackViewModal";
@@ -267,6 +268,8 @@ export default function InterviewsPage() {
   const [bulkAiGenerating,  setBulkAiGenerating]  = useState(false);
   const [bulkAiProgress,    setBulkAiProgress]    = useState(null); // { generated }
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
+  const [panelistAuditTarget,  setPanelistAuditTarget]  = useState(null); // interview being viewed/generated
+  const [panelistAuditLoading, setPanelistAuditLoading] = useState(false);
   const [historyModal,      setHistoryModal]      = useState(null); // interview
   const [historyEntries,    setHistoryEntries]    = useState([]);
   const [historyLoading,    setHistoryLoading]    = useState(false);
@@ -1147,6 +1150,82 @@ export default function InterviewsPage() {
       setToast({ message: "Couldn't generate report with Claude: " + e.message, type: "error" });
     }
     setAiReportLoading(false);
+  };
+
+  // Safety-net manual trigger — the nightly sweep (cron/generate-ai-reports.js)
+  // is the PRIMARY path, generating this automatically once a completed
+  // interview's transcript is ready, for any interview whose template has
+  // an auditRubricKey assigned. This exists for when that hasn't happened
+  // yet (transcript came in late, the sweep errored) or an admin wants to
+  // regenerate. Shares /api/generate-ai-report (reportType: "panelist")
+  // rather than a separate endpoint — see that file's own comment on why.
+  const generatePanelistAuditFor = async (iv) => {
+    const template = templates.find(t => t.id === iv.templateId);
+    const rubricKey = template?.auditRubricKey;
+    if (!rubricKey) {
+      throw new Error("This interview's template has no Panelist Audit Rubric assigned (Templates → Lifecycle).");
+    }
+    const transcriptUrl = await resolveTranscriptUrl_(iv);
+    const textResult = await callAppsScript(APPS_SCRIPT_URL, APPS_SCRIPT_SECRET, {
+      action: "getTranscriptText",
+      transcriptUrl,
+    });
+    if (textResult?.status !== "ready" || !textResult.text) {
+      const err = new Error(textResult?.message || textResult?.error || "Couldn't read the transcript's text content.");
+      err.noTranscript = true;
+      throw err;
+    }
+
+    // Same "last 2 of this SAME panelist's own past audits" lookback as the
+    // sweep (see getPriorFindingsForPanelist in api/_lib/aiReportSweep.js),
+    // done client-side here since this is a one-off admin-triggered call.
+    const priorInterviews = await getInterviewerInterviews(iv.interviewerEmail || "");
+    const priorFindings = priorInterviews
+      .filter(x => x.id !== iv.id && x.status === "completed" && x.panelistAudit)
+      .sort((a, b) => (b.scheduledDate || "").localeCompare(a.scheduledDate || ""))
+      .slice(0, 2)
+      .flatMap(x => {
+        const audit = x.panelistAudit;
+        return [
+          ...(audit.criticalFindings || []).map(f => `[Critical, ${x.scheduledDate}] ${f.issue}`),
+          ...(audit.remarks || []).filter(r => r.severity === "fix").map(r => `[Fix, ${x.scheduledDate}] ${r.area}: ${r.remark}`),
+        ];
+      });
+
+    const idToken = await currentUser.getIdToken();
+    const res = await fetch("/api/generate-ai-report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({
+        reportType:    "panelist",
+        transcriptText: textResult.text,
+        rubricKey,
+        panelistName:  iv.interviewerName,
+        panelistEmail: iv.interviewerEmail,
+        round:         iv.round || iv.templateName || "Interview",
+        templateName:  iv.templateName || "",
+        priorFindings,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) throw new Error(json?.message || `HTTP ${res.status}`);
+
+    const panelistAudit = { ...json.panelistAudit, generatedAt: new Date().toISOString() };
+    await updateInterview(iv.id, { panelistAudit });
+    return panelistAudit;
+  };
+
+  const handleGeneratePanelistAudit = async (ivArg) => {
+    const iv = ivArg || panelistAuditTarget;
+    if (!iv) return;
+    setPanelistAuditLoading(true);
+    try {
+      const panelistAudit = await generatePanelistAuditFor(iv);
+      setPanelistAuditTarget({ ...iv, panelistAudit });
+    } catch (e) {
+      setToast({ message: "Couldn't generate panelist audit: " + e.message, type: "error" });
+    }
+    setPanelistAuditLoading(false);
   };
 
   // Runs server-side (see /api/generate-ai-reports-bulk.js), scanning the
@@ -2622,6 +2701,18 @@ export default function InterviewsPage() {
                       highlight: true,
                     },
                     {
+                      label: iv.panelistAudit ? "Panelist Audit" : "Panelist Audit (not yet generated)",
+                      onClick: () => setPanelistAuditTarget(iv),
+                      // Only offered once a template actually has a rubric
+                      // assigned (Templates → Lifecycle) — nothing to audit
+                      // against otherwise. Generation itself normally
+                      // already happened automatically (the nightly sweep);
+                      // this just opens the viewer, which offers a manual
+                      // "Generate Now" safety-net button when it's missing.
+                      show: isDoneStatus(iv.status) && !!templates.find(t => t.id === iv.templateId)?.auditRubricKey,
+                      highlight: true,
+                    },
+                    {
                       label: "Archive",
                       onClick: () => handleArchive(iv),
                       show: iv.archived !== true && (isDoneStatus(iv.status) || iv.status === "cancelled" || iv.status === "no_show" || iv.status === "dropped_off"),
@@ -2733,6 +2824,14 @@ export default function InterviewsPage() {
         onRegenerate={handleRegenerateAiReport}
         onRetry={handleRetryAiReport}
         onGenerateWithClaude={() => handleGenerateWithClaude(aiReportTarget)}
+      />
+
+      <PanelistAuditModal
+        audience="admin"
+        interview={panelistAuditTarget}
+        loading={panelistAuditLoading}
+        onClose={() => setPanelistAuditTarget(null)}
+        onGenerate={() => handleGeneratePanelistAudit(panelistAuditTarget)}
       />
 
       {toast && <Toast message={toast.message} type={toast.type} onDone={() => setToast(null)} />}

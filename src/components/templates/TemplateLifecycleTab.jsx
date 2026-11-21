@@ -5,6 +5,7 @@ import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
 import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT, DEFAULT_CANCEL_LIMIT, DEFAULT_SELF_BOOK_WINDOW_DAYS } from "../../constants/templateAttempts";
+import { RUBRIC_OPTIONS } from "../../constants/panelistAuditRubrics";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -100,6 +101,16 @@ export default function TemplateLifecycleTab() {
   const handleChangeStatus = (t, status) => {
     if (statusOf(t) === status) return;
     saveTemplate(t, { status });
+  };
+
+  // Which panelist-conduct audit rubric this template's completed
+  // interviews get checked against (api/_lib/panelistAuditRubrics.js) —
+  // "" means none assigned, so no audit is ever generated for this
+  // template. Saves immediately on change, same as Status, since it's a
+  // fixed choice from a short list, not free text needing a draft/blur.
+  const handleChangeAuditRubric = (t, auditRubricKey) => {
+    if ((t.auditRubricKey || "") === auditRubricKey) return;
+    saveTemplate(t, { auditRubricKey: auditRubricKey || null });
   };
 
   const commitMaxAttempts = (t) => {
@@ -227,7 +238,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Cancel Limit", "Booking Window", "AI Report & Score", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Cancel Limit", "Booking Window", "AI Report & Score", "Panelist Audit Rubric", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -417,6 +428,24 @@ export default function TemplateLifecycleTab() {
                           className="w-full text-xs border border-violet-100 bg-violet-50/40 rounded-lg px-2.5 py-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-violet-400 text-gray-700 placeholder:text-gray-400"
                         />
                       )}
+                    </td>
+                    <td className="px-4 py-3 align-top min-w-[14rem]">
+                      {/* Teal to match Booking Window's accent family —
+                         visually a "config" control like the others, not a
+                         warning. Changing it only affects audits generated
+                         AFTER the change; anything already generated keeps
+                         the rubric it was actually checked against. */}
+                      <select
+                        value={t.auditRubricKey || ""}
+                        onChange={e => handleChangeAuditRubric(t, e.target.value)}
+                        className={`w-full text-xs font-semibold rounded-lg px-2 py-1.5 border cursor-pointer focus:outline-none focus:ring-1 ${
+                          t.auditRubricKey
+                            ? "bg-teal-50 border-teal-200 text-teal-700 focus:ring-teal-400"
+                            : "bg-white border-gray-200 text-gray-400 focus:ring-brand-400"
+                        }`}>
+                        <option value="">Not configured — no audit</option>
+                        {RUBRIC_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                      </select>
                     </td>
                     <td className="px-4 py-3 w-10">
                       {savingId === t.id && <span className="text-[11px] text-gray-400">Saving…</span>}

@@ -414,6 +414,14 @@ export interface Template {
   // (still overridable per-booking). Absent on templates created before
   // this existed; every read site falls back to 60.
   durationMinutes?: number;
+  // Which panelist-conduct audit rubric (api/_lib/panelistAuditRubrics.js's
+  // RUBRICS keys) applies to interviews on this template — set once by an
+  // admin (Templates → Lifecycle), chosen from the program/track/duration
+  // this template actually represents. Unset means this template never
+  // gets a panelist audit generated (nothing to apply). Deliberately a
+  // fixed admin choice, not something Claude guesses per interview, since
+  // we already know the template with certainty.
+  auditRubricKey?: string;
   questionBank?: QuestionBank;
   questionIds?: string[];
   // Link to this template's Interview Guidelines / Format doc (e.g. a Google
@@ -537,6 +545,50 @@ export interface AiCandidateReport {
   positiveObservations: string[];
   recommendation: string;
   nextSteps: AiReportNextStep[];
+  generatedAt: string;
+}
+
+export interface PanelistAuditFinding {
+  issue: string;
+  quote: string;
+  timestamp: string;
+}
+
+export interface PanelistAuditRemark {
+  area: string;
+  whatHappened: string;
+  severity: "good" | "fix" | "critical";
+  remark: string;
+}
+
+export interface PanelistAuditNextStep {
+  action: string;
+  example: string;
+}
+
+// Audits the PANELIST'S CONDUCT of an interview — completely separate from
+// AiCandidateReport above, which assesses the candidate. See
+// api/_lib/panelistAuditReport.js / panelistAuditRubrics.js. Generated
+// automatically once a completed interview's transcript is ready AND its
+// template has an auditRubricKey assigned (see Template.auditRubricKey
+// below); a manual "Generate Panelist Audit" admin action exists as a
+// safety-net retry, not the primary path.
+export interface PanelistAuditReport {
+  rubricKey: string;
+  rubricLabel: string;
+  verdict: "good_to_continue" | "continue_after_feedback" | "not_yet_pause_solo";
+  verdictReason: string;
+  criticalFindings: PanelistAuditFinding[];
+  checkRecordingItems: string[];
+  remarks: PanelistAuditRemark[];
+  wrongAnswersPassed: string[];
+  strengths: string[];
+  nextSteps: PanelistAuditNextStep[];
+  // The only part of this report shown to the panelist themselves (see
+  // PanelistAuditModal.jsx) — everything else above is admin-only review
+  // detail, same distinction the source spec itself draws between an
+  // internal audit and the "ready-to-send message for the panelist".
+  finalMessage: string;
   generatedAt: string;
 }
 
@@ -677,6 +729,7 @@ export interface Interview {
   meetingRecordingUrl?: string;
   recallBotId?: string;
   aiReport?: AiCandidateReport;
+  panelistAudit?: PanelistAuditReport;
   // Set true whenever an interview is marked completed (see
   // markInterviewCompleted in api/interviews.ts); the Apps Script sweep
   // queries on this instead of scanning every completed interview, and

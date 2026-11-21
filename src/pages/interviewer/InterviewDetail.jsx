@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, Calendar, Video, FileText, CheckCircle2, XCircle,
-  AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2, LogOut,
+  AlertTriangle, HelpCircle, ArrowUpRight, ClipboardList, Loader2, LogOut, MessageSquare,
 } from "lucide-react";
 import {
   subscribeToInterview, updateInterview, markInterviewCompleted, markInterviewPartiallyCompleted, markInterviewDroppedOff, saveFeedbackDraft,
@@ -14,6 +14,7 @@ import {
   getActiveAdmins, getCandidate, getInterview, createNotification,
 } from "../../api/firestore";
 import { scheduleInterviewMeet, markInterviewCancelled } from "../../api/interviews";
+import PanelistAuditModal from "../../features/interviews/PanelistAuditModal";
 import { getUnratedVerdictDomains } from "../../utils/templateEngine";
 import { callAppsScript } from "../../lib/appsScript";
 import { resolveActionAdminRecipients } from "../../utils/adminNotify";
@@ -109,6 +110,7 @@ export default function InterviewDetail() {
   // strict Submit Evaluation flow that normally lands feedback on
   // interview.feedback first.
   const [pendingPartialFeedback, setPendingPartialFeedback] = useState(null);
+  const [panelistFeedbackOpen, setPanelistFeedbackOpen] = useState(false);
   const [dropOffModalOpen,   setDropOffModalOpen]   = useState(false);
   const [dropOffReasonPreset, setDropOffReasonPreset] = useState("");
   const [dropOffReasonText,  setDropOffReasonText]  = useState("");
@@ -694,8 +696,30 @@ export default function InterviewDetail() {
             </span>
           )}
         </div>
-        <Badge value={interview.status} />
+        <div className="flex flex-col items-end gap-2">
+          <Badge value={interview.status} />
+          {/* "Beside complete" — the panelist's own view of their conduct
+             feedback for this interview, once it's ready. Shows only the
+             drafted coaching message (PanelistAuditModal's "panelist"
+             audience), never the internal critical-findings detail. */}
+          {interview.panelistAudit && (
+            <button
+              type="button"
+              onClick={() => setPanelistFeedbackOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-700 bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-full hover:bg-brand-100 transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5" /> View My Feedback
+            </button>
+          )}
+        </div>
       </motion.div>
+
+      <PanelistAuditModal
+        audience="panelist"
+        interview={panelistFeedbackOpen ? interview : null}
+        loading={false}
+        onClose={() => setPanelistFeedbackOpen(false)}
+      />
 
       {/* Details card */}
       <motion.div initial="hidden" animate="visible" custom={1} variants={fadeUp}
