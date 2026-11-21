@@ -8,7 +8,7 @@
 // Mirrors claudeReport.js's own shape deliberately (same model, same
 // tool-forced structured-output pattern) so the two paths never drift.
 
-import { UNIVERSAL_CHECKLIST, SEVERITY_AND_VERDICT, OUTPUT_INSTRUCTIONS, TONE_INTERNAL, TONE_EXTERNAL, RUBRICS } from "./panelistAuditRubrics.js";
+import { UNIVERSAL_CHECKLIST, SEVERITY_AND_VERDICT, OUTPUT_INSTRUCTIONS, TONE_INTERNAL, TONE_EXTERNAL } from "./panelistAuditRubrics.js";
 
 const ANTHROPIC_MODEL = "claude-sonnet-5-5";
 const ANTHROPIC_API_VERSION = "2023-06-01";
@@ -88,7 +88,9 @@ const AUDIT_TOOL = {
 /**
  * @param {string} transcriptText
  * @param {object} ctx
- * @param {string} ctx.rubricKey - one of panelistAuditRubrics.js's RUBRICS keys
+ * @param {string} ctx.rubricKey - which rubric this audit is FOR (stored on the result, not looked up internally)
+ * @param {string} ctx.rubricLabel - resolved by the caller (resolveRubricText in panelistAuditRubrics.js — Firestore override or default)
+ * @param {string} ctx.rubricText - resolved by the caller, same as rubricLabel
  * @param {string} ctx.panelistName
  * @param {string} ctx.panelistEmail
  * @param {string} ctx.round
@@ -96,14 +98,14 @@ const AUDIT_TOOL = {
  * @param {string[]} [ctx.priorFindings] - short strings summarizing this SAME panelist's recent Critical/Fix findings, oldest first, for repeat-issue escalation
  */
 export async function generatePanelistAuditWithClaude(transcriptText, ctx = {}) {
-  const { rubricKey, panelistName, panelistEmail, round, templateName, priorFindings = [] } = ctx;
+  const { rubricKey, rubricLabel, rubricText, panelistName, panelistEmail, round, templateName, priorFindings = [] } = ctx;
   if (!transcriptText || !String(transcriptText).trim()) {
     throw new Error("transcriptText is required.");
   }
-  const rubric = RUBRICS[rubricKey];
-  if (!rubric) {
-    throw new Error(`No panelist audit rubric configured for key "${rubricKey}" — assign one on this interview's template first.`);
+  if (!rubricText) {
+    throw new Error("No panelist audit rubric text resolved — assign/configure one on this interview's template first.");
   }
+  const rubric = { label: rubricLabel || rubricKey, text: rubricText };
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set.");
 

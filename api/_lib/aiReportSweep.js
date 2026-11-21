@@ -1,5 +1,6 @@
 import { generateReportWithClaude } from "./claudeReport.js";
 import { generatePanelistAuditWithClaude } from "./panelistAuditReport.js";
+import { resolveRubricText } from "./panelistAuditRubrics.js";
 
 // Up to this many of a panelist's own past audits, most recent first, used
 // so Claude can catch a REPEATED issue and escalate it a severity level
@@ -131,8 +132,9 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
         try {
           const rubricKey = templatesById.get(iv.templateId).auditRubricKey;
           const priorFindings = await getPriorFindingsForPanelist(db, iv.interviewerEmail, iv.id);
+          const { label: rubricLabel, text: rubricText } = await resolveRubricText(db, rubricKey);
           const audit = await generatePanelistAuditWithClaude(textResult.text, {
-            rubricKey, panelistName: iv.interviewerName, panelistEmail: iv.interviewerEmail,
+            rubricKey, rubricLabel, rubricText, panelistName: iv.interviewerName, panelistEmail: iv.interviewerEmail,
             round: iv.round || iv.templateName || "Interview", templateName: iv.templateName || "", priorFindings,
           });
           update.panelistAudit = { ...audit, generatedAt: new Date().toISOString() };

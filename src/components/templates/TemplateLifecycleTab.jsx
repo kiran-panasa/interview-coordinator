@@ -5,7 +5,7 @@ import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
 import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT, DEFAULT_CANCEL_LIMIT, DEFAULT_SELF_BOOK_WINDOW_DAYS } from "../../constants/templateAttempts";
-import { RUBRIC_OPTIONS } from "../../constants/panelistAuditRubrics";
+import { RUBRIC_OPTIONS } from "../../constants/panelistAuditRubricDefaults";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects

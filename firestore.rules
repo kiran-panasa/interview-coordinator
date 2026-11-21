@@ -93,16 +93,27 @@ service cloud.firestore {
       allow read, write: if isPrivilegedRole();
     }
 
+    // Panelist Audit Rubric text (Templates → "Audit Rubrics" tab) — the
+    // actual grading criteria an interviewer's conduct gets judged against,
+    // so admin-only rather than the general privileged-role set (which
+    // would also let a vendor-contact-as-interviewer, content_team, etc.
+    // read/edit it). The server-side generation path (api/_lib/
+    // panelistAuditRubrics.js's resolveRubricText) uses the Admin SDK and
+    // bypasses rules entirely either way.
+    match /panelistAuditRubrics/{key} {
+      allow read, write: if callerHasProfile() && callerProfile().role == "admin";
+    }
+
     // Everything else — unchanged from before: any signed-in user, full
-    // access. "users", "interviews", "availability", and "studentQueries"
-    // are carved out above (Firestore evaluates every matching rule and
-    // allows if ANY of them does, so this collection list must stay in sync
-    // with the match blocks above or a new sensitive collection would
-    // silently fall through to this permissive default instead of being
-    // scoped).
+    // access. "users", "interviews", "availability", "studentQueries", and
+    // "panelistAuditRubrics" are carved out above (Firestore evaluates
+    // every matching rule and allows if ANY of them does, so this
+    // collection list must stay in sync with the match blocks above or a
+    // new sensitive collection would silently fall through to this
+    // permissive default instead of being scoped).
     match /{collection}/{document=**} {
       allow read, write: if request.auth != null
-        && !(collection in ["users", "interviews", "availability", "studentQueries"]);
+        && !(collection in ["users", "interviews", "availability", "studentQueries", "panelistAuditRubrics"]);
     }
   }
 }

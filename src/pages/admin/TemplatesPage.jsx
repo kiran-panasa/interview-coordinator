@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   Plus, RefreshCw, Copy, Upload, Download, CheckCircle2, AlertTriangle,
-  Info, FileWarning, ShieldCheck, LayoutGrid, ExternalLink, GitBranch,
+  Info, FileWarning, ShieldCheck, LayoutGrid, ExternalLink, GitBranch, ClipboardCheck,
 } from "lucide-react";
 import { formatDateShort } from "../../utils/dates";
 import { DURATIONS } from "../../constants/durations";
@@ -24,6 +24,7 @@ import { parseTemplateCSV, downloadSampleExcel, exportTemplateToExcel } from "..
 import { DomainRow, AddDomainPanel } from "../../components/templates/DomainEditor";
 import InterviewIntegrityTab from "../../components/templates/InterviewIntegrityTab";
 import TemplateLifecycleTab from "../../components/templates/TemplateLifecycleTab";
+import PanelistAuditRubricsTab from "../../components/templates/PanelistAuditRubricsTab";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -466,7 +467,7 @@ export default function TemplatesPage() {
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.03 }}
         className="flex gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full mb-6 overflow-x-auto scrollbar-thin"
       >
-        {[["templates", "Templates", LayoutGrid], ["integrity", "Interview Integrity", ShieldCheck], ["lifecycle", "Lifecycle", GitBranch]].map(([id, label, Icon]) => (
+        {[["templates", "Templates", LayoutGrid], ["integrity", "Interview Integrity", ShieldCheck], ["lifecycle", "Lifecycle", GitBranch], ["auditRubrics", "Audit Rubrics", ClipboardCheck]].map(([id, label, Icon]) => (
           <button key={id} onClick={() => setPageView(id)}
             className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
               pageView === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
@@ -481,6 +482,8 @@ export default function TemplatesPage() {
         <InterviewIntegrityTab />
       ) : pageView === "lifecycle" ? (
         <TemplateLifecycleTab />
+      ) : pageView === "auditRubrics" ? (
+        <PanelistAuditRubricsTab />
       ) : (
       <>
       {/* ── Program Tabs (filter only — manage programs in Settings) ── */}
