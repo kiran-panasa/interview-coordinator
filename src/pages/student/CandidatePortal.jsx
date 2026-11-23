@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, LogIn, Smartphone, AlertTriangle } from "lucide-react";
+import { Mail, ShieldCheck, CalendarClock, Clock3, ArrowRight, Inbox, Smartphone, AlertTriangle } from "lucide-react";
 import { formatDate, formatTimeLabel } from "../../utils/dates";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { signInAnonymously } from "firebase/auth";
@@ -14,8 +14,6 @@ import Button from "../../components/Button";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
 const APPS_SCRIPT_SECRET = import.meta.env.VITE_APPS_SCRIPT_SECRET;
-const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
-const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
 
 async function callAppsScript(payload) {
   if (!APPS_SCRIPT_URL) return;
@@ -75,9 +73,9 @@ const stepMotion = {
 // sign-in link expired or got reused (e.g. a link-preview bot pre-fetching
 // it) just landed back on the plain sign-in page with zero explanation.
 const SSO_ERROR_COPY = {
-  token_expired: "That sign-in link expired before you finished — tap \"Sign In via Academy Account\" again to get a fresh one.",
-  token_already_used: "That sign-in link was already used — tap \"Sign In via Academy Account\" again to get a fresh one.",
-  invalid_token: "That sign-in link isn't valid anymore — tap \"Sign In via Academy Account\" again.",
+  token_expired: "That sign-in link expired before you finished — please sign in again to get a fresh one.",
+  token_already_used: "That sign-in link was already used — please sign in again to get a fresh one.",
+  invalid_token: "That sign-in link isn't valid anymore — please sign in again.",
   student_not_found: "We couldn't find your account. Please check with your team.",
 };
 
@@ -238,18 +236,6 @@ export default function CandidatePortal() {
                 <p className="text-sm text-gray-500 mt-1">Enter your registered mobile number</p>
               </div>
               <div className="space-y-4">
-                {FORMS_SSO_LINK_ID && (
-                  <>
-                    <a
-                      href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
-                      className="flex items-center justify-center gap-1.5 w-full text-center bg-gray-900 text-white font-semibold py-3 rounded-full text-sm hover:bg-gray-800 transition-colors">
-                      <LogIn className="w-4 h-4" /> Sign In via Academy Account
-                    </a>
-                    <div className="flex items-center gap-3 text-xs text-gray-400">
-                      <div className="flex-1 h-px bg-gray-100" /> or use mobile number <div className="flex-1 h-px bg-gray-100" />
-                    </div>
-                  </>
-                )}
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">
                     Mobile Number
