@@ -32,20 +32,22 @@ export async function exchangeTokenForSession(authToken) {
     const snap = await txn.get(tokenRef);
     if (!snap.exists) return { error: "invalid_token" };
     const data = snap.data();
+    // accountsToken (sso-handler.js) mints a token even for a student it
+    // couldn't find — candidateId: null marks that case — so Forms always
+    // gets the same success-shaped response and always proceeds with its
+    // own redirect here, rather than silently failing on its own "not
+    // found" handling. This always means the same thing, no matter how
+    // many times the link gets opened — unlike a real login token, there's
+    // no "already used" or "expired" state that makes sense here (both
+    // would wrongly imply the student DOES have an account), so it's
+    // checked first and never marked used/consumed.
+    if (!data.candidateId) return { error: "student_not_found" };
     if (data.used) return { error: "token_already_used" };
     if (new Date(data.expiresAt) < new Date()) return { error: "token_expired" };
     txn.update(tokenRef, { used: true, usedAt: new Date().toISOString() });
     return { candidateId: data.candidateId, studentUid: data.studentUid };
   });
   if (claim.error) return claim;
-  // accountsToken (sso-handler.js) now mints a token even for a student it
-  // couldn't find — candidateId: null marks that case — so Forms always
-  // gets the same success-shaped response and always proceeds with its own
-  // (working) redirect here, instead of silently failing to redirect at
-  // all on its own "not found" handling. The not-registered message is
-  // rendered entirely on our side from here (SsoCallbackPage.jsx already
-  // has this exact branch).
-  if (!claim.candidateId) return { error: "student_not_found" };
 
   return createSession(claim.candidateId, claim.studentUid);
 }
