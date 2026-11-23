@@ -36,9 +36,17 @@ export default function ScheduleInterviewModal({
     if (!t.program) return null;
     return programNameById.get(t.program) || t.program;
   };
+  // Draft/Archived are deliberately still shown everywhere else in the app
+  // (see the STATUS_OPTIONS comment in TemplateLifecycleTab.jsx — only
+  // student-facing visibility is affected by status), but scheduling a
+  // NEW interview should only ever offer templates actually ready to use.
+  // The one currently assigned to this interview is kept even if it's
+  // since gone inactive, so editing an existing interview never silently
+  // hides its own template out from under it.
+  const schedulableTemplates = templates.filter(t => (t.status || "active") === "active" || t.id === form.templateId);
   const templateGroups = new Map(); // label -> templates[]
   const unassigned = [];
-  templates.forEach(t => {
+  schedulableTemplates.forEach(t => {
     const label = resolveProgramLabel(t);
     if (!label) { unassigned.push(t); return; }
     if (!templateGroups.has(label)) templateGroups.set(label, []);
