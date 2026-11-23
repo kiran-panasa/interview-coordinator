@@ -23,6 +23,17 @@ import KebabMenu from "../../components/KebabMenu";
 import Modal from "../../components/Modal";
 import CandidateTimeline from "../../components/CandidateTimeline";
 
+// A real student only ever reaches this dashboard via Forms SSO — once
+// signed out (explicitly, or a session that's simply expired), they should
+// land back on Forms' own sign-in page, not this app's /student/portal
+// (CandidatePortal.jsx's mobile-OTP/Academy-redirect page, meant as an
+// internal fallback, not a page a real student should ever see). Same env
+// vars/URL shape CandidatePortal.jsx itself already uses for its own
+// "Sign In via Academy Account" link.
+const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
+const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
+const FORMS_SSO_LOGIN_URL = `${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`;
+
 const SEEN_INVITES_KEY = "ic_seen_invites";
 function readSeenInviteIds() {
   try { return new Set(JSON.parse(localStorage.getItem(SEEN_INVITES_KEY) || "[]")); }
@@ -324,7 +335,7 @@ export default function StudentDashboardPage() {
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
       const res = await fetch("/api/sso/me", { credentials: "include" });
-      if (res.status === 401) { navigate("/student/portal", { replace: true }); return; }
+      if (res.status === 401) { window.location.href = FORMS_SSO_LOGIN_URL; return; }
       const json = await res.json();
       if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
 
@@ -369,7 +380,7 @@ export default function StudentDashboardPage() {
         headers: { "x-csrf-token": readCookie("ic_student_csrf") },
       });
     } catch { /* sign out locally regardless */ }
-    navigate("/student/portal", { replace: true });
+    window.location.href = FORMS_SSO_LOGIN_URL;
   };
 
   const handleSaveResume = async () => {
