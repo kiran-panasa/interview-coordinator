@@ -493,6 +493,10 @@ export default function SettingsPage() {
   const handleAddRound = async () => {
     const name = newRoundName.trim();
     if (!name) return;
+    if (rounds.some(r => r.name.toLowerCase() === name.toLowerCase())) {
+      setToast({ message: `A round named "${name}" already exists.`, type: "error" });
+      return;
+    }
     await createRound(name);
     await refetchRounds();
     setNewRoundName("");
@@ -500,8 +504,13 @@ export default function SettingsPage() {
   };
 
   const handleRenameRound = async () => {
-    if (!editingRound?.name?.trim()) return;
-    await updateRound(editingRound.id, editingRound.name.trim());
+    const name = editingRound?.name?.trim();
+    if (!name) return;
+    if (rounds.some(r => r.id !== editingRound.id && r.name.toLowerCase() === name.toLowerCase())) {
+      setToast({ message: `A round named "${name}" already exists.`, type: "error" });
+      return;
+    }
+    await updateRound(editingRound.id, name);
     await refetchRounds();
     setEditingRound(null);
   };
