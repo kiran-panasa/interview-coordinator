@@ -1719,18 +1719,12 @@ export default function StudentDashboardPage() {
           <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-2xl px-3.5 py-3">
             <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-red-700 leading-relaxed">
-              <span className="font-bold">Important:</span> cancellations and reschedules are tracked on your account.
-              Repeatedly cancelling or rescheduling interviews may result in your account being blocked from further
-              bookings. Please only do this if you genuinely can't make it.
+              <span className="font-bold">Please note:</span>{" "}
+              {cancelRescheduleTarget?.mode === "cancel"
+                ? "Cancellations are tracked on your account. We understand plans can change, but cancelling too often may lead to your account being temporarily blocked from booking further interviews. Please cancel only if you genuinely can't attend."
+                : "Reschedule requests are tracked on your account. We're happy to help you find a better time, but requesting too many reschedules may lead to your account being temporarily blocked from booking further interviews. Please request a reschedule only if you genuinely need a different time."}
             </p>
           </div>
-
-          {cancelRescheduleTarget?.mode === "cancel" && (
-            <p className="text-sm text-gray-500">
-              Not free for any of this week's open slots? Slots only show about a week ahead, so cancelling just means
-              you're not booking right now — come back to "Book an Interview" next week once new slots are open.
-            </p>
-          )}
 
           {/* Both Cancel and Reschedule count the same way against the
              template's cancel limit (a reschedule cancels the old interview
