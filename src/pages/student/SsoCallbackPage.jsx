@@ -48,14 +48,18 @@ export default function SsoCallbackPage() {
         {error ? (
           <>
             <AlertTriangle className="w-8 h-8 text-red-400 mx-auto mb-3" />
-            <h2 className="text-lg font-bold text-gray-900">Sign-in failed</h2>
+            <h2 className="text-lg font-bold text-gray-900">
+              {error === "student_not_found" ? "Access Not Available" : "Sign-in Failed"}
+            </h2>
             <p className="text-sm text-gray-500 mt-1.5">
               {error === "token_expired" ? "This sign-in link has expired."
                 : error === "token_already_used" ? "This sign-in link was already used."
-                : error === "student_not_found" ? "We couldn't find your account — please check with your team."
-                : "Something went wrong signing you in."}
+                : error === "student_not_found" ? "We couldn't locate your account in our system. Please reach out to your program team for assistance."
+                : "Something went wrong while signing you in."}
             </p>
-            {FORMS_SSO_LINK_ID && (
+            {/* Retrying genuinely helps for an expired/already-used link —
+               it never would here, since the account itself isn't found. */}
+            {FORMS_SSO_LINK_ID && error !== "student_not_found" && (
               <a href={`${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`}
                 className="inline-flex items-center justify-center gap-1.5 bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-full text-sm hover:bg-brand-700 transition-colors mt-4">
                 Try Signing In Again
