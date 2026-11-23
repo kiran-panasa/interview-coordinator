@@ -1031,6 +1031,15 @@ export default function StudentDashboardPage() {
 
                 <SelfBookCutoffBanner />
 
+                <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl px-3.5 py-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    <span className="font-bold">Important:</span> once you book a slot, please make sure to join your interview on time.
+                    Missing a scheduled interview (no-show) is tracked on your account, and repeated no-shows may result in your account
+                    being temporarily blocked from booking further interviews.
+                  </p>
+                </div>
+
                 {/* Every assigned template not already in progress, shown as
                    its own clickable box — a direct click goes straight to
                    Find Slots for that template, instead of a "Self Book"
