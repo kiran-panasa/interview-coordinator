@@ -1385,6 +1385,29 @@ export default function InterviewsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, interviews]);
 
+  // Same deep-link pattern as the aiReport one above, but for Panelist
+  // Audit — lets an admin copy a link straight to one interview's audit
+  // (see the kebab menu's copyValue below) and share it with another
+  // admin, who just needs to be logged in and open it.
+  useEffect(() => {
+    const targetId = searchParams.get("panelistAudit");
+    if (!targetId) return;
+    const iv = interviews.find(x => x.id === targetId);
+    if (iv) {
+      setPanelistAuditTarget(iv);
+    } else {
+      getInterview(targetId)
+        .then(fetched => { if (fetched) setPanelistAuditTarget(fetched); })
+        .catch(err => console.error("Failed to load interview for panelistAudit deep link:", err));
+    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete("panelistAudit");
+      return next;
+    }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, interviews]);
+
   // ── Cancel interview (+ calendar event) ────────────────────────────────────
 
   const handleCancel = async (iv) => {
@@ -2794,6 +2817,12 @@ export default function InterviewsPage() {
                       // "Generate Now" safety-net button when it's missing.
                       show: isDoneStatus(iv.status) && !!templates.find(t => t.id === iv.templateId)?.auditRubricKey,
                       highlight: true,
+                      // Shareable link straight to this interview's audit —
+                      // another admin just needs to be logged in and open
+                      // it (see the panelistAudit deep-link effect above).
+                      // Only offered once the audit actually exists, since
+                      // there's nothing to open yet otherwise.
+                      copyValue: iv.panelistAudit ? `${window.location.origin}/admin/interviews?panelistAudit=${iv.id}` : undefined,
                     },
                     {
                       label: "Archive",
