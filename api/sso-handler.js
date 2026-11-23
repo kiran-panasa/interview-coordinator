@@ -314,41 +314,32 @@ async function accountsToken(req, res) {
       }
     }
   }
-  if (!candidate) {
+  // Student not found: mint a real, normal one-time token anyway — same
+  // shape, same TTL, same {"auth_token": "..."} response as the success
+  // path below — rather than returning an error body with no token. Forms'
+  // get_redirect_url service has repeatedly 502'd on the no-token response
+  // regardless of what that body contained (confirmed via our own Vercel
+  // logs: our side returns a clean, fast 200 every time; their side still
+  // fails), so it's not something fixable from our side by changing the
+  // response shape — Forms' own redirect never fires, so the student never
+  // even reaches our "you're not registered" screen (SsoCallbackPage.jsx
+  // already had one, it just couldn't be reached).
+  //
+  // Minting a token here instead means Forms ALWAYS gets the exact same
+  // success-shaped response and ALWAYS proceeds with its (already working)
+  // redirect to our own /sso/callback — where exchangeTokenForSession
+  // below recognizes this token's null candidateId and returns
+  // student_not_found itself, which SsoCallbackPage.jsx renders as the
+  // same "you're not registered" message. The whole not-found path now
+  // happens entirely within systems we control.
+  const notFoundCandidate = !candidate;
+  if (notFoundCandidate) {
     await logTokenAttempt(db, {
       outcome: "student_not_found", userId, matchCount: snap.size,
       // Full request body, not just user_id — the goal is to see what
       // else Forms actually sends (phone? email?) so the fallback above
       // can be widened if this still isn't enough to resolve someone.
       rawBody: typeof req.body === "object" ? JSON.stringify(req.body) : String(req.body || ""),
-    });
-    // 200, not 404 — a student who simply hasn't been added as a
-    // candidate yet is an expected, anticipated outcome of this call, not
-    // a server failure. Forms' own client wrapper (otg_forms.utils.
-    // client_backend_utils) treats ANY non-2xx status as an internal
-    // error and raises it to their Sentry, so a 404 here was firing a
-    // genuine-looking crash alert on their side for something that isn't
-    // actually broken on EITHER side. The body is unchanged — same
-    // `error: "student_not_found"` field and message as before — so
-    // Forms can keep branching on the body to show its own "you're not
-    // registered" screen instead of redirecting with a token; only the
-    // status code changed, specifically so their generic non-200 =
-    // error handling stops misclassifying this as a crash.
-    //
-    // auth_token: null is new — their own get_redirect_url service still
-    // reports a 502 ("CLIENT_BACKEND_TOKEN_FETCH_FAILED") for this exact
-    // response even though it's a clean 200 (confirmed via our own Vercel
-    // logs: fast, no error, every time), which only makes sense if their
-    // side does strict response-schema validation expecting an auth_token
-    // KEY to always be present — see the success response below, sent as
-    // exactly {"auth_token": "..."} for the same documented-contract
-    // reason. Including the key as null costs nothing on our side and
-    // can't break the success path; it's a best-effort guess at their
-    // contract, not a confirmed fix — ask Forms to confirm either way.
-    return res.status(200).json({
-      auth_token: null,
-      error: "student_not_found",
-      message: "No access — you're not registered. Please connect with your team.",
     });
   }
   if (fallbackUsed) {
@@ -367,12 +358,16 @@ async function accountsToken(req, res) {
   // before a student lands on "This sign-in link has expired".
   const expiresAt = new Date(createdAt.getTime() + 15 * 60 * 1000);
   await db.collection("ssoLoginTokens").doc(token).set({
-    candidateId: candidate.id, studentUid: userId,
+    candidateId: notFoundCandidate ? null : candidate.id, studentUid: userId,
     createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(), used: false,
   });
-  await logTokenAttempt(db, { outcome: "success", userId, candidateId: candidate.id });
+  if (!notFoundCandidate) {
+    await logTokenAttempt(db, { outcome: "success", userId, candidateId: candidate.id });
+  }
   // Exactly {"auth_token": "..."} per their documented contract — no extra
   // fields, in case their backend does strict response-schema validation.
+  // Sent identically whether or not a candidate was actually found — see
+  // the comment above for why.
   return res.status(200).json({ auth_token: token });
 }
 
