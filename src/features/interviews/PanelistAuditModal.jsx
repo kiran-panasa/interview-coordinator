@@ -76,7 +76,16 @@ export default function PanelistAuditModal({ interview, loading, onClose, onGene
             <span className={`inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-full border ${verdictMeta.cls}`}>
               <VerdictIcon className="w-4 h-4" /> {verdictMeta.label}
             </span>
-            <p className="text-xs text-gray-400">{audit.verdictReason}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-gray-400">{audit.verdictReason}</p>
+              {/* Same shareable deep link as the kebab menu's copy icon
+                 (InterviewsPage.jsx's panelistAudit=<id> handler) — right
+                 here too, so sharing doesn't need closing this modal first. */}
+              <CopyButton
+                value={`${window.location.origin}/admin/interviews?panelistAudit=${interview.id}`}
+                title="Copy link to this audit"
+              />
+            </div>
           </div>
           <p className="text-[11px] text-gray-400">
             Rubric: {audit.rubricLabel} · Generated {new Date(audit.generatedAt).toLocaleString()}
