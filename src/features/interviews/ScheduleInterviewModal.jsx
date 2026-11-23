@@ -16,12 +16,38 @@ export default function ScheduleInterviewModal({
   open, onClose,
   editTarget, form, setField, handleSave, saving,
   candidates, interviewers, templates,
+  programs = [],
   availDates, availTimes,
   rounds = [], DURATIONS,
   blockedDates = [],
   reassignMode = false,
 }) {
   const roundNames = rounds.map(r => r.name);
+  // A template's own `program` field is inconsistent across records — some
+  // store the Program's actual name directly ("NIAT"), others store its
+  // Firestore doc id (see the Program id/name comment on this field in
+  // types.ts) — so resolve through `programs` first and only fall back to
+  // treating it as an already-readable name. Grouped into <optgroup>s, in
+  // the same order as `programs` itself (matching the Program tab order
+  // used elsewhere), with same-named templates across different programs
+  // no longer ambiguous — each only ever appears under its own program.
+  const programNameById = new Map(programs.map(p => [p.id, p.name]));
+  const resolveProgramLabel = (t) => {
+    if (!t.program) return null;
+    return programNameById.get(t.program) || t.program;
+  };
+  const templateGroups = new Map(); // label -> templates[]
+  const unassigned = [];
+  templates.forEach(t => {
+    const label = resolveProgramLabel(t);
+    if (!label) { unassigned.push(t); return; }
+    if (!templateGroups.has(label)) templateGroups.set(label, []);
+    templateGroups.get(label).push(t);
+  });
+  const orderedLabels = [
+    ...programs.map(p => p.name).filter(name => templateGroups.has(name)),
+    ...[...templateGroups.keys()].filter(label => !programs.some(p => p.name === label)),
+  ];
   const [customRound, setCustomRound] = useState(() => !!form.round && !roundNames.includes(form.round));
   const todayStr = new Date().toISOString().slice(0, 10);
 
@@ -150,9 +176,18 @@ export default function ScheduleInterviewModal({
           <label className={labelCls}>Evaluation Template</label>
           <select value={form.templateId} onChange={e => setField("templateId", e.target.value)} className={inputCls}>
             <option value="">— No template (generic feedback) —</option>
-            {templates.map(t => (
-              <option key={t.id} value={t.id}>{t.name}{t.program ? ` — ${t.program}` : ""}</option>
+            {orderedLabels.map(label => (
+              <optgroup key={label} label={label}>
+                {templateGroups.get(label).map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </optgroup>
             ))}
+            {unassigned.length > 0 && (
+              <optgroup label="No Program">
+                {unassigned.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </optgroup>
+            )}
           </select>
         </div>
 

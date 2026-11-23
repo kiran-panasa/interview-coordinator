@@ -2856,6 +2856,7 @@ export default function InterviewsPage() {
         editTarget={editTarget} form={form} setField={setField}
         handleSave={handleSave} saving={saving}
         candidates={candidates} interviewers={interviewers} templates={templates}
+        programs={programs}
         availDates={availDates} availTimes={availTimes}
         rounds={rounds} DURATIONS={DURATIONS}
         blockedDates={blockedDates}
