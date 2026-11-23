@@ -334,7 +334,19 @@ async function accountsToken(req, res) {
     // registered" screen instead of redirecting with a token; only the
     // status code changed, specifically so their generic non-200 =
     // error handling stops misclassifying this as a crash.
+    //
+    // auth_token: null is new — their own get_redirect_url service still
+    // reports a 502 ("CLIENT_BACKEND_TOKEN_FETCH_FAILED") for this exact
+    // response even though it's a clean 200 (confirmed via our own Vercel
+    // logs: fast, no error, every time), which only makes sense if their
+    // side does strict response-schema validation expecting an auth_token
+    // KEY to always be present — see the success response below, sent as
+    // exactly {"auth_token": "..."} for the same documented-contract
+    // reason. Including the key as null costs nothing on our side and
+    // can't break the success path; it's a best-effort guess at their
+    // contract, not a confirmed fix — ask Forms to confirm either way.
     return res.status(200).json({
+      auth_token: null,
       error: "student_not_found",
       message: "No access — you're not registered. Please connect with your team.",
     });
