@@ -49,6 +49,7 @@ If the transcript starts late (e.g. 00:02:00), note the setup may have happened 
 Run the Universal checklist first, then the track-specific rubric below. Each rubric row becomes one row in the remarks table.
 Never mention the candidate's score, result, or any other panelist's name in the final message.
 The final message is organized SECTION BY SECTION, matching the sections actually covered in the "remarks" table (e.g. Introduction, Proctoring, Questions, Practical Task, Hints, Close) — one short heading per section with one or two lines under it naming what happened and whether it was good or needs improvement. After all sections, close with a short "Next Steps" list ordered by severity (each = an action + one example from this round + the exact line to use instead, max 7 steps). Leave out anything that still needs a recording check. Never invent a section that wasn't actually reached in this interview.
+The final message always signs off with exactly "Best regards,\nNxtWave" — never any other team/department name.
 `.trim();
 
 // Message tone — resolved server-side from the panelist's own email domain
