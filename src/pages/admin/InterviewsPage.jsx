@@ -267,6 +267,8 @@ export default function InterviewsPage() {
   const [aiReportLoading,   setAiReportLoading]   = useState(false);
   const [bulkAiGenerating,  setBulkAiGenerating]  = useState(false);
   const [bulkAiProgress,    setBulkAiProgress]    = useState(null); // { generated }
+  const [bulkPanelistGenerating, setBulkPanelistGenerating] = useState(false);
+  const [bulkPanelistProgress,  setBulkPanelistProgress]   = useState(null); // { generated }
   const [aiReportStatus,    setAiReportStatus]    = useState(null); // { status: "processing"|"not_found", message }
   const [panelistAuditTarget,  setPanelistAuditTarget]  = useState(null); // interview being viewed/generated
   const [panelistAuditLoading, setPanelistAuditLoading] = useState(false);
@@ -1283,6 +1285,54 @@ export default function InterviewsPage() {
     }
     setBulkAiProgress(null);
     setBulkAiGenerating(false);
+  };
+
+  // Same looping pattern as handleBulkGenerateAiReports above, but scoped
+  // to Panelist Audits only, within the admin's CURRENTLY selected date
+  // range (filterDateFrom/filterDateTo) — the nightly automatic sweep and
+  // the general "Generate Missing AI Reports" button both use a fixed
+  // rolling 14-day window instead, which doesn't cover an admin
+  // deliberately looking further back or at a specific range.
+  const handleBulkGeneratePanelistAudits = async () => {
+    if (!window.confirm(`Generate Panelist Audits for every completed interview (any panelist, any program) between ${formatDate(filterDateFrom)} and ${formatDate(filterDateTo)} that's missing one? This can take a few minutes — please don't close this tab while it runs.`)) return;
+
+    setBulkPanelistGenerating(true);
+    let totalSucceeded = 0, totalNoTranscript = 0, totalFailed = 0, firstError = null, noProgressRounds = 0;
+    try {
+      const idToken = await currentUser.getIdToken();
+      for (let round = 0; round < 25; round++) {
+        setBulkPanelistProgress({ generated: totalSucceeded });
+        const res = await fetch("/api/generate-ai-reports-bulk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+          body: JSON.stringify({ startDate: filterDateFrom, endDate: filterDateTo, panelistOnly: true }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) throw new Error(json?.message || `HTTP ${res.status}`);
+
+        totalSucceeded += json.panelistAuditsSucceeded;
+        totalFailed += json.panelistAuditsFailed;
+        totalNoTranscript += json.noTranscript;
+        if (!firstError && json.errors?.[0]?.message) firstError = json.errors[0].message;
+
+        if (json.attempted < 1) break;
+        noProgressRounds = (json.panelistAuditsSucceeded === 0) ? noProgressRounds + 1 : 0;
+        if (noProgressRounds >= 2) break;
+      }
+
+      if (totalSucceeded + totalNoTranscript + totalFailed === 0) {
+        setToast({ message: "No completed interviews in this date range are missing a Panelist Audit.", type: "info" });
+      } else {
+        const parts = [`${totalSucceeded} generated`];
+        if (totalNoTranscript) parts.push(`${totalNoTranscript} skipped (no transcript yet)`);
+        if (totalFailed) parts.push(`${totalFailed} failed${firstError ? ` (${firstError})` : ""}`);
+        setToast({ message: parts.join(", ") + ".", type: totalSucceeded ? "success" : "error" });
+      }
+    } catch (e) {
+      setToast({ message: `Couldn't generate panelist audits (${totalSucceeded} succeeded before this): ` + e.message, type: "error" });
+    }
+    setBulkPanelistProgress(null);
+    setBulkPanelistGenerating(false);
   };
 
   // Backs the "AI Report" link column in the Download Feedback export — a
@@ -2362,6 +2412,16 @@ export default function InterviewsPage() {
             {bulkAiGenerating
               ? `Generating${bulkAiProgress?.generated ? ` (${bulkAiProgress.generated} so far)` : "…"}`
               : "Generate Missing AI Reports"}
+          </button>
+          <button onClick={handleBulkGeneratePanelistAudits} disabled={bulkPanelistGenerating}
+            title={`Generates Panelist Audits for every panelist/program's completed interviews between ${formatDate(filterDateFrom)} and ${formatDate(filterDateTo)} that are missing one`}
+            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+            {bulkPanelistGenerating
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Sparkles className="w-3.5 h-3.5" />}
+            {bulkPanelistGenerating
+              ? `Generating${bulkPanelistProgress?.generated ? ` (${bulkPanelistProgress.generated} so far)` : "…"}`
+              : "Generate Missing Panelist Audits"}
           </button>
           <button onClick={handleDownloadFeedback} disabled={downloadingFeedback}
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">

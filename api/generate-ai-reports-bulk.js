@@ -37,10 +37,20 @@ export default async function handler(req, res) {
       return res.status(403).json({ success: false, error: "forbidden", message: "Only an admin can generate AI reports." });
     }
 
+    // startDate/endDate/panelistOnly are optional — sent by the admin
+    // "Generate Missing Panelist Audits" button (scoped to whatever date
+    // range is currently filtered on InterviewsPage.jsx), targeting an
+    // explicit window and panelist audits only, instead of the general
+    // "Generate Missing AI Reports" button's rolling 14-day/both-types
+    // default (unchanged when these aren't sent).
+    const { startDate, endDate, panelistOnly } = req.body || {};
     const result = await runAiReportSweep(db, {
       appsScriptUrl:    process.env.APPS_SCRIPT_URL,
       appsScriptSecret: process.env.APPS_SCRIPT_SECRET,
       lookbackDays: 14,
+      sinceDate: startDate || undefined,
+      untilDate: endDate || undefined,
+      panelistOnly: !!panelistOnly,
       // Each interview costs 2-3 slow round trips (Apps Script transcript
       // fetch/read + a Claude call that alone can take 5-15s) -- a batch
       // much bigger than this risks blowing past Vercel's 60s maxDuration

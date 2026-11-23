@@ -41,7 +41,7 @@ async function getPriorFindingsForPanelist(db, interviewerEmail, excludeIntervie
 // for panelist audits; generate-panelist-audit.js's manual single-interview
 // endpoint exists only as a safety-net retry, not something an admin needs
 // to click routinely.
-export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lookbackDays = 14, maxPerRun = 15 }) {
+export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lookbackDays = 14, maxPerRun = 15, sinceDate, untilDate, panelistOnly = false }) {
   if (!appsScriptUrl) throw new Error("APPS_SCRIPT_URL is not set (server-side env var, no VITE_ prefix).");
 
   const templatesSnap = await db.collection("templates").get();
@@ -75,11 +75,16 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
     return json;
   }
 
-  const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const snap = await db.collection("interviews")
+  // sinceDate/untilDate let a caller (the admin "Generate Missing Panelist
+  // Audits" button, scoped to whatever date range is currently filtered on
+  // InterviewsPage.jsx) target an explicit window instead of the rolling
+  // lookbackDays the nightly cron and the general bulk button both use.
+  const since = sinceDate || new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  let query = db.collection("interviews")
     .where("status", "==", "completed")
-    .where("scheduledDate", ">=", since)
-    .get();
+    .where("scheduledDate", ">=", since);
+  if (untilDate) query = query.where("scheduledDate", "<=", untilDate);
+  const snap = await query.get();
 
   const needsPanelistAudit = (iv) => {
     const rubricKey = templatesById.get(iv.templateId)?.auditRubricKey;
@@ -88,7 +93,7 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
 
   const targets = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(iv => (!iv.aiReport || needsPanelistAudit(iv)) && (iv.transcriptUrl || iv.eventId || iv.meetLink))
+    .filter(iv => (panelistOnly ? needsPanelistAudit(iv) : (!iv.aiReport || needsPanelistAudit(iv))) && (iv.transcriptUrl || iv.eventId || iv.meetLink))
     .slice(0, maxPerRun);
 
   let succeeded = 0, noTranscript = 0, failed = 0;
@@ -117,7 +122,7 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
       const textResult = await callAppsScriptServer({ action: "getTranscriptText", transcriptUrl });
       if (textResult?.status !== "ready" || !textResult.text) { noTranscript++; continue; }
 
-      if (!iv.aiReport) {
+      if (!panelistOnly && !iv.aiReport) {
         const report = await generateCandidateReport(textResult.text, {
           candidateName: iv.candidateName, round: iv.round || iv.templateName || "Interview", templateName: iv.templateName || "",
         });
