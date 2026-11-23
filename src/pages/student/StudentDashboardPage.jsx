@@ -1035,7 +1035,7 @@ export default function StudentDashboardPage() {
                   <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-800 leading-relaxed">
                     <span className="font-bold">Important:</span> once you book a slot, please make sure to join your interview on time.
-                    Missing a scheduled interview (no-show) is tracked on your account, and repeated no-shows may result in your account
+                    Missing a scheduled interview (missed) is tracked on your account, and repeated misses may result in your account
                     being temporarily blocked from booking further interviews.
                   </p>
                 </div>
