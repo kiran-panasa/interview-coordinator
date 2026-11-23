@@ -150,7 +150,9 @@ export default function ScheduleInterviewModal({
           <label className={labelCls}>Evaluation Template</label>
           <select value={form.templateId} onChange={e => setField("templateId", e.target.value)} className={inputCls}>
             <option value="">— No template (generic feedback) —</option>
-            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>{t.name}{t.program ? ` — ${t.program}` : ""}</option>
+            ))}
           </select>
         </div>
 
