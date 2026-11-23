@@ -33,6 +33,19 @@ import CandidateTimeline from "../../components/CandidateTimeline";
 const FORMS_SSO_URL     = import.meta.env.VITE_FORMS_SSO_URL || "https://forms.ccbp.in";
 const FORMS_SSO_LINK_ID = import.meta.env.VITE_FORMS_SSO_LINK_ID;
 const FORMS_SSO_LOGIN_URL = `${FORMS_SSO_URL}/mid/${FORMS_SSO_LINK_ID}`;
+// forms.ccbp.in/mid/{link_id} alone can silently re-authenticate the
+// student straight back in if Accounts still has an active session for
+// them (sign-out here only clears OUR OWN session cookie — a different
+// domain's cookies aren't ours to touch) — which looks exactly like
+// "clicking sign out did nothing". Going to Accounts' own login screen
+// directly (mode=otp) gets them an actual sign-in prompt instead. These
+// query params are otherwise-static per CCBP's own Accounts login URL
+// shape, not anything Forms issues dynamically per-session.
+const FORMS_ACCOUNTS_URL   = import.meta.env.VITE_FORMS_ACCOUNTS_URL || "https://accounts.ccbp.in";
+const FORMS_ACCOUNTS_CLIENT_ID = import.meta.env.VITE_FORMS_ACCOUNTS_CLIENT_ID || "otg_forms";
+const FORMS_ACCOUNTS_LOGIN_URL =
+  `${FORMS_ACCOUNTS_URL}/login?client_id=${encodeURIComponent(FORMS_ACCOUNTS_CLIENT_ID)}` +
+  `&call_back_url=${encodeURIComponent(FORMS_SSO_LOGIN_URL)}&mode=otp&WINDOW_MODE=IN_APP`;
 
 const SEEN_INVITES_KEY = "ic_seen_invites";
 function readSeenInviteIds() {
@@ -335,7 +348,7 @@ export default function StudentDashboardPage() {
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
       const res = await fetch("/api/sso/me", { credentials: "include" });
-      if (res.status === 401) { window.location.href = FORMS_SSO_LOGIN_URL; return; }
+      if (res.status === 401) { window.location.href = FORMS_ACCOUNTS_LOGIN_URL; return; }
       const json = await res.json();
       if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
 
@@ -380,7 +393,7 @@ export default function StudentDashboardPage() {
         headers: { "x-csrf-token": readCookie("ic_student_csrf") },
       });
     } catch { /* sign out locally regardless */ }
-    window.location.href = FORMS_SSO_LOGIN_URL;
+    window.location.href = FORMS_ACCOUNTS_LOGIN_URL;
   };
 
   const handleSaveResume = async () => {
