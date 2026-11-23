@@ -105,10 +105,19 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
 
   let succeeded = 0, noTranscript = 0, failed = 0;
   let panelistAuditsSucceeded = 0, panelistAuditsFailed = 0;
+  // A free-tier Gemini key has a hard per-day request cap, shared across
+  // every candidate report AND panelist audit call — once it's hit, every
+  // remaining target this run would fail the exact same way. Rather than
+  // logging each one as an individual "failed" (misleading — nothing is
+  // actually wrong with those interviews), this stops the run early and
+  // reports how many are simply waiting for tomorrow's quota reset, which
+  // the nightly/15-min sweep will pick up on its own with no action needed.
+  let quotaExceeded = false, quotaSkipped = 0;
   // Keeps the actual failure reason per interview — a bare "X failed" count
   // was impossible to debug from the UI alone (see the "Unknown action"
   // Apps Script gap this surfaced originally).
   const errors = [];
+  targetLoop:
   for (const iv of targets) {
     const update = {};
     try {
@@ -130,11 +139,21 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
       if (textResult?.status !== "ready" || !textResult.text) { noTranscript++; continue; }
 
       if (!panelistOnly && !iv.aiReport) {
-        const report = await generateCandidateReport(textResult.text, {
-          candidateName: iv.candidateName, round: iv.round || iv.templateName || "Interview", templateName: iv.templateName || "",
-        });
-        update.aiReport = { ...report, generatedAt: new Date().toISOString() };
-        succeeded++;
+        try {
+          const report = await generateCandidateReport(textResult.text, {
+            candidateName: iv.candidateName, round: iv.round || iv.templateName || "Interview", templateName: iv.templateName || "",
+          });
+          update.aiReport = { ...report, generatedAt: new Date().toISOString() };
+          succeeded++;
+        } catch (e) {
+          if (e?.quotaExceeded) {
+            quotaExceeded = true;
+            quotaSkipped += targets.length - targets.indexOf(iv);
+            if (Object.keys(update).length) await db.collection("interviews").doc(iv.id).update(update).catch(() => {});
+            break targetLoop;
+          }
+          throw e;
+        }
       }
 
       // Best-effort, separate from the candidate report above — a failure
@@ -152,6 +171,12 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
           update.panelistAudit = { ...audit, generatedAt: new Date().toISOString() };
           panelistAuditsSucceeded++;
         } catch (e) {
+          if (e?.quotaExceeded) {
+            quotaExceeded = true;
+            quotaSkipped += targets.length - targets.indexOf(iv);
+            if (Object.keys(update).length) await db.collection("interviews").doc(iv.id).update(update).catch(() => {});
+            break targetLoop;
+          }
           panelistAuditsFailed++;
           errors.push({ id: iv.id, candidateName: iv.candidateName, message: `panelist audit: ${e?.message || String(e)}` });
         }
@@ -172,5 +197,6 @@ export async function runAiReportSweep(db, { appsScriptUrl, appsScriptSecret, lo
   return {
     scanned: snap.size, attempted: targets.length, succeeded, noTranscript, failed, errors,
     panelistAuditsSucceeded, panelistAuditsFailed,
+    quotaExceeded, quotaSkipped,
   };
 }

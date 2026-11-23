@@ -26,7 +26,14 @@ export async function callGeminiJson(prompt) {
 
   const json = await res.json();
   if (!res.ok) {
-    throw new Error(json?.error?.message || `Gemini API returned HTTP ${res.status}.`);
+    const err = new Error(json?.error?.message || `Gemini API returned HTTP ${res.status}.`);
+    // Free-tier daily request cap (429 RESOURCE_EXHAUSTED) — distinguished
+    // from a real failure so callers can stop burning through the rest of
+    // a batch hitting the same wall and just let tomorrow's sweep pick the
+    // rest up automatically, instead of logging every remaining interview
+    // as individually "failed".
+    if (res.status === 429) err.quotaExceeded = true;
+    throw err;
   }
 
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text;

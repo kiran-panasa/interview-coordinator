@@ -1241,6 +1241,7 @@ export default function InterviewsPage() {
 
     setBulkAiGenerating(true);
     let totalSucceeded = 0, totalNoTranscript = 0, totalFailed = 0, firstError = null, noProgressRounds = 0;
+    let quotaExceeded = false, quotaSkipped = 0;
     try {
       const idToken = await currentUser.getIdToken();
       // The endpoint only processes a handful of interviews per call (see
@@ -1264,6 +1265,11 @@ export default function InterviewsPage() {
         totalFailed += json.failed;
         if (!firstError && json.errors?.[0]?.message) firstError = json.errors[0].message;
 
+        // The free-tier Gemini key's daily cap — no point looping further
+        // today, since every remaining interview would hit the same wall;
+        // tomorrow's automatic sweep picks them up on its own.
+        if (json.quotaExceeded) { quotaExceeded = true; quotaSkipped = json.quotaSkipped || 0; break; }
+
         if (json.attempted < 1) break; // nothing left to do
         // Stop early if two rounds in a row made zero real progress (e.g.
         // the same items keep failing for a persistent reason) instead of
@@ -1272,7 +1278,13 @@ export default function InterviewsPage() {
         if (noProgressRounds >= 2) break;
       }
 
-      if (totalSucceeded + totalNoTranscript + totalFailed === 0) {
+      if (quotaExceeded) {
+        setToast({
+          message: `${totalSucceeded} generated, then the daily AI quota was reached` +
+            (quotaSkipped ? ` (~${quotaSkipped} remaining)` : "") + " — the rest will generate automatically once it resets.",
+          type: totalSucceeded ? "success" : "info",
+        });
+      } else if (totalSucceeded + totalNoTranscript + totalFailed === 0) {
         setToast({ message: "No completed interviews in the last 14 days are missing an AI report.", type: "info" });
       } else {
         const parts = [`${totalSucceeded} generated`];
@@ -1298,6 +1310,7 @@ export default function InterviewsPage() {
 
     setBulkPanelistGenerating(true);
     let totalSucceeded = 0, totalNoTranscript = 0, totalFailed = 0, firstError = null, noProgressRounds = 0;
+    let quotaExceeded = false, quotaSkipped = 0;
     try {
       const idToken = await currentUser.getIdToken();
       for (let round = 0; round < 25; round++) {
@@ -1315,12 +1328,22 @@ export default function InterviewsPage() {
         totalNoTranscript += json.noTranscript;
         if (!firstError && json.errors?.[0]?.message) firstError = json.errors[0].message;
 
+        // The free-tier Gemini key's daily cap — no point looping further
+        // today; tomorrow's automatic sweep picks the rest up on its own.
+        if (json.quotaExceeded) { quotaExceeded = true; quotaSkipped = json.quotaSkipped || 0; break; }
+
         if (json.attempted < 1) break;
         noProgressRounds = (json.panelistAuditsSucceeded === 0) ? noProgressRounds + 1 : 0;
         if (noProgressRounds >= 2) break;
       }
 
-      if (totalSucceeded + totalNoTranscript + totalFailed === 0) {
+      if (quotaExceeded) {
+        setToast({
+          message: `${totalSucceeded} generated, then the daily AI quota was reached` +
+            (quotaSkipped ? ` (~${quotaSkipped} remaining)` : "") + " — the rest will generate automatically once it resets.",
+          type: totalSucceeded ? "success" : "info",
+        });
+      } else if (totalSucceeded + totalNoTranscript + totalFailed === 0) {
         setToast({ message: "No completed interviews in this date range are missing a Panelist Audit.", type: "info" });
       } else {
         const parts = [`${totalSucceeded} generated`];
