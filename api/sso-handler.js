@@ -200,13 +200,28 @@ async function accountsToken(req, res) {
   const snap = await db.collection("candidates").where("uid", "==", userId).get();
   let candidate = pickOne(snap.docs);
   let fallbackUsed = false;
+  // A genuinely unregistered student (the common case Forms actually hits
+  // at volume — whole cohorts not yet added) used to fail EVERY fallback
+  // below, each of which re-ran its own full `candidates` collection scan:
+  // up to 3 full reads back to back (loose-uid, phone, email) before
+  // concluding "not found". On a large collection that's slow enough to
+  // blow past Forms' own call timeout, which they then report to us as a
+  // 502 ("CLIENT_BACKEND_TOKEN_FETCH_FAILED") even though this endpoint
+  // itself returns a clean 200 — just too slowly. Fetched lazily (only
+  // candidates whose exact-uid lookup above already missed need it at
+  // all) and cached here so every fallback below reuses the SAME one read.
+  let allCandidatesSnap = null;
+  async function getAllCandidates() {
+    if (!allCandidatesSnap) allCandidatesSnap = await db.collection("candidates").get();
+    return allCandidatesSnap;
+  }
   // Firestore's "==" is exact — a UID saved with invisible leading/trailing
   // whitespace, or differing only in case, looks identical to an admin on
   // screen but silently never matches here. Only runs on the already-slow
   // not-found path (never the common case), and only trusts the fallback
   // when it resolves to exactly one candidate, same as the exact match.
   if (!candidate) {
-    const allSnap = await db.collection("candidates").get();
+    const allSnap = await getAllCandidates();
     const loose = allSnap.docs.filter(d => (d.data().uid || "").trim().toLowerCase() === userId.toLowerCase());
     if (loose.length > 0) { candidate = pickOne(loose); fallbackUsed = true; }
 
@@ -258,7 +273,7 @@ async function accountsToken(req, res) {
         }
       }
       if (!candidate) {
-        const allSnap = await db.collection("candidates").get();
+        const allSnap = await getAllCandidates();
         const phoneMatches = allSnap.docs.filter(d => (d.data().phone || "").replace(/\D/g, "").slice(-10) === digits);
         if (phoneMatches.length > 0) {
           candidate = pickOne(phoneMatches);
@@ -288,7 +303,7 @@ async function accountsToken(req, res) {
         healedUid = true;
       }
       if (!candidate) {
-        const allSnap = await db.collection("candidates").get();
+        const allSnap = await getAllCandidates();
         const emailMatches = allSnap.docs.filter(d => (d.data().email || "").trim().toLowerCase() === bodyEmail);
         if (emailMatches.length > 0) {
           candidate = pickOne(emailMatches);
