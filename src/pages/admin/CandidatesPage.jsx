@@ -55,20 +55,17 @@ const NO_TEMPLATE_STATUS = "__no_template__";
 
 // A second pseudo-status, same idea as NO_TEMPLATE_STATUS — "blocked" is
 // never a real interview status, it's derived per (candidate, template)
-// from counting that candidate's own completed/no-show/candidate-cancelled
+// from counting that candidate's own no-show/candidate-cancelled
 // interviews against the template's limit (or this candidate's own
-// override from "Manage Attempts"). Mirrors effectiveMaxAttempts/
-// effectiveMaxNoShows/effectiveMaxCancellations + the blocked checks in
-// api/sso-handler.js EXACTLY (same defaults, same override precedence) so
-// this list can never disagree with what actually stops a candidate from
-// booking — just computed here in bulk instead of one candidate at a time.
+// override from "Manage Attempts"). Mirrors effectiveMaxNoShows/
+// effectiveMaxCancellations + the blocked checks in api/sso-handler.js
+// EXACTLY (same defaults, same override precedence) so this list can
+// never disagree with what actually stops a candidate from booking —
+// just computed here in bulk instead of one candidate at a time.
+// Deliberately excludes the attempt limit — see computeBlocked below for
+// why that one specifically doesn't belong in this "blocked" bucket.
 const BLOCKED_STATUS = "__blocked__";
 
-function effectiveMaxAttempts(templateMaxAttempts, override) {
-  if (override === 0) return null;
-  if (typeof override === "number" && override > 0) return override;
-  return templateMaxAttempts ?? null;
-}
 function effectiveMaxNoShows(templateMaxNoShows, override) {
   if (override === 0) return null;
   if (typeof override === "number" && override > 0) return override;
@@ -88,10 +85,16 @@ function effectiveMaxCancellations(templateMaxCancellations, override) {
 // actually sees there too.
 function computeBlocked(template, tid, candidate, counts) {
   if (!template || !counts) return { blocked: false, blockReason: "" };
-  const maxAttempts = effectiveMaxAttempts(template.maxAttempts, candidate.attemptOverrides?.[tid]);
-  if (maxAttempts != null && counts.attemptsUsed >= maxAttempts) {
-    return { blocked: true, blockReason: `Attempt limit reached (${counts.attemptsUsed}/${maxAttempts})` };
-  }
+  // Deliberately NOT checking effectiveMaxAttempts here, even though the
+  // student dashboard (api/sso-handler.js) does block further booking once
+  // it's reached — attemptsUsed only ever advances via a COMPLETED
+  // interview, so on the very common maxAttempts: 1 template, "attempt
+  // limit reached" is identical to "finished their one attempt
+  // successfully" for EVERY candidate who ever completes it — the normal,
+  // expected outcome, not a problem worth surfacing as "Blocked". No-show
+  // and cancellation limits are the genuinely punitive ones (repeatedly
+  // not showing up / backing out), which is what this view is actually
+  // for.
   const maxNoShows = effectiveMaxNoShows(template.maxNoShows, candidate.noShowOverrides?.[tid]);
   if (maxNoShows != null && counts.noShowCount >= maxNoShows) {
     return { blocked: true, blockReason: `No-show limit reached (${counts.noShowCount}/${maxNoShows})` };
