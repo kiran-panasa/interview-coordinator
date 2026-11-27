@@ -34,6 +34,11 @@ export default function SsoCallbackPage() {
           setError(data.error || "sign_in_failed");
           return;
         }
+        // Same flag CandidatePortal.jsx sets for its own (mobile-OTP/
+        // testing) sign-in path — lets handleSignOut/session-expiry in
+        // StudentDashboardPage.jsx send a student back to wherever they
+        // actually came from, instead of always assuming one or the other.
+        try { sessionStorage.setItem("ic_login_method", "sso"); } catch { /* storage unavailable */ }
         navigate("/student/dashboard", { replace: true });
       } catch {
         setError("network_error");

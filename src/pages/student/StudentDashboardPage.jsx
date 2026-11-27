@@ -47,6 +47,20 @@ const FORMS_ACCOUNTS_LOGIN_URL =
   `${FORMS_ACCOUNTS_URL}/login?client_id=${encodeURIComponent(FORMS_ACCOUNTS_CLIENT_ID)}` +
   `&call_back_url=${encodeURIComponent(FORMS_SSO_LOGIN_URL)}&mode=otp&WINDOW_MODE=IN_APP`;
 
+// Sign-out/session-expiry should send a student back to wherever they
+// actually signed in from — a real student only ever arrives via Forms
+// SSO (SsoCallbackPage.jsx sets "sso"), but this same dashboard is also
+// used to test with directly via /student/portal's mobile-OTP flow
+// (CandidatePortal.jsx sets "otp"), which should land back on that same
+// portal, not Accounts' login. Defaults to the SSO target when the flag
+// is missing (an old session from before this existed, or storage
+// blocked) — the common real-student case.
+function postLogoutRedirectUrl() {
+  let method = "sso";
+  try { method = sessionStorage.getItem("ic_login_method") || "sso"; } catch { /* storage unavailable */ }
+  return method === "otp" ? "/student/portal" : FORMS_ACCOUNTS_LOGIN_URL;
+}
+
 const SEEN_INVITES_KEY = "ic_seen_invites";
 function readSeenInviteIds() {
   try { return new Set(JSON.parse(localStorage.getItem(SEEN_INVITES_KEY) || "[]")); }
@@ -348,7 +362,7 @@ export default function StudentDashboardPage() {
   const loadDashboard = async ({ expandInviteId } = {}) => {
     try {
       const res = await fetch("/api/sso/me", { credentials: "include" });
-      if (res.status === 401) { window.location.href = FORMS_ACCOUNTS_LOGIN_URL; return; }
+      if (res.status === 401) { window.location.href = postLogoutRedirectUrl(); return; }
       const json = await res.json();
       if (!res.ok) { setError(json.error || "load_failed"); setLoading(false); return; }
 
@@ -393,7 +407,7 @@ export default function StudentDashboardPage() {
         headers: { "x-csrf-token": readCookie("ic_student_csrf") },
       });
     } catch { /* sign out locally regardless */ }
-    window.location.href = FORMS_ACCOUNTS_LOGIN_URL;
+    window.location.href = postLogoutRedirectUrl();
   };
 
   const handleSaveResume = async () => {

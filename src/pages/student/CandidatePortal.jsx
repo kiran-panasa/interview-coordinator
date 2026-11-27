@@ -153,6 +153,12 @@ export default function CandidatePortal() {
         setBusy(false);
         return;
       }
+      // Lets the dashboard's own sign-out/session-expiry redirect send a
+      // student back to the right place: this (mobile-OTP/testing) portal
+      // for a session that started here, vs. Accounts' SSO login for one
+      // that came through Forms (see SsoCallbackPage.jsx's own flag, and
+      // StudentDashboardPage.jsx's handleSignOut).
+      try { sessionStorage.setItem("ic_login_method", "otp"); } catch { /* storage unavailable */ }
       navigate("/student/dashboard");
     } catch {
       setMobileOtpError("Verification failed. Please try again.");
