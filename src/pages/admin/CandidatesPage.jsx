@@ -1114,28 +1114,48 @@ export default function CandidatesPage() {
           byTemplate.get(key).push(iv);
         });
 
-        const lines = [];
+        // Same grouping the in-app History modal shows (one block per
+        // template, a heading line, then its attempts oldest-first) —
+        // blank lines between blocks so it reads as sections, not one
+        // run-on paragraph.
+        const blocks = [];
         byTemplate.forEach((entries, tid) => {
           const name = templatesById.get(tid)?.name || tid;
-          [...entries].sort((a, b) => a.attemptNumber - b.attemptNumber).forEach(iv => {
+          const sorted = [...entries].sort((a, b) => a.attemptNumber - b.attemptNumber);
+          const attemptLines = sorted.map(iv => {
             const date = iv.scheduledDate
               ? `${formatDate(iv.scheduledDate)}${iv.scheduledTime ? ` ${formatTimeLabel(iv.scheduledTime)}` : ""}`
               : "no date";
-            lines.push(`${name} — ${ordinalLabel(iv.attemptNumber)} attempt (${date}): ${timelineDetail(iv, "admin")}`);
+            return `  ${ordinalLabel(iv.attemptNumber)} attempt (${date}): ${timelineDetail(iv, "admin")}`;
           });
+          blocks.push([`${name} (${sorted.length} interview${sorted.length === 1 ? "" : "s"})`, ...attemptLines].join("\n"));
         });
+        const historyText = blocks.length ? blocks.join("\n\n") : "No interview history";
 
         return {
-          UID: isSwapped(c) ? c.name : (c.uid || ""),
-          Name: isSwapped(c) ? c.uid : (c.name || ""),
-          Email: c.email || "",
-          History: lines.length ? lines.join("\n") : "No interview history",
+          row: {
+            UID: isSwapped(c) ? c.name : (c.uid || ""),
+            Name: isSwapped(c) ? c.uid : (c.name || ""),
+            Email: c.email || "",
+            History: historyText,
+          },
+          // Used below to size this row tall enough that every line
+          // actually shows — Excel still clips explicit line breaks to
+          // the row's default single-line height otherwise, even though
+          // the breaks are genuinely saved in the cell (that's what made
+          // it look like "one line" before, independent of the data
+          // itself being correct). Kept out of the row object itself —
+          // json_to_sheet includes every property present, header or not.
+          lineCount: historyText.split("\n").length,
         };
       });
 
       const header = ["UID", "Name", "Email", "History"];
-      const ws = XLSX.utils.json_to_sheet(rows, { header });
+      const ws = XLSX.utils.json_to_sheet(rows.map(r => r.row), { header });
       ws["!cols"] = header.map(h => ({ wch: h === "History" ? 90 : h === "UID" ? 16 : 22 }));
+      // Row 0 is the header; data starts at row 1. ~15px per line is
+      // Excel's own default single-line row height.
+      ws["!rows"] = [undefined, ...rows.map(r => ({ hpx: Math.max(20, r.lineCount * 15) }))];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "History");
       XLSX.writeFile(wb, `candidate_history_${new Date().toISOString().slice(0, 10)}.xlsx`);
