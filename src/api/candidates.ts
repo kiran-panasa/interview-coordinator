@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import {
   collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, orderBy, where, limit, startAfter, getCountFromServer,
+  query, orderBy, where, limit, startAfter, getCountFromServer, or, and,
 } from "firebase/firestore";
 import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import type { Candidate } from "../types";
@@ -29,19 +29,29 @@ export async function getCandidatesPage(
   cursor: QueryDocumentSnapshot<DocumentData> | null = null,
   take = 10
 ): Promise<CandidatesPageResult> {
-  const constraints = [] as import("firebase/firestore").QueryConstraint[];
-  // array-contains, not equality — a candidate can now belong to more than
-  // one Program (see Candidate.programs in types.ts). Needs its own
-  // composite index (programs CONTAINS + createdAt DESC), added alongside
-  // the old program== one in firestore.indexes.json rather than replacing
-  // it, since other equality reads of the legacy `program` field still
-  // exist elsewhere until they're migrated too.
-  if (programId) constraints.push(where("programs", "array-contains", programId));
-  constraints.push(orderBy("createdAt", "desc"));
-  if (cursor) constraints.push(startAfter(cursor));
-  constraints.push(limit(take));
+  // OR across both the new programs array AND the legacy single `program`
+  // string (see Candidate.programs / getCandidateProgramIds in
+  // candidatePrograms.ts) — most existing candidates still only have the
+  // old field, never bulk-migrated. Querying array-contains alone (as this
+  // used to) silently missed almost every one of them server-side, well
+  // beyond "badge undercounts slightly": the per-program candidate LIST
+  // itself came back near-empty while client-side code (which already
+  // falls back to the legacy field) showed the real count elsewhere,
+  // producing exactly that contradiction. Each branch already has its own
+  // composite index in firestore.indexes.json (program ASC + createdAt
+  // DESC; programs CONTAINS + createdAt DESC) from before this fix, so no
+  // new index deploy is needed. query()'s typings require a composite
+  // filter to be its own argument (not spread alongside plain where()s),
+  // followed only by non-filter constraints (orderBy/startAfter/limit).
+  const nonFilterConstraints: import("firebase/firestore").QueryNonFilterConstraint[] = [orderBy("createdAt", "desc")];
+  if (cursor) nonFilterConstraints.push(startAfter(cursor));
+  nonFilterConstraints.push(limit(take));
 
-  const snap = await getDocs(query(collection(db, "candidates"), ...constraints));
+  const q = programId
+    ? query(collection(db, "candidates"), or(where("programs", "array-contains", programId), where("program", "==", programId)), ...nonFilterConstraints)
+    : query(collection(db, "candidates"), ...nonFilterConstraints);
+
+  const snap = await getDocs(q);
   const items = snap.docs
     .filter(d => d.data().archived !== true)
     .map(d => ({ id: d.id, ...d.data() } as Candidate));
@@ -61,17 +71,21 @@ export interface CandidateCounts {
 // Cheap (aggregation, ~1 read regardless of collection size) counts for the
 // header/tab badges — lets the default Candidates view stay scoped to a
 // handful of documents without losing accurate "N active" / per-program
-// counts. array-contains/equality filters with no orderBy (programs
-// CONTAINS, archived==) never need a composite index, so this still works
-// with zero index setup even after the programs array migration.
+// counts. Each branch of the OR below is a single-field filter (array-
+// contains or equality, no orderBy), so this needs zero composite indexes —
+// same as before this fix, just now also catching the legacy `program`
+// field (see the comment on the matching OR in getCandidatesPage above:
+// missing it here is what made "Unassigned" wildly overcounted, since it's
+// derived by subtracting these per-program totals from the grand total).
 export async function getCandidateCounts(programIds: string[]): Promise<CandidateCounts> {
   const col = collection(db, "candidates");
+  const byProgramFilter = (id: string) => or(where("programs", "array-contains", id), where("program", "==", id));
   const [totalSnap, archivedSnap, ...programSnaps] = await Promise.all([
     getCountFromServer(query(col)),
     getCountFromServer(query(col, where("archived", "==", true))),
     ...programIds.flatMap(id => [
-      getCountFromServer(query(col, where("programs", "array-contains", id))),
-      getCountFromServer(query(col, where("programs", "array-contains", id), where("archived", "==", true))),
+      getCountFromServer(query(col, byProgramFilter(id))),
+      getCountFromServer(query(col, and(byProgramFilter(id), where("archived", "==", true)))),
     ]),
   ]);
   const byProgram: Record<string, { total: number; archived: number }> = {};
