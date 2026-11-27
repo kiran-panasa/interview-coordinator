@@ -29,6 +29,7 @@ import { usePagination } from "../../hooks/usePagination";
 import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
 import CandidateHistoryModal from "../../features/candidates/CandidateHistoryModal";
 import { getCandidateProgramIds, candidateHasProgram } from "../../utils/candidatePrograms";
+import { timelineDetail } from "../../utils/candidateTimeline";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -187,15 +188,16 @@ function downloadSampleExcel(templates = [], programs = []) {
 // No interviews at all for this template yet -> "not_started".
 async function getLatestTemplateStatus(candidateId, templateId) {
   const list = await getInterviewsForCandidateTemplate(candidateId, templateId).catch(() => []);
-  if (!list.length) return { status: "not_started", attemptNumber: 1 };
+  if (!list.length) return { status: "not_started", attemptNumber: 1, note: "" };
   const sorted = [...list].sort(compareByInterviewDate);
-  let n = 1, attemptNumber = 1, status = sorted[0].status;
+  let n = 1, attemptNumber = 1, status = sorted[0].status, latest = sorted[0];
   for (const iv of sorted) {
     attemptNumber = n;
     status = iv.status;
+    latest = iv;
     if (iv.status === "completed") n++;
   }
-  return { status, attemptNumber };
+  return { status, attemptNumber, note: timelineDetail(latest, "admin") };
 }
 
 // Every assigned template's latest status for one candidate, fetched in
@@ -237,13 +239,18 @@ function computeLatestStatusByPair(interviews) {
   const result = new Map();
   byPair.forEach((list, key) => {
     const sorted = [...list].sort(compareByInterviewDate);
-    let n = 1, attemptNumber = 1, status = sorted[0].status;
+    let n = 1, attemptNumber = 1, status = sorted[0].status, latest = sorted[0];
     for (const iv of sorted) {
       attemptNumber = n;
       status = iv.status;
+      latest = iv;
       if (iv.status === "completed") n++;
     }
-    result.set(key, { status, attemptNumber });
+    // Reuses the exact same "who/why" wording CandidateTimeline/the
+    // admin History modal already show (Cancelled by Admin/Interviewer/
+    // Candidate — "reason", declined, dropped off, etc.) rather than a
+    // second, differently-worded summary of the same fields.
+    result.set(key, { status, attemptNumber, note: timelineDetail(latest, "admin") });
   });
   return result;
 }
@@ -260,6 +267,7 @@ function statusesFromBulkPairMap(candidate, templatesById, pairMap) {
       templateName: templatesById.get(tid)?.name || tid,
       status: found?.status || "not_started",
       attemptNumber: found?.attemptNumber || 1,
+      note: found?.note || "",
     };
   });
 }
@@ -914,19 +922,30 @@ export default function CandidatesPage() {
         `${s.templateName}: ${s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} - ` : ""}${STATUS_LABELS[s.status] || s.status}`
       ).join(" | ");
     };
+    // Same per-template breakdown as Status, but the "who/why" behind it
+    // (cancelled by admin/interviewer/candidate + their reason, declined,
+    // dropped off, etc.) — statusesFromBulkPairMap/getLatestTemplateStatus
+    // both already attach this via timelineDetail, so it's just surfaced
+    // here, not recomputed.
+    const noteText = (c) => {
+      const statuses = statusMap.get(c.id);
+      if (!statuses?.length) return "";
+      return statuses.filter(s => s.note).map(s => `${s.templateName}: ${s.note}`).join(" | ");
+    };
 
     const exportRows = target.map(c => ({
       UID: isSwapped(c) ? c.name : (c.uid || ""),
       Name: isSwapped(c) ? c.uid : (c.name || ""),
       Email: c.email || "",
+      Phone: c.phone || "",
       Program: getCandidateProgramIds(c).map(programName).join(" | "),
       Templates: (c.templateIds || []).map(tid => templatesById.get(tid)?.name).filter(Boolean).join(" | "),
       Status: statusText(c),
-      Phone: c.phone || "",
+      Note: noteText(c),
     }));
-    const header = ["UID", "Name", "Email", "Program", "Templates", "Status", "Phone"];
+    const header = ["UID", "Name", "Email", "Phone", "Program", "Templates", "Status", "Note"];
     const ws = XLSX.utils.json_to_sheet(exportRows, { header });
-    ws["!cols"] = header.map(h => ({ wch: h === "Status" ? 50 : h === "Templates" ? 36 : h === "UID" ? 16 : 22 }));
+    ws["!cols"] = header.map(h => ({ wch: h === "Status" || h === "Note" ? 50 : h === "Templates" ? 36 : h === "UID" ? 16 : 22 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Candidates");
     XLSX.writeFile(wb, `candidates_${new Date().toISOString().slice(0, 10)}.xlsx`);
