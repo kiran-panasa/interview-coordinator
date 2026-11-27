@@ -971,7 +971,18 @@ export default function CandidatesPage() {
             { id: "all",        label: "All",        count: tabCounts ? tabCounts.all : "…" },
             ...programs.map(p => ({ id: p.id, label: p.name, count: tabCounts ? tabCounts.byProgram[p.id] : "…" })),
             { id: "unassigned", label: "Unassigned", count: tabCounts ? tabCounts.unassigned : "…" },
-          ].map(tab => (
+          ].map(tab => ({
+            ...tab,
+            // Once a Status/Template/Date filter narrows the active tab's
+            // own list, its badge should track that — not stay frozen at
+            // the whole-tab total while the table below shows far fewer.
+            // A search query bypasses the active tab entirely (see the
+            // `filtered` useMemo's own comment), so it's excluded here —
+            // candTotal wouldn't mean "this tab" while that's active.
+            count: (tab.id === activeProgram && !search.trim() &&
+              (filterTemplateIds.length > 0 || filterStatuses.length > 0 || !!filterDateFrom || !!filterDateTo))
+              ? candTotal : tab.count,
+          })).map(tab => (
             <button key={tab.id} onClick={() => { setActiveProgram(tab.id); setCandPage(1); }}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px whitespace-nowrap flex-shrink-0 transition-colors ${
                 activeProgram === tab.id
