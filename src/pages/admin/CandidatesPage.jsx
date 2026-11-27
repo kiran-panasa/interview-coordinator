@@ -916,22 +916,39 @@ export default function CandidatesPage() {
       }
     }
 
+    // When a Template filter is active, every column below should only
+    // ever talk about the selected template(s) — a candidate assigned to
+    // 5 templates but filtered down to just "DSA" was still showing every
+    // one of their 5 templates/statuses/notes crammed together, which is
+    // exactly the "so confusing" complaint: the Templates column already
+    // names the template, so repeating "TemplateName: " in Status/Note
+    // once there's only one relevant template is pure noise, not clarity.
+    const relevantTemplateIds = (c) => {
+      const ids = c.templateIds || [];
+      return filterTemplateIds.length ? ids.filter(tid => filterTemplateIds.includes(tid)) : ids;
+    };
+
     const statusText = (c) => {
-      const statuses = statusMap.get(c.id);
-      if (!statuses?.length) return "";
+      const relevant = relevantTemplateIds(c);
+      const statuses = (statusMap.get(c.id) || []).filter(s => relevant.includes(s.templateId));
+      if (!statuses.length) return "";
+      const bare = relevant.length === 1;
       return statuses.map(s =>
-        `${s.templateName}: ${s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} - ` : ""}${STATUS_LABELS[s.status] || s.status}`
+        `${bare ? "" : `${s.templateName}: `}${s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} - ` : ""}${STATUS_LABELS[s.status] || s.status}`
       ).join(" | ");
     };
     // Same per-template breakdown as Status, but the "who/why" behind it
     // (cancelled by admin/interviewer/candidate + their reason, declined,
     // dropped off, etc.) — statusesFromBulkPairMap/getLatestTemplateStatus
     // both already attach this via timelineDetail, so it's just surfaced
-    // here, not recomputed.
+    // here, not recomputed. Left blank (not "no reason") when the
+    // relevant template has no note at all — nothing to show.
     const noteText = (c) => {
-      const statuses = statusMap.get(c.id);
-      if (!statuses?.length) return "";
-      return statuses.filter(s => s.note).map(s => `${s.templateName}: ${s.note}`).join(" | ");
+      const relevant = relevantTemplateIds(c);
+      const statuses = (statusMap.get(c.id) || []).filter(s => relevant.includes(s.templateId) && s.note);
+      if (!statuses.length) return "";
+      const bare = relevant.length === 1;
+      return statuses.map(s => bare ? s.note : `${s.templateName}: ${s.note}`).join(" | ");
     };
 
     const exportRows = target.map(c => ({
@@ -940,7 +957,7 @@ export default function CandidatesPage() {
       Email: c.email || "",
       Phone: c.phone || "",
       Program: getCandidateProgramIds(c).map(programName).join(" | "),
-      Templates: (c.templateIds || []).map(tid => templatesById.get(tid)?.name).filter(Boolean).join(" | "),
+      Templates: relevantTemplateIds(c).map(tid => templatesById.get(tid)?.name).filter(Boolean).join(" | "),
       Status: statusText(c),
       Note: noteText(c),
     }));
@@ -981,7 +998,12 @@ export default function CandidatesPage() {
 
       const rows = [];
       historyTargets.forEach(c => {
-        buildCandidateTimeline(byCandidateId.get(c.id) || []).forEach(iv => {
+        buildCandidateTimeline(byCandidateId.get(c.id) || [])
+          // Same scoping as handleDownload's Status/Note columns — a
+          // Template filter means ONLY that template's history, not every
+          // template this candidate happens to also be assigned to.
+          .filter(iv => !filterTemplateIds.length || filterTemplateIds.includes(iv.templateId))
+          .forEach(iv => {
           rows.push({
             UID: isSwapped(c) ? c.name : (c.uid || ""),
             Name: isSwapped(c) ? c.uid : (c.name || ""),
