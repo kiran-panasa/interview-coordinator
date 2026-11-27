@@ -720,6 +720,17 @@ export default function CandidatesPage() {
     [candidates, showArchived]
   );
 
+  // The "All Templates" filter used to list every template system-wide
+  // regardless of which Program tab was active — picking the Academy tab
+  // still showed NIAT/Edge-only templates mixed in, confusing since most
+  // of them could never match anyone on this tab. Scoped to the active
+  // Program's own templates now; "All"/"Unassigned" keep seeing everything,
+  // since neither of those narrows by a single program.
+  const templateOptionsForTab = useMemo(() => {
+    if (activeProgram === "all" || activeProgram === "unassigned") return templates;
+    return templates.filter(t => t.program === activeProgram);
+  }, [templates, activeProgram]);
+
   // A search query bypasses the active Program tab — otherwise a candidate
   // on a different tab than the one you're viewing silently returns zero
   // results, which reads as "search is broken" rather than "search worked,
@@ -985,7 +996,7 @@ export default function CandidatesPage() {
         </div>
         <div className="w-52">
           <SkillsSelect
-            skills={templates.map(t => ({ id: t.id, name: t.name }))}
+            skills={templateOptionsForTab.map(t => ({ id: t.id, name: t.name }))}
             value={filterTemplateIds}
             onChange={ids => { setFilterTemplateIds(ids); setCandPage(1); }}
             placeholder="All Templates"
