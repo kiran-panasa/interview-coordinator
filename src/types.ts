@@ -386,8 +386,23 @@ export interface Template {
   // this template, from the earliest bookable date (Templates →
   // Lifecycle → "Booking Window"). null/undefined means the platform
   // default (DEFAULT_SELF_BOOK_WINDOW_DAYS, src/constants/templateAttempts.js)
-  // applies. See effectiveSelfBookWindowDays in api/sso-handler.js.
+  // applies in "rolling" mode. See effectiveSelfBookWindowDays in
+  // api/sso-handler.js. In "fixed" mode (selfBookWindowMode below) this is
+  // instead how many days are visible starting from selfBookCycleAnchorWeekday
+  // each week — see computeFixedCycleWindow in src/utils/selfBookWindow.js.
   selfBookWindowDays?: number | null;
+  // "rolling" (default/unset) = today's original behavior: the window
+  // slides forward one day every day, so a student who never books always
+  // sees a fresh selfBookWindowDays-sized block starting tomorrow — nothing
+  // ever actually closes. "fixed" = the window is pinned to a specific
+  // weekday (selfBookCycleAnchorWeekday) and automatically flips to the next
+  // occurrence of that weekday once today crosses it, regardless of when
+  // the template was turned on or looked at — see computeFixedCycleWindow.
+  selfBookWindowMode?: "rolling" | "fixed" | null;
+  // 0 (Sun) - 6 (Sat) — which weekday each week's fixed cycle opens on. Only
+  // read when selfBookWindowMode === "fixed"; null/undefined there falls
+  // back to Sunday (0).
+  selfBookCycleAnchorWeekday?: number | null;
   // Whether a completed interview on this template shows its AI Report and
   // its Final Score to the candidate (Templates → Lifecycle) — independent
   // toggles, so a template can hide one without the other (e.g. show the

@@ -10,7 +10,7 @@ import {
   DEFAULT_CANCEL_LIMIT, DEFAULT_CANCEL_BLOCKED_MESSAGE,
   DEFAULT_SELF_BOOK_WINDOW_DAYS,
 } from "../src/constants/templateAttempts.js";
-import { computeSelfBookWindow, DEFAULT_SELF_BOOK_CUTOFF_TIME } from "../src/utils/selfBookWindow.js";
+import { computeSelfBookWindow, computeFixedCycleWindow, DEFAULT_SELF_BOOK_CUTOFF_TIME } from "../src/utils/selfBookWindow.js";
 
 // Every /api/sso/* route, consolidated into one function — Vercel's Hobby
 // plan caps a deployment at 12 Serverless Functions, and the 7 separate SSO
@@ -97,6 +97,22 @@ function effectiveMaxCancellations(templateMaxCancellations, override) {
 function effectiveSelfBookWindowDays(templateWindowDays) {
   if (typeof templateWindowDays === "number" && templateWindowDays > 0) return templateWindowDays;
   return DEFAULT_SELF_BOOK_WINDOW_DAYS;
+}
+
+// Picks between the two window shapes (see src/utils/selfBookWindow.js) for
+// whichever mode this template is in. "fixed" mode's dateRangeEnd never
+// moves with `now` the way "rolling" mode's does — that's the whole point.
+function computeTemplateSelfBookWindow(template, now, cutoffTime) {
+  if (template?.selfBookWindowMode === "fixed") {
+    const anchorWeekday = typeof template.selfBookCycleAnchorWeekday === "number" ? template.selfBookCycleAnchorWeekday : 0;
+    const windowDays = effectiveSelfBookWindowDays(template.selfBookWindowDays);
+    const { dateRangeStart, dateRangeEnd, closed, nextCycleStart } = computeFixedCycleWindow(now, anchorWeekday, windowDays, cutoffTime);
+    return { dateRangeStart, dateRangeEnd, closed, nextCycleStart };
+  }
+  const { earliestDate } = computeSelfBookWindow(now, cutoffTime);
+  const windowDays = effectiveSelfBookWindowDays(template?.selfBookWindowDays);
+  const dateRangeEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return { dateRangeStart: earliestDate, dateRangeEnd, closed: false, nextCycleStart: null };
 }
 
 export default async function handler(req, res) {
@@ -829,12 +845,12 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   // Same-day booking is never allowed; the cutoff time (Settings -> General
   // -> Self-Book Window, default 5:30 PM IST) decides whether tomorrow is
   // still open (before it) or closed too (at/after it) — see
-  // computeSelfBookWindow. Enforced here, not just in the client's
-  // countdown banner, since that's only ever a courtesy — a stale page
-  // open past the cutoff must not still be able to book tomorrow.
+  // computeSelfBookWindow/computeTemplateSelfBookWindow below. Enforced
+  // here, not just in the client's countdown banner, since that's only
+  // ever a courtesy — a stale page open past the cutoff must not still be
+  // able to book tomorrow.
   const cutoffSnap = await db.collection("settings").doc("selfBookCutoff").get();
   const cutoffTime = cutoffSnap.exists ? (cutoffSnap.data().cutoffTime || DEFAULT_SELF_BOOK_CUTOFF_TIME) : DEFAULT_SELF_BOOK_CUTOFF_TIME;
-  const { earliestDate } = computeSelfBookWindow(new Date(), cutoffTime);
 
   // Defense in depth for the attempt-cap check /me already annotates onto
   // the templates list (limitReached) — covers "they had the dashboard
@@ -921,12 +937,16 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     // silently show a different (wrong) window than what was actually
     // sent. Instead, return a copy with an EFFECTIVE range computed
     // on the fly (never persisted) for the picker to use.
-    const windowDays = effectiveSelfBookWindowDays(capTemplate?.selfBookWindowDays);
-    const minEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const effective = {
+    const win = computeTemplateSelfBookWindow(capTemplate, new Date(), cutoffTime);
+    // A fixed-cycle template currently sitting in its gap (no cycle open
+    // right now) has nothing to widen WITH — leave the existing invite's
+    // own range exactly as it is rather than erroring out: it's likely a
+    // Nudge-sent invite with its own valid window, unrelated to self-book's
+    // cycle being closed, and this reuse path is a convenience, not a gate.
+    const effective = win.closed ? { ...existing } : {
       ...existing,
-      dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < earliestDate) ? earliestDate : existing.dateRangeStart,
-      dateRangeEnd: (!existing.dateRangeEnd || existing.dateRangeEnd < minEnd) ? minEnd : existing.dateRangeEnd,
+      dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < win.dateRangeStart) ? win.dateRangeStart : existing.dateRangeStart,
+      dateRangeEnd: (!existing.dateRangeEnd || existing.dateRangeEnd < win.dateRangeEnd) ? win.dateRangeEnd : existing.dateRangeEnd,
     };
     // Reschedule flow, reusing a pre-existing invite for this template
     // (uncommon, but possible) — best-effort patch so handleConfirmBooking
@@ -975,11 +995,23 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
   } else {
     matchedInterviewerIds = await findSkillMatchedInterviewerIds(db, template.skills);
   }
-  const dateRangeStart = earliestDate;
-  const windowDays = effectiveSelfBookWindowDays(template.selfBookWindowDays);
-  const endDate = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000);
-  const dateRangeEnd = endDate.toISOString().slice(0, 10);
-  const expiresAt = new Date(endDate.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const win = computeTemplateSelfBookWindow(template, new Date(), cutoffTime);
+  // Unlike the "existing invite" reuse path above, there's nothing to fall
+  // back to here — this IS the student initiating a brand-new booking, so
+  // a fixed-cycle template currently in its gap genuinely has no slots to
+  // offer right now. Refuse clearly rather than handing back a draft whose
+  // own dateRangeStart is already past its dateRangeEnd.
+  if (win.closed) {
+    const friendly = new Date(win.nextCycleStart + "T00:00:00+05:30")
+      .toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Kolkata" });
+    return {
+      error: "booking_window_closed",
+      status: 403,
+      message: `Booking for this round isn't open right now — it opens again on ${friendly}.`,
+    };
+  }
+  const { dateRangeStart, dateRangeEnd } = win;
+  const expiresAt = new Date(new Date(dateRangeEnd + "T00:00:00+05:30").getTime() + 24 * 60 * 60 * 1000).toISOString();
 
   return {
     candidate,

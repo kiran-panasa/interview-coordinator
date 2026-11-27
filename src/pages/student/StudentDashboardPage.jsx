@@ -510,6 +510,9 @@ export default function StudentDashboardPage() {
       } else if (json?.error === "cancel_limit_reached") {
         alert(json.message || "You've been blocked from booking this interview due to repeated cancellations.");
         loadDashboard();
+      } else if (json?.error === "booking_window_closed") {
+        alert(json.message || "Booking for this round isn't open right now. Please check back later.");
+        loadDashboard();
       } else {
         // Surfaces the actual failure (e.g. template_not_assigned) instead
         // of a generic message that looks identical whether the request
