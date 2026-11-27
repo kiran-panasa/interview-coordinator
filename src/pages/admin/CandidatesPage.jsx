@@ -40,6 +40,7 @@ const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: 
 
 import { isUUID } from "../../utils/strings";
 import { splitCSVRow } from "../../utils/csv";
+import { DEFAULT_NO_SHOW_LIMIT, DEFAULT_CANCEL_LIMIT } from "../../constants/templateAttempts";
 
 const isSwapped = (c) => isUUID(c.name) && !!c.uid && !isUUID(c.uid);
 
@@ -51,6 +52,56 @@ const isSwapped = (c) => isUUID(c.name) && !!c.uid && !isUUID(c.uid);
 // dropdown's per-option counts sum to LESS than the program tab's own
 // total candidate count.
 const NO_TEMPLATE_STATUS = "__no_template__";
+
+// A second pseudo-status, same idea as NO_TEMPLATE_STATUS — "blocked" is
+// never a real interview status, it's derived per (candidate, template)
+// from counting that candidate's own completed/no-show/candidate-cancelled
+// interviews against the template's limit (or this candidate's own
+// override from "Manage Attempts"). Mirrors effectiveMaxAttempts/
+// effectiveMaxNoShows/effectiveMaxCancellations + the blocked checks in
+// api/sso-handler.js EXACTLY (same defaults, same override precedence) so
+// this list can never disagree with what actually stops a candidate from
+// booking — just computed here in bulk instead of one candidate at a time.
+const BLOCKED_STATUS = "__blocked__";
+
+function effectiveMaxAttempts(templateMaxAttempts, override) {
+  if (override === 0) return null;
+  if (typeof override === "number" && override > 0) return override;
+  return templateMaxAttempts ?? null;
+}
+function effectiveMaxNoShows(templateMaxNoShows, override) {
+  if (override === 0) return null;
+  if (typeof override === "number" && override > 0) return override;
+  if (templateMaxNoShows === 0) return null;
+  if (typeof templateMaxNoShows === "number" && templateMaxNoShows > 0) return templateMaxNoShows;
+  return DEFAULT_NO_SHOW_LIMIT;
+}
+function effectiveMaxCancellations(templateMaxCancellations, override) {
+  if (override === 0) return null;
+  if (typeof override === "number" && override > 0) return override;
+  if (templateMaxCancellations === 0) return null;
+  if (typeof templateMaxCancellations === "number" && templateMaxCancellations > 0) return templateMaxCancellations;
+  return DEFAULT_CANCEL_LIMIT;
+}
+// Checked in the same order the dashboard (api/sso-handler.js) checks it —
+// first exhausted limit wins, since that's the one message a student
+// actually sees there too.
+function computeBlocked(template, tid, candidate, counts) {
+  if (!template || !counts) return { blocked: false, blockReason: "" };
+  const maxAttempts = effectiveMaxAttempts(template.maxAttempts, candidate.attemptOverrides?.[tid]);
+  if (maxAttempts != null && counts.attemptsUsed >= maxAttempts) {
+    return { blocked: true, blockReason: `Attempt limit reached (${counts.attemptsUsed}/${maxAttempts})` };
+  }
+  const maxNoShows = effectiveMaxNoShows(template.maxNoShows, candidate.noShowOverrides?.[tid]);
+  if (maxNoShows != null && counts.noShowCount >= maxNoShows) {
+    return { blocked: true, blockReason: `No-show limit reached (${counts.noShowCount}/${maxNoShows})` };
+  }
+  const maxCancellations = effectiveMaxCancellations(template.maxCancellations, candidate.cancelOverrides?.[tid]);
+  if (maxCancellations != null && counts.cancelCount >= maxCancellations) {
+    return { blocked: true, blockReason: `Cancellation limit reached (${counts.cancelCount}/${maxCancellations})` };
+  }
+  return { blocked: false, blockReason: "" };
+}
 
 // Outline-only variant of Badge.jsx's STATUS_STYLES for the Status column's
 // pills — a filled background behind both the template name AND the status
@@ -188,16 +239,24 @@ function downloadSampleExcel(templates = [], programs = []) {
 // No interviews at all for this template yet -> "not_started".
 async function getLatestTemplateStatus(candidateId, templateId) {
   const list = await getInterviewsForCandidateTemplate(candidateId, templateId).catch(() => []);
-  if (!list.length) return { status: "not_started", attemptNumber: 1, note: "" };
+  if (!list.length) return { status: "not_started", attemptNumber: 1, note: "", attemptsUsed: 0, noShowCount: 0, cancelCount: 0 };
   const sorted = [...list].sort(compareByInterviewDate);
   let n = 1, attemptNumber = 1, status = sorted[0].status, latest = sorted[0];
+  let attemptsUsed = 0, noShowCount = 0, cancelCount = 0;
   for (const iv of sorted) {
     attemptNumber = n;
     status = iv.status;
     latest = iv;
-    if (iv.status === "completed") n++;
+    // Same three tallies the student dashboard itself counts against its
+    // limits (api/sso-handler.js) — completed advances both the attempt
+    // number AND the attempts-used count; no-show/candidate-cancelled
+    // never advance the attempt number (a retry of the same attempt) but
+    // still count toward their own separate limits.
+    if (iv.status === "completed") { n++; attemptsUsed++; }
+    else if (iv.status === "no_show") noShowCount++;
+    else if (iv.status === "cancelled" && iv.cancelledBy === "candidate") cancelCount++;
   }
-  return { status, attemptNumber, note: timelineDetail(latest, "admin") };
+  return { status, attemptNumber, note: timelineDetail(latest, "admin"), attemptsUsed, noShowCount, cancelCount };
 }
 
 // Every assigned template's latest status for one candidate, fetched in
@@ -207,11 +266,15 @@ async function getLatestTemplateStatus(candidateId, templateId) {
 async function getCandidateTemplateStatuses(candidate, templatesById) {
   const assignedIds = candidate.templateIds || [];
   const results = await Promise.all(assignedIds.map(tid => getLatestTemplateStatus(candidate.id, tid)));
-  return assignedIds.map((tid, i) => ({
-    templateId: tid,
-    templateName: templatesById.get(tid)?.name || tid,
-    ...results[i],
-  }));
+  return assignedIds.map((tid, i) => {
+    const template = templatesById.get(tid);
+    return {
+      templateId: tid,
+      templateName: template?.name || tid,
+      ...results[i],
+      ...computeBlocked(template, tid, candidate, results[i]),
+    };
+  });
 }
 
 // Same "only a COMPLETED interview advances the attempt count" rule as
@@ -240,17 +303,20 @@ function computeLatestStatusByPair(interviews) {
   byPair.forEach((list, key) => {
     const sorted = [...list].sort(compareByInterviewDate);
     let n = 1, attemptNumber = 1, status = sorted[0].status, latest = sorted[0];
+    let attemptsUsed = 0, noShowCount = 0, cancelCount = 0;
     for (const iv of sorted) {
       attemptNumber = n;
       status = iv.status;
       latest = iv;
-      if (iv.status === "completed") n++;
+      if (iv.status === "completed") { n++; attemptsUsed++; }
+      else if (iv.status === "no_show") noShowCount++;
+      else if (iv.status === "cancelled" && iv.cancelledBy === "candidate") cancelCount++;
     }
     // Reuses the exact same "who/why" wording CandidateTimeline/the
     // admin History modal already show (Cancelled by Admin/Interviewer/
     // Candidate — "reason", declined, dropped off, etc.) rather than a
     // second, differently-worded summary of the same fields.
-    result.set(key, { status, attemptNumber, note: timelineDetail(latest, "admin") });
+    result.set(key, { status, attemptNumber, note: timelineDetail(latest, "admin"), attemptsUsed, noShowCount, cancelCount });
   });
   return result;
 }
@@ -262,12 +328,15 @@ function statusesFromBulkPairMap(candidate, templatesById, pairMap) {
   const assignedIds = candidate.templateIds || [];
   return assignedIds.map(tid => {
     const found = pairMap.get(`${candidate.id}|${tid}`);
+    const template = templatesById.get(tid);
+    const counts = found || { attemptsUsed: 0, noShowCount: 0, cancelCount: 0 };
     return {
       templateId: tid,
-      templateName: templatesById.get(tid)?.name || tid,
+      templateName: template?.name || tid,
       status: found?.status || "not_started",
       attemptNumber: found?.attemptNumber || 1,
       note: found?.note || "",
+      ...computeBlocked(template, tid, candidate, counts),
     };
   });
 }
@@ -797,7 +866,9 @@ export default function CandidatesPage() {
       // Interview Taken Yet", just because some OTHER template of theirs
       // happened to be cancelled.
       const relevant = filterTemplateIds.length ? statuses?.filter(s => filterTemplateIds.includes(s.templateId)) : statuses;
-      return relevant?.some(s => filterStatuses.includes(s.status));
+      // BLOCKED_STATUS isn't a real interview status — it's the derived
+      // "hit a limit" flag computeBlocked attaches to each entry.
+      return relevant?.some(s => filterStatuses.includes(s.status) || (filterStatuses.includes(BLOCKED_STATUS) && s.blocked));
     });
   }, [filtered, filterStatuses, statusByCandidateId, filterTemplateIds]);
 
@@ -887,6 +958,7 @@ export default function CandidatesPage() {
       const relevant = filterTemplateIds.length ? statuses.filter(s => filterTemplateIds.includes(s.templateId)) : statuses;
       const seen = new Set(relevant.map(s => s.status));
       seen.forEach(status => { counts[status] = (counts[status] || 0) + 1; });
+      if (relevant.some(s => s.blocked)) counts[BLOCKED_STATUS] = (counts[BLOCKED_STATUS] || 0) + 1;
     });
     return counts;
   }, [needsFullList, filtered, statusByCandidateId, filterTemplateIds]);
@@ -959,13 +1031,18 @@ export default function CandidatesPage() {
     // dropped off, etc.) — statusesFromBulkPairMap/getLatestTemplateStatus
     // both already attach this via timelineDetail, so it's just surfaced
     // here, not recomputed. Left blank (not "no reason") when the
-    // relevant template has no note at all — nothing to show.
+    // relevant template has no note at all — nothing to show. When blocked,
+    // leads with WHY (the limit that was hit) ahead of the latest
+    // interview's own note, since that's the actually useful fact here.
     const noteText = (c) => {
       const relevant = relevantTemplateIds(c);
-      const statuses = (statusMap.get(c.id) || []).filter(s => relevant.includes(s.templateId) && s.note);
+      const statuses = (statusMap.get(c.id) || []).filter(s => relevant.includes(s.templateId) && (s.note || s.blocked));
       if (!statuses.length) return "";
       const bare = relevant.length === 1;
-      return statuses.map(s => bare ? s.note : `${s.templateName}: ${s.note}`).join(" | ");
+      return statuses.map(s => {
+        const text = s.blocked ? (s.note ? `${s.blockReason} — ${s.note}` : s.blockReason) : s.note;
+        return bare ? text : `${s.templateName}: ${text}`;
+      }).join(" | ");
     };
 
     const exportRows = target.map(c => ({
@@ -1161,6 +1238,11 @@ export default function CandidatesPage() {
               // assigned a round). Keeping them separate is also what lets
               // every status count add up to the tab's own total.
               { id: NO_TEMPLATE_STATUS, name: `No Templates Assigned${statusCounts ? ` (${statusCounts[NO_TEMPLATE_STATUS] || 0})` : ""}` },
+              // Hit their attempt/no-show/cancellation limit on at least
+              // one (Template-filter-scoped) assigned template — the Note
+              // column shows exactly which limit and the count once this
+              // is picked.
+              { id: BLOCKED_STATUS, name: `Blocked${statusCounts ? ` (${statusCounts[BLOCKED_STATUS] || 0})` : ""}` },
             ]}
             value={filterStatuses}
             onChange={ids => { setFilterStatuses(ids); setCandPage(1); }}
@@ -1273,13 +1355,25 @@ export default function CandidatesPage() {
                       {statusByCandidateId.has(c.id) && (
                         <div className="flex flex-col gap-1 mt-2">
                           {statusByCandidateId.get(c.id).map(s => (
-                            <span key={s.templateId}
-                              className={`inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border bg-white w-fit max-w-full ${STATUS_OUTLINE_STYLES[s.status] || "border-gray-300 text-gray-500"}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[s.status] || "bg-gray-400"}`} />
-                              <span className="truncate opacity-70 font-medium">{s.templateName}:</span>
-                              <span className="font-bold whitespace-nowrap">
-                                {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                            <span key={s.templateId} className="flex items-center gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border bg-white w-fit max-w-full ${STATUS_OUTLINE_STYLES[s.status] || "border-gray-300 text-gray-500"}`}>
+                                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[s.status] || "bg-gray-400"}`} />
+                                <span className="truncate opacity-70 font-medium">{s.templateName}:</span>
+                                <span className="font-bold whitespace-nowrap">
+                                  {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                                </span>
                               </span>
+                              {/* The real status badge above never says
+                                 "Blocked" (that's a derived flag, not a
+                                 status), so filtering to Blocked and then
+                                 seeing e.g. "No Interview Taken Yet" with
+                                 nothing to explain it would look broken. */}
+                              {s.blocked && (
+                                <span title={s.blockReason} className="text-[9px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                  Blocked
+                                </span>
+                              )}
                             </span>
                           ))}
                         </div>
@@ -1368,14 +1462,26 @@ export default function CandidatesPage() {
                            shows it in full) so the eye catches the colored
                            status first. */}
                         {statusByCandidateId.get(c.id).map(s => (
-                          <span key={s.templateId}
-                            title={`${s.templateName}: ${STATUS_LABELS[s.status] || s.status}`}
-                            className={`inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border bg-white w-fit max-w-full ${STATUS_OUTLINE_STYLES[s.status] || "border-gray-300 text-gray-500"}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[s.status] || "bg-gray-400"}`} />
-                            <span className="truncate opacity-70 font-medium">{s.templateName}:</span>
-                            <span className="font-bold whitespace-nowrap">
-                              {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                          <span key={s.templateId} className="flex items-center gap-1">
+                            <span
+                              title={`${s.templateName}: ${STATUS_LABELS[s.status] || s.status}`}
+                              className={`inline-flex items-center gap-1.5 text-[10px] px-1.5 py-0.5 rounded-full border bg-white w-fit max-w-full ${STATUS_OUTLINE_STYLES[s.status] || "border-gray-300 text-gray-500"}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT_COLORS[s.status] || "bg-gray-400"}`} />
+                              <span className="truncate opacity-70 font-medium">{s.templateName}:</span>
+                              <span className="font-bold whitespace-nowrap">
+                                {s.attemptNumber > 1 ? `${ordinalLabel(s.attemptNumber)} — ` : ""}{STATUS_LABELS[s.status] || s.status}
+                              </span>
                             </span>
+                            {/* The real status badge above never says
+                               "Blocked" (that's a derived flag, not a
+                               status), so filtering to Blocked and then
+                               seeing e.g. "No Interview Taken Yet" with
+                               nothing to explain it would look broken. */}
+                            {s.blocked && (
+                              <span title={s.blockReason} className="text-[9px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                Blocked
+                              </span>
+                            )}
                           </span>
                         ))}
                       </div>
