@@ -258,7 +258,20 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
 
   const bookableSlots = computeBookableSlots(invite, slots, busyWindowsByInterviewer, loadByInterviewer);
   const dates = [...new Set(bookableSlots.map(s => s.date))].sort();
-  const activeDate = selectedDate && dates.includes(selectedDate) ? selectedDate : dates[0];
+  // dates[0] (the earliest date the invite's own range technically covers)
+  // can be today or even a past day — same-day booking is never allowed,
+  // and a Nudge invite's admin-set range doesn't shrink as days pass — so
+  // defaulting to it could open straight onto a tab where every slot is
+  // already disabled (isBooked/past). Default to the first date that
+  // actually has something bookable instead; dates[0] is still the
+  // fallback for the (normal) case where every date has at least one.
+  const isSlotBookable = (s) => {
+    if (s.isBooked) return false;
+    const slotStart = parseInterviewStart(s.date, s.time);
+    return slotStart ? slotStart >= new Date() : true;
+  };
+  const firstBookableDate = dates.find(d => bookableSlots.some(s => s.date === d && isSlotBookable(s)));
+  const activeDate = selectedDate && dates.includes(selectedDate) ? selectedDate : (firstBookableDate || dates[0]);
 
   if (dates.length === 0) {
     return (
