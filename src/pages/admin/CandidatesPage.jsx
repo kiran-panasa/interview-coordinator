@@ -914,6 +914,10 @@ export default function CandidatesPage() {
         return;
       }
     }
+    // Checking specific rows (the "Edit Selected" checkboxes) means "just
+    // these", overriding whatever's filtered — same as Edit Selected
+    // itself only ever touches the checked rows, not the whole filtered set.
+    if (selected.size > 0) target = target.filter(c => selected.has(c.id));
     const missing = target.filter(c => !statusByCandidateId.has(c.id));
     let statusMap = statusByCandidateId;
     if (missing.length) {
@@ -983,15 +987,16 @@ export default function CandidatesPage() {
     setDownloading(false);
   };
 
-  // Same filtered candidate set as handleDownload above, but one row per
-  // INTERVIEW ATTEMPT instead of one row per candidate — a student who was
-  // cancelled, then rescheduled, then completed shows all three rows, not
-  // just their latest status. Reuses buildCandidateTimeline (the same data
-  // prep the per-candidate History modal already uses) and timelineDetail
-  // (the same who/why wording as the Note column above), fetched in one
-  // batch across every template any target candidate is assigned to
-  // (getInterviewsForTemplates) rather than one Firestore read per
-  // candidate.
+  // Same filtered candidate set as handleDownload above — ONE ROW PER
+  // CANDIDATE (not per attempt, which made a single student's multiple
+  // attempts read as unrelated rows scattered through the file) — the
+  // full chronological history lives in one "History" cell per candidate,
+  // grouped by template, oldest attempt first within each. Reuses
+  // buildCandidateTimeline (same data prep as the per-candidate History
+  // modal) and timelineDetail (same who/why wording as the Note column
+  // above), fetched in one batch across every template any target
+  // candidate is assigned to (getInterviewsForTemplates) rather than one
+  // Firestore read per candidate.
   const handleDownloadHistory = async () => {
     setDownloadingHistory(true);
     try {
@@ -1000,6 +1005,15 @@ export default function CandidatesPage() {
         const all = await getCandidates();
         historyTargets = all.filter(c => c.archived !== true && (activeProgram === "all" || candidateHasProgram(c, activeProgram)));
       }
+      // Checking specific rows means "just these" — same override as
+      // handleDownload above.
+      if (selected.size > 0) historyTargets = historyTargets.filter(c => selected.has(c.id));
+      if (!historyTargets.length) {
+        setToast({ message: "No candidates match the current selection/filters.", type: "info" });
+        setDownloadingHistory(false);
+        return;
+      }
+
       const allTemplateIds = [...new Set(historyTargets.flatMap(c => c.templateIds || []))];
       const interviews = allTemplateIds.length ? await getInterviewsForTemplates(allTemplateIds) : [];
       const byCandidateId = new Map();
@@ -1009,36 +1023,42 @@ export default function CandidatesPage() {
         byCandidateId.get(iv.candidateId).push(iv);
       });
 
-      const rows = [];
-      historyTargets.forEach(c => {
-        buildCandidateTimeline(byCandidateId.get(c.id) || [])
+      const rows = historyTargets.map(c => {
+        const timeline = buildCandidateTimeline(byCandidateId.get(c.id) || [])
           // Same scoping as handleDownload's Status/Note columns — a
           // Template filter means ONLY that template's history, not every
           // template this candidate happens to also be assigned to.
-          .filter(iv => !filterTemplateIds.length || filterTemplateIds.includes(iv.templateId))
-          .forEach(iv => {
-          rows.push({
-            UID: isSwapped(c) ? c.name : (c.uid || ""),
-            Name: isSwapped(c) ? c.uid : (c.name || ""),
-            Email: c.email || "",
-            Template: templatesById.get(iv.templateId)?.name || iv.templateId || "",
-            Attempt: ordinalLabel(iv.attemptNumber),
-            Date: iv.scheduledDate ? `${formatDate(iv.scheduledDate)}${iv.scheduledTime ? ` ${formatTimeLabel(iv.scheduledTime)}` : ""}` : "",
-            Status: STATUS_LABELS[iv.status] || iv.status,
-            "Who / Reason": timelineDetail(iv, "admin"),
+          .filter(iv => !filterTemplateIds.length || filterTemplateIds.includes(iv.templateId));
+
+        const byTemplate = new Map();
+        timeline.forEach(iv => {
+          const key = iv.templateId || "(no template)";
+          if (!byTemplate.has(key)) byTemplate.set(key, []);
+          byTemplate.get(key).push(iv);
+        });
+
+        const lines = [];
+        byTemplate.forEach((entries, tid) => {
+          const name = templatesById.get(tid)?.name || tid;
+          [...entries].sort((a, b) => a.attemptNumber - b.attemptNumber).forEach(iv => {
+            const date = iv.scheduledDate
+              ? `${formatDate(iv.scheduledDate)}${iv.scheduledTime ? ` ${formatTimeLabel(iv.scheduledTime)}` : ""}`
+              : "no date";
+            lines.push(`${name} — ${ordinalLabel(iv.attemptNumber)} attempt (${date}): ${timelineDetail(iv, "admin")}`);
           });
         });
+
+        return {
+          UID: isSwapped(c) ? c.name : (c.uid || ""),
+          Name: isSwapped(c) ? c.uid : (c.name || ""),
+          Email: c.email || "",
+          History: lines.length ? lines.join("\n") : "No interview history",
+        };
       });
 
-      if (!rows.length) {
-        setToast({ message: "No interview history found for the current filters.", type: "info" });
-        setDownloadingHistory(false);
-        return;
-      }
-
-      const header = ["UID", "Name", "Email", "Template", "Attempt", "Date", "Status", "Who / Reason"];
+      const header = ["UID", "Name", "Email", "History"];
       const ws = XLSX.utils.json_to_sheet(rows, { header });
-      ws["!cols"] = header.map(h => ({ wch: h === "Who / Reason" ? 50 : h === "UID" ? 16 : 22 }));
+      ws["!cols"] = header.map(h => ({ wch: h === "History" ? 90 : h === "UID" ? 16 : 22 }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "History");
       XLSX.writeFile(wb, `candidate_history_${new Date().toISOString().slice(0, 10)}.xlsx`);
