@@ -60,11 +60,16 @@ export default function ScoringRulesModal({ open, onClose, template }) {
       setError("Add at least one Final Status band (or leave normalization/status unconfigured for this template).");
       return;
     }
+    const normalizeNum = normalizeTo.trim() === "" ? null : Number(normalizeTo);
+    if (normalizeNum != null && (!Number.isFinite(normalizeNum) || normalizeNum <= 0)) {
+      setError("Normalize score to must be a positive number, or left blank for the default (out of 5).");
+      return;
+    }
     setSaving(true);
     try {
       await addScoringRuleVersion(template.id, {
         effectiveFrom,
-        normalizeTo: normalizeTo ? Number(normalizeTo) : null,
+        normalizeTo: normalizeNum,
         finalStatusBands: cleanBands,
       }, currentUser?.uid || "");
       const list = await getScoringRuleVersions(template.id);
@@ -94,10 +99,12 @@ export default function ScoringRulesModal({ open, onClose, template }) {
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-1">Normalize score to</label>
-                <select value={normalizeTo} onChange={e => setNormalizeTo(e.target.value)} className={`${inputCls} w-full cursor-pointer`}>
-                  <option value="">Default — out of 5</option>
-                  <option value="100">Out of 100</option>
-                </select>
+                <input
+                  type="number" min="1" step="1" value={normalizeTo}
+                  onChange={e => setNormalizeTo(e.target.value)}
+                  placeholder="Default — out of 5 (e.g. 100, 20, 10…)"
+                  className={`${inputCls} w-full`}
+                />
               </div>
             </div>
 
