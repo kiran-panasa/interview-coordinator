@@ -106,13 +106,16 @@ function computeTemplateSelfBookWindow(template, now, cutoffTime) {
   if (template?.selfBookWindowMode === "fixed") {
     const anchorWeekday = typeof template.selfBookCycleAnchorWeekday === "number" ? template.selfBookCycleAnchorWeekday : 0;
     const windowDays = effectiveSelfBookWindowDays(template.selfBookWindowDays);
-    const { dateRangeStart, dateRangeEnd, closed, nextCycleStart } = computeFixedCycleWindow(now, anchorWeekday, windowDays, cutoffTime);
-    return { dateRangeStart, dateRangeEnd, closed, nextCycleStart };
+    const { cycleStart, dateRangeStart, dateRangeEnd, closed, nextCycleStart } = computeFixedCycleWindow(now, anchorWeekday, windowDays, cutoffTime);
+    return { cycleStart, dateRangeStart, dateRangeEnd, closed, nextCycleStart };
   }
   const { earliestDate } = computeSelfBookWindow(now, cutoffTime);
   const windowDays = effectiveSelfBookWindowDays(template?.selfBookWindowDays);
   const dateRangeEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  return { dateRangeStart: earliestDate, dateRangeEnd, closed: false, nextCycleStart: null };
+  // Rolling mode has no notion of a cycle starting earlier than the
+  // earliest bookable date — cycleStart === dateRangeStart here means the
+  // picker never renders any "already elapsed" placeholder days for it.
+  return { cycleStart: earliestDate, dateRangeStart: earliestDate, dateRangeEnd, closed: false, nextCycleStart: null };
 }
 
 export default async function handler(req, res) {
@@ -947,6 +950,12 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
       ...existing,
       dateRangeStart: (!existing.dateRangeStart || existing.dateRangeStart < win.dateRangeStart) ? win.dateRangeStart : existing.dateRangeStart,
       dateRangeEnd: (!existing.dateRangeEnd || existing.dateRangeEnd < win.dateRangeEnd) ? win.dateRangeEnd : existing.dateRangeEnd,
+      // Only for a self-book-originated invite being resumed — never for a
+      // genuine Nudge-sent one reused via this same path. The picker uses
+      // this purely to render already-elapsed days of the current fixed
+      // cycle as disabled placeholders ("this day existed, you missed it"),
+      // which would be meaningless/wrong on an admin-set Nudge range.
+      ...(existing.selfBooked ? { cycleStart: win.cycleStart } : {}),
     };
     // Reschedule flow, reusing a pre-existing invite for this template
     // (uncommon, but possible) — best-effort patch so handleConfirmBooking
@@ -1010,7 +1019,7 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
       message: `Booking for this round isn't open right now — it opens again on ${friendly}.`,
     };
   }
-  const { dateRangeStart, dateRangeEnd } = win;
+  const { dateRangeStart, dateRangeEnd, cycleStart } = win;
   const expiresAt = new Date(new Date(dateRangeEnd + "T00:00:00+05:30").getTime() + 24 * 60 * 60 * 1000).toISOString();
 
   return {
@@ -1018,7 +1027,7 @@ async function resolveSelfBookTarget(db, session, templateId, replacingInterview
     draft: {
       templateId, templateName: template.name, program: template.program || candidate.program || "",
       round: template.name, duration: template.durationMinutes || 60,
-      dateRangeStart, dateRangeEnd, expiresAt,
+      dateRangeStart, dateRangeEnd, cycleStart, expiresAt,
       ...(matchedInterviewerIds ? { interviewerIds: matchedInterviewerIds } : {}),
       ...(replacingInterviewId ? { replacingInterviewId } : {}),
       ...(rescheduleReason ? { rescheduleReason } : {}),
@@ -1061,7 +1070,7 @@ async function selfBookStart(req, res) {
     const inv = result.existing;
     return res.status(200).json({
       inviteId: inv.id, templateId, templateName: inv.templateName, duration: inv.duration,
-      dateRangeStart: inv.dateRangeStart, dateRangeEnd: inv.dateRangeEnd,
+      dateRangeStart: inv.dateRangeStart, dateRangeEnd: inv.dateRangeEnd, cycleStart: inv.cycleStart,
       interviewerIds: inv.interviewerIds || null,
       replacingInterviewId: inv.replacingInterviewId || null,
     });

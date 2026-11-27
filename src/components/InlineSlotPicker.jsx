@@ -273,6 +273,27 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   const firstBookableDate = dates.find(d => bookableSlots.some(s => s.date === d && isSlotBookable(s)));
   const activeDate = selectedDate && dates.includes(selectedDate) ? selectedDate : (firstBookableDate || dates[0]);
 
+  // A fixed-cycle self-book invite's cycleStart (see computeFixedCycleWindow,
+  // api/sso-handler.js) can sit earlier than dateRangeStart/dates[0] — e.g.
+  // the cycle opened Sunday but today is already Wednesday. Those earlier
+  // days never get real slot data (dateRangeStart is where the actual
+  // Firestore query starts), but showing nothing for them makes the window
+  // look like it only ever had a couple of days, instead of "this week's
+  // full window, most of which has already gone by." Rendered as disabled
+  // placeholders — never selectable, never affects which date is active.
+  // Absent for a Nudge-sent invite or a rolling-mode one (no cycleStart, or
+  // cycleStart === dateRangeStart) — nothing extra renders for those.
+  const elapsedDates = [];
+  if (invite?.cycleStart && dates.length && invite.cycleStart < dates[0]) {
+    let d = invite.cycleStart;
+    while (d < dates[0]) {
+      elapsedDates.push(d);
+      const dt = new Date(d + "T00:00:00Z");
+      dt.setUTCDate(dt.getUTCDate() + 1);
+      d = dt.toISOString().slice(0, 10);
+    }
+  }
+
   if (dates.length === 0) {
     return (
       <div className="space-y-3">
@@ -307,20 +328,24 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
          separate pickers (which date vs which time) rather than one
          continuous group. */}
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
-        {dates.map(d => {
+        {[...elapsedDates.map(d => ({ d, elapsed: true })), ...dates.map(d => ({ d, elapsed: false }))].map(({ d, elapsed }) => {
           const dt = new Date(d + "T12:00:00");
           const todayStr    = new Date().toISOString().slice(0, 10);
           const tomorrowStr = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
           const dayLabel = d === todayStr ? "Today" : d === tomorrowStr ? "Tomorrow" : dt.toLocaleDateString("en-US", { weekday: "short" });
-          const isActive = d === activeDate;
+          const isActive = !elapsed && d === activeDate;
           return (
-            <button key={d} onClick={() => { setSelectedDate(d); setSelected(null); }}
+            <button key={d} type="button" disabled={elapsed}
+              onClick={() => { if (!elapsed) { setSelectedDate(d); setSelected(null); } }}
+              title={elapsed ? "This day has already passed — no longer bookable" : undefined}
               className={`flex-shrink-0 flex flex-col items-center justify-center w-16 py-2.5 rounded-[1.75rem] border-2 transition-all ${
-                isActive ? "bg-violet-600 border-violet-600 text-white shadow-md" : "bg-white border-gray-100 text-gray-600 hover:border-violet-300"
+                elapsed
+                  ? "bg-gray-50 border-gray-100 text-gray-300 cursor-not-allowed"
+                  : isActive ? "bg-violet-600 border-violet-600 text-white shadow-md" : "bg-white border-gray-100 text-gray-600 hover:border-violet-300"
               }`}>
-              <span className={`text-[10px] font-semibold uppercase tracking-wide ${isActive ? "text-white/80" : "text-gray-400"}`}>{dayLabel}</span>
+              <span className={`text-[10px] font-semibold uppercase tracking-wide ${isActive ? "text-white/80" : elapsed ? "text-gray-300" : "text-gray-400"}`}>{dayLabel}</span>
               <span className="text-lg font-bold leading-tight mt-0.5">{dt.getDate()}</span>
-              <span className={`text-[10px] font-semibold ${isActive ? "text-white/80" : "text-gray-400"}`}>{dt.toLocaleDateString("en-US", { month: "short" })}</span>
+              <span className={`text-[10px] font-semibold ${isActive ? "text-white/80" : elapsed ? "text-gray-300" : "text-gray-400"}`}>{dt.toLocaleDateString("en-US", { month: "short" })}</span>
             </button>
           );
         })}
