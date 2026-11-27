@@ -11,6 +11,7 @@ import { getCandidates } from "./candidates";
 import { getPrograms } from "./programs";
 import { getInterviewIntegrity } from "./interviewIntegrity";
 import { withIntegrityDomain, attachDescriptors } from "../utils/templateEngine";
+import { getActiveScoringRule, computeScoringFields } from "./scoringRules";
 import type { Interview, InterviewStatus, InterviewHistoryEntry, Candidate, Program } from "../types";
 
 interface FeedbackQuestion {
@@ -598,8 +599,30 @@ async function completeInterview(
   status: "completed" | "partially_completed",
   extraFields: Record<string, unknown> = {}
 ): Promise<void> {
-  await updateDoc(doc(db, "interviews", id), {
+  const ref = doc(db, "interviews", id);
+  // Computed exactly once, right here, and frozen onto the interview from
+  // here on — see the normalizedScore/finalStatus comment in types.ts for
+  // why this must never be re-derived later from whatever the template's
+  // rules happen to say "today". Reads the existing doc because
+  // extraFields doesn't always carry a fresh feedback object (the
+  // interviewer's own "Mark as Completed" button calls this with none —
+  // feedback was already saved moments earlier by a separate submitFeedback
+  // call) — this is the one place that has to work either way.
+  let scoringFields: Record<string, unknown> = {};
+  if (status === "completed") {
+    const snap = await getDoc(ref);
+    const existing = (snap.exists() ? snap.data() : {}) as Interview;
+    const incomingFeedback = (extraFields as { feedback?: { finalVerdict?: number | null } }).feedback;
+    const finalVerdict = incomingFeedback?.finalVerdict ?? existing.feedback?.finalVerdict;
+    const templateId = existing.templateId;
+    if (finalVerdict != null && templateId) {
+      const rule = await getActiveScoringRule(templateId);
+      if (rule) scoringFields = computeScoringFields(finalVerdict, rule);
+    }
+  }
+  await updateDoc(ref, {
     ...extraFields,
+    ...scoringFields,
     status,
     aiReportPending: true,
     aiReportPendingSince: new Date().toISOString(),

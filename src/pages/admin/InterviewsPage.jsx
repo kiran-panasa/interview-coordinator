@@ -2500,14 +2500,14 @@ export default function InterviewsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-100 bg-gray-50/60">
-              {["Candidate", "Interviewer", "Template", "Round", "Date & Time", "Meet", "Status", ""].map(h => (
+              {["Candidate", "Interviewer", "Template", "Round", "Date & Time", "Meet", "Status", "Normalized Score", "Final Status", ""].map(h => (
                 <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
             {filtered.length === 0 ? (
-              <tr><td colSpan={8} className="py-16">
+              <tr><td colSpan={10} className="py-16">
                 <div className="flex flex-col items-center gap-2 text-gray-400">
                   <Inbox className="w-8 h-8 text-gray-300" />
                   <p className="text-sm">No interviews found</p>
@@ -2661,6 +2661,22 @@ export default function InterviewsPage() {
                       </p>
                     );
                   })()}
+                </td>
+                <td className="px-4 py-3 text-xs">
+                  {/* Computed once at completion time from whichever Scoring
+                     Rule version was active for this template that day
+                     (Templates → Lifecycle → Final Score & Status) — never
+                     recomputed later even if that template's rules change
+                     afterward. Blank whenever no rule existed yet, or this
+                     template was never configured for normalization. */}
+                  {iv.normalizedScore != null
+                    ? <span className="font-semibold text-gray-700">{iv.normalizedScore}</span>
+                    : <span className="text-gray-300">—</span>}
+                </td>
+                <td className="px-4 py-3 text-xs">
+                  {iv.finalStatus
+                    ? <span className="font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-full px-2 py-0.5 whitespace-nowrap">{iv.finalStatus}</span>
+                    : <span className="text-gray-300">—</span>}
                 </td>
                 <td className="px-4 py-3 w-12">
                   <KebabMenu actions={[

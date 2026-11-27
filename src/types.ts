@@ -450,6 +450,36 @@ export interface Template {
   updatedAt?: string;
 }
 
+// One "version" of a template's scoring rules — stored at
+// interviewTemplates/{templateId}/scoringRules/{id}, never edited in place
+// once created (see addScoringRuleVersion in src/api/scoringRules.ts). A
+// change always creates a NEW version effective from a chosen date forward;
+// every version that ever existed stays exactly as it was, which is what
+// gives getActiveScoringRule's "whichever version was active on date X" a
+// real history to look up instead of one mutable current setting.
+export interface ScoringRuleVersion {
+  id: string;
+  templateId: string;
+  // "YYYY-MM-DD" — this version is the active one for every interview
+  // completed on or after this date, up until a later version's own
+  // effectiveFrom. The version with the latest effectiveFrom <= today is
+  // "current"; a version is never deleted, only superseded.
+  effectiveFrom: string;
+  // null/undefined = finalVerdict is shown as-is, out of 5 (today's
+  // behavior everywhere else in the app). A number (e.g. 100) means the
+  // Interviews page's Normalized Score column shows finalVerdict scaled to
+  // that max instead — purely a display value; finalVerdict itself (the
+  // panelist's raw score) is never altered.
+  normalizeTo?: number | null;
+  // Ordered, non-overlapping ranges evaluated against finalVerdict's
+  // PERCENTAGE of 5 (e.g. finalVerdict 3.5 -> 70%) regardless of
+  // normalizeTo, so bands stay meaningful even for a template that isn't
+  // normalized for display. First matching range wins.
+  finalStatusBands: { min: number; max: number; label: string }[];
+  createdAt: string;
+  createdBy: string;
+}
+
 // ── Questions ─────────────────────────────────────────────────────────────────
 
 export type Difficulty = "easy" | "medium" | "hard";
@@ -733,6 +763,22 @@ export interface Interview {
   questionRemarks?: Record<string, string>;
   feedback?: Feedback;
   feedbackDraft?: (Record<string, unknown> & { savedAt: string }) | null;
+  // Computed ONCE, at the same moment feedback.finalVerdict is finalized
+  // (completeInterview in api/interviews.ts), from whichever ScoringRule
+  // version was active that day for this interview's template — never
+  // recomputed afterward, even if the template's rules change later. This
+  // is deliberate: an interview scored 3 months ago must keep showing
+  // whatever its own rules said at the time, not get silently reinterpreted
+  // under today's rules. finalVerdict itself (the panelist's raw out-of-5
+  // score) is never touched by any of this.
+  normalizedScore?: number | null;
+  finalStatus?: string | null;
+  // Which version produced the two fields above — lets an admin trace
+  // exactly which rule was in force, even long after that version is no
+  // longer the active one. Absent entirely when no ScoringRule exists yet
+  // for the template (normalizedScore/finalStatus are also absent then).
+  scoringRuleVersionId?: string;
+  scoringComputedAt?: string;
   meetLink?: string;
   eventId?: string;
   // Set whenever scheduleInterviewMeet's Apps Script call reports it

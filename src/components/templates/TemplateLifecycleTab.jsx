@@ -1,11 +1,12 @@
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, CheckCircle2 } from "lucide-react";
+import { Search, CheckCircle2, BarChart3 } from "lucide-react";
 import { useTemplates, usePrograms, QK } from "../../hooks/queries";
 import { updateTemplate } from "../../api/firestore";
 import { Skeleton } from "../Skeleton";
 import { DEFAULT_HIDDEN_SCORE_MESSAGE, DEFAULT_NO_SHOW_LIMIT, DEFAULT_CANCEL_LIMIT, DEFAULT_SELF_BOOK_WINDOW_DAYS } from "../../constants/templateAttempts";
 import { RUBRIC_OPTIONS } from "../../constants/panelistAuditRubricDefaults";
+import ScoringRulesModal from "../../features/templates/ScoringRulesModal";
 
 // Three states, student visibility is the only thing any of them touch —
 // see the `status` field's comment in types.ts. Nothing here ever affects
@@ -66,6 +67,7 @@ export default function TemplateLifecycleTab() {
   const [maxCancelsDraft,   setMaxCancelsDraft]   = useState({});
   const [cancelMessageDraft, setCancelMessageDraft] = useState({});
   const [windowDaysDraft,  setWindowDaysDraft]  = useState({});
+  const [scoringModalTemplate, setScoringModalTemplate] = useState(null);
 
   const programName = (id) => programs.find(p => p.id === id)?.name || "";
   const statusOf = (t) => t.status || "active";
@@ -259,7 +261,7 @@ export default function TemplateLifecycleTab() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Cancel Limit", "Booking Window", "AI Report & Score", "Panelist Audit Rubric", ""].map(h => (
+                {["Template", "Program", "Status", "Attempt Limit", "No-Show Limit", "Cancel Limit", "Booking Window", "AI Report & Score", "Panelist Audit Rubric", "Final Score & Status", ""].map(h => (
                   <th key={h} className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 py-3">{h}</th>
                 ))}
               </tr>
@@ -502,6 +504,18 @@ export default function TemplateLifecycleTab() {
                         {RUBRIC_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
                       </select>
                     </td>
+                    <td className="px-4 py-3 align-top min-w-[9rem]">
+                      {/* Normalized Score / Final Status columns live on the
+                         Interviews page only (per-interview, computed and
+                         frozen once at completion time) — this button just
+                         manages the per-template RULES those columns read,
+                         same teal accent family as Booking Window/Panelist
+                         Audit Rubric since it's the same kind of config. */}
+                      <button type="button" onClick={() => setScoringModalTemplate(t)}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded-lg px-2.5 py-1.5 hover:bg-teal-100 transition-colors">
+                        <BarChart3 className="w-3.5 h-3.5" /> Manage
+                      </button>
+                    </td>
                     <td className="px-4 py-3 w-10">
                       {savingId === t.id && <span className="text-[11px] text-gray-400">Saving…</span>}
                       {savedId === t.id && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
@@ -514,6 +528,12 @@ export default function TemplateLifecycleTab() {
           </div>
         )}
       </div>
+
+      <ScoringRulesModal
+        open={!!scoringModalTemplate}
+        onClose={() => setScoringModalTemplate(null)}
+        template={scoringModalTemplate}
+      />
     </div>
   );
 }
