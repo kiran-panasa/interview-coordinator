@@ -109,13 +109,15 @@ function computeTemplateSelfBookWindow(template, now, cutoffTime) {
     const { cycleStart, dateRangeStart, dateRangeEnd, closed, nextCycleStart } = computeFixedCycleWindow(now, anchorWeekday, windowDays, cutoffTime);
     return { cycleStart, dateRangeStart, dateRangeEnd, closed, nextCycleStart };
   }
-  const { earliestDate } = computeSelfBookWindow(now, cutoffTime);
+  const { earliestDate, todayIso } = computeSelfBookWindow(now, cutoffTime);
   const windowDays = effectiveSelfBookWindowDays(template?.selfBookWindowDays);
   const dateRangeEnd = new Date(new Date(earliestDate + "T00:00:00+05:30").getTime() + windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  // Rolling mode has no notion of a cycle starting earlier than the
-  // earliest bookable date — cycleStart === dateRangeStart here means the
-  // picker never renders any "already elapsed" placeholder days for it.
-  return { cycleStart: earliestDate, dateRangeStart: earliestDate, dateRangeEnd, closed: false, nextCycleStart: null };
+  // Rolling mode has no earlier "cycle" to reveal, but same-day booking is
+  // still never allowed — today itself sits right before dateRangeStart,
+  // so cycleStart = today (not dateRangeStart) gets the picker to show it
+  // as a disabled placeholder too, same treatment as fixed mode's elapsed
+  // days, instead of the date strip just silently starting at "Tomorrow".
+  return { cycleStart: todayIso, dateRangeStart: earliestDate, dateRangeEnd, closed: false, nextCycleStart: null };
 }
 
 export default async function handler(req, res) {

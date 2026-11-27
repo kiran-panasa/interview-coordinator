@@ -273,16 +273,18 @@ export default function InlineSlotPicker({ invite, onBooked, ensureInvite }) {
   const firstBookableDate = dates.find(d => bookableSlots.some(s => s.date === d && isSlotBookable(s)));
   const activeDate = selectedDate && dates.includes(selectedDate) ? selectedDate : (firstBookableDate || dates[0]);
 
-  // A fixed-cycle self-book invite's cycleStart (see computeFixedCycleWindow,
-  // api/sso-handler.js) can sit earlier than dateRangeStart/dates[0] — e.g.
-  // the cycle opened Sunday but today is already Wednesday. Those earlier
-  // days never get real slot data (dateRangeStart is where the actual
-  // Firestore query starts), but showing nothing for them makes the window
-  // look like it only ever had a couple of days, instead of "this week's
-  // full window, most of which has already gone by." Rendered as disabled
-  // placeholders — never selectable, never affects which date is active.
-  // Absent for a Nudge-sent invite or a rolling-mode one (no cycleStart, or
-  // cycleStart === dateRangeStart) — nothing extra renders for those.
+  // A self-book invite's cycleStart (see computeTemplateSelfBookWindow,
+  // api/sso-handler.js) always sits at or before dateRangeStart/dates[0] —
+  // for a fixed-cycle template it's the cycle's real opening day (e.g.
+  // Sunday, even if today is already Wednesday); for a rolling one it's
+  // just today itself, since same-day booking is never allowed either way.
+  // Those earlier days never get real slot data (dateRangeStart is where
+  // the actual Firestore query starts), but showing nothing for them makes
+  // the window look narrower than it really is, or makes the strip jump
+  // straight to "Tomorrow" with no visible "today" to anchor against.
+  // Rendered as disabled placeholders — never selectable, never affects
+  // which date is active. Absent for a Nudge-sent invite (no cycleStart at
+  // all) — nothing extra renders for those.
   const elapsedDates = [];
   if (invite?.cycleStart && dates.length && invite.cycleStart < dates[0]) {
     let d = invite.cycleStart;
