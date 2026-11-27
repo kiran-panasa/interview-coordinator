@@ -1,8 +1,14 @@
 import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Printer, FileText, Users2 } from "lucide-react";
+import { Printer, FileText, Users2, BookOpenCheck, ExternalLink } from "lucide-react";
 import { useAuth } from "../../AuthContext";
 import Button from "../../components/Button";
+
+// Live, searchable FAQ/checklist for the whole app — editable by whoever has
+// Editor access on the page itself (Share menu there, separate from this
+// app's own admin roles). Kept as one constant so updating the link later is
+// a one-line change here, not a hunt through the JSX below.
+const HANDBOOK_URL = "https://claude.ai/artifact/1VoHp7UuYwz7WKcHJp6LaR";
 
 // ── Print helpers ──────────────────────────────────────────────────────────────
 
@@ -372,7 +378,7 @@ export default function AboutPage() {
 
       {/* ── What is this? ── */}
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
-        className="bg-gray-50 border border-gray-100 rounded-[1.75rem] p-5 mb-8 text-sm text-gray-600 leading-relaxed">
+        className="bg-gray-50 border border-gray-100 rounded-[1.75rem] p-5 mb-5 text-sm text-gray-600 leading-relaxed">
         <p>
           <strong className="text-gray-900">Interview Coordinator</strong> is NxtWave's internal operations tool for managing the full interview lifecycle —
           from configuring structured evaluation templates and building a central question bank, to sending scheduling invites to candidates,
@@ -383,6 +389,25 @@ export default function AboutPage() {
           The app is built on React + Firebase and deployed on Vercel.
         </p>
       </motion.div>
+
+      {/* ── Team Handbook callout ── */}
+      <motion.a
+        href={HANDBOOK_URL} target="_blank" rel="noreferrer"
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.08 }}
+        className="print-hide group flex items-center gap-4 bg-brand-600 hover:bg-brand-700 transition-colors rounded-[1.75rem] p-5 mb-8 text-white"
+      >
+        <div className="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center flex-shrink-0">
+          <BookOpenCheck className="w-5 h-5" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold flex items-center gap-1.5">
+            Open the Team Handbook <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+          </p>
+          <p className="text-xs text-white/75 mt-0.5">
+            A live, searchable FAQ/checklist covering every section of the app — what to click, in what order, for every task. Editable by admins directly on the page.
+          </p>
+        </div>
+      </motion.a>
 
       {/* ── How it works (admin only) ── */}
       {!isContent && (
