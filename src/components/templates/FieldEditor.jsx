@@ -124,9 +124,15 @@ function FieldItem({ field, index = 0, isFirst, isLast, onUpdate, onDelete, onMo
       {/* Label gets its own row on mobile — on one line, 5 sibling controls
          (weight, type select, Options, delete, move arrows) left the
          flex-1 label input squeezed to near-zero width, making the field
-         name invisible on a phone. */}
+         name invisible on a phone. That squeeze happened on desktop too:
+         this wrapper had no flex-1/grow of its own, so the outer row's two
+         top-level children (this one, and the fixed-width controls group)
+         both sized to their natural content width instead of this one
+         actually claiming the row's available space — the inner input's
+         own flex-1 only matters relative to THIS wrapper, which was never
+         told to grow in the first place. */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-3 py-2.5">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <div className="flex flex-col gap-0 flex-shrink-0">
             <button type="button" disabled={isFirst} onClick={() => onMove("up")}
               className="text-gray-300 hover:text-gray-600 disabled:opacity-20 leading-none rounded hover:bg-gray-100 transition-colors">
