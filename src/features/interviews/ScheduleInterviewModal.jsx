@@ -6,6 +6,8 @@ import DatePicker from "../../components/DatePicker";
 import TimePicker from "../../components/TimePicker";
 import SearchableSelect from "../../components/SearchableSelect";
 import { formatTimeLabel } from "../../utils/dates";
+import { getInterviewsForCandidateTemplate } from "../../api/interviews";
+import { computeBlocked, countAttemptsNoShowsCancellations } from "../../utils/candidateBlocking";
 
 const OTHER_VALUE = "__other__";
 
@@ -64,6 +66,31 @@ export default function ScheduleInterviewModal({
     if (open) setCustomRound(!!form.round && !roundNames.includes(form.round));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editTarget]);
+
+  // Admins can always schedule past a candidate's attempt/no-show/cancel
+  // limit (by design — that's the whole point of being able to override
+  // the self-book flow), but it was happening silently with no indication
+  // the candidate was already blocked. This just surfaces it so it's a
+  // deliberate choice, not an invisible side effect — it never prevents
+  // saving. Skipped when editing an already-scheduled interview (editTarget)
+  // — this interview IS the one being evaluated, so re-warning about it
+  // against its own template is noise, not useful.
+  const [blockWarning, setBlockWarning] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    setBlockWarning("");
+    if (editTarget || !form.candidateId || !form.templateId) return;
+    const candidate = candidates.find(c => c.id === form.candidateId);
+    const template = templates.find(t => t.id === form.templateId);
+    if (!candidate || !template) return;
+    getInterviewsForCandidateTemplate(form.candidateId, form.templateId).then(list => {
+      if (cancelled) return;
+      const counts = countAttemptsNoShowsCancellations(list);
+      const { blocked, blockReason } = computeBlocked(template, form.templateId, candidate, counts);
+      if (blocked) setBlockWarning(blockReason);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [editTarget, form.candidateId, form.templateId, candidates, templates]);
 
   return (
     <Modal open={open} onClose={onClose}
@@ -197,6 +224,12 @@ export default function ScheduleInterviewModal({
               </optgroup>
             )}
           </select>
+          {blockWarning && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              This candidate is already blocked for this template — {blockWarning.toLowerCase()}. Scheduling anyway will create another attempt.
+            </p>
+          )}
         </div>
 
         <div className="flex gap-3 pt-2">

@@ -40,7 +40,7 @@ const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: 
 
 import { isUUID } from "../../utils/strings";
 import { splitCSVRow } from "../../utils/csv";
-import { DEFAULT_NO_SHOW_LIMIT, DEFAULT_CANCEL_LIMIT } from "../../constants/templateAttempts";
+import { computeBlocked } from "../../utils/candidateBlocking";
 
 const isSwapped = (c) => isUUID(c.name) && !!c.uid && !isUUID(c.uid);
 
@@ -63,49 +63,13 @@ const NO_TEMPLATE_STATUS = "__no_template__";
 // this list can never disagree with what actually stops a candidate from
 // booking — just computed here in bulk instead of one candidate at a time.
 const BLOCKED_STATUS = "__blocked__";
-
-function effectiveMaxAttempts(templateMaxAttempts, override) {
-  if (override === 0) return null;
-  if (typeof override === "number" && override > 0) return override;
-  return templateMaxAttempts ?? null;
-}
-function effectiveMaxNoShows(templateMaxNoShows, override) {
-  if (override === 0) return null;
-  if (typeof override === "number" && override > 0) return override;
-  if (templateMaxNoShows === 0) return null;
-  if (typeof templateMaxNoShows === "number" && templateMaxNoShows > 0) return templateMaxNoShows;
-  return DEFAULT_NO_SHOW_LIMIT;
-}
-function effectiveMaxCancellations(templateMaxCancellations, override) {
-  if (override === 0) return null;
-  if (typeof override === "number" && override > 0) return override;
-  if (templateMaxCancellations === 0) return null;
-  if (typeof templateMaxCancellations === "number" && templateMaxCancellations > 0) return templateMaxCancellations;
-  return DEFAULT_CANCEL_LIMIT;
-}
-// Checked in the same order the dashboard (api/sso-handler.js) checks it —
-// first exhausted limit wins, since that's the one message a student
-// actually sees there too. Attempt limit included once more (reversing
-// the earlier "exclude it" change) — a template set to 1 attempt means
-// exactly that: once they've completed it, they're genuinely blocked from
-// booking it again, which is correct to surface here even though it also
-// means every normal single-attempt completion counts as "blocked".
-function computeBlocked(template, tid, candidate, counts) {
-  if (!template || !counts) return { blocked: false, blockReason: "" };
-  const maxAttempts = effectiveMaxAttempts(template.maxAttempts, candidate.attemptOverrides?.[tid]);
-  if (maxAttempts != null && counts.attemptsUsed >= maxAttempts) {
-    return { blocked: true, blockReason: `Attempt limit reached (${counts.attemptsUsed}/${maxAttempts})` };
-  }
-  const maxNoShows = effectiveMaxNoShows(template.maxNoShows, candidate.noShowOverrides?.[tid]);
-  if (maxNoShows != null && counts.noShowCount >= maxNoShows) {
-    return { blocked: true, blockReason: `No-show limit reached (${counts.noShowCount}/${maxNoShows})` };
-  }
-  const maxCancellations = effectiveMaxCancellations(template.maxCancellations, candidate.cancelOverrides?.[tid]);
-  if (maxCancellations != null && counts.cancelCount >= maxCancellations) {
-    return { blocked: true, blockReason: `Cancellation limit reached (${counts.cancelCount}/${maxCancellations})` };
-  }
-  return { blocked: false, blockReason: "" };
-}
+// effectiveMaxAttempts/NoShows/Cancellations + computeBlocked now live in
+// ../../utils/candidateBlocking (shared with ScheduleInterviewModal.jsx's
+// admin-scheduling warning) — same override precedence/defaults as the
+// real enforcement in api/sso-handler.js. Attempt limit is included: a
+// template set to 1 attempt means exactly that, once completed they're
+// genuinely blocked from booking it again, even though that also means
+// every normal single-attempt completion counts as "blocked" here.
 
 // Outline-only variant of Badge.jsx's STATUS_STYLES for the Status column's
 // pills — a filled background behind both the template name AND the status
