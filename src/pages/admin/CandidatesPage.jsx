@@ -13,7 +13,7 @@ import {
 } from "../../api/firestore";
 import { usePrograms, useTemplates, useCandidates, useCandidateCounts, QK } from "../../hooks/queries";
 import { ordinalLabel } from "../../utils/strings";
-import { compareByInterviewDate } from "../../utils/dates";
+import { compareByInterviewDate, formatDate, formatTimeLabel } from "../../utils/dates";
 import Modal from "../../components/Modal";
 import Toast from "../../components/Toast";
 import Button from "../../components/Button";
@@ -29,7 +29,7 @@ import { usePagination } from "../../hooks/usePagination";
 import AttemptOverridesModal from "../../features/candidates/AttemptOverridesModal";
 import CandidateHistoryModal from "../../features/candidates/CandidateHistoryModal";
 import { getCandidateProgramIds, candidateHasProgram } from "../../utils/candidatePrograms";
-import { timelineDetail } from "../../utils/candidateTimeline";
+import { timelineDetail, buildCandidateTimeline } from "../../utils/candidateTimeline";
 
 const fadeUp = {
   hidden:  { opacity: 0, y: 12 },
@@ -311,6 +311,7 @@ export default function CandidatesPage() {
   const [statusByCandidateId, setStatusByCandidateId] = useState(new Map());
   const [statusLoading, setStatusLoading] = useState(false);
   const [downloading,   setDownloading]   = useState(false);
+  const [downloadingHistory, setDownloadingHistory] = useState(false);
 
   // The default view only ever reads a handful of "fresh" candidates per
   // Program (see the pageItems state below) instead of the whole
@@ -952,6 +953,66 @@ export default function CandidatesPage() {
     setDownloading(false);
   };
 
+  // Same filtered candidate set as handleDownload above, but one row per
+  // INTERVIEW ATTEMPT instead of one row per candidate — a student who was
+  // cancelled, then rescheduled, then completed shows all three rows, not
+  // just their latest status. Reuses buildCandidateTimeline (the same data
+  // prep the per-candidate History modal already uses) and timelineDetail
+  // (the same who/why wording as the Note column above), fetched in one
+  // batch across every template any target candidate is assigned to
+  // (getInterviewsForTemplates) rather than one Firestore read per
+  // candidate.
+  const handleDownloadHistory = async () => {
+    setDownloadingHistory(true);
+    try {
+      let historyTargets = statusFiltered;
+      if (!needsFullList) {
+        const all = await getCandidates();
+        historyTargets = all.filter(c => c.archived !== true && (activeProgram === "all" || candidateHasProgram(c, activeProgram)));
+      }
+      const allTemplateIds = [...new Set(historyTargets.flatMap(c => c.templateIds || []))];
+      const interviews = allTemplateIds.length ? await getInterviewsForTemplates(allTemplateIds) : [];
+      const byCandidateId = new Map();
+      interviews.forEach(iv => {
+        if (!iv.candidateId) return;
+        if (!byCandidateId.has(iv.candidateId)) byCandidateId.set(iv.candidateId, []);
+        byCandidateId.get(iv.candidateId).push(iv);
+      });
+
+      const rows = [];
+      historyTargets.forEach(c => {
+        buildCandidateTimeline(byCandidateId.get(c.id) || []).forEach(iv => {
+          rows.push({
+            UID: isSwapped(c) ? c.name : (c.uid || ""),
+            Name: isSwapped(c) ? c.uid : (c.name || ""),
+            Email: c.email || "",
+            Template: templatesById.get(iv.templateId)?.name || iv.templateId || "",
+            Attempt: ordinalLabel(iv.attemptNumber),
+            Date: iv.scheduledDate ? `${formatDate(iv.scheduledDate)}${iv.scheduledTime ? ` ${formatTimeLabel(iv.scheduledTime)}` : ""}` : "",
+            Status: STATUS_LABELS[iv.status] || iv.status,
+            "Who / Reason": timelineDetail(iv, "admin"),
+          });
+        });
+      });
+
+      if (!rows.length) {
+        setToast({ message: "No interview history found for the current filters.", type: "info" });
+        setDownloadingHistory(false);
+        return;
+      }
+
+      const header = ["UID", "Name", "Email", "Template", "Attempt", "Date", "Status", "Who / Reason"];
+      const ws = XLSX.utils.json_to_sheet(rows, { header });
+      ws["!cols"] = header.map(h => ({ wch: h === "Who / Reason" ? 50 : h === "UID" ? 16 : 22 }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "History");
+      XLSX.writeFile(wb, `candidate_history_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (e) {
+      setToast({ message: `Couldn't download history: ${e.message}`, type: "error" });
+    }
+    setDownloadingHistory(false);
+  };
+
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 transition-colors";
   const labelCls = "block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1";
   const setField = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -1086,6 +1147,11 @@ export default function CandidatesPage() {
         <button onClick={handleDownload} disabled={downloading}
           className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed ml-auto">
           <Download className="w-3.5 h-3.5" /> {downloading ? "Preparing…" : "Download"}
+        </button>
+        <button onClick={handleDownloadHistory} disabled={downloadingHistory}
+          title="Full interview history (every attempt, not just the latest) for whichever candidates match the current filters"
+          className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+          <Download className="w-3.5 h-3.5" /> {downloadingHistory ? "Preparing…" : "Download History"}
         </button>
       </motion.div>
 
