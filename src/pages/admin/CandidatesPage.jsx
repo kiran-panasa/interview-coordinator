@@ -790,9 +790,16 @@ export default function CandidatesPage() {
     return filtered.filter(c => {
       if (filterStatuses.includes(NO_TEMPLATE_STATUS) && (c.templateIds || []).length === 0) return true;
       const statuses = statusByCandidateId.get(c.id);
-      return statuses?.some(s => filterStatuses.includes(s.status));
+      // Once a Template filter is ALSO active, "Cancelled" must mean
+      // cancelled on THAT template specifically — checking every assigned
+      // template regardless of the Template filter (the old behavior)
+      // surfaced candidates whose selected template was actually "No
+      // Interview Taken Yet", just because some OTHER template of theirs
+      // happened to be cancelled.
+      const relevant = filterTemplateIds.length ? statuses?.filter(s => filterTemplateIds.includes(s.templateId)) : statuses;
+      return relevant?.some(s => filterStatuses.includes(s.status));
     });
-  }, [filtered, filterStatuses, statusByCandidateId]);
+  }, [filtered, filterStatuses, statusByCandidateId, filterTemplateIds]);
 
   const { paged: pagedCandidates, page: candPage, setPage: setCandPage, totalPages: candTotalPages, total: candTotal, pageSize: candPageSize } = usePagination(statusFiltered, 10);
 
@@ -871,12 +878,18 @@ export default function CandidatesPage() {
         counts[NO_TEMPLATE_STATUS] = (counts[NO_TEMPLATE_STATUS] || 0) + 1;
         return;
       }
-      const seen = new Set();
-      (statusByCandidateId.get(c.id) || []).forEach(s => seen.add(s.status));
+      // Same Template-filter scoping as statusFiltered below — otherwise
+      // this badge's own number (e.g. "Cancelled (6)") already counts
+      // candidates cancelled on some OTHER template, before you even pick
+      // a status, which is what made the result look wrong in the first
+      // place.
+      const statuses = statusByCandidateId.get(c.id) || [];
+      const relevant = filterTemplateIds.length ? statuses.filter(s => filterTemplateIds.includes(s.templateId)) : statuses;
+      const seen = new Set(relevant.map(s => s.status));
       seen.forEach(status => { counts[status] = (counts[status] || 0) + 1; });
     });
     return counts;
-  }, [needsFullList, filtered, statusByCandidateId]);
+  }, [needsFullList, filtered, statusByCandidateId, filterTemplateIds]);
 
   // Exports exactly what's currently filtered (Program/search/Archived/
   // Template/Status), not just the visible page. In the default scoped
