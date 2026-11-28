@@ -250,7 +250,7 @@ async function getCandidateTemplateStatuses(candidate, templatesById) {
       templateId: tid,
       templateName: template?.name || tid,
       ...results[i],
-      ...computeBlocked(template, tid, candidate, results[i]),
+      ...computeBlocked(template, tid, candidate, results[i], results[i].status),
     };
   });
 }
@@ -314,7 +314,7 @@ function statusesFromBulkPairMap(candidate, templatesById, pairMap) {
       status: found?.status || "not_started",
       attemptNumber: found?.attemptNumber || 1,
       note: found?.note || "",
-      ...computeBlocked(template, tid, candidate, counts),
+      ...computeBlocked(template, tid, candidate, counts, found?.status),
     };
   });
 }
@@ -1369,8 +1369,18 @@ export default function CandidatesPage() {
                                  "Blocked" (that's a derived flag, not a
                                  status), so filtering to Blocked and then
                                  seeing e.g. "No Interview Taken Yet" with
-                                 nothing to explain it would look broken. */}
-                              {s.blocked && (
+                                 nothing to explain it would look broken.
+                                 "attempt" is a normal, successful outcome
+                                 (they used their allowed attempt(s) and
+                                 finished) — shown as a neutral "Closed", not
+                                 the alarm-red "Blocked" a no-show/cancel
+                                 limit still gets. */}
+                              {s.blocked && s.blockKind === "attempt" && (
+                                <span title="Successfully completed — contact your program team if they want to retake it." className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                  Closed
+                                </span>
+                              )}
+                              {s.blocked && s.blockKind !== "attempt" && (
                                 <span title={s.blockReason} className="text-[9px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                   Blocked
                                 </span>
@@ -1477,8 +1487,18 @@ export default function CandidatesPage() {
                                "Blocked" (that's a derived flag, not a
                                status), so filtering to Blocked and then
                                seeing e.g. "No Interview Taken Yet" with
-                               nothing to explain it would look broken. */}
-                            {s.blocked && (
+                               nothing to explain it would look broken.
+                               "attempt" is a normal, successful outcome
+                               (they used their allowed attempt(s) and
+                               finished) — shown as a neutral "Closed", not
+                               the alarm-red "Blocked" a no-show/cancel
+                               limit still gets. */}
+                            {s.blocked && s.blockKind === "attempt" && (
+                              <span title="Successfully completed — contact your program team if they want to retake it." className="text-[9px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                                Closed
+                              </span>
+                            )}
+                            {s.blocked && s.blockKind !== "attempt" && (
                               <span title={s.blockReason} className="text-[9px] font-bold text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full flex-shrink-0">
                                 Blocked
                               </span>

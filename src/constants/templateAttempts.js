@@ -3,7 +3,7 @@
 // whenever a template has a maxAttempts cap but no custom message set) —
 // kept in one place so the two never drift apart.
 export const DEFAULT_ATTEMPT_LIMIT_MESSAGE =
-  "You've reached the maximum number of attempts for this interview. Kindly contact your program support team for any concerns.";
+  "You've successfully completed this interview — your attempt is done. If you'd still like to give it again, please contact your program support team.";
 
 // Shown in place of the AI Report / Final Score on a completed interview
 // when a template has showScoreToStudent set to false and no custom
