@@ -67,6 +67,35 @@ export default function ScheduleInterviewModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editTarget]);
 
+  // Evaluation Template has no required-field validation (InterviewsPage.jsx's
+  // handleSave) — deliberately, since a genuinely template-less "generic
+  // feedback" interview is a real, intentional choice. But it also means an
+  // admin can silently leave it blank on a quick/ad-hoc booking for a
+  // candidate who already has an assigned template, and that completed
+  // interview then never counts toward ANY template's attempt/no-show/
+  // cancel limit — both /api/sso/me and resolveSelfBookTarget key purely on
+  // an exact templateId match, so a blank one is invisible to both. If this
+  // candidate has exactly one assigned template, fill it in automatically
+  // the moment they're picked for a NEW interview — the unambiguous, almost
+  // certainly-correct case. Never overwrites a value already set (by this
+  // effect or by hand), and never runs while editing an existing interview.
+  useEffect(() => {
+    if (editTarget || !open || !form.candidateId || form.templateId) return;
+    const candidate = candidates.find(c => c.id === form.candidateId);
+    const assigned = candidate?.templateIds || [];
+    if (assigned.length === 1) setField("templateId", assigned[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editTarget, open, form.candidateId]);
+
+  // Covers the remaining case the auto-fill above can't resolve on its own
+  // (no assigned template at all to default to, or more than one so it's
+  // genuinely ambiguous which round this is) — still lets the admin
+  // deliberately proceed template-less, just makes sure that's a choice and
+  // not an accident.
+  const candidateForTemplateCheck = form.candidateId ? candidates.find(c => c.id === form.candidateId) : null;
+  const assignedTemplateCount = candidateForTemplateCheck?.templateIds?.length || 0;
+  const showNoTemplateWarning = !editTarget && !form.templateId && assignedTemplateCount > 0;
+
   // Admins can always schedule past a candidate's attempt/no-show/cancel
   // limit (by design — that's the whole point of being able to override
   // the self-book flow), but it was happening silently with no indication
@@ -228,6 +257,12 @@ export default function ScheduleInterviewModal({
             <p className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               This candidate is already blocked for this template — {blockWarning.toLowerCase()}. Scheduling anyway will create another attempt.
+            </p>
+          )}
+          {showNoTemplateWarning && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              This candidate has {assignedTemplateCount} assigned template{assignedTemplateCount === 1 ? "" : "s"} — leaving this blank means this interview won't count toward any of their attempt/no-show/cancellation limits.
             </p>
           )}
         </div>
