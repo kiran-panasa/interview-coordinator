@@ -3,7 +3,9 @@ import { motion } from "framer-motion";
 import {
   PieChart, Users, CalendarClock, CheckCircle2, Hourglass, RefreshCw,
   XCircle, UserX, UserMinus, AlertTriangle, Download, X, ArrowUpDown, Lock, CalendarDays, Clock, LogOut,
+  LineChart as LineChartIcon, Table2,
 } from "lucide-react";
+import { DaySnapshotChart, SeriesTrendChart } from "../../features/analytics/TrendChart";
 import { useAuth } from "../../AuthContext";
 import { useInterviewsInDateRange } from "../../hooks/subscriptions";
 import { useTemplates, usePrograms, useUsers, useVendors } from "../../hooks/queries";
@@ -53,6 +55,28 @@ function monthRange(offset = 0) {
   return { from: iso(first), to: iso(last) };
 }
 function allTimeRange() { return { from: "2000-01-01", to: "2099-12-31" }; }
+function parseLocalIso(s) { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); }
+function enumerateDates(fromIso, toIso) {
+  const out = [];
+  let d = parseLocalIso(fromIso);
+  const end = parseLocalIso(toIso);
+  while (d <= end) { out.push(iso(d)); d = addDays(d, 1); }
+  return out;
+}
+// Chunks a sequential run of date strings into Monday-start calendar weeks —
+// used for Month view's "per week" granularity. A month's first/last chunk
+// is naturally partial (the month rarely starts/ends on a Monday); that's
+// fine, each chunk is just labeled by whatever dates it actually covers.
+function chunkIntoWeeks(dates) {
+  const weeks = [];
+  let current = [];
+  dates.forEach(d => {
+    if (parseLocalIso(d).getDay() === 1 && current.length) { weeks.push(current); current = []; }
+    current.push(d);
+  });
+  if (current.length) weeks.push(current);
+  return weeks;
+}
 // "16 Nov 2026" — a compact, readable form for the header's date range,
 // parsed as a local date (not `new Date(isoStr)`, which some browsers
 // read as UTC midnight and can again print one day early/late depending
@@ -198,6 +222,12 @@ export default function VendorAnalyticsPage() {
   const [search,      setSearch]      = useState("");
   const [sortBy,      setSortBy]      = useState("completed");
   const [sortDir,     setSortDir]     = useState("desc");
+  // Table (the existing vendor/panelist comparison) vs Graph (the trend
+  // chart below) — independent of the period tabs, so switching Day/Week/
+  // Month keeps whichever view was active. monthGranularity only matters
+  // while period === "month" and view === "graph".
+  const [view,             setView]             = useState("table"); // table | graph
+  const [monthGranularity, setMonthGranularity]  = useState("week"); // week | day
 
   const periodRange = period === "day" ? dayRange(dayOffset)
     : period === "week" ? weekRange(weekOffset)
@@ -356,6 +386,50 @@ export default function VendorAnalyticsPage() {
     return withRates(acc);
   };
   const totals = useMemo(() => aggregateTotals(filtered), [filtered]);
+
+  // ── Trend chart data — reuses the exact same `filtered` list and the
+  // exact same bumpCounts/withRates math as the KPI cards/table above, just
+  // re-bucketed by date instead of by vendor/panelist, so the chart can
+  // never disagree with the rest of the page. Only the active period's
+  // bucketing actually runs (the other two stay cheap no-ops). ──────────
+  const interviewsByDate = useMemo(() => {
+    const m = new Map();
+    filtered.forEach(iv => {
+      if (!iv.scheduledDate) return;
+      if (!m.has(iv.scheduledDate)) m.set(iv.scheduledDate, []);
+      m.get(iv.scheduledDate).push(iv);
+    });
+    return m;
+  }, [filtered]);
+  const bucketLabel = (list, fallbackLabel) => {
+    const t = aggregateTotals(list);
+    return { label: fallbackLabel, completed: t.completed, cancelled: t.cancelled, rescheduled: t.rescheduled, noShow: t.noShow };
+  };
+  const weekChartData = useMemo(() => {
+    if (period !== "week") return [];
+    return enumerateDates(range.from, range.to).map(d => {
+      const dt = parseLocalIso(d);
+      const label = `${dt.toLocaleDateString("en-GB", { weekday: "short" })} ${dt.getDate()}`;
+      return bucketLabel(interviewsByDate.get(d) || [], label);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, range.from, range.to, interviewsByDate]);
+  const monthChartData = useMemo(() => {
+    if (period !== "month") return [];
+    const dates = enumerateDates(range.from, range.to);
+    if (monthGranularity === "day") {
+      return dates.map(d => bucketLabel(interviewsByDate.get(d) || [], String(parseLocalIso(d).getDate())));
+    }
+    return chunkIntoWeeks(dates).map(chunk => {
+      const start = parseLocalIso(chunk[0]), end = parseLocalIso(chunk[chunk.length - 1]);
+      const label = chunk.length > 1
+        ? `${start.getDate()}–${end.getDate()} ${end.toLocaleDateString("en-GB", { month: "short" })}`
+        : `${start.getDate()} ${start.toLocaleDateString("en-GB", { month: "short" })}`;
+      return bucketLabel(chunk.flatMap(d => interviewsByDate.get(d) || []), label);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, range.from, range.to, monthGranularity, interviewsByDate]);
+
   // Distinct interviewers who actually had at least one interview in range
   // — "capacity" (Total Panelists, from the users collection) vs. "who
   // actually got used this period." Company-wide, for the Total row.
@@ -619,6 +693,20 @@ export default function VendorAnalyticsPage() {
         ))}
       </div>
 
+      {/* ── Table / Graph toggle ── */}
+      <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit mb-3">
+        {[["table", "Table", Table2], ["graph", "Graph", LineChartIcon]].map(([id, label, Icon]) => (
+          <button key={id} onClick={() => setView(id)}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap transition-colors ${
+              view === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
+            }`}>
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {view === "table" && (
+      <>
       {/* ── Compare-by toggle + search + sort ── */}
       <div className="flex flex-wrap items-center gap-3 mb-3">
         <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit">
@@ -768,6 +856,43 @@ export default function VendorAnalyticsPage() {
         )}
         <Pagination page={rowsPagination.page} totalPages={rowsPagination.totalPages} total={rowsPagination.total} pageSize={rowsPagination.pageSize} onPageChange={rowsPagination.setPage} />
       </div>
+      </>
+      )}
+
+      {/* ── Trend chart ── */}
+      {view === "graph" && (
+        <div className="bg-white rounded-[1.75rem] border border-gray-100 shadow-soft p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900">
+                {period === "day" ? "Today's breakdown" : period === "week" ? "This period, by day" : period === "month" ? "This period, by " + (monthGranularity === "week" ? "week" : "day") : "All time"}
+              </h2>
+              <p className="text-xs text-gray-400 mt-0.5">Completed, Cancelled, Rescheduled and No-Show — same totals as the KPI cards above, just plotted {period === "day" ? "side by side" : "over time"}.</p>
+            </div>
+            {period === "month" && (
+              <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-full w-fit flex-shrink-0">
+                {[["week", "Per Week"], ["day", "Per Day"]].map(([id, label]) => (
+                  <button key={id} onClick={() => setMonthGranularity(id)}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-full whitespace-nowrap transition-colors ${
+                      monthGranularity === id ? "bg-white text-brand-600 shadow-card" : "text-gray-500 hover:text-gray-700"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {period === "overall" ? (
+            <p className="text-sm text-gray-400 py-16 text-center">
+              Overall has no single time axis to plot — pick Day, Weekly or Monthly to see a trend.
+            </p>
+          ) : period === "day" ? (
+            <DaySnapshotChart totals={totals} />
+          ) : (
+            <SeriesTrendChart data={period === "week" ? weekChartData : monthChartData} />
+          )}
+        </div>
+      )}
     </div>
   );
 }
