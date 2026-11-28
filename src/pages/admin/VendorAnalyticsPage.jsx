@@ -30,18 +30,26 @@ function iso(d) {
   return `${y}-${m}-${day}`;
 }
 function todayIso() { return iso(new Date()); }
-function thisWeekRange() {
-  const now = new Date();
+function addDays(d, n) { const copy = new Date(d); copy.setDate(copy.getDate() + n); return copy; }
+// offset in whole days — 0 = today, -1 = yesterday, 1 = tomorrow.
+function dayRange(offset = 0) {
+  const d = iso(addDays(new Date(), offset));
+  return { from: d, to: d };
+}
+// offset in whole weeks — 0 = this week, -1 = previous week, 1 = next week.
+function weekRange(offset = 0) {
+  const now = addDays(new Date(), offset * 7);
   const day = now.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = new Date(now); monday.setDate(now.getDate() + diffToMonday);
   const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
   return { from: iso(monday), to: iso(sunday) };
 }
-function thisMonthRange() {
+// offset in whole months — 0 = this month, -1 = previous month, 1 = next month.
+function monthRange(offset = 0) {
   const now = new Date();
-  const first = new Date(now.getFullYear(), now.getMonth(), 1);
-  const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const first = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const last  = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
   return { from: iso(first), to: iso(last) };
 }
 function allTimeRange() { return { from: "2000-01-01", to: "2099-12-31" }; }
@@ -53,7 +61,12 @@ function formatRangeDate(isoStr) {
   const [y, m, d] = isoStr.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
-const PERIOD_LABEL = { week: "This Week", month: "This Month", overall: "All Time" };
+// Quick-pick sub-options shown under the Day/Weekly/Monthly tabs — [offset,
+// label] pairs, 0 always being "the current one". "Overall" has no concept
+// of an offset, so it isn't listed here at all.
+const DAY_QUICK_PICKS   = [[-1, "Yesterday"], [0, "Today"], [1, "Tomorrow"]];
+const WEEK_QUICK_PICKS  = [[-1, "Previous Week"], [0, "This Week"], [1, "Next Week"]];
+const MONTH_QUICK_PICKS = [[-1, "Previous Month"], [0, "This Month"], [1, "Next Month"]];
 
 const UNASSIGNED_PROGRAM_ID = "__unassigned__";
 const NO_VENDOR_ID = "__no_vendor__";
@@ -164,8 +177,14 @@ const pct = (n) => `${n.toFixed(0)}%`;
 export default function VendorAnalyticsPage() {
   const { userProfile } = useAuth();
 
-  const [period,     setPeriod]     = useState("week"); // week | month | overall
+  const [period,     setPeriod]     = useState("week"); // day | week | month | overall
   const [compareBy,  setCompareBy]  = useState("vendor"); // vendor | panelist
+  // Which quick-pick is active within the current period tab — independent
+  // per tab, so switching tabs and back remembers each one's own choice
+  // instead of resetting. Only period "overall" has no offset at all.
+  const [dayOffset,   setDayOffset]   = useState(0);
+  const [weekOffset,  setWeekOffset]  = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
 
   const [vendorIds,   setVendorIds]   = useState([]);
   const [programIds,  setProgramIds]  = useState([]);
@@ -180,8 +199,9 @@ export default function VendorAnalyticsPage() {
   const [sortBy,      setSortBy]      = useState("completed");
   const [sortDir,     setSortDir]     = useState("desc");
 
-  const periodRange = period === "week" ? thisWeekRange()
-    : period === "month" ? thisMonthRange()
+  const periodRange = period === "day" ? dayRange(dayOffset)
+    : period === "week" ? weekRange(weekOffset)
+    : period === "month" ? monthRange(monthOffset)
     : allTimeRange();
   const range = dateFilterFrom
     ? { from: dateFilterFrom, to: dateFilterTo || dateFilterFrom }
@@ -522,7 +542,7 @@ export default function VendorAnalyticsPage() {
       {/* ── Period toggle ── */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <div className="flex items-center gap-1 bg-gray-100 p-1.5 rounded-full w-fit max-w-full overflow-x-auto scrollbar-thin">
-          {[["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
+          {[["day", "Day"], ["week", "Weekly"], ["month", "Monthly"], ["overall", "Overall"]].map(([id, label]) => (
             <button key={id} onClick={() => setPeriod(id)}
               disabled={!!dateFilterFrom}
               className={`px-4 py-2 text-sm font-semibold rounded-full whitespace-nowrap flex-shrink-0 transition-colors ${
@@ -535,13 +555,47 @@ export default function VendorAnalyticsPage() {
         </div>
       </div>
 
+      {/* Quick-pick sub-row — which specific day/week/month within the
+          active tab, each labeled with its own actual date range so there's
+          no need to mentally compute "which week is 'next week'". Hidden
+          for "overall" (no concept of an offset) and whenever the manual
+          Date filter overrides the period entirely, same as the tabs above. */}
+      {!dateFilterFrom && period !== "overall" && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          {(period === "day" ? DAY_QUICK_PICKS : period === "week" ? WEEK_QUICK_PICKS : MONTH_QUICK_PICKS).map(([offset, label]) => {
+            const active = (period === "day" ? dayOffset : period === "week" ? weekOffset : monthOffset) === offset;
+            const r = period === "day" ? dayRange(offset) : period === "week" ? weekRange(offset) : monthRange(offset);
+            const onPick = () => {
+              if (period === "day") setDayOffset(offset);
+              else if (period === "week") setWeekOffset(offset);
+              else setMonthOffset(offset);
+            };
+            return (
+              <button key={offset} onClick={onPick}
+                className={`flex flex-col items-start px-3 py-1.5 rounded-xl border whitespace-nowrap transition-colors ${
+                  active ? "bg-brand-50 border-brand-200 text-brand-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                }`}>
+                <span className="text-xs font-semibold">{label}</span>
+                <span className="text-[10px] opacity-75">
+                  {r.from === r.to ? formatRangeDate(r.from) : `${formatRangeDate(r.from)} – ${formatRangeDate(r.to)}`}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Active date range — kept clearly visible right under the period
           toggle (rather than buried in the header) since it's what the KPI
           cards and table below are actually scoped to. */}
       <div className="flex items-center gap-2 mb-6 px-4 py-2.5 bg-brand-50 border border-brand-100 rounded-xl w-fit max-w-full">
         <CalendarClock className="w-4 h-4 text-brand-500 flex-shrink-0" />
         <span className="text-sm font-semibold text-brand-700">
-          {dateFilterFrom ? "Date Filter" : PERIOD_LABEL[period]}
+          {dateFilterFrom ? "Date Filter"
+            : period === "day" ? (DAY_QUICK_PICKS.find(([o]) => o === dayOffset)?.[1] || "Day")
+            : period === "week" ? (WEEK_QUICK_PICKS.find(([o]) => o === weekOffset)?.[1] || "Week")
+            : period === "month" ? (MONTH_QUICK_PICKS.find(([o]) => o === monthOffset)?.[1] || "Month")
+            : "All Time"}
         </span>
         <span className="text-brand-300">·</span>
         <span className="text-sm font-semibold text-gray-700">
