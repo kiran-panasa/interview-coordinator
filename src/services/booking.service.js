@@ -20,6 +20,7 @@ import {
   getScheduleInvite, getUserByEmail,
 } from "../api/firestore";
 import { formatDate, formatTimeLabel, parseInterviewStart } from "../utils/dates";
+import { looksLikeValidEmail } from "../utils/strings";
 import { callAppsScript } from "../lib/appsScript";
 
 const APPS_SCRIPT_URL    = import.meta.env.VITE_APPS_SCRIPT_URL;
@@ -168,8 +169,15 @@ export async function confirmSelfBooking(inviteId) {
   if (!invite) throw new Error("This booking could not be found — please try again.");
 
   const [ivr] = await getUsersByIds([invite.bookedInterviewerId]);
-  if (!ivr?.email || !invite.candidateEmail) {
-    throw new Error("Missing interviewer or candidate email — cannot schedule.");
+  // A plain truthiness check here is what let a candidate record whose
+  // email was literally the 4-character string "null" (data-entry mistake,
+  // never validated at save time — see looksLikeValidEmail) sail through:
+  // "null" is a non-empty string, so !invite.candidateEmail was false.
+  // Rejecting the booking itself rather than just warning on it, same as
+  // the missing-interviewer-email case, since this candidateEmail is what
+  // every downstream notification/export will show from here on.
+  if (!ivr?.email || !looksLikeValidEmail(invite.candidateEmail) || !invite.candidateEmail) {
+    throw new Error("Missing or invalid interviewer/candidate email — cannot schedule. Please fix the candidate's email and try again.");
   }
   const tmpl = invite.templateId ? await getTemplate(invite.templateId) : null;
   const roundLabel = invite.round || tmpl?.name || "Interview";

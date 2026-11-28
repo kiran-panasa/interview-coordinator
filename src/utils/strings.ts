@@ -15,6 +15,28 @@ export function maskEmail(email = ""): string {
 export const isUUID = (s?: string | null): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s || "");
 
+// Candidate add/edit and CSV import previously accepted any text at all into
+// the email field with zero validation — not even the browser's native
+// type="email" check, since both save paths call handleSave from a plain
+// button click, never a real <form> submit. A candidate record ended up
+// with the literal 4-character string "null" stored as its email (likely
+// typed by hand, or pasted from a spreadsheet cell whose missing value
+// exported as that literal text) — truthy, so it silently passed every
+// "is an email present" check downstream, including the self-book
+// confirmSelfBooking guard, and got snapshotted onto an interview as
+// candidateEmail: "null" forever (snapshots are never retroactively
+// corrected when the candidate's own record is fixed later — same as
+// candidateName/candidateUid elsewhere in this app). Blank is still valid
+// (email is optional) — this only rejects a NON-BLANK value that isn't a
+// real email shape, these placeholder words specifically included.
+const EMAIL_PLACEHOLDER_WORDS = new Set(["null", "undefined", "n/a", "na", "none", "nil", "-"]);
+export function looksLikeValidEmail(value?: string | null): boolean {
+  const v = (value || "").trim();
+  if (!v) return true;
+  if (EMAIL_PLACEHOLDER_WORDS.has(v.toLowerCase())) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
 /** Convert a label string to a lowercase_underscore slug (max 40 chars). */
 export function slugify(label: string): string {
   return (label || "")

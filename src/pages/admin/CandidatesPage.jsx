@@ -38,7 +38,7 @@ const fadeUp = {
 
 const EMPTY = { name: "", uid: "", email: "", phone: "", resumeLink: "", notes: "", programs: [], templateIds: [] };
 
-import { isUUID } from "../../utils/strings";
+import { isUUID, looksLikeValidEmail } from "../../utils/strings";
 import { splitCSVRow } from "../../utils/csv";
 import { computeBlocked } from "../../utils/candidateBlocking";
 
@@ -124,10 +124,20 @@ function parseCandidatesCSV(text) {
     const c = splitCSVRow(lines[i]);
     const name = c[nameIdx]?.trim();
     if (!name) { errors.push(`Row ${i + 1}: name is required`); continue; }
+    let email = emailIdx >= 0 ? c[emailIdx]?.trim() || "" : "";
+    // Blank it out rather than skipping the whole row — a bad email is no
+    // reason to lose an otherwise-good name/uid/phone/program import, but a
+    // placeholder value like the literal text "null" (seen from a
+    // spreadsheet export of a missing cell) must never be saved as if it
+    // were a real address — see looksLikeValidEmail in utils/strings.ts.
+    if (email && !looksLikeValidEmail(email)) {
+      errors.push(`Row ${i + 1}: email "${email}" doesn't look valid — imported with email left blank`);
+      email = "";
+    }
     rows.push({
       name,
       uid:           uidIdx       >= 0 ? c[uidIdx]?.trim()       || "" : "",
-      email:         emailIdx     >= 0 ? c[emailIdx]?.trim()     || "" : "",
+      email,
       phone:         phoneIdx     >= 0 ? c[phoneIdx]?.trim()     || "" : "",
       resumeLink:    resumeIdx    >= 0 ? c[resumeIdx]?.trim()    || "" : "",
       notes:         notesIdx     >= 0 ? c[notesIdx]?.trim()     || "" : "",
@@ -449,6 +459,9 @@ export default function CandidatesPage() {
 
   const handleSave = async () => {
     if (!form.name.trim()) return setToast({ message: "Name is required.", type: "error" });
+    if (!looksLikeValidEmail(form.email)) {
+      return setToast({ message: `"${form.email.trim()}" doesn't look like a real email address. Leave it blank if there isn't one.`, type: "error" });
+    }
     // Untrimmed whitespace here is invisible in the UI but breaks the exact
     // Firestore match (candidates.uid === the Forms/Accounts user_id) that
     // the SSO login flow depends on — a pasted UID with a trailing space
