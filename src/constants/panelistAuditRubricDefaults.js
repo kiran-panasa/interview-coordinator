@@ -126,11 +126,42 @@ Identify T1 vs T2 from the title/transcript stack (Next.js+TS vs FastAPI/Django)
   },
   irp_l1_frontend: {
     label: "IRP L1 Frontend TR",
-    text: `IRP L1 FRONTEND TR (separate program), 60 min.
+    text: `IRP L1 FRONTEND TR (separate program), 60 min, marks /100.
+IRP-wide rule: AI use on the take-home is strictly prohibited. If a candidate admits using it, or cannot explain their own code, the panelist must log an integrity flag and score the project part low — telling the candidate "it's fine" is Critical. Screen share and the phone camera stay on for the whole round.
 FE project (take-home), 15 min, 20 marks: app flow, 2 design choices, one small live change; AI used on the take-home = integrity flag, not "fine".
 Concepts, 15 min, 30 marks: 10 questions at L1, in syllabus.
 Live coding, 25 min, 40 marks: Counter / Todo / Login form / Search filter / Fetch users — full 25 min, one follow-up change.
 Communication throughout, 10 marks.`,
+  },
+  irp_genai: {
+    label: "IRP Gen AI",
+    text: `IRP GEN AI (separate program), 60 min, marks /100. For 2nd-3rd year students. Three parts only: one project, concepts, one basic DSA question.
+IRP-wide rule: AI use on the take-home is strictly prohibited. If a candidate admits using it, or cannot explain their own code, the panelist must log an integrity flag and score the project part low — telling the candidate "it's fine" is Critical. Screen share and the phone camera stay on for the whole round.
+Start, 2 min: recording on, screen share on, AI assistants off, official docs OK; no "how you're doing" chat.
+Project + live change, 25 min, 40 marks: take-home (or a course project) — flow input -> model -> answer (10); two design choices (model/prompt/chunk size) (10); one small change of about 10 min e.g. return JSON, word limit, error handling, change top-k, limit chat history (15); explains while changing (5); minus 3 marks per hint, every hint logged; panelist stays silent, no pre-filled code.
+Concepts, 15 min, 30 marks: 10 questions = 7 Core + 3 Applied from the bank, scored 3/2/1/0 each; a 5-count before helping; an unasked question is left blank, not scored 0.
+Basic DSA, 15 min, 20 marks: one easy Python question (strings, lists, dicts) — approach first (5), code works (10), edge cases + complexity (5).
+Communication throughout, 10 marks: can the reasoning be followed — not accent or fluency.
+Out of scope (flag if asked): system design, scaling, new features, fine-tuning internals, transformer maths, multi-agent, guardrail frameworks, eval pipelines, trees/graphs/DP.
+Tiers: Strong Hire 70+; Medium 60-69; Low 40-59; Not Yet below 40. Project score below 20/40 caps the tier at Low Hire.
+Integrity: cheating seen -> stop, mark Integrity fail = Yes, inform the coordinator. API key fails -> panelist gives a backup key or a mock, no marks lost.
+Never say: "you did well", "that was weak", "you'll clear it", the model answer after a wrong answer, comparisons, salary or jobs. Only the result timeline at the end.
+Track red flags: the "change" is a new feature instead of an edit to their own code; concepts drift into the out-of-scope list; hints not logged; AI on the take-home accepted.`,
+  },
+  academy_aiml: {
+    label: "Academy AIML — Data Science / AI-ML Engineer (60 min mock)",
+    text: `ACADEMY AIML — DATA SCIENCE / AI-ML ENGINEER (60 min mock, 7 ratings). Fresher mock, one panelist.
+The panelist picks one Interview Set (R2+R3 already chosen and timed) and one R1 project probe from the question bank. Ratings are 1-5 in the app; the app calculates the score and grade band.
+Opening 0-5, weight Communication 5% + Confidence 5%: format explained (project -> technical -> coding), "Tell me about yourself" in 60-90s.
+R1 Project 5-17, weight 30%: one probe from the R1 tab — why, data, model, metric, failures, own role; notes the tools they name for R2.
+R2 Technical 17-37, weight 30% + Industry trends 5%: the set's 3 questions in order — Easy 4 min -> Medium 6 min -> Hard 8 min; 3 different topics (stats, ML, evaluation, DL, GenAI); climbs only while answers are right.
+R3 Coding 37-57, weight 20%: the set's coding task, max 15 min — restate -> approach -> code -> dry run -> Big-O; then the closing case as 3 short verbal questions (5 min).
+Close 57-60, weight Professionalism 5%: "Any questions for me?", neutral close.
+Hint steps (cap Coding only, NOT the standard hint ladder used elsewhere): 0 Wait 30-60s (caps 5); 1 Nudge (caps 5); 2 Direction (caps 4); 3 Partial answer (caps 3); 4 Move on (caps 2). A full minute of silence is required before step 1.
+Grade bands: 75+ = Interview Ready; 55-74.9 = Needs Improvement; below 55 = Not Ready. A rating of 1 in Project, Technical, or Coding caps the grade at Needs Improvement.
+Swaps: like-for-like only (Easy for Easy) from the pool tabs.
+Remarks: every rating needs an evidence-based remark (e.g. "Could not explain recall", never just "weak"), entered within 10 minutes.
+Track red flags: questions not from the picked set; Hard asked after a wrong Easy; coding task skipped or over 15 min; confirming answers or teaching; Project rated on the resume instead of the answers; hint step not recorded.`,
   },
 };
 
