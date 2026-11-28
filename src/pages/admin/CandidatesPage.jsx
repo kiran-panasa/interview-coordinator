@@ -63,6 +63,13 @@ const NO_TEMPLATE_STATUS = "__no_template__";
 // this list can never disagree with what actually stops a candidate from
 // booking — just computed here in bulk instead of one candidate at a time.
 const BLOCKED_STATUS = "__blocked__";
+
+// Split out of BLOCKED_STATUS — blockKind "attempt" (they used up their
+// allowed attempt(s) and successfully finished) is a normal outcome, not a
+// penalty, so it gets its own filterable bucket instead of being counted
+// under "Blocked" alongside a genuine no-show/cancellation block. See the
+// "Closed" chip in the Status column below.
+const CLOSED_STATUS = "__closed__";
 // effectiveMaxAttempts/NoShows/Cancellations + computeBlocked now live in
 // ../../utils/candidateBlocking (shared with ScheduleInterviewModal.jsx's
 // admin-scheduling warning) — same override precedence/defaults as the
@@ -847,9 +854,15 @@ export default function CandidatesPage() {
       // Interview Taken Yet", just because some OTHER template of theirs
       // happened to be cancelled.
       const relevant = filterTemplateIds.length ? statuses?.filter(s => filterTemplateIds.includes(s.templateId)) : statuses;
-      // BLOCKED_STATUS isn't a real interview status — it's the derived
-      // "hit a limit" flag computeBlocked attaches to each entry.
-      return relevant?.some(s => filterStatuses.includes(s.status) || (filterStatuses.includes(BLOCKED_STATUS) && s.blocked));
+      // BLOCKED_STATUS/CLOSED_STATUS aren't real interview statuses — they're
+      // the derived "hit a limit" flag computeBlocked attaches to each
+      // entry, split by blockKind ("attempt" = Closed, no_show/cancel =
+      // Blocked).
+      return relevant?.some(s =>
+        filterStatuses.includes(s.status)
+        || (filterStatuses.includes(BLOCKED_STATUS) && s.blocked && s.blockKind !== "attempt")
+        || (filterStatuses.includes(CLOSED_STATUS) && s.blocked && s.blockKind === "attempt")
+      );
     });
   }, [filtered, filterStatuses, statusByCandidateId, filterTemplateIds]);
 
@@ -939,7 +952,8 @@ export default function CandidatesPage() {
       const relevant = filterTemplateIds.length ? statuses.filter(s => filterTemplateIds.includes(s.templateId)) : statuses;
       const seen = new Set(relevant.map(s => s.status));
       seen.forEach(status => { counts[status] = (counts[status] || 0) + 1; });
-      if (relevant.some(s => s.blocked)) counts[BLOCKED_STATUS] = (counts[BLOCKED_STATUS] || 0) + 1;
+      if (relevant.some(s => s.blocked && s.blockKind !== "attempt")) counts[BLOCKED_STATUS] = (counts[BLOCKED_STATUS] || 0) + 1;
+      if (relevant.some(s => s.blocked && s.blockKind === "attempt")) counts[CLOSED_STATUS] = (counts[CLOSED_STATUS] || 0) + 1;
     });
     return counts;
   }, [needsFullList, filtered, statusByCandidateId, filterTemplateIds]);
@@ -1230,7 +1244,11 @@ export default function CandidatesPage() {
         <div className="w-56">
           <SkillsSelect
             skills={[
-              ...["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show", "dropped_off"].map(k => ({
+              // "dropped_off" deliberately left out here — it's always (or
+              // almost always) 0 and just clutters the list; still shown in
+              // the Status color legend further down since that's purely
+              // informational, not a filter.
+              ...["not_started", "scheduled", "completed", "partially_completed", "cancelled", "declined", "no_show"].map(k => ({
                 id: k, name: `${STATUS_LABELS[k]}${statusCounts ? ` (${statusCounts[k] || 0})` : ""}`,
               })),
               // Its own bucket, not folded into "No Interview Taken Yet" —
@@ -1239,11 +1257,13 @@ export default function CandidatesPage() {
               // assigned a round). Keeping them separate is also what lets
               // every status count add up to the tab's own total.
               { id: NO_TEMPLATE_STATUS, name: `No Templates Assigned${statusCounts ? ` (${statusCounts[NO_TEMPLATE_STATUS] || 0})` : ""}` },
-              // Hit their attempt/no-show/cancellation limit on at least
-              // one (Template-filter-scoped) assigned template — the Note
+              // Hit a no-show/cancellation limit on at least one
+              // (Template-filter-scoped) assigned template — the Note
               // column shows exactly which limit and the count once this
-              // is picked.
+              // is picked. Successfully using up an attempt limit is its
+              // own separate "Closed" bucket just below, not counted here.
               { id: BLOCKED_STATUS, name: `Blocked${statusCounts ? ` (${statusCounts[BLOCKED_STATUS] || 0})` : ""}` },
+              { id: CLOSED_STATUS, name: `Closed${statusCounts ? ` (${statusCounts[CLOSED_STATUS] || 0})` : ""}` },
             ]}
             value={filterStatuses}
             onChange={ids => { setFilterStatuses(ids); setCandPage(1); }}
